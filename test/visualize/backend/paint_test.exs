@@ -156,7 +156,7 @@ defmodule Visualize.Backend.PaintTest do
              ) ==
                [{:beginPath, []}, {:moveTo, [0, 5]}, {:lineTo, [10, 5]}]
 
-      assert [{:set_fillStyle, ["#d62728"]}, {:fillText, _}] =
+      assert [{:save, []}, {:set_fillStyle, ["#d62728"]}, {:fillText, _}, {:restore, []}] =
                Canvas.render_element(Element.text("a", x: 0, y: 0, style: %{fill: linear()}),
                  format: :commands
                )
@@ -168,7 +168,7 @@ defmodule Visualize.Backend.PaintTest do
       tree = Element.group([Element.rect(0, 0, 10, 10, %{fill: "#336699"})])
       binary = CanvasBinary.encode_element!(tree)
       refute Enum.any?(Decoder.decode(binary), &match?({:version, _}, &1))
-      assert <<0x30, 0x10, _::binary>> = binary
+      assert <<0x30, 0x30, 0x10, _::binary>> = binary
     end
 
     test "a paint is defined once, first, and referred to by index; every draw gets its box" do
@@ -606,6 +606,7 @@ defmodule Visualize.Backend.PaintTest do
       rect = Element.rect(0, 0, 10, 10, style)
 
       assert [
+               {:save, []},
                {:set_fillStyle, _},
                {:set_shadowColor, ["rgba(255,0,0,1)"]},
                {:set_shadowBlur, [4]},
@@ -617,18 +618,19 @@ defmodule Visualize.Backend.PaintTest do
 
       assert [
                {:version, 2},
+               :save,
                {:style, _},
                {:effect, :shadow, 4.0, {2.0, -3.0}, {255, 0, 0, 255}} | _
              ] = records
 
       plain = Element.rect(0, 0, 10, 10, %{fill: "#336699", effect: :shadow})
 
-      assert [_, _, {:effect, :shadow, 3.0, {1.5, 1.5}, {0, 0, 0, 89}} | _] =
+      assert [_, :save, _, {:effect, :shadow, 3.0, {1.5, 1.5}, {0, 0, 0, 89}} | _] =
                plain |> CanvasBinary.encode_element!() |> Decoder.decode()
 
       blur = Element.rect(0, 0, 10, 10, %{fill: "#336699", effect: :blur, effect_radius: 2})
 
-      assert [_, _, {:effect, :blur, 2.0} | _] =
+      assert [_, :save, _, {:effect, :blur, 2.0} | _] =
                blur |> CanvasBinary.encode_element!() |> Decoder.decode()
     end
 

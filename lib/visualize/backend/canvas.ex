@@ -220,9 +220,11 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     path_cmds = path_data(path)
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}] ++
-      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+        path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   defp element_to_commands(
@@ -237,9 +239,11 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x: x, y: y, width: w, height: h} = attrs
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}, {:rect, [x, y, w, h]}] ++
-      style_apply_commands(Map.merge(inherited, style), element)
+        style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   defp element_to_commands(
@@ -254,9 +258,11 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, r: r} = attrs
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}, {:arc, [cx, cy, r, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(Map.merge(inherited, style), element)
+        style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   defp element_to_commands(
@@ -271,9 +277,11 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{cx: cx, cy: cy, rx: rx, ry: ry} = attrs
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}, {:ellipse, [cx, cy, rx, ry, 0, 0, 2 * :math.pi()]}] ++
-      style_apply_commands(Map.merge(inherited, style), element)
+        style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   defp element_to_commands(
@@ -288,12 +296,11 @@ defmodule Visualize.Backend.Canvas do
     setup = transform_commands(transform) ++ style_setup_commands(style)
     %{x1: x1, y1: y1, x2: x2, y2: y2} = attrs
 
-    setup ++
-      [
-        {:beginPath, []},
-        {:moveTo, [x1, y1]},
-        {:lineTo, [x2, y2]}
-      ] ++ stroke_commands(Map.get(Map.merge(inherited, style), :stroke), element)
+    scoped(
+      setup,
+      [{:beginPath, []}, {:moveTo, [x1, y1]}, {:lineTo, [x2, y2]}] ++
+        stroke_commands(Map.get(Map.merge(inherited, style), :stroke), element)
+    )
   end
 
   defp element_to_commands(
@@ -317,9 +324,11 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}] ++
-      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+        path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   defp element_to_commands(
@@ -345,9 +354,11 @@ defmodule Visualize.Backend.Canvas do
           []
       end
 
-    setup ++
+    scoped(
+      setup,
       [{:beginPath, []}] ++
-      path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+        path_cmds ++ style_apply_commands(Map.merge(inherited, style), element)
+    )
   end
 
   # A text of several lines (spec/14 §7.1) is one fillText per tspan, each `dy` em below
@@ -374,7 +385,7 @@ defmodule Visualize.Backend.Canvas do
         {acc ++ [{:fillText, [content || "", line[:x] || x, at]}], at}
       end)
 
-    setup ++ commands
+    scoped(setup, commands)
   end
 
   defp element_to_commands(
@@ -391,7 +402,7 @@ defmodule Visualize.Backend.Canvas do
     x = attrs[:x] || 0
     y = attrs[:y] || 0
 
-    setup ++ [{:fillText, [content || "", x, y]}]
+    scoped(setup, [{:fillText, [content || "", x, y]}])
   end
 
   # A group's style is set after its transform, inside the save/restore pair, so children
@@ -439,8 +450,14 @@ defmodule Visualize.Backend.Canvas do
   defp element_to_commands(%Element{type: :image, attrs: attrs, transform: transform}, _inherited) do
     setup = transform_commands(transform)
     %{href: href, x: x, y: y, width: w, height: h} = attrs
-    setup ++ [{:drawImage, [href, x, y, w, h]}]
+    scoped(setup, [{:drawImage, [href, x, y, w, h]}])
   end
+
+  # A leaf's transform and style are its own (spec/09 §3.3.1, #679, D-179): a leaf whose
+  # setup sets either is drawn inside a save/restore pair, so its next sibling draws in its
+  # parent's state, as SVG draws it; a leaf that sets neither pays nothing.
+  defp scoped([], body), do: body
+  defp scoped(setup, body), do: [{:save, []}] ++ setup ++ body ++ [{:restore, []}]
 
   # A tspan's `dy`: a number as it is, an `em` measure at the font size.
   defp em(nil, _font_size), do: 0

@@ -2164,3 +2164,24 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - **The style stack panel makes every entry §3.6 allows**: names (grouped, #685), `{:field, f}` from the site's data columns, `generate(name, args)` from the generators the builder knows (its `generators` assign and the host's configuration, checked for arity), and the local node; each row says what it is. Rows move by drag and by `ArrowUp`/`ArrowDown`; the local entry stays last.
 - **The inspector explains the selected element's look** with `Visualize.Chart.explain/2` of the preview's chart: per part, the chain of contributions with their layer, container, style and `extends` path, field and value, generators and their results, and the keys set.
 - *Rejected:* a text box for a whole stack. The panel's rows already are the stack; a literal for the whole would be a second editor of the same value. *Rejected:* explaining with a sample datum. A field entry would then show one row's choice as if it were the element's; the inspector says a field entry is per row instead.
+
+## 179. D-179 — A canvas leaf's transform and state are its own: a leaf that sets either is drawn inside save/restore, on every canvas stream
+
+**Context.** #679, found by #653 (work item #678). The canvas encoders wrote an element's transform and style as a prefix of its commands and wrapped only groups and clips in `save`/`restore`, as if a group always stood around a transformed element. A leaf's `translate`/`rotate` therefore stayed applied when its next sibling was drawn: each symbol of a scatter is a path placed by a translate (`Visualize.Chart.Mark.Shapes`), so on a canvas the second symbol landed at the sum of the first two offsets and the rest off the plot. Its style leaked the same way — a translucent leaf left `globalAlpha` for the next, and a leaf's own fill replaced the group's colour its unstyled sibling should fill with. The JSON, the script and the binary canvas all did it; `CanvasIncremental` encodes through the binary encoder and did too. It went unnoticed because the parity tests drew untransformed leaves or a single one, the recording stub restored no property on `restore`, a moving mark's motion span happened to save and restore, and no `:js_resvg` test ran in CI.
+
+**Decision.**
+- **A leaf with a non-empty setup is scoped.** On the `:json`/`:js` commands (spec/09 §3.3.1) and the binary stream (§4.4), a leaf that writes a transform or style state — a style record, text style, a transform — is `save`, setup, geometry, draws, `restore`. A leaf that writes neither has no pair. Groups and clips are unchanged.
+- **Style state is scoped with the transform**, because the sibling test showed it leaks: alpha, colours, width, blend, effect and font are a leaf's as much as its transform.
+- **The hooks are unchanged.** Each reader already executes `save`/`restore` and scopes its fill and stroke paints with them.
+- **The stub behaves as a browser's context**: `save`/`restore` scope its properties, and every draw call is recorded with the transform and state it ran in, so a test asserts what each element was drawn with, not only which calls were made.
+- **`verify:hooks` runs the `:js_resvg` tests**: it downloads the pinned resvg from the `.resvg` job the `test` job extends too, and runs `mix test --only js --include js_resvg` (spec/12 §4); `mix vis.check` mirrors it.
+
+**Rejected.**
+- **Undoing a leaf's transform with its inverse after the draw.** It is cheaper than a pair for a translate, but a singular matrix has no inverse, a rotation's inverse accumulates rounding, and it leaves the style state leaking.
+- **Wrapping every leaf.** A leaf with nothing to scope gains two commands and nothing else; a line mark's paths have their style on the group.
+- **Leaving style state unscoped until #675.** The sibling test fails on alpha and fill today, and #675's per-paint alpha is set inside the same pair.
+
+**Consequences.**
+- A transformed or styled leaf costs one `save` and one `restore`, two bytes on the binary stream. No golden changes: the charts and builder goldens hold SVG.
+- #675 sets each paint's alpha inside a leaf's pair.
+- `test/visualize/backend/canvas_scope_test.exs` is the guard: siblings on three streams, and a symbol scatter against resvg in CI.

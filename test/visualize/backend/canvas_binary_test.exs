@@ -269,7 +269,10 @@ defmodule Visualize.Backend.CanvasBinaryTest do
   describe "transforms" do
     defp matrix_of(transform) do
       element = Element.rect(0, 0, 1, 1) |> Element.set_transform(transform)
-      [{:transform, kind, values} | _] = Decoder.decode(CanvasBinary.encode_element!(element))
+      # A transformed leaf is drawn inside save and restore (spec/09 §4.4, D-179).
+      [:save, {:transform, kind, values} | _] =
+        Decoder.decode(CanvasBinary.encode_element!(element))
+
       {kind, values}
     end
 
@@ -315,7 +318,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
 
   describe "colours" do
     defp fill_of(style) do
-      [{:style, %{fill: fill}} | _] =
+      [:save, {:style, %{fill: fill}} | _] =
         Decoder.decode(CanvasBinary.encode_element!(Element.rect(0, 0, 1, 1, style)))
 
       fill
@@ -406,12 +409,17 @@ defmodule Visualize.Backend.CanvasBinaryTest do
     assert Decoder.decode(CanvasBinary.encode_element!(group)) == [
              :save,
              {:transform, :translate, {5.0, 6.0}},
+             # Each styled leaf is drawn inside save and restore (spec/09 §4.4, D-179).
+             :save,
              {:style, %{fill: nil, stroke: {255, 0, 0, 255}, stroke_width: 2.0, opacity: nil}},
              {:path_cubic32, [{:M, 0.0, 0.0}, {:L, 1.0, 1.0}, :Z]},
              :stroke,
+             :restore,
+             :save,
              {:style, %{fill: {0, 0, 255, 255}, stroke: nil, stroke_width: nil, opacity: 0.5}},
              {:circles, [{1.0, 2.0, 3.0}]},
              :fill,
+             :restore,
              :restore
            ]
   end

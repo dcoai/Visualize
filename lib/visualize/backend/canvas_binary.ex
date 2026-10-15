@@ -258,110 +258,27 @@ defmodule Visualize.Backend.CanvasBinary do
     ])
   end
 
-  defp do_encode_element(
-         %Element{type: :path, path: path, style: style, transform: transform} = element,
-         ctx,
-         inherited
-       ) do
-    parts = []
+  defp do_encode_element(%Element{type: :path, path: path} = element, ctx, inherited),
+    do: leaf(element, do_encode_path(path.commands, ctx.precision), ctx, inherited)
 
-    # Transform
-    parts =
-      if transform && transform.operations != [] do
-        parts ++ [encode_transform(transform)]
-      else
-        parts
-      end
-
-    # Style
-    parts =
-      if map_size(style) > 0 do
-        parts ++ [encode_style(style, ctx.paints)]
-      else
-        parts
-      end
-
-    # Path data
-    parts = parts ++ [do_encode_path(path.commands, ctx.precision)]
-
-    # Draw commands
-    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
-
-    IO.iodata_to_binary(parts)
-  end
-
-  defp do_encode_element(
-         %Element{type: :circle, attrs: attrs, style: style, transform: transform} = element,
-         ctx,
-         inherited
-       ) do
+  defp do_encode_element(%Element{type: :circle, attrs: attrs} = element, ctx, inherited) do
     %{cx: cx, cy: cy, r: r} = attrs
 
-    parts = []
+    circle =
+      <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
+        r::little-float-64>>
 
-    parts =
-      if transform && transform.operations != [] do
-        parts ++ [encode_transform(transform)]
-      else
-        parts
-      end
-
-    parts =
-      if map_size(style) > 0 do
-        parts ++ [encode_style(style, ctx.paints)]
-      else
-        parts
-      end
-
-    # Circle data
-    parts =
-      parts ++
-        [
-          <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
-            r::little-float-64>>
-        ]
-
-    # Draw commands
-    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
-
-    IO.iodata_to_binary(parts)
+    leaf(element, circle, ctx, inherited)
   end
 
-  defp do_encode_element(
-         %Element{type: :rect, attrs: attrs, style: style, transform: transform} = element,
-         ctx,
-         inherited
-       ) do
+  defp do_encode_element(%Element{type: :rect, attrs: attrs} = element, ctx, inherited) do
     %{x: x, y: y, width: w, height: h} = attrs
 
-    parts = []
+    rect =
+      <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
+        w::little-float-64, h::little-float-64>>
 
-    parts =
-      if transform && transform.operations != [] do
-        parts ++ [encode_transform(transform)]
-      else
-        parts
-      end
-
-    parts =
-      if map_size(style) > 0 do
-        parts ++ [encode_style(style, ctx.paints)]
-      else
-        parts
-      end
-
-    # Rect data
-    parts =
-      parts ++
-        [
-          <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
-            w::little-float-64, h::little-float-64>>
-        ]
-
-    # Draw commands
-    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
-
-    IO.iodata_to_binary(parts)
+    leaf(element, rect, ctx, inherited)
   end
 
   # A group's style is the state its children draw in, scoped by the save/restore, and
@@ -409,6 +326,23 @@ defmodule Visualize.Backend.CanvasBinary do
 
   defp do_encode_element(_element, _ctx, _inherited) do
     <<>>
+  end
+
+  # A leaf: its transform and its style record, its geometry, and the draw records of its
+  # effective style. A leaf that writes a transform or a style is drawn inside save and
+  # restore, so its next sibling draws in its parent's state as SVG draws it; a leaf that
+  # writes neither pays nothing (spec/09 §4.4, #679, D-179).
+  defp leaf(%Element{style: style, transform: transform} = element, geometry, ctx, inherited) do
+    transform =
+      if transform && transform.operations != [], do: [encode_transform(transform)], else: []
+
+    setup = transform ++ if(map_size(style) > 0, do: [encode_style(style, ctx.paints)], else: [])
+    body = [geometry | draw_records(Map.merge(inherited, style), element, ctx)]
+
+    case setup do
+      [] -> IO.iodata_to_binary(body)
+      setup -> IO.iodata_to_binary([<<Opcodes.save()::8>>, setup, body, <<Opcodes.restore()::8>>])
+    end
   end
 
   # A line is a two-point path; a polyline a move and its lines; a polygon the same,

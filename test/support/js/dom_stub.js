@@ -4,6 +4,10 @@
 // concatenates this, Visualize.Hooks.js_code() and one scenario into one ES module.
 const Stub = (() => {
   const log = [];
+  // Every draw call with the transform and the state it drew in (#679): what a sibling
+  // inherits from the one before it, which the call log alone does not show.
+  const draws = [];
+  const drawCalls = new Set(['fill', 'stroke', 'fillText', 'strokeText', 'fillRect', 'strokeRect', 'drawImage']);
   let ids = 0, now = 0, timerIds = 0;
   const timers = new Map();
 
@@ -41,10 +45,13 @@ const Stub = (() => {
 
   // Every context method is a recorder; every assignment is recorded and kept. The
   // transform is tracked beside, and `getTransform()` reads it without being recorded.
+  // `save` and `restore` scope the assigned properties as they scope the transform, as a
+  // browser's context does (#679).
   function context(canvas) {
     // A context starts with the values a browser's does (#653): a motion reads them as targets.
     const props = {globalAlpha: 1, lineWidth: 1, fillStyle: "#000000", strokeStyle: "#000000"};
     const state = {m: identity(), stack: []};
+    const saved = [];
     return new Proxy(props, {
       get: (_t, name) => name === 'getTransform' ? () => ({...state.m}) :
         name in props ? props[name] :
@@ -64,7 +71,20 @@ const Stub = (() => {
           Object.defineProperty(pattern, 'setTransform', {value: (m) => { pattern.transform = {...m}; }});
           return pattern;
         } :
-        (...args) => { transforms(state, name, args); log.push({on: canvas.id, kind: 'call', name, args}); },
+        (...args) => {
+          if (name === 'save') saved.push({...props});
+          if (name === 'restore' && saved.length) {
+            const back = saved.pop();
+            for (const key of Object.keys(props)) delete props[key];
+            Object.assign(props, back);
+          }
+          transforms(state, name, args);
+          if (drawCalls.has(name)) {
+            draws.push({on: canvas.id, name, m: {...state.m}, globalAlpha: props.globalAlpha,
+              fillStyle: props.fillStyle, strokeStyle: props.strokeStyle});
+          }
+          log.push({on: canvas.id, kind: 'call', name, args});
+        },
       set: (_t, name, value) => {
         props[name] = value;
         log.push({on: canvas.id, kind: 'set', name, value});
@@ -324,8 +344,9 @@ const Stub = (() => {
       now = until;
     },
     mark(label) { log.push({on: 'scenario', kind: 'mark', name: label}); },
-    // The one line Visualize.JsHooks reads: the log and whatever the scenario reports.
-    done(report = {}) { console.log('VIS-HOOKS-LOG ' + JSON.stringify({log, report})); },
+    // The one line Visualize.JsHooks reads: the log, the draws and whatever the scenario
+    // reports.
+    done(report = {}) { console.log('VIS-HOOKS-LOG ' + JSON.stringify({log, draws, report})); },
   };
 })();
 
