@@ -2227,3 +2227,26 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A snapshot exported with the board's generators and assigns draws each cell byte for byte as the live cell does (`test/visualize/board/export_test.exs`).
 - A host exporting a snapshot it reopened elsewhere passes its own `generators:` and `assigns:`, as it passes `system:`.
 - D-177 is amended; spec/15 §12 says the options and the precedence.
+
+## 182. D-182 — A one-key `$` object is always a tag: one table writes and reads them, an unknown or retired tag is refused at its path, and data's `$` keys are escaped
+
+**Context.** #645, surfaced by #644 (MR !450); work item #696. The design codec wrote tagged terms as one-key `$` objects, but on reading, a one-key `$` object whose tag it did not know fell through to the plain-map path: a misspelt tag (`"$feild"`), a retired one (`"$styles"`, removed by #644) or one from a newer library loaded silently as data, and in a color-range position passed validation as a color map. The fall-through was not decided anywhere: the codec's rule that decoding never fails on a wrong shape is deliberate (the validator names the fault), but in a `:term` position the generic map clause simply read the object as a map. The deep dive found the converse too: a `:term` value is any value, so a host's data map may carry a `$` key — and one that spells a tag, `%{"$atom" => "x"}`, came back as the atom `:x`. No test read an unknown tag, wrote a `$` key in data, or tied the tags written to the tags read. Board (`$datum`) and snapshot (`$absent`) documents had tags of their own, in separate codecs, with no shared list.
+
+**Decision.**
+- **One table** (`Visualize.Chart.Codec.Tags`) of every tag a JSON document of this library writes — design, fragment, board, snapshot, and the `$version` stamp — with the tags it has **retired** (each with what replaced it) and **renamed** (old → new). Encoders write a tag only through `Tags.tag/2`, which refuses at compile time a name the table does not list as live; the table is what the round-trip property test enumerates.
+- **Every JSON reader holds the document to the table** after the version gate and the limits, before decoding: an unknown tag is `{:unknown_tag, tag}` and a retired one `{:retired_tag, tag, why}`, at the JSON path; a renamed tag is rewritten to its new name. In `Fragment.from_json/2` they are `{:error, {:tags, errors}}`, beside `{:limits, errors}`.
+- **An escape for data.** Every map key the codecs write that starts with `$` gets one more `$`; a key starting `$$` reads with one fewer. A one-key object with a single-`$` key is then never data.
+- **`$styles` is retired; `$scale` is not.** The retired list is built from what the encoder writes now, not from #644's list: `{"$scale": "min" | "max"}` is still written for a channel at its scale's own end (#554, #649).
+- **Version 2 reads as it did.** A document before version 3 predates the escape, so its `$` keys are data: an unknown one-key `$` object in it is read as data, as before; known, retired and renamed tags are handled as in version 3.
+
+**Rejected.**
+- **Failing inside the decoder**, position by position. The decoder is type-directed and deliberately passes a wrong shape through for the validator; an unknown tag is wrong in every position, so one walk over the parsed document says it once, with the document's own path, before any atom is made.
+- **Refusing every `$` key, with no escape.** A term is any host value; refusing a data column named `$price` would make a valid chart unwritable.
+- **Escaping only one-key maps.** A rule that depends on a map's size changes a key's spelling when a column is added or dropped; escaping every `$` key is one rule.
+- **Retiring `$scale` with `$styles`**, as #644's list had it. It is still written; retiring it would refuse the area baselines every version 3 design may hold.
+
+**Consequences.**
+- A misspelt, retired or future tag fails at its path, with its name, and never loads as data.
+- Retiring or renaming a tag is a table entry: #642's `$colours` → `$colors` is the first rename.
+- `test/visualize/chart/codec_tags_test.exs` is the guard: every live tag round-trips, its samples cover exactly the table's live tags, and any other `$` key is refused.
+- spec/14 §11.2 says the rule; spec/15 §2.2 and §12.3 name the board's and the snapshot's tags as the table's.
