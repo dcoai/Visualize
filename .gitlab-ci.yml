@@ -69,11 +69,10 @@ compile:
 
 # The raster tests run the resvg binary (spec/12 §4, D-121): a pinned upstream release,
 # checked against its SHA-256 before use. test/test_helper.exs fails the suite when
-# VISUALIZE_RESVG names no executable, so this job never skips them silently. Moving to
-# another release changes RESVG_URL and RESVG_SHA256 together.
-test:
-  extends: .elixir
-  stage: check
+# VISUALIZE_RESVG names no executable, so a job that downloads it never skips them
+# silently. Moving to another release changes RESVG_URL and RESVG_SHA256 together. The
+# `test` job and `verify:hooks` both take it from here (D-179).
+.resvg:
   variables:
     RESVG_URL: https://github.com/linebender/resvg/releases/download/v0.48.1/resvg-linux-x86_64.tar.gz
     RESVG_SHA256: fa8c26495a187e592c501db15bf9e8a9fdc051d4b2b336b39703d5b59f912b9d
@@ -84,6 +83,12 @@ test:
     - mkdir -p .resvg && tar -xzf resvg.tar.gz -C .resvg resvg
     - export VISUALIZE_RESVG="$CI_PROJECT_DIR/.resvg/resvg"
     - $VISUALIZE_RESVG --version
+
+test:
+  extends: [.elixir, .resvg]
+  stage: check
+  script:
+    - !reference [.resvg, script]
     - mix test --warnings-as-errors --cover
   coverage: '/\|\s+(\d+\.\d+)%\s+\|\s+Total\s+\|/'
   artifacts:
@@ -122,15 +127,19 @@ verify:models:
 # ExUnit drives the engine, so the job is the Elixir image with Debian's nodejs (18 on
 # bookworm, ES modules and atob included) added; `mix test` elsewhere excludes :js when
 # no node is on the path, and here `--only js` runs exactly those tests.
+#
+# It has resvg too (#679, D-179): a :js_resvg test replays a hook under node and compares
+# what it drew with resvg's raster of the same SVG, so this is the one job with both.
 verify:hooks:
-  extends: .elixir
+  extends: [.elixir, .resvg]
   stage: verify
   variables:
     MIX_ENV: test
   script:
     - apt-get install -y -qq --no-install-recommends nodejs
     - node --version
-    - mix test --warnings-as-errors --only js
+    - !reference [.resvg, script]
+    - mix test --warnings-as-errors --only js --include js_resvg
 
 # What a consumer compiles: lib/ alone, with neither audit/, specs/, surfex nor extla, and
 # neither Phoenix nor Nx. This checkout's own prod build carries the optional deps, so the

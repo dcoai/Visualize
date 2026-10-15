@@ -67,7 +67,7 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
 
       # The whole canvas cleared from the identity, then the stream replayed onto it.
       assert ["setTransform", "clearRect", "beginPath", "moveTo", "lineTo", "lineTo", "stroke"] =
-               calls(drawn, canvas) -- ["save", "restore"]
+               Enum.reject(calls(drawn, canvas), &(&1 in ["save", "restore"]))
 
       assert %{"name" => "clearRect", "args" => [0, 0, 1200, 800]} =
                Enum.find(drawn, &(&1["name"] == "clearRect"))

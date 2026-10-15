@@ -413,6 +413,17 @@ release it merely follows.
   labels, axes or grid for every chart drawn under it. A design's own `styles` entry of the same
   name still wins.
 
+### Fixed
+
+- **A canvas draws each element in its own transform and style** (#689, D-179). On the
+  JSON, script and binary canvases an element's own `translate`/`rotate`, and its alpha,
+  colors, blend, shadow and font, stayed in force for the element drawn after it: a symbol
+  scatter drew its second symbol at the sum of the first two positions and the rest off the
+  plot, rotated text skewed what followed, and a translucent element made its next sibling
+  translucent. Each element that sets a transform or a style is now drawn inside
+  `save`/`restore`, so a canvas draws what the SVG draws. An element that sets neither is
+  unchanged.
+
 ## [0.6.0] — 2026-10-14
 
 The contracts a scene builds on, settled before more is built over the old shapes. A feed can
