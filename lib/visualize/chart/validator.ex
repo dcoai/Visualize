@@ -533,8 +533,9 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
-  defp held(kind, map, path, _ctx) when kind in [:style_transition, :part_transition],
-    do: Motion.check(map, path)
+  defp held(kind, map, path, _ctx)
+       when kind in [:style_transition, :part_transition, :style_animation],
+       do: Motion.check(map, path)
 
   defp held(_kind, _map, _path, _ctx), do: []
 

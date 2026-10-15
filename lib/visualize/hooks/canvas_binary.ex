@@ -510,14 +510,14 @@ defmodule Visualize.Hooks.CanvasBinary do
               const length = view.getUint16(offset, true);
               if (motion) {
                 const text = new TextDecoder().decode(bytes.subarray(offset + 2, offset + 2 + length));
-                VisualizeMotion.open(motion, VisualizeMotion.parseSpan(text));
+                VisualizeMotion.open(motion, ctx, VisualizeMotion.parseSpan(text));
               }
               offset += 2 + length;
               break;
             }
 
             case 0x54: // motion_end (§4.3.16)
-              if (motion) VisualizeMotion.close(motion);
+              if (motion) VisualizeMotion.close(motion, ctx);
               break;
 
             case 0x00: { // version (spec/09 §4.3.11)

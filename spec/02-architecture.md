@@ -93,7 +93,7 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Paint.definition/1` | The `:linear_gradient` or `:radial_gradient` element under the paint's id, its geometry as `x1 y1 x2 y2` or `cx cy r fx fy` with `gradientUnits="objectBoundingBox"`, and one `:stop` per stop; for a hatch, the `:pattern` element of [14-declarative-chart](14-declarative-chart.md) §2.7 — `patternUnits="userSpaceOnUse"`, the tile `spacing` square, `patternTransform="rotate(angle)"` — holding its background rectangle and its lines or dot. |
 | `Visualize.IR.Paint.bounds/1` | The tight bounding box `{x, y, width, height}` of a `:path`, `:rect`, `:circle`, `:ellipse`, `:line`, `:polyline` or `:polygon` element in its own user units — a path's curves and arcs by their extremes, not their control points — or `nil` for any other type or an empty shape. |
 
-**Motion** (#653, D-176). An element's style MAY carry `:transition`, a list of `{property, duration, easing}` — `property` `:fill`, `:stroke` or `:opacity`, `duration` in milliseconds, `easing` a `Visualize.Ease` name ([14-declarative-chart](14-declarative-chart.md) §3.10) — and an element MAY carry the attribute `"data-vis-id"`, the identity a motion is keyed by. `Visualize.IR.Motion` holds what every backend writes of it:
+**Motion** (#653, D-176). An element's style MAY carry `:transition`, a list of `{property, duration, easing}` — `property` `:fill`, `:stroke` or `:opacity`, `duration` in milliseconds, `easing` a `Visualize.Ease` name ([14-declarative-chart](14-declarative-chart.md) §3.10) — and `:animation`, `%{name, duration, easing, iterations, delay}` (§3.11, #677), and an element MAY carry the attribute `"data-vis-id"`, the identity a motion is keyed by. `Visualize.IR.Motion` holds what every backend writes of it:
 
 | Function | Contract |
 |---|---|
@@ -104,6 +104,9 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Motion.json/1` | A span's arguments as JSON text — lists, strings, numbers, atoms as their names and `nil` as `null`, numbers formatted as path data is, every string escaped with control characters as `\uXXXX` — the text the `:json` command and the binary record both carry. |
 | `Visualize.IR.Motion.transitions/1` | The resolved list as the canvas encoders write it: `[[property, duration, samples], …]`, the property a string ([09-rendering-backends](09-rendering-backends.md) §3.3.5). |
 | `Visualize.IR.Motion.css_properties/1` | The CSS properties a property moves: `fill` → `fill`, `fill-opacity`; `stroke` → `stroke`, `stroke-width`, `stroke-opacity`; `opacity` → `opacity`. |
+| `Visualize.IR.Motion.keyframes/1` | A built-in animation's keyframes (spec/14 §3.11): `[{offset, values}]`, `values` a map of `:opacity`, `:x`, `:y`, `:rotate` and `:scale`. |
+| `Visualize.IR.Motion.css_keyframes/1` | `@keyframes vis-<name> { … }` of a built-in: each offset as a percentage, `opacity`, `translate: Xpx Ypx`, `rotate: Ddeg`, `scale: S`. |
+| `Visualize.IR.Motion.css_animation/1` | The CSS `animation` value of a resolved animation: `<keyframes> <duration>ms <easing> <delay>ms <iterations>`. |
 | `Visualize.IR.Motion.oklch/1` | A colour string as `oklch()`: a literal `Visualize.Color.parse/1` reads as `oklch(L C H)` (`/ alpha` below `1`), an `oklch(…)` as it is, anything else as `oklch(from <value> l c h / alpha)`; `:none`, `:current_color` and a paint as they are. |
 
 ### 2.2 `Visualize.IR.Path`

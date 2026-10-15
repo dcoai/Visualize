@@ -24,7 +24,7 @@ defmodule Visualize.IR.Motion do
   """
 
   alias Visualize.{Color, Ease}
-  alias Visualize.IR.{Element, Paint, Path}
+  alias Visualize.IR.{Element, Paint, Path, Transform}
 
   @typedoc "A property a transition moves."
   @type property :: :fill | :stroke | :opacity
@@ -35,6 +35,9 @@ defmodule Visualize.IR.Motion do
   # The easing is sampled at t = 0, 0.05, …, 1: CSS's `linear()` and the hooks read the
   # same points (spec/14 §3.10).
   @steps 20
+
+  # The values a keyframe may hold, in the order a span writes them.
+  @properties [:opacity, :x, :y, :rotate, :scale]
 
   @doc """
   The easing's 21 values at `t = 0, 0.05, …, 1`, each rounded to 4 decimals; `[0, 1]` for
@@ -111,14 +114,118 @@ defmodule Visualize.IR.Motion do
   """
   @spec span(String.t(), Element.t(), map()) :: list()
   def span(id, %Element{} = element, style) do
-    [id, box(element), transitions(Map.get(style, :transition) || [])]
+    transitions = transitions(Map.get(style, :transition) || [])
+
+    case Map.get(style, :animation) do
+      %{} = animation -> [id, box(element), transitions, animation(animation)]
+      nil -> [id, box(element), transitions]
+    end
   end
 
-  defp box(element) do
+  # The element's tight box as drawn: its bounds mapped through its own transform, the
+  # corners' bounds, in the user units the span opens in (#677).
+  defp box(%Element{transform: transform} = element) do
     case Paint.bounds(element) do
-      {x, y, w, h} -> [x, y, w, h]
-      nil -> nil
+      nil ->
+        nil
+
+      {x, y, w, h} ->
+        if transform == nil or Transform.empty?(transform) do
+          [x, y, w, h]
+        else
+          m = Transform.to_matrix(transform)
+
+          {xs, ys} =
+            [{x, y}, {x + w, y}, {x, y + h}, {x + w, y + h}]
+            |> Enum.map(&Transform.apply_matrix(m, &1))
+            |> Enum.unzip()
+
+          {x0, x1} = Enum.min_max(xs)
+          {y0, y1} = Enum.min_max(ys)
+          [x0, y0, x1 - x0, y1 - y0]
+        end
     end
+  end
+
+  # A resolved animation as the span carries it (spec/09 §3.3.5): the keyframes' name, the
+  # duration, the samples, the iterations (`nil` for infinite), the delay and a built-in's
+  # keyframes as rows of offset, opacity, x, y, rotate and scale (`nil` for a host's).
+  defp animation(%{name: name} = a) do
+    iterations = if a.iterations == :infinite, do: nil, else: a.iterations
+    [to_string(name), a.duration, samples(a.easing), iterations, a.delay, wire_keyframes(name)]
+  end
+
+  defp wire_keyframes(name) when is_binary(name), do: nil
+
+  defp wire_keyframes(name) do
+    for {offset, values} <- keyframes(name),
+        do: [offset | Enum.map(@properties, &Map.get(values, &1))]
+  end
+
+  @doc """
+  A built-in animation's keyframes (spec/14 §3.11): offsets from `0` to `1`, each with the
+  values there of `:opacity`, `:x`, `:y` (a translation in user units), `:rotate` (degrees,
+  about the centre of the element's box as drawn) and `:scale`.
+
+      iex> Visualize.IR.Motion.keyframes(:pulse)
+      [{0, %{opacity: 1}}, {0.5, %{opacity: 0.35}}, {1, %{opacity: 1}}]
+  """
+  @spec keyframes(atom()) :: [{number(), map()}]
+  def keyframes(:pulse), do: [{0, %{opacity: 1}}, {0.5, %{opacity: 0.35}}, {1, %{opacity: 1}}]
+
+  def keyframes(:blink),
+    do: [{0, %{opacity: 1}}, {0.4999, %{opacity: 1}}, {0.5, %{opacity: 0}}, {1, %{opacity: 0}}]
+
+  def keyframes(:shake) do
+    for {offset, x} <- [{0, 0}, {0.2, -3}, {0.4, 3}, {0.6, -3}, {0.8, 3}, {1, 0}],
+        do: {offset, %{x: x}}
+  end
+
+  def keyframes(:spin), do: [{0, %{rotate: 0}}, {1, %{rotate: 360}}]
+
+  @doc """
+  A built-in's keyframes as CSS: `@keyframes vis-<name> { … }`, each offset a percentage,
+  `opacity` as itself, `x` and `y` as `translate`, `rotate` and `scale` as the individual
+  transform properties, which compose with an element's transform.
+
+      iex> Visualize.IR.Motion.css_keyframes(:spin)
+      "@keyframes vis-spin { 0% { rotate: 0deg; } 100% { rotate: 360deg; } }"
+  """
+  @spec css_keyframes(atom()) :: String.t()
+  def css_keyframes(name) do
+    frames =
+      Enum.map_join(keyframes(name), " ", fn {offset, values} ->
+        "#{num(tidy(offset * 100))}% { #{css_values(values)} }"
+      end)
+
+    "@keyframes vis-#{name} { #{frames} }"
+  end
+
+  defp css_values(values) do
+    [
+      values[:opacity] && "opacity: #{num(values.opacity)};",
+      (values[:x] || values[:y]) &&
+        "translate: #{num(values[:x] || 0)}px #{num(values[:y] || 0)}px;",
+      values[:rotate] && "rotate: #{num(values.rotate)}deg;",
+      values[:scale] && "scale: #{num(values.scale)};"
+    ]
+    |> Enum.reject(&(&1 in [nil, false]))
+    |> Enum.join(" ")
+  end
+
+  @doc """
+  The CSS `animation` value of a resolved animation: the keyframes — `vis-<name>` for a
+  built-in, a host's name as it is — the duration, the easing, the delay and the
+  iterations.
+
+      iex> Visualize.IR.Motion.css_animation(%{name: :pulse, duration: 1200, easing: :linear, iterations: :infinite, delay: 0})
+      "vis-pulse 1200ms linear 0ms infinite"
+  """
+  @spec css_animation(map()) :: String.t()
+  def css_animation(%{name: name} = a) do
+    keyframes = if is_binary(name), do: name, else: "vis-#{name}"
+    iterations = if a.iterations == :infinite, do: "infinite", else: num(a.iterations)
+    "#{keyframes} #{num(a.duration)}ms #{css_easing(a.easing)} #{num(a.delay)}ms #{iterations}"
   end
 
   @doc "The resolved transition as the canvas encoders write it: `[[property, duration, samples], …]`."

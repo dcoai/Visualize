@@ -349,9 +349,12 @@ A member maps a received extent through its own five numbers, **clipped to its d
 
 **The loop.** After a replay that leaves a motion running, the hook requests one animation frame, and that frame replays the same stream — its parsed commands or decoded bytes, kept — with the clock advanced; a new stream arriving meanwhile is drawn at once and the loop goes on with it. A replay that leaves nothing running requests nothing, so **a stream without a span costs one draw and no frame**, as before #653. `destroyed()` cancels a pending frame.
 
-**Reduced motion** is read at every replay, so a reader who turns it on mid-motion sees the targets on the next frame.
+**Animations** (#677, spec/14 §3.11). `open` saves the context; when the span carries an animation and the reader does not prefer reduced motion, it reads the values at the time since the identity first drew it with that animation, less its delay — each property between the two keyframes about the fraction through the iteration that name it, the segment eased by the samples — translates by `x` and `y`, turns by `rotate` and scales by `scale` about the box's centre, and keeps `opacity` as a factor `draw` multiplies `globalAlpha` by; `close` restores. A running animation keeps `active`, so the loop runs while any has iterations left. `VisualizeMotion.register(name, keyframes)` registers a host's keyframes — `[[offset, {opacity, x, y, rotate, scale}], …]`, a property absent where a keyframe does not name it — under the name a design's `animation.name` gives as a string; the hooks look a span's `null` keyframes up there, and run nothing for a name nobody registered.
 
-`test/visualize/hooks/motion_test.exs` executes it under the harness of spec/12 §6, whose stub runs `requestAnimationFrame` on its manual clock: a fill moving from one colour to another through OKLab and reaching its end, a width moving numerically, a change in the middle, reduced motion, and a stream without a span requesting no frame.
+**Reduced motion** is read at every replay, so a reader who turns it on mid-motion sees the targets on the next frame, and no animation.
+
+
+`test/visualize/hooks/motion_test.exs` executes it under the harness of spec/12 §6, whose stub runs `requestAnimationFrame` on its manual clock: a fill moving from one colour to another through OKLab and reaching its end, a width moving numerically, a change in the middle, reduced motion, and a stream without a span requesting no frame; a pulse changing the alpha over time and repeating, a finite blink stopping, a spin turning about the box's centre, a registered keyframe running, and reduced motion running none (#677).
 
 ## 5. Visualize.Hooks.Zoom
 
