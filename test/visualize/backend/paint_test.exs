@@ -276,8 +276,8 @@ defmodule Visualize.Backend.PaintTest do
   end
 
   describe "the canvas gradient is the SVG gradient, pixel for pixel" do
-    @describetag :js
-    @describetag :resvg
+    # Both node and resvg: `--only js` must not select it where resvg is absent (test_helper).
+    @describetag :js_resvg
 
     # One 4:1 bar of each paint on a white page: resvg rasterises the SVG, and the gradient
     # the binary hook built is evaluated at each pixel's centre inside the bar.

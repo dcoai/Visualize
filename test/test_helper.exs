@@ -32,7 +32,12 @@ resvg =
     [:resvg]
   end
 
-ExUnit.start(exclude: [:benchmark | js ++ resvg])
+# A test that needs both — a hook replayed under node, compared with resvg's raster (#652) —
+# is tagged :js_resvg alone: `--only js` includes a :js test even when :resvg is excluded,
+# so it carries neither, and runs only where both are present.
+js_resvg = if js == [] and resvg == [], do: [], else: [:js_resvg]
+
+ExUnit.start(exclude: [:benchmark | js ++ resvg ++ js_resvg])
 
 # A zoned time scale reads the host's time zone database (spec/03 §7.4, D-115); the library
 # ships none, so the suite configures the test-only `tz` here as a host would.
