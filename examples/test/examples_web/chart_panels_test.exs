@@ -32,12 +32,15 @@ defmodule ExamplesWeb.ChartPanelsTest do
     figure
   end
 
-  test "a module names its panels; one that names none has none" do
-    assert ChartPanels.of(ColorsChart) == [:dark_mode]
-    assert ChartPanels.of(BarChart) == []
+  doctest ExamplesWeb.ChartPanels.Explain
+
+  test "a module names its panels, and every page explains" do
+    assert ChartPanels.of(ColorsChart) == [:dark_mode, :explain]
+    assert ChartPanels.of(BarChart) == [:explain]
 
     assert html(mounted("colors")) =~ ~s(id="chart-panel-dark_mode-colors")
-    refute html(mounted("bar")) =~ "chart-panel-"
+    refute html(mounted("bar")) =~ "chart-panel-dark_mode"
+    assert html(mounted("bar")) =~ ~s(id="chart-panel-explain-bar")
   end
 
   test "the implicit drawing carries the dark-mode rule, color_scheme: false none" do
@@ -92,16 +95,16 @@ defmodule ExamplesWeb.ChartPanelsTest do
       ChartLive.handle_event("chart_panel", %{"panel" => "dark_mode", "scheme" => "dark"}, s)
 
     {:noreply, kept} = ChartLive.handle_event("change_palette", %{"palette" => "dark"}, s)
-    assert [dark_mode: %{scheme: :dark}] = kept.assigns.panels
+    assert [dark_mode: %{scheme: :dark}, explain: _] = kept.assigns.panels
 
     {:noreply, stepped} = ChartLive.handle_params(%{"chart" => "paints"}, "/chart/paints", s)
-    assert stepped.assigns.panels == []
+    assert [explain: %{open: false}] = stepped.assigns.panels
     {:noreply, back} = ChartLive.handle_params(%{"chart" => "colors"}, "/chart/colors", stepped)
-    assert [dark_mode: %{scheme: :system}] = back.assigns.panels
+    assert [dark_mode: %{scheme: :system}, explain: _] = back.assigns.panels
   end
 
   test "the Composition chart is drawn under ZoomHook, its budget line non-scaling" do
-    assert ChartPanels.of(CompositionChart) == [:zoom]
+    assert ChartPanels.of(CompositionChart) == [:zoom, :explain]
     s = mounted("composition")
     page = html(s)
 
@@ -116,5 +119,61 @@ defmodule ExamplesWeb.ChartPanelsTest do
     # The hook's report changes nothing on the page.
     params = %{"k" => 2.0, "x" => -10.0, "y" => -5.0}
     assert {:noreply, ^s} = ChartLive.handle_event("chart_zoom", params, s)
+  end
+
+  defp event(s, name, params) do
+    {:noreply, s} = ChartLive.handle_event(name, params, s)
+    s
+  end
+
+  test "a click explains the element: its parts and the layers that set them" do
+    s = mounted("composition")
+    closed = html(s)
+    assert closed =~ "Explain an element"
+    refute closed =~ ~s(data-builder-scope="graph")
+
+    s = event(s, "chart_panel", %{"panel" => "explain", "action" => "open"})
+    page = html(s)
+    assert page =~ ~s(phx-hook="BuilderHook" data-builder-scope="graph")
+    assert page =~ ~s(data-node="marks[0]")
+    assert page =~ "Nothing picked yet."
+
+    # The bar's style is chosen by its row's state, so it is explained per state, the
+    # first at once: a palette name, a list, a style that extends another.
+    s = event(s, "pick", %{"node" => "marks[0]", "scope" => "graph"})
+    page = html(s)
+    assert page =~ ~s(data-builder-selected="marks[0]")
+    assert page =~ "why marks[0] looks as it does"
+
+    for word <- ["state = good", "state = degraded", "state = down"],
+        do: assert(page =~ word)
+
+    s = event(s, "chart_panel", %{"panel" => "explain", "datum" => "2"})
+    [explain] = for {:explain, state} <- s.assigns.panels, do: state
+    assert [%{layer: :theme}, %{layer: :kind}, %{layer: :field, style: :down, via: [:bad]}] =
+             explain.look.parts.stroke.chain
+
+    assert html(s) =~ "via bad"
+
+    # The trend's thick line: two palette entries stacked over the kind's defaults.
+    s = event(s, "pick", %{"node" => "marks[2]"})
+    [explain] = for {:explain, state} <- s.assigns.panels, do: state
+    assert explain.data == []
+
+    assert Enum.map(explain.look.parts.stroke.chain, &{&1.layer, &1.style}) ==
+             [theme: nil, kind: nil, kind: nil, palette: :style_3, palette: :thick]
+
+    # A frame's own group, and a frame the design lacks, explain nothing.
+    for node <- ["frames.status", "frames.nope.legend"] do
+      s = event(s, "pick", %{"node" => node})
+      assert html(s) =~ "has no style of its own to explain"
+    end
+
+    # The hook's drag and menu gestures move nothing here.
+    assert {:noreply, ^s} = ChartLive.handle_event("move", %{"node" => "labels[0]"}, s)
+    assert {:noreply, ^s} = ChartLive.handle_event("menu", %{"node" => "marks[0]"}, s)
+
+    closed = event(s, "chart_panel", %{"panel" => "explain", "action" => "close"})
+    refute html(closed) =~ ~s(data-builder-scope="graph")
   end
 end
