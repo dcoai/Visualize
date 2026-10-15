@@ -9,6 +9,7 @@ defmodule Visualize.Check do
     {"test", "test", ~w(test --warnings-as-errors --cover)},
     {"verify:api-surface", "dev", ~w(vis.surface --check)},
     {"verify:headings", "dev", ~w(vis.headings)},
+    {"verify:citations", "dev", ~w(vis.citations)},
     {"verify:models", "dev", ~w(vis.verify)},
     {"verify:hooks", "test", ~w(test --warnings-as-errors --only js --include js_resvg), ".",
      :node},
