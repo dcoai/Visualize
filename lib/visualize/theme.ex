@@ -61,7 +61,7 @@ defmodule Visualize.Theme do
   """
 
   alias Visualize.{Backend, Color}
-  alias Visualize.Chart.Style
+  alias Visualize.Chart.{Migration, Style}
   alias Visualize.Theme.{Contract, Palette}
 
   @light_series ~w(#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480)
@@ -69,13 +69,14 @@ defmodule Visualize.Theme do
 
   # The ramps of spec/08 §7.2, chosen in CIE LCh to hold the contracts of §7.5 with room.
   @light_ramps %{
-    status: ~w(#4ca34b #bd7407 #c23238),
+    # The status ramp is defined from the theme's green, amber and red (spec/08 §7.5, #664).
+    status: [{:color, :green}, {:color, :amber}, {:color, :red}],
     thermal: ~w(#0e68ad #e8e8e8 #c02e31),
     diverging: ~w(#b35806 #ededed #62448e),
     sequential: ~w(#e9f2fc #5e95d3 #004580)
   }
   @dark_ramps %{
-    status: ~w(#4f924c #db8e1c #ff8f8a),
+    status: [{:color, :green}, {:color, :amber}, {:color, :red}],
     thermal: ~w(#7fb3e6 #3a3f48 #f47c7c),
     diverging: ~w(#f7a35c #3a3f48 #c1acee),
     sequential: ~w(#273b4f #457cb1 #aad1f9)
@@ -291,7 +292,7 @@ defmodule Visualize.Theme do
   the key out. Any other name raises `ArgumentError`.
 
       iex> Visualize.Theme.style(Visualize.Theme.default(), :warning)
-      %{fill: %{type: :solid, color: :warning}, stroke: %{type: :solid, color: :warning, dash: "6 3"}, marker: %{shape: :triangle}}
+      %{fill: %{type: :solid, color: {:color, :warning}}, stroke: %{type: :solid, color: {:color, :warning}, dash: "6 3"}, marker: %{shape: :triangle}}
       iex> Visualize.Theme.style(Visualize.Theme.dark(), {:style, 12}) == Visualize.Theme.style(Visualize.Theme.dark(), :style_2)
       true
       iex> Visualize.Theme.style(Visualize.Theme.default(), :muted)
@@ -406,7 +407,7 @@ defmodule Visualize.Theme do
       iex> Visualize.Theme.style(theme, :muted)
       %{opacity: 0.4}
       iex> Visualize.Theme.new(name: :house, styles: %{bad: %{fill: :good}})
-      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill.color must be :bad or absent; got :good
+      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill.color must be :bad or absent; got {:color, :good}
 
   """
   @spec merge(t(), keyword() | map()) :: t()
@@ -458,8 +459,15 @@ defmodule Visualize.Theme do
   end
 
   # Palette entries in their parts, whatever spelling a host gave them (spec/14 §3.1, D-172).
+  # A color written as a bare name is the typed color it names (spec/08 §7.7, #664).
   defp normalized(styles),
-    do: Map.new(styles, fn {name, entry} -> {name, Style.normalize(entry)} end)
+    do: Map.new(styles, fn {name, entry} -> {name, typed(Style.normalize(entry))} end)
+
+  defp typed(entry) when is_map(entry) and not is_struct(entry),
+    do: Migration.canonical(entry, :style)
+
+  defp typed(entries) when is_list(entries), do: Enum.map(entries, &typed/1)
+  defp typed(entry), do: entry
 
   @doc """
   `:ok`, or `{:error, subject, message}` for the first ramp, color or palette style of the
@@ -503,9 +511,20 @@ defmodule Visualize.Theme do
   def violations(%__MODULE__{ramps: ramps} = theme) when is_map(ramps) do
     colors = own_colors(theme)
 
+    # A ramp's anchors are measured as the strings they name (#664); one that names none is
+    # left as written, which the contract refuses as no colour.
+    resolved =
+      Map.new(ramps, fn
+        {name, anchors} when is_list(anchors) ->
+          {name, Enum.map(anchors, &(anchor_literal(theme, &1, []) || &1))}
+
+        other ->
+          other
+      end)
+
     ramp_faults =
       for name <- ordered(ramps, Contract.ramps()),
-          {:error, subject, message} <- [Contract.check(Map.take(ramps, [name]), %{})],
+          {:error, subject, message} <- [Contract.check(Map.take(resolved, [name]), %{})],
           do: {subject, message}
 
     # Each entry of the table is a color; then `:info` and `:neutral` hold their contracts.
@@ -576,11 +595,38 @@ defmodule Visualize.Theme do
             "unknown ramp #{inspect(name)}; the ramps are #{inspect(Contract.ramps())}"
     end
 
-    case Map.get(theme.ramps || %{}, name) do
-      [_, _ | _] = anchors -> anchors
-      _missing -> Map.fetch!(@light_ramps, name)
+    anchors =
+      case Map.get(theme.ramps || %{}, name) do
+        [_, _ | _] = anchors -> anchors
+        _missing -> Map.fetch!(@light_ramps, name)
+      end
+
+    Enum.map(anchors, &(anchor_literal(theme, &1, []) || &1))
+  end
+
+  @doc false
+  # Each anchor as the colour string it is: a string as written, `{:color, name}` the
+  # string its name holds in the theme's table through any chain of names; `nil` for one
+  # that reaches no string — a ramp's anchor never reads a ramp, so it cannot loop (#664).
+  @spec anchor_literals(t(), list()) :: [String.t() | nil]
+  def anchor_literals(%__MODULE__{} = theme, anchors) when is_list(anchors),
+    do: Enum.map(anchors, &anchor_literal(theme, &1, []))
+
+  defp anchor_literal(_theme, literal, _seen) when is_binary(literal), do: literal
+
+  defp anchor_literal(theme, {:color, name}, seen) do
+    if name in seen do
+      nil
+    else
+      case lookup(theme, name) do
+        literal when is_binary(literal) -> literal
+        {:color, _} = next -> anchor_literal(theme, next, [name | seen])
+        _other -> nil
+      end
     end
   end
+
+  defp anchor_literal(_theme, _anchor, _seen), do: nil
 
   defp colour!(name, anchor) do
     (is_binary(anchor) && Color.parse(anchor)) ||

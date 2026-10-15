@@ -454,7 +454,7 @@ defmodule Visualize.Chart.FrameTest do
       fade: %{
         type: :linear,
         stops: [
-          %{at: 0, color: :series_1, opacity: 0.8},
+          %{at: 0, color: {:color, :series_1}, opacity: 0.8},
           %{at: 1, color: "#fff", opacity: 0.1}
         ]
       },

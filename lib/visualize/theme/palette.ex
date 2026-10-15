@@ -39,7 +39,7 @@ defmodule Visualize.Theme.Palette do
            end)
 
   @label %{
-    fill: %{type: :solid, color: :text},
+    fill: %{type: :solid, color: {:color, :text}},
     font: %{family: :font_family, size: :label_size}
   }
 
@@ -48,46 +48,48 @@ defmodule Visualize.Theme.Palette do
                Enum.map(@roles, fn role ->
                  {role,
                   %{
-                    fill: %{type: :solid, color: role},
-                    stroke: %{type: :solid, color: role, dash: :cue},
+                    fill: %{type: :solid, color: {:color, role}},
+                    stroke: %{type: :solid, color: {:color, role}, dash: :cue},
                     marker: %{shape: :cue}
                   }}
                end) ++
                [
-                 hover: %{stroke: %{type: :solid, color: :text, width: 2}},
-                 focused: %{stroke: %{type: :solid, color: :text, width: 2, dash: "4 2"}},
+                 hover: %{stroke: %{type: :solid, color: {:color, :text}, width: 2}},
+                 focused: %{
+                   stroke: %{type: :solid, color: {:color, :text}, width: 2, dash: "4 2"}
+                 },
                  # Heavier only (#638): no colour of its own to paint over a stroked mark's.
                  selected: %{stroke: %{width: 2}},
-                 active: %{stroke: %{type: :solid, color: :text, width: 3}},
+                 active: %{stroke: %{type: :solid, color: {:color, :text}, width: 3}},
                  disabled: %{opacity: 0.4, stroke: %{dash: "2 2"}},
                  # The board's dim of today (spec/15 §13.2), so a muted row looks as it did.
                  muted: %{opacity: 0.25},
                  emphasis: %{stroke: %{width: 3}, font: %{weight: :bold}},
                  breakpoint: %{
-                   stroke: %{type: :solid, color: :bad, width: 2, dash: "6 2 2 2"}
+                   stroke: %{type: :solid, color: {:color, :bad}, width: 2, dash: "6 2 2 2"}
                  },
                  # The four built-in styles of spec/14 §3.3, exactly as they always were.
                  axis: %{
-                   stroke: %{type: :solid, color: :axis},
-                   fill: %{type: :solid, color: :text},
+                   stroke: %{type: :solid, color: {:color, :axis}},
+                   fill: %{type: :solid, color: {:color, :text}},
                    font: %{family: :font_family, size: :font_size}
                  },
-                 grid: %{stroke: %{type: :solid, color: :grid}},
+                 grid: %{stroke: %{type: :solid, color: {:color, :grid}}},
                  label: @label,
                  title: %{
                    @label
                    | font: %{family: :font_family, size: :title_size, weight: :bold}
                  },
                  caption: %{
-                   fill: %{type: :solid, color: :text},
+                   fill: %{type: :solid, color: {:color, :text}},
                    font: %{family: :font_family, size: :font_size, style: :italic}
                  },
                  value: %{
-                   fill: %{type: :solid, color: :text},
+                   fill: %{type: :solid, color: {:color, :text}},
                    font: %{family: :font_family, size: :title_size, weight: :medium}
                  },
                  annotation: %{
-                   fill: %{type: :solid, color: :text},
+                   fill: %{type: :solid, color: {:color, :text}},
                    font: %{family: :font_family, size: :font_size}
                  },
                  # The modifiers (D-172): each changes one thing, to be stacked on a look —
@@ -376,6 +378,7 @@ defmodule Visualize.Theme.Palette do
   end
 
   defp own_role?(role, role), do: true
+  defp own_role?(role, {:color, role}), do: true
 
   defp own_role?(role, {:ramp, :status, t}) when is_number(t),
     do: Map.get(@status_positions, role) == t

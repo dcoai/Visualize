@@ -14,6 +14,9 @@ defmodule Visualize.Chart.Codec do
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
   @series_slot ~r/^series_[1-9]\d*$/
+  # A color name read from a document is made an atom only when it is plain words.
+  @colour_word ~r/^[a-z][a-z0-9_]*$/
+  @unary Visualize.Color.Typed.unary()
 
   # -- encode ---------------------------------------------------------------------------
 
@@ -61,6 +64,19 @@ defmodule Visualize.Chart.Codec do
     do: %{"$ramp" => [Atom.to_string(name), t]}
 
   defp value(:ramp, {:ramp, name}) when is_atom(name), do: %{"$ramp" => Atom.to_string(name)}
+
+  # A typed color (spec/14 §11.2, #664): a name, a transform with its color first, a blend's
+  # list, the contrast ink over a color or over what is under.
+  defp value(:colour, {:color, name}) when is_atom(name), do: %{"$color" => Atom.to_string(name)}
+
+  defp value(:colour, {op, c, t}) when op in @unary and is_number(t),
+    do: %{"$#{op}" => [value(:colour, c), t]}
+
+  defp value(:colour, {:blend, list}) when is_list(list),
+    do: %{"$blend" => Enum.map(list, &value(:colour, &1))}
+
+  defp value(:colour, {:contrast, :under}), do: %{"$contrast" => "under"}
+  defp value(:colour, {:contrast, c}), do: %{"$contrast" => value(:colour, c)}
 
   # A map of colours as `[category, colour]` pairs in the categories' term order (spec/14
   # §11.2, D-143): an object's keys are strings, and a category need not be one.
@@ -209,6 +225,39 @@ defmodule Visualize.Chart.Codec do
     case ramp_name(name) do
       nil -> v
       found -> {:ramp, found, t}
+    end
+  end
+
+  defp read(:colour, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
+    if Regex.match?(@colour_word, name), do: {:color, String.to_atom(name)}, else: v
+  end
+
+  defp read(:colour, %{"$blend" => list} = v) when map_size(v) == 1 and is_list(list),
+    do: {:blend, Enum.map(list, &read(:colour, &1))}
+
+  defp read(:colour, %{"$contrast" => "under"} = v) when map_size(v) == 1, do: {:contrast, :under}
+
+  defp read(:colour, %{"$contrast" => c} = v) when map_size(v) == 1,
+    do: {:contrast, read(:colour, c)}
+
+  # A transform's tag; any other one-key `$` object is left as the object it is, which is no
+  # color, so the validator refuses it rather than a color be read as data (#645's rule).
+  defp read(:colour, %{} = v) when map_size(v) == 1 do
+    case Map.to_list(v) do
+      [{"$" <> op, [c, t]}] when is_number(t) ->
+        case Enum.find(@unary, &(Atom.to_string(&1) == op)) do
+          nil -> v
+          found -> {found, read(:colour, c), t}
+        end
+
+      [{"$series", i}] ->
+        {:series, i}
+
+      [{"$" <> _tag, _value}] ->
+        v
+
+      _other ->
+        read_term(v)
     end
   end
 

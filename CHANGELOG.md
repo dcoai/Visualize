@@ -76,6 +76,20 @@ release it merely follows.
 
 ### Changed
 
+- **Colors in a design are typed** (#664, D-173). A color position of a design always holds a
+  literal string, `:none` or a typed color. `fill: :bad` is read as `fill: color(:bad)`, and
+  `:contrast` as `contrast()`, the ink over whatever the text is drawn on (new:
+  `Visualize.Color.contrast/0`). The rewrite happens silently on every read, at every version, so
+  stored designs draw as before, but a design read back holds `{:color, :bad}` where it held `:bad`.
+  The validator checks every color name against the theme's color table:
+  `{:undeclared, :color, name}` replaces `{:undeclared, :slot, name}` for colors. JSON writes typed
+  colors with tags: `{"$color": "bad"}`, `{"$intensity": [c, 0.65]}`, `{"$alpha": …}`,
+  `{"$lighten": …}`, `{"$darken": …}`, `{"$saturate": …}`, `{"$blend": […]}` and
+  `{"$contrast": c | "under"}`. The old spellings (`"bad"`, `"contrast"`) are still read, and an
+  unknown `$` tag in a color position is refused. The theme palette is written in typed colors
+  (`Visualize.Theme.style/2` answers `color: {:color, :warning}`). The built-in light and dark
+  `status` ramps are `[color(:green), color(:amber), color(:red)]`, so a theme that changes its
+  red changes its bad end. A ramp anchor may name a color of the table.
 - **Role colors are names in the theme's color table** (#663, D-135 amended). `%Visualize.Theme{}`
   has no `roles` field: `:info` and `:neutral` are entries of `colors`, and `:good`, `:warning`
   and `:bad` are the entries `{:ramp, :status, 0 | 0.5 | 1}`, so they still follow `status`.

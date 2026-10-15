@@ -156,7 +156,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         anchors:
           drawn.ramps
           |> Map.fetch!(name)
-          |> anchors(Map.get(theme.ramps || %{}, name))
+          |> anchors(own_anchors(theme, name))
           |> Enum.with_index(),
         markers: if(name == :status, do: @positions, else: []),
         fault: Map.get(faults, {:ramp, name})
@@ -176,6 +176,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           colour: colour,
           l: colour |> Color.parse() |> Color.to_lab() |> Map.fetch!(:l) |> round()
         }
+      end
+    end
+
+    # The theme's own anchors as the strings they name (spec/08 §7.5, #664).
+    defp own_anchors(theme, name) do
+      case Map.get(theme.ramps || %{}, name) do
+        anchors when is_list(anchors) -> Theme.anchor_literals(theme, anchors)
+        other -> other
       end
     end
 

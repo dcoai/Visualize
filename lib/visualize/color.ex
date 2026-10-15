@@ -685,7 +685,7 @@ defmodule Visualize.Color do
           | {:ramp, atom(), number()}
           | {:intensity | :alpha | :lighten | :darken | :saturate, value(), number()}
           | {:blend, [value(), ...]}
-          | {:contrast, value()}
+          | {:contrast, value() | :under}
 
   @doc """
   The color `name` of the theme's color table (spec/08 §1.9, §7.1).
@@ -784,6 +784,17 @@ defmodule Visualize.Color do
   """
   @spec darken(value(), number()) :: value()
   def darken(c, t), do: transform(:darken, c, t)
+
+  @doc """
+  The readable ink over whatever the text is drawn on (spec/14 §3.2): a mark's inline label
+  inks against its element's fill, any other text against the theme's background.
+
+      iex> Visualize.Color.contrast()
+      {:contrast, :under}
+
+  """
+  @spec contrast() :: value()
+  def contrast, do: {:contrast, :under}
 
   @doc """
   The readable ink over `c`: the theme's text or background, else black or white,

@@ -150,7 +150,7 @@ defmodule Visualize.Chart.Mark.Label do
   # the label rather than the background `Style.resolve/3` assumed (spec/14 §5.5, D-123).
   defp inked(style, style_node, under, theme) do
     Enum.reduce([:fill, :stroke], style, fn key, acc ->
-      if Map.get(style_node, key) == :contrast,
+      if Map.get(style_node, key) in [:contrast, {:contrast, :under}],
         do: Map.put(acc, key, Theme.ink(theme, under)),
         else: acc
     end)
@@ -181,7 +181,8 @@ defmodule Visualize.Chart.Mark.Label do
     end
   end
 
-  defp contrast?(node), do: Enum.any?([:fill, :stroke], &(Map.get(node, &1) == :contrast))
+  defp contrast?(node),
+    do: Enum.any?([:fill, :stroke], &(Map.get(node, &1) in [:contrast, {:contrast, :under}]))
 
   @doc false
   # The colour under a mark's label (spec/14 §5.5, D-123): the fill its element is drawn

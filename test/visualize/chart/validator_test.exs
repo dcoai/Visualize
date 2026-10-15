@@ -603,10 +603,10 @@ defmodule Visualize.Chart.ValidatorTest do
 
     test "theme slots, against the built-in or inline theme" do
       assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :nope)) ==
-               [{[:styles, :muted, :stroke, :color], {:undeclared, :slot, :nope}}]
+               [{[:styles, :muted, :stroke, :color], {:undeclared, :color, :nope}}]
 
       assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :series_3)) ==
-               [{[:styles, :muted, :stroke, :color], {:undeclared, :slot, :series_3}}]
+               [{[:styles, :muted, :stroke, :color], {:undeclared, :color, :series_3}}]
 
       assert Validator.validate(put_at(@full, [:styles, :muted, :stroke, :color], {:series, 99})) ==
                :ok
@@ -661,8 +661,12 @@ defmodule Visualize.Chart.ValidatorTest do
                "marks[0].options.radius: is not read by :line"
 
       assert Validator.format({[:styles, :s, :fill], {:type, :colour}}) ==
-               "styles.s.fill: must be a colour string, :none, :contrast, a theme slot, a role, " <>
-                 "{:ramp, name, t} with t in 0..1 or a paint"
+               "styles.s.fill: must be a colour string, :none, a typed color — color(name), " <>
+                 "ramp(name, t) with t in 0..1, contrast() — a transform of colors with every " <>
+                 "number in 0..1, or a paint"
+
+      assert Validator.format({[:styles, :s, :fill], {:undeclared, :color, :brand}}) ==
+               "styles.s.fill: color :brand is not a name of the theme's color table"
     end
   end
 

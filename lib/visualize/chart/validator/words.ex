@@ -168,6 +168,10 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   def words({:undeclared, :slot, name}), do: "slot #{inspect(name)} is not a slot of the theme"
+
+  def words({:undeclared, :color, name}),
+    do: "color #{inspect(name)} is not a name of the theme's color table"
+
   def words({:undeclared, kind, name}), do: "#{kind} #{inspect(name)} is not declared"
   def words({:invalid_for, type}), do: "is not read by #{inspect(type)}"
 
@@ -293,8 +297,8 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   defp type_words(:colour) do
-    "a colour string, :none, :contrast, a theme slot, a role, {:ramp, name, t} with t in " <>
-      "0..1 or a paint"
+    "a colour string, :none, a typed color — color(name), ramp(name, t) with t in 0..1, " <>
+      "contrast() — a transform of colors with every number in 0..1, or a paint"
   end
 
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"

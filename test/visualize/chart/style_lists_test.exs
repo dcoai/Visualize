@@ -20,7 +20,7 @@ defmodule Visualize.Chart.StyleListsTest do
                Style.node(styles, [:bad, :bold])
 
       assert Style.node(styles, :bad_bold).font_weight == :bold
-      assert Style.node(styles, :bad_bold).stroke == :bad
+      assert Style.node(styles, :bad_bold).stroke == {:color, :bad}
       assert Style.node(styles, :alert) == Style.node(styles, :bad)
     end
 
@@ -30,7 +30,7 @@ defmodule Visualize.Chart.StyleListsTest do
 
       assert node.fill == :none
       assert node.font_weight == :bold
-      assert node.stroke == :bad and node.stroke_dasharray == Theme.cue(:bad).dash
+      assert node.stroke == {:color, :bad} and node.stroke_dasharray == Theme.cue(:bad).dash
     end
 
     test "a list nests: a named composition inside a site's list" do
@@ -152,7 +152,7 @@ defmodule Visualize.Chart.StyleListsTest do
 
       node = Style.node(styles, stack, pick(:selected))
       # The field-chosen style (5) over the named one (4): the bad colour.
-      assert node.stroke == :bad
+      assert node.stroke == {:color, :bad}
       # The view state (7) over the data: its opacity.
       assert node.opacity == 0.9
       # The local edit (8) over the state: its width.

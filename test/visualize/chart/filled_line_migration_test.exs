@@ -94,6 +94,6 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
 
   test "a role style's fill counts, read through the theme's palette" do
     {:ok, v3} = Migration.migrate(design(2, [Map.put(plain(), :style, :bad)]))
-    assert [%{type: :area, style: %{fill: %{color: :bad}}}, %{type: :line}] = v3.marks
+    assert [%{type: :area, style: %{fill: %{color: {:color, :bad}}}}, %{type: :line}] = v3.marks
   end
 end
