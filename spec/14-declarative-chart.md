@@ -106,7 +106,7 @@ A field name is an atom in the map form even for a source whose columns are stri
 | `sources` | `{:map, {:node, :source}}` | `:binding` | `%{}` | `:union` |
 | `vars` | `{:map, {:node, :var}}` | `:binding` | `%{}` | `:union` |
 | `theme` | `{:one_of, [:name, {:node, :theme}]}` | `:style` | `:default` | `:override` |
-| `styles` | `{:map, {:node, :style}}` | `:style` | `%{}` | `:union` |
+| `styles` | `{:map, style entry}` — a node, a name or a list (§2.6) | `:style` | `%{}` | `:union` |
 | `defs` | `{:map, {:node, :paint}}` | `:style` | `%{}` | `:union` |
 | `layout` | `{:node, :layout}` | `:geometry` | `%{}` | `:override` |
 | `interaction` | `{:node, :interaction}` | `:binding` | `%{}` | `:override` |
@@ -148,13 +148,13 @@ A field name is an atom in the map form even for a source whose columns are stri
 
 ### 2.5 Theme
 
-**Implemented.** `theme` names a theme — `:default`, `:dark`, `:colour_safe` or `:print` for the built-in ones of [08-utilities](08-utilities.md) §7.2, through `Visualize.Theme.builtin/1` — or gives one inline as a `:theme` node whose keys are the fields of `Visualize.Theme`: `name` (`:name`), `series` (`{:list, :string}`, non-empty), `axis`, `grid`, `text`, `background`, `surface` (`:string`), `ramps` (`{:map, {:list, :string}}`, a ramp name to its anchors), `roles` (`{:map, :string}`, `:info` and `:neutral` to a colour), `styles` (`{:map, {:node, :style}}`, a palette name to its entry, [08-utilities](08-utilities.md) §7.7 — #637), `font_family` (`:string`), `font_size`, `label_size`, `title_size` (`:number`), every key `:style` and `:override`, defaults those of `Visualize.Theme.default/0`. An inline `ramps`, `roles` or `styles` names only what it changes; the rest are the default theme's (spec/08 §7.2, §7.5, §7.7). A palette entry is checked as the style node it is (§3.1, §3.2) — its slots against this theme's, a version 2 entry in the flat keys read as its parts — except that a role's `:cue` on `stroke.dash` or `marker.shape` is the role's cue (spec/08 §7.7) and `extends` is the contract's to refuse. An inline theme whose ramps, roles or palette entries break their contracts (spec/08 §7.5, §7.7) is the fault `{:contract, message}` at `[:theme, :ramps, name]`, `[:theme, :roles, name]` or `[:theme, :styles, name]`, and application refuses it as `Visualize.Theme.new/1` does. A name that is neither built-in nor known to the consumer is resolved at application, which takes a `theme:` option; the validator accepts any name. Slots referenced from styles (§3.2), and palette names used as style references (§3.3), are checked against the theme when it is built-in or inline.
+**Implemented.** `theme` names a theme — `:default`, `:dark`, `:colour_safe` or `:print` for the built-in ones of [08-utilities](08-utilities.md) §7.2, through `Visualize.Theme.builtin/1` — or gives one inline as a `:theme` node whose keys are the fields of `Visualize.Theme`: `name` (`:name`), `series` (`{:list, :string}`, non-empty), `axis`, `grid`, `text`, `background`, `surface` (`:string`), `ramps` (`{:map, {:list, :string}}`, a ramp name to its anchors), `roles` (`{:map, :string}`, `:info` and `:neutral` to a colour), `styles` (a palette name to its entry — a style node, or a list of palette names and nodes, [08-utilities](08-utilities.md) §7.7 — #637, #658), `font_family` (`:string`), `font_size`, `label_size`, `title_size` (`:number`), every key `:style` and `:override`, defaults those of `Visualize.Theme.default/0`. An inline `ramps`, `roles` or `styles` names only what it changes; the rest are the default theme's (spec/08 §7.2, §7.5, §7.7). A palette entry is checked as the style node it is (§3.1, §3.2) — its slots against this theme's, a version 2 entry in the flat keys read as its parts — except that a role's `:cue` on `stroke.dash` or `marker.shape` is the role's cue (spec/08 §7.7) and `extends` is the contract's to refuse. An inline theme whose ramps, roles or palette entries break their contracts (spec/08 §7.5, §7.7) is the fault `{:contract, message}` at `[:theme, :ramps, name]`, `[:theme, :roles, name]` or `[:theme, :styles, name]`, and application refuses it as `Visualize.Theme.new/1` does. A name that is neither built-in nor known to the consumer is resolved at application, which takes a `theme:` option; the validator accepts any name. Slots referenced from styles (§3.2), and palette names used as style references (§3.3), are checked against the theme when it is built-in or inline.
 
 A theme is also a **document of its own** (§9.3, #534, D-139): `Visualize.Chart.Theme` writes and reads a theme as this node, stamped with the schema version, so a host stores and ships one as a value. A theme kept in the builder's store is found by name (`Visualize.Chart.Builder.Store.theme/2`, §19.7), and the builder's preview resolves a design's `theme: name` that is not built-in through it, supplying the `theme:` option of application from the library.
 
 ### 2.6 Styles
 
-**Implemented.** `styles` declares named style nodes (§3). A mark, axis, legend or label references one by name through its `style` key; no other node carries a colour, a font or a curve.
+**Implemented** (lists: #658, D-172). `styles` declares named styles (§3). A mark, axis, legend or label references one by name through its `style` key; no other node carries a colour, a font or a curve. An entry is a style node, **a name** (another style, under this one's name), or **a list** of names and nodes that stacks into one style left to right by the merge rule (§3.5), so a design names a composition once: `styles: %{bad_bold: [:bad, :bold], alert: :bad}`. The entry's type is `{:one_of, [{:node, :style}, {:ref, :style}, {:list, {:one_of, [{:ref, :style}, {:node, :style}]}}]}`; a field entry (§3.6) is a site's, since a named style has no datum of its own.
 
 ### 2.7 Defs
 
@@ -249,7 +249,7 @@ A `frame` that names no frame of the design is `{:undeclared, :frame, name}`, as
 
 | Key | Type | Notes |
 |---|---|---|
-| `extends` | `{:ref, :style}` | the style this one derives from (§3.5) |
+| `extends` | `{:one_of, [{:ref, :style}, {:list, {:ref, :style}}]}` | the style this one derives from, or a list of them stacked left to right (§3.5) |
 | `fill` | `{:node, :paint}` | what an area is filled with (§3.2) |
 | `stroke` | `{:node, :stroke}` | what a line or an outline is drawn with, and the line itself |
 | `font` | `{:node, :font}` | a text's face |
@@ -354,6 +354,8 @@ For an enumerated key an atom is the literal; for a `:colour`, `:size` or `:font
 **The merge rule** (`Visualize.Chart.Style.merge/2`), the one way a style is laid over another — by `extends`, in a stack (§3.6), and in the fragment cascade (§8.2): every top-level key of the later wins, except a **part**, which merges **key by key**, so `%{extends: :warning, stroke: %{width: 3}}` keeps the warning stroke's colour and dash. When the two name **different `type`s** of one part — a solid fill over a linear one, `:none` over a colour, one curve over another — the later part **replaces** the earlier, because `color` and `stops` do not mix and a curve's tension is its type's; it keeps of the earlier only what no type decides: a paint's `opacity`, and a stroke's `width`, `dash`, `join`, `cap` and `placement`. A partial part with no `type` (`%{width: 3}`) keeps the type under it, so `[:outline, %{fill: %{opacity: 0.5}}]` is still no fill.
  A chain of any length resolves, each link flattened over the one above it; the parent is looked up among the declared styles and then the theme's palette (§3.3), so a design derives from `:axis`, `:grid`, `:label`, `:title` — or `:warning`, `:selected`, `:style_2` — without declaring them. A palette entry is flat (spec/08 §7.7), so the palette ends every chain. A design entry of a palette name that extends the same name names itself, not the theme's entry, and is a cycle like any other: a design that wants "the theme's `:bad`, heavier" declares it under a name of its own.
 
+**`extends` may name a list** (#658): `%{extends: [:bad, :bold], fill: :none}` derives from the stack of the two — the bad look with bold text — and lays its own parts over that, as a list at a site would (§3.6).
+
 Derivation is *within* a style; composition (§8) is *between* fragments, and the two never meet. `Visualize.Chart.compose/2` unions two `styles` maps and reports `:conflict` where they declare one name differently, and `extends` is a value of a style node like any other key while it does so. What derivation buys is that a dashboard wanting "the series style, but heavier" writes one key instead of copying four that then drift.
 
 A cycle — a style that reaches itself through `extends`, directly or through a chain — is `:cycle` at the style's path (`[:styles, :series]`), reported by the validator for every style that reaches itself, and a design with one does not validate. `extends` reaches neither the element nor the mark's generator: the lookup consumes it, so a flattened style node never carries it and `Visualize.Chart.Style.resolve/3` never sees it.
@@ -383,7 +385,12 @@ The private `node/2` of `Visualize.Chart.Style` is where this happens, and it is
 
 It is **anonymous in the document**: an inline node is not a key of `design.styles`, so nothing can refer to it. `Visualize.Chart.explain/1` needs a name for attribution and synthesises one from where it sits — `marks[0].style.local`, `axes[1].style.local` — which is unique by construction, one local per site and one site per position. That name is a **display name and not a reference**: writing `style: :"marks[0].style.local"` names a style nothing declares, exactly as any other undeclared name does. Sharing a local style means promoting it to a declared one.
 
-**What does not change.** A reference to a style nothing declares is the error it already is, at the entry's own path. A cycle through `extends` is `:cycle` as before, and a stack cannot introduce one, because a stack is not a chain: an entry may not name the stack it sits in.
+**What does not change.** A reference to a style nothing declares is the error it already is, at the entry's own path. A stack at a site cannot introduce a cycle, because a site is not a name: an entry may not name the stack it sits in.
+
+**A list of styles anywhere a style goes** (#658, D-172). The list a site takes is the list every other style position takes: a `styles` entry (§2.6), `extends` (§3.5), a theme's palette entry ([08-utilities](08-utilities.md) §7.7) and every site — `mark.style`, `label.style`, `mark_label.style`, `axis.style`, `legend.style` — with a site's `{:field, f}` entries among them (#644). Wherever it stands, a list stacks left to right into one style by the merge rule (§3.5), the later winning. A name, a list and an `extends` chain may reach one another, and a style that reaches itself through any of them — `a: [:b]`, `b: %{extends: :a}` — is `:cycle` at its path in `styles` (§10.1), refused before it is drawn.
+
+**A bare atom is a style.** In a style position — a site, a `styles` entry, `extends`, a list in any of them — a bare atom names a style: the design's `styles` first, then the theme's palette (§3.3). A colour is never written there; it is written in a part (`fill: %{color: …}`, or the shorthand `fill: …`, §3.1), and in a paint's place the one reserved bare atom is `:none`, no paint. (Until #650 types colours, an atom in a colour's place is still a slot or a meaning, §3.2.)
+
 
 **A field in the stack: a style named by data** (#637, #644, D-171). A stack entry MAY be a field binding `{:field, f}`: the style **named by the datum's value** of `f`. It is laid on the stack **where it stands**, the later entry winning where they overlap, so partial entries go over a base and a later entry over an earlier one. It stands alone or in a list, like any other entry:
 
@@ -397,6 +404,23 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 - **Every site takes one.** The validator accepts the entry at all five sites — `mark.style`, `label.style`, `mark_label.style`, `axis.style` and `legend.style` — and checks `f` as any field binding (§3.2): a field the mark's source does not declare is `{:undeclared, :field, f}` at the entry's path. Where there is no datum — a frame label, an axis, a legend, the type inference, the color domain's field bindings — the entry lays nothing, so the rest of the stack is the site's style there.
 
 A design whose stack holds no field entry draws byte for byte as before: the per-datum path is taken only by a mark whose stack holds one.
+
+### 3.7 Precedence
+
+**Implemented** for the layers that exist (#658, D-172). The look of an element is laid from these layers, each over the ones before it by the merge rule (§3.5), lowest first:
+
+| | Layer | Where it comes from |
+|---|---|---|
+| 1 | theme root defaults | the theme (#651) |
+| 2 | container defaults | a design's, frame's, layer's or group's `defaults` (#651) |
+| 3 | mark-kind defaults | `defaults` for one mark kind (#651) |
+| 4 | named and stacked styles, with `extends` | the site's stack: names, lists and inline nodes, each through its `extends` (§3.5, §3.6); the theme's palette under a name the design does not declare (§3.3) |
+| 5 | the field-chosen style | a `{:field, f}` entry, the style the datum's value names (§3.6) |
+| 6 | generator results | #654 |
+| 7 | view states | `:hover`, `:focused`, `:selected`, `:muted`: a board's selection (spec/15 §13.2), the hooks' markers (spec/10 §4.4) |
+| 8 | the site's local inline edit | the inline node a stack ends with (§3.6) |
+
+**View states sit above data styles**, so feedback stays visible over whatever the data chose, and **the local edit sits above everything**, so an edit made at a site is what that site shows. A stack an author writes is laid in the order written, a field entry where it stands (§3.6); the order above is the one the library keeps where it adds a layer itself. A board puts its selection's state entry after the stack's names and field entries and **before** a trailing inline node (`Visualize.Chart.Style.with_state/2`), and a resolved state is laid over the element's own look and never under it. Layers 1–3 and 6 belong to the parts that bring them (#651, #654); until then a mark's own default — the series' paint of §5.6 — is what lies under layer 4.
 
 ## 4. The frame
 
@@ -1254,7 +1278,7 @@ A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, na
 | `{:type_mismatch, slot, field, expected, given}` | the schema bound to `slot` describes `field` as `given`, and the scale a mark reads it through needs `expected` — `:time`, `:number` or `:category` (§7.4, D-153); at the read |
 | `{:identity_required, source}` | a mark whose `:window` step asks `latest` (§5.4.1) over slot `source`, whose feed declares no identity (spec/08 §10.1); at the mark (§7.3, D-168) |
 | `:conflict` | a `:union` key declared with different values by two fragments (§8) |
-| `:cycle` | a style that reaches itself through `extends` (§3.5) |
+| `:cycle` | a style that reaches itself through `extends`, a name or a list (§3.5, §3.6), at its path in `styles` |
 | `{:unscaled, field}` | the builder's, not the layer's (§18.16, #370): a position channel bound to a field that names a scale the frame lacks and no type could be read for; the design still validates and draws |
 
 The resolution, binding and schema faults are reported by `Visualize.Chart.apply/2`, and `:conflict` by `Visualize.Chart.compose/2`, in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
@@ -1672,6 +1696,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.Style.resolve/3` | `resolve(node, theme, mode)`: the element style map of a style node, its parts projected first (`project/1`) — the eighteen element keys, every slot resolved through `Visualize.Theme.resolve/3` in `mode`, a dash-array list joined, a `{:field, f}` kept for `bind/4` and a `{:paint, name}` kept for the frame (§3.2). Raises `ArgumentError` for a variable. |
 | `Visualize.Chart.Style.normalize/1` | a style node in the shape it is stored in (§3.1, D-172): the flat keys of version 2 moved into their parts, every shorthand expanded, a gradient's `color` list its stops; anything that is not a style node (a reference, a variable) passes through. |
 | `Visualize.Chart.Style.merge/2` | `merge(under, over)`: the merge rule of §3.5 — every top-level key of `over` wins, a part merges key by key, and a part whose `type` changes is replaced but for the keys no type decides. Both are normalized first. |
+| `Visualize.Chart.Style.with_state/2` | `with_state(stack, entry)`: the stack with a view-state entry laid at its layer of §3.7 — after its names and field entries, before a trailing inline node, the site's local edit — so the local edit still wins. |
 | `Visualize.Chart.Style.project/1` | a style node's parts written as the flat keys the frame, the marks and the backends read (§3.2); a gradient written in place is `{:paint, name}` under its hash; keys already flat pass through, so projecting twice is projecting once. |
 | `Visualize.Chart.Style.bind/4` | `bind(style, datum, frame, mode)`: the map of `resolve/3` with every `{:field, f}` read from the datum; a colour key's reading passes through the frame's `color` scale when it declares one — a value outside its domain is the scale's `unknown` — and resolves as a slot when it is one; a colour key whose reading is `nil`, or whose scale yields `nil`, is `:none` (D-122); any other key's `nil` reading drops the key. |
 
