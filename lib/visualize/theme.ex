@@ -62,7 +62,7 @@ defmodule Visualize.Theme do
 
   alias Visualize.{Backend, Color}
   alias Visualize.Chart.{Migration, Style}
-  alias Visualize.Theme.{Contract, Palette}
+  alias Visualize.Theme.{Contract, Palette, Roles}
 
   @light_series ~w(#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480)
   @dark_series ~w(#7fb3e6 #f7a35c #f47c7c #6fd3c8 #86d67c #f2d15b #c99bd6 #ffb3c1 #cfa98b #b7bcc6)
@@ -406,8 +406,8 @@ defmodule Visualize.Theme do
       iex> theme = Visualize.Theme.new(name: :house, styles: %{muted: %{opacity: 0.4}})
       iex> Visualize.Theme.style(theme, :muted)
       %{opacity: 0.4}
-      iex> Visualize.Theme.new(name: :house, styles: %{bad: %{fill: :good}})
-      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill.color must be :bad or absent; got {:color, :good}
+      iex> Visualize.Theme.new(name: :house, colors: %{warning: "#f5c242"})
+      ** (ArgumentError) theme :house: style :warning breaks its contract: fill {:color, :warning} is 1.65:1 against #ffffff; a role style's paint must reach 3:1 (WCAG 1.4.11, non-text contrast)
 
   """
   @spec merge(t(), keyword() | map()) :: t()
@@ -542,7 +542,15 @@ defmodule Visualize.Theme do
           {:error, subject, message} <- [Contract.check(%{}, roles)],
           do: {subject, message}
 
-    ramp_faults ++ entry_faults ++ role_faults ++ Palette.violations(own_styles(theme))
+    palette_faults = Palette.violations(own_styles(theme))
+    broken = for {{:style, name}, _message} <- palette_faults, do: name
+
+    # The role styles as a set and every palette color name, once the table's own entries
+    # read; a table that does not cannot be measured against (#666).
+    set_faults =
+      if entry_faults == [] and ramp_faults == [], do: Roles.violations(theme, broken), else: []
+
+    ramp_faults ++ entry_faults ++ role_faults ++ palette_faults ++ set_faults
   end
 
   # The names of a map in the contract's order, then any it does not know, sorted.

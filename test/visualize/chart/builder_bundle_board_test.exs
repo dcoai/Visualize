@@ -66,7 +66,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
     def ids(agent), do: Agent.get(agent, fn s -> Map.keys(s.entries) end)
   end
 
-  @ocean %{theme: %{name: :ocean, series: ["#1f5f8b", "#3fa7a0"], background: "#f4f8fb"}}
+  @ocean %{theme: %{name: :ocean, series: ["#1f5f8b", "#3fa7a0"], background: "#fbfdfe"}}
 
   # A line drawn in the theme a variable names, its mark in a stored style.
   defp line(style) do

@@ -20,6 +20,29 @@ defmodule Visualize.Chart.Validator.Colors do
     end
   end
 
+  @doc false
+  # A ramp's anchor is a colour string or a name of the theme's table (spec/08 §7.5, #664).
+  @spec anchor?(term()) :: boolean()
+  def anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_atom(name), anchor)
+
+  # The fields of an inline theme its contracts are measured with: the role styles are read
+  # against its own background and colors (spec/08 §7.7, #666).
+  @measured [:ramps, :colors, :styles, :background, :text, :axis, :grid, :surface, :series]
+
+  @doc false
+  # An inline theme's fields its contracts are measured with, each only when well typed: a
+  # type fault is the type check's to report.
+  @spec measured(map()) :: map()
+  def measured(map) do
+    map
+    |> Map.take(@measured)
+    |> Map.filter(fn
+      {:series, v} -> is_list(v) and v != [] and Enum.all?(v, &is_binary/1)
+      {k, v} when k in [:background, :text, :axis, :grid, :surface] -> is_binary(v)
+      _ramps_colors_styles -> true
+    end)
+  end
+
   defp undeclared(_value, _path, :unknown), do: []
 
   defp undeclared(value, path, names) do

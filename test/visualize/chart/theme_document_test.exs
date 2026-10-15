@@ -17,7 +17,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
            series: ~w(#2f5d8a #b5651d #a23b3b),
            background: "#fbfaf6",
            font_family: "Georgia, serif",
-           ramps: %{status: ~w(#5996d6 #cd6012 #b92931)},
+           ramps: %{status: ~w(#4ca34b #bd7407 #c23238)},
            roles: %{info: "#2f5d8a"}
          )
 
@@ -47,7 +47,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
       decoded = Jason.decode!(json)
       assert decoded["$version"] == Visualize.Chart.Migration.current()
       assert decoded["theme"]["name"] == "house"
-      assert decoded["theme"]["ramps"]["status"] == ~w(#5996d6 #cd6012 #b92931)
+      assert decoded["theme"]["ramps"]["status"] == ~w(#4ca34b #bd7407 #c23238)
     end
 
     test "the store's fragment is a theme fragment and reads as the current version" do

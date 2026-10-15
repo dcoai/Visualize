@@ -1951,3 +1951,10 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - **`stylesheet/1` respects forced colors.** An `@media (forced-colors: active)` block maps the furniture to the user's system colors (`CanvasText`, `Canvas`, `GrayText`). In that mode a browser forces data fills and strokes itself, and a role still reads without hue by its dash and marker.
 
 *Rejected:* writing the forced-colors block into every chart's SVG. A declaration on the `<svg>` beats an ancestor's theme class (D-55), so the block belongs with the stylesheet the host includes. *Rejected:* `@supports` fallbacks to the literal inside the SVG. A presentation attribute cannot carry two values, and the browsers that lack relative colors predate 2023.
+
+**Amended by #666** (work item 5 of #650; D-171's contracts amended). **The role styles' contracts are rewritten for typed colors** (#650's acceptance, modification 2). "A role style paints with its own role" is gone: a theme restyles what a meaning looks like and may paint `bad` in any color. The library now holds the five roles as a set:
+- they are distinct from each other without hue (by dash, marker or weight, cues in place);
+- their colors are at least ΔEOK 0.02 apart;
+- each one's solid `fill` or `stroke` reaches **3:1** against the theme's background (WCAG 1.4.11), and its `fill` reaches **4.5:1** when the entry carries a `font` (1.4.3).
+
+Every `{:color, name}` in a palette entry's paints must resolve in the theme's color table. A refusal names the measured ratio and the rule that failed. Every built-in theme passes; the lowest ratio is the color-safe theme's `good`, at 3.11:1 on white. *Rejected:* checking a role against every possible background, or against the surface. The background is the one the theme promises its marks are read on (spec/08 §7.4), and a stricter rule would refuse the built-ins' light-page status greens.
