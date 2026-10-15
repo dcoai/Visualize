@@ -133,6 +133,7 @@ Each row sums to 1, so every grey is its own simulation — a property the tests
 | `{:alpha, c, a}` | `alpha(c, a)` | `c` at opacity `a` |
 | `{:lighten, c, t}`, `{:darken, c, t}`, `{:saturate, c, t}` | `lighten(c, t)`, `darken(c, t)`, `saturate(c, t)` | `c` moved toward white, black or full chroma in OKLCH |
 | `{:contrast, c}` | `contrast(c)` | the readable ink over `c`: the theme's text or background, else black or white (7.3) |
+| `{:contrast, :under}` | `contrast()` | the readable ink over whatever the text is drawn on: a mark's inline label over its element's fill, any other text over the background (spec/14 §3.2) |
 
 **Each helper takes the color first, and every number is in `0..1`,** so colors pipe:
 
@@ -184,6 +185,7 @@ A helper raises `ArgumentError` for a number outside `0..1`, an operand that is 
 | `Visualize.Color.lighten/2` | `{:lighten, c, t}` |
 | `Visualize.Color.darken/2` | `{:darken, c, t}` |
 | `Visualize.Color.saturate/2` | on a color value, `{:saturate, c, t}`; on a `%Visualize.Color{}`, 1.5 |
+| `Visualize.Color.contrast/0` | `{:contrast, :under}`: the ink over whatever the text is drawn on (spec/14 §3.2) |
 | `Visualize.Color.contrast/1` | `{:contrast, c}` |
 | `Visualize.Color.value?/1` | whether a term is a color value of the table above, operands included |
 | `Visualize.Color.resolve/3` | `resolve(value, theme, mode)`: the color as `Visualize.Theme.resolve/3` gives a slot, or a transform's literal |
@@ -564,7 +566,7 @@ Beside the slots, a **ramp position**  `{:ramp, name, t}` names the colour at `t
 | `text` | `#333333` | `#e6e6e6` |
 | `background` | `#ffffff` | `#1b1e24` |
 | `surface` | `#eef2f6` | `#23272f` |
-| `ramps.status` | `#4ca34b #bd7407 #c23238` | `#4f924c #db8e1c #ff8f8a` |
+| `ramps.status` | `color(:green) color(:amber) color(:red)`: `#4ca34b #bd7407 #c23238` | the same names: `#4f924c #db8e1c #ff8f8a` |
 | `ramps.thermal` | `#0e68ad #e8e8e8 #c02e31` | `#7fb3e6 #3a3f48 #f47c7c` |
 | `ramps.diverging` | `#b35806 #ededed #62448e` | `#f7a35c #3a3f48 #c1acee` |
 | `ramps.sequential` | `#e9f2fc #5e95d3 #004580` | `#273b4f #457cb1 #aad1f9` |
@@ -608,7 +610,7 @@ A theme MUST hold, by `Visualize.Color.contrast/2` against its own `background`:
 
 **Implemented** (#533, D-135). A palette position promises *distinct*, never a meaning: `:series_3` is red on both built-in themes, but nothing makes it so on a host's, and a status chart coloured success, warning and failure through series slots can come out orange, grey and light blue. Some colours carry meaning a reader brings with them — the stop-light, cold blue and hot red, below and above a target — so a theme carries that meaning as **ramps**, and the library, not the theme's author, fixes what each one means.
 
-**Ramps.** A ramp is a list of two or more anchor colours, evenly spaced along `0..1`, and the colour at `t` is interpolated between the two anchors about it in **CIE Lab** (`Visualize.Color.interpolate_lab/3`), so any number of ordered levels fits and a theme never runs out of positions. A position that falls on an anchor is that anchor as written. Four ramps are standard, each with its **meaning contract**:
+**Ramps.** A ramp is a list of two or more anchor colours — a colour string, or a name of the theme's color table, `{:color, name}`, whose entry is a string or a chain of such names (#664): the built-in light and dark themes write `status` as `[color(:green), color(:amber), color(:red)]`, so the status ramp is defined from the theme's green, amber and red — evenly spaced along `0..1`, and the colour at `t` is interpolated between the two anchors about it in **CIE Lab** (`Visualize.Color.interpolate_lab/3`), so any number of ordered levels fits and a theme never runs out of positions. A position that falls on an anchor is that anchor as written. Four ramps are standard, each with its **meaning contract**:
 
 | Ramp | Meaning | Contract |
 |---|---|---|
@@ -682,7 +684,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 A theme chooses only **how many style series** it has, `:style_1` to `:style_n` with no gap, and how each entry looks. It cannot add a name: the names are the library's, as the ramps and roles are, so a design that names one reads the same on every theme. `style_names/1` lists a theme's names — its style series, then the roles, the state styles, the furniture styles and the modifiers, each in the order of the table. The palette's names are style names, not slots: `:axis` the style and `:axis` the colour slot are different things, as the built-in style and the slot always were (spec/14 §3.3).
 
-**An entry is a style node in compound parts, written in slots** (spec/14 §3.1, D-172). Its keys are the style's parts — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve` — and `opacity`, `blend` and `class`, and its values are written as a design writes them — `fill: %{type: :solid, color: :bad}`, `stroke: %{type: :solid, color: {:series, 3}, width: 1.5}`, `font: %{size: :label_size}` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). A host may give an entry in the flat keys of version 2 (`stroke_width: 2`) or in shorthands (`fill: :bad`); `new/1` and `merge/2` hold it in its parts. In a role's entry `stroke: %{dash: :cue}` and `marker: %{shape: :cue}` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the dash out where it is solid. An entry may also be **a list** of palette names and style nodes, stacked left to right as a list anywhere is (spec/14 §3.6, #658): a theme may write `:emphasis` as `[:bold, :thick]`. A name in the list is a palette name of the same theme. An entry is **flat** in the other sense: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
+**An entry is a style node in compound parts, written in slots** (spec/14 §3.1, D-172). Its keys are the style's parts — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve` — and `opacity`, `blend` and `class`, and its values are written as a design writes them — `fill: %{type: :solid, color: {:color, :bad}}` (a typed color, §1.9, #664), `stroke: %{type: :solid, color: {:series, 3}, width: 1.5}`, `font: %{size: :label_size}` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). A host may give an entry in the flat keys of version 2 (`stroke_width: 2`) or in shorthands (`fill: :bad`); `new/1` and `merge/2` hold it in its parts, a bare atom in a color position as the typed color it names (`{:color, :bad}`, #664). In a role's entry `stroke: %{dash: :cue}` and `marker: %{shape: :cue}` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the dash out where it is solid. An entry may also be **a list** of palette names and style nodes, stacked left to right as a list anywhere is (spec/14 §3.6, #658): a theme may write `:emphasis` as `[:bold, :thick]`. A name in the list is a palette name of the same theme. An entry is **flat** in the other sense: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
 
 **Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` is `stroke: %{width: 2}` alone — a stroked mark keeps its own paint and draws heavier, and a mark with no stroke of its own draws as it is (#638) — and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2). A modifier is partial by design: it changes one thing.
 
@@ -691,7 +693,7 @@ A theme chooses only **how many style series** it has, `:style_1` to `:style_n` 
 | Name | Entry |
 |---|---|
 | `:style_1` … `:style_10` | a solid `fill` of `{:series, k}`; a solid `stroke` of `{:series, k}`, `width: 1.5` and the `dash` below; a `marker` of the `shape` below |
-| `:good` … `:neutral` | a solid `fill` of the role; a solid `stroke` of the role with `dash: :cue`; `marker: %{shape: :cue}` |
+| `:good` … `:neutral` | a solid `fill` of the role's color, `{:color, role}`; a solid `stroke` of it with `dash: :cue`; `marker: %{shape: :cue}` |
 | `:hover` | `stroke: %{type: :solid, color: :text, width: 2}` |
 | `:focused` | `stroke: %{type: :solid, color: :text, width: 2, dash: "4 2"}` |
 | `:selected` | `stroke: %{width: 2}` (#638: no stroke colour and no `placement`, so it never paints over a mark's own stroke) |
