@@ -2066,3 +2066,12 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A raster, a `:js` script and the incremental canvas's strips draw the end state.
 - spec/14 §21.6's "no hook animates on its own" now has this one exception, stopped by the same media query.
 - The next work items amend this decision with `animation` and with `enter` and `exit`.
+
+**Amended by #677** (work item 2 of #653). **A style may animate, and reduced motion stops it.**
+- **`animation` is a style part** (spec/14 §3.11): a `name` — `:pulse`, `:blink`, `:shake`, `:spin`, or a string naming the host's keyframes — with `duration`, `easing`, `iterations` and `delay`. A state's style carries it, so an element runs it exactly while its data choose that state.
+- **The built-ins are data**, `Visualize.IR.Motion.keyframes/1`: offsets and the values of `opacity`, `x`, `y`, `rotate`, `scale`. SVG writes them as `@keyframes` with the individual transform properties; the motion span carries them to the canvas hooks, which hold no copy. Each segment between keyframes is eased by `easing`, as CSS does, on both backends.
+- **An animated element is wrapped** in `:css` output, `<g class="vis-animation-<h>">`, so a spin turns about the element's box as drawn, its own transform included; on a canvas the span's box is the element's as drawn for the same reason, and every span saves and restores the context.
+- **Host keyframes** are a string name: the host's stylesheet defines them for SVG, `VisualizeMotion.register/2` for a canvas. The name must be a CSS identifier (`{:unsafe, :animation}`), since it is written into a stylesheet.
+- **Reduced motion** stops every animation: `animation: none !important` under the media query, and the hooks run none while it matches.
+
+*Rejected:* the class on the element itself. CSS composes `transform-origin` outside an element's `transform` attribute, so a symbol placed by `translate(540,0)` would spin about the plot's corner; the wrapper's box already holds the translation. *Rejected:* easing the whole iteration with one curve. CSS eases each keyframe segment, and a canvas that eased differently would pulse on another rhythm than the SVG beside it. *Rejected:* a copy of the built-in keyframes in the hooks. They would drift from the CSS the server writes; carried in the span, the server's table is the one both draw.

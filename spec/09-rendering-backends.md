@@ -109,7 +109,7 @@ A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
 | `:vector_effect` | `:non_scaling_stroke` | `vector-effect="non-scaling-stroke"` (spec/14 §3.9, #651). The property does not inherit, so on a `:group` it is not written on the group: each child takes it, a child group passing it on the same way, unless the child sets its own |
 | `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
-| `:transition` | a list (spec/14 §3.10) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterised for a PNG — draws the element's end state |
+| `:transition`, `:animation` | a list, a map (spec/14 §3.10, §3.11) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterised for a PNG — draws the element's end state |
 | `:effect` with `:effect_radius`, `:effect_offset`, `:effect_color` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent, and `url(#vis-effect-shadow-<radius>-<h>)` for a shadow with an offset or a colour, `<h>` the base-36 `:erlang.phash2/1` of `{offset, color}` (spec/14 §2.7, #674); `:none` and the three keys alone are dropped |
 
 Every other `{key, value}` pair passes through unchanged and is serialised per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
@@ -263,10 +263,12 @@ A `nil` transform or one with no operations emits nothing. Otherwise one command
 **Implemented** (#653, work item #676, D-176). An element that carries a `"data-vis-id"` attribute — which only an element of a moving mark does (spec/14 §3.10) — is drawn inside a **motion span**: `{:motion, [id, box, transitions]}` before the element's commands and `{:motionEnd, []}` after them, the span holding exactly that element's own commands.
 
 - `id` is the attribute's value, the identity the hook keys the element's shown values by.
-- `box` is `[x, y, w, h]`, `Visualize.IR.Paint.bounds/1` of the element, its tight box in its user units, `null` for an element without one.
+- `box` is `[x, y, w, h]`, the element's tight box as drawn: `Visualize.IR.Paint.bounds/1` of the element mapped through its own transform — the corners' bounds — in the user units the span opens in, `null` for an element without one (#677).
 - `transitions` is the resolved transition of the element's effective style — its own `:transition`, else the one a group above it carries — as a list of `[property, duration, samples]`, `property` `"fill"`, `"stroke"` or `"opacity"`, `duration` in milliseconds, and `samples` the easing's 21 values at `t = 0, 0.05, …, 1` (`Visualize.IR.Motion.samples/1`) — the curve CSS's `linear()` is written from, so both backends ease alike. It is empty for an element whose style moves nothing, and the span is still written: a mark whose data choose a moving style for some rows draws every row in a span, so the hook knows what each identity shows before a later stream moves it.
 
-A span does not change what is drawn: a reader that ignores it draws the element at its target, which is what the `:js` serialisation does (3.4). `Visualize.IR.Motion` holds the conversions both canvas encoders share. No span is written for an element without the attribute, so a chart without motion is the commands it always was.
+- `animation` (#677, spec/14 §3.11), a fourth argument present when the element's effective style animates: `[name, duration, samples, iterations, delay, keyframes]` — the keyframes' name (a built-in's without the `vis-` prefix), `iterations` `null` for `:infinite`, and `keyframes` a built-in's as `[[offset, opacity, x, y, rotate, scale], …]`, `null` for an absent value, or `null` for a host's.
+
+A reader that runs spans saves the context at `motion` and restores it at `motionEnd`, so the element's own transform and what its animation adds stay the element's (#677). A span does not change what is drawn: a reader that ignores it draws the element at its target, which is what the `:js` serialisation does (3.4). `Visualize.IR.Motion` holds the conversions both canvas encoders share. No span is written for an element without the attribute, so a chart without motion is the commands it always was.
 
 ### 3.4 JavaScript serialisation
 
