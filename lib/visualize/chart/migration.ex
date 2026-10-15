@@ -207,13 +207,37 @@ defmodule Visualize.Chart.Migration do
   defp node(kind, map, text?), do: walk(kind, map, text?)
 
   defp walk(kind, map, text?) when is_map(map) and not is_struct(map) do
-    Map.new(map, fn {k, v} ->
+    map
+    |> renamed_themes(kind)
+    |> Map.new(fn {k, v} ->
       type = if spec = Schema.key(kind, k), do: spec.type, else: :term
       {k, value(type, v, text?)}
     end)
   end
 
   defp walk(_kind, value, _text?), do: value
+
+  # A built-in theme spelled in British English before #642 is read by its American name
+  # (spec/14 §9, D-183), wherever a theme is named: a design's or a theme document's
+  # `theme`, an inline theme's own `name` and its counterparts.
+  # spelling: allow — the old name a stored document holds.
+  @renamed_themes %{colour_safe: :color_safe}
+
+  defp renamed_themes(map, :design), do: rename_values(map, [:theme])
+  defp renamed_themes(map, :theme), do: rename_values(map, [:name, :dark, :light])
+  defp renamed_themes(map, _kind), do: map
+
+  defp rename_values(map, keys) do
+    Enum.reduce(keys, map, fn key, map ->
+      case Map.fetch(map, key) do
+        {:ok, name} when is_map_key(@renamed_themes, name) ->
+          Map.put(map, key, Map.fetch!(@renamed_themes, name))
+
+        _other ->
+          map
+      end
+    end)
+  end
 
   defp value(:text, parts, true) when is_list(parts), do: Text.unparse(parts)
   defp value(:colour, v, _text?), do: colour(v)

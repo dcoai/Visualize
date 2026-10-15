@@ -52,7 +52,7 @@ defmodule Visualize.ThemeColorsTest do
       expected = %{
         default: ~w(#4ca34b #bd7407 #c23238 #3b6fa8 #6f7480),
         dark: ~w(#4f924c #db8e1c #ff8f8a #7fb3e6 #b7bcc6),
-        colour_safe: ~w(#5996d6 #cd6012 #b92931 #3b6fa8 #6f7480),
+        color_safe: ~w(#5996d6 #cd6012 #b92931 #3b6fa8 #6f7480),
         print: ~w(#5996d6 #cd6012 #b92931 #3b6fa8 #6f7480)
       }
 

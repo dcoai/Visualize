@@ -119,7 +119,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     end
 
     test "a theme swap restyles a palette-styled mark" do
-      for theme <- [Theme.default(), Theme.dark(), Theme.colour_safe(), Theme.print()] do
+      for theme <- [Theme.default(), Theme.dark(), Theme.color_safe(), Theme.print()] do
         {group, _} = elements(design(%{style: :bad}), :literal, theme: theme)
 
         # The print theme's :bad is a crosshatch in its colour (#673).

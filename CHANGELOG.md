@@ -281,6 +281,20 @@ release it merely follows.
 
 ### Changed
 
+- **American spelling: the color-safe theme is `:color_safe`, and a map of colors is
+  `$colors` in JSON** (#642, D-183). The built-in theme and its function are
+  `Visualize.Theme.color_safe/0` and `theme: :color_safe`, and `Visualize.Theme.builtin/1`
+  knows only the new name; a color map range is written `{"$colors": …}`. A **stored**
+  design, inline theme or theme document that names the theme by its old spelling, and a
+  stored document holding the old tag, read as the new ones and draw exactly as before, so
+  nothing stored needs rewriting. Code that passes the old theme name changes it. The old
+  names:
+
+  <!-- spelling: allow -->
+  `:colour_safe` → `:color_safe`, `Visualize.Theme.colour_safe/0` → `color_safe/0`,
+  `{"$colours": …}` → `{"$colors": …}`.
+  <!-- spelling: end -->
+
 - **A JSON document's unknown or retired `$` tag is refused, not read as data** (#645,
   D-182). `Chart.from_json/2`, `Board.from_json/2`, `Board.Snapshot.from_json/2` and
   `Chart.Fragment.from_json/2` hold a document to the one table of tags before decoding it:

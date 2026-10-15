@@ -87,7 +87,7 @@ defmodule Visualize.Color.VisionTest do
     end
 
     for deficiency <- [:protanopia, :deuteranopia] do
-      assert distance.(Theme.colour_safe(), deficiency) > distance.(Theme.default(), deficiency),
+      assert distance.(Theme.color_safe(), deficiency) > distance.(Theme.default(), deficiency),
              inspect(deficiency)
     end
   end

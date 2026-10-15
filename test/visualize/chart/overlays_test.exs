@@ -418,7 +418,7 @@ defmodule Visualize.Chart.OverlaysTest do
   describe "the theme draws the meaning (D-135)" do
     test "default, dark and colour-safe draw each severity in their own tones" do
       colours =
-        for theme <- [:default, :dark, :colour_safe] do
+        for theme <- [:default, :dark, :color_safe] do
           applied = apply!(design(%{theme: theme}))
           [rules, _thresholds] = group(applied, resolve: :literal) |> find("mark mark-rule")
           [deploy, outage] = lines(rules)
@@ -487,7 +487,7 @@ defmodule Visualize.Chart.OverlaysTest do
       {:ok, json} = Chart.to_json(chart)
 
       assert json =~
-               ~s("$colours":[[3,"#123456"],[{"$atom":"warn"},{"$ramp":["status",0.5]}],["critical",{"$color":"bad"}]])
+               ~s("$colors":[[3,"#123456"],[{"$atom":"warn"},{"$ramp":["status",0.5]}],["critical",{"$color":"bad"}]])
 
       assert {:ok, ^chart} = Chart.from_json(json)
     end

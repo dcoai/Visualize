@@ -19,7 +19,7 @@ defmodule Visualize.Chart.Codec.Tags do
 
   # The tags written today. A transform of a color (`$intensity`, `$alpha`, …) is one per
   # operation of `Visualize.Color.Typed.ops/0`, so a new operation is a tag by construction.
-  @live ~w($var $field $generate $paint $ramp $color $blend $contrast $steps $colours
+  @live ~w($var $field $generate $paint $ramp $color $blend $contrast $steps $colors
            $series $unit $scale $axis $frame $data $adopted $keys $fact $use $id $time $atom
            $datum $absent $version) ++ Enum.map(@unary, &"$#{&1}")
 
@@ -29,8 +29,10 @@ defmodule Visualize.Chart.Codec.Tags do
       "was removed in #644: a style site names a style by data with {:field, f} (spec/14 §3.13)"
   }
 
-  # A tag written under another name now, read as the new one (old => new).
-  @renamed %{}
+  # A tag written under another name now, read as the new one (old => new): the British
+  # spellings before #642 (D-183).
+  # spelling: allow — the old tag a stored document holds.
+  @renamed %{"$colours" => "$colors"}
 
   # The first version whose documents escape their data's `$` keys.
   @escaped_from 3

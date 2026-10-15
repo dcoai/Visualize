@@ -61,7 +61,7 @@ defmodule Visualize.Chart.CodecTagsTest do
         StreamData.constant(
           at(%{version: 3}, [:theme, :colors, :red], %{100 => "#fde8e8", 500 => "#d62728"})
         ),
-      "$colours" =>
+      "$colors" =>
         StreamData.constant(
           at(%{version: 3}, [:frames, :main, :scales, :c], %{
             kind: :ordinal,
@@ -193,7 +193,8 @@ defmodule Visualize.Chart.CodecTagsTest do
   property "any other `$` key of a one-key object is refused at its path" do
     check all(
             tag <- StreamData.map(word(), &("$" <> &1)),
-            tag not in Tags.live() and not Map.has_key?(Tags.retired(), tag),
+            tag not in Tags.live() and not Map.has_key?(Tags.retired(), tag) and
+              not Map.has_key?(Tags.renamed(), tag),
             depth <- StreamData.integer(0..3)
           ) do
       {:ok, json} = Chart.to_json(Chart.from_map!(chart()))

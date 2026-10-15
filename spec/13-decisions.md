@@ -2250,3 +2250,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Retiring or renaming a tag is a table entry: #642's `$colours` → `$colors` is the first rename.
 - `test/visualize/chart/codec_tags_test.exs` is the guard: every live tag round-trips, its samples cover exactly the table's live tags, and any other `$` key is refused.
 - spec/14 §11.2 says the rule; spec/15 §2.2 and §12.3 name the board's and the snapshot's tags as the table's.
+
+## 183. D-183 — American spelling throughout: released names are renamed outright, stored names migrate on read, and the gate refuses a British form
+
+**Context.** #642; work items #697–#701. The library spelled its own names in British English — `colour`, `centre`, `grey`, `normalise`, `serialise`, `honour`, `labelled`, `realise` — in names, keys, docs and spec, while the user's rule (2026-10-14) is American English for everything we name and write. Most occurrences are prose and private names, but some are released: functions (`Board.realise/3`, `Color.Vision.recolour/2`, `Theme.colour_safe/0`, `Theme.colour_slots/1`), the built-in theme name `:colour_safe` a stored design holds, the JSON tag `$colours` a stored document holds, and the schema types a validator fault carries (`{:type, :colour}`). The style keys a stored design holds were already moved by the 2 → 3 step (D-172: a paint's `centre`, a stop's `colour`).
+
+**Decision.**
+- **Released public functions are renamed outright, with no `@deprecated` shims.** 0.7.0 is already a breaking release with a migration (schema v3) and the project is pre-1.0; a shim layer would keep both spellings in the surface for a release and the guard would have to allowlist them. The CHANGELOG carries a rename table, old → new.
+- **Stored documents migrate on read.** `Migration.canonical/1` reads the theme name `:colour_safe` as `:color_safe` wherever a design, an inline theme (`name`, `dark`, `light`) or a theme document names it; the tag table of D-182 reads `$colours` as `$colors`. Writing always uses the new spelling, and an old document renders byte for byte as the same document written in the new names.
+- **Everything else is renamed in place:** schema types and fault terms (`:colour` → `:color`, `:colour_map` → `:color_map`, `:theme_colour` → `:theme_color`), module and file names, builder event names, private names, docs, tests, spec, guides and the examples app.
+- **What stays:** Elixir's own `behaviour` (`@behaviour`, a module that is an Elixir behaviour, prose about one), the CHANGELOG's past entries, and quoted third-party text — CSS's `grey` keywords, d3's scheme names, ARIA's `aria-labelledby`, a unit alias a host may type (`metre`) — and the old names a migration reads, marked so.
+- **A recurrence guard in the gate**, with that allowlist (spec/12 §3).
+
+**Rejected.**
+- **Keeping the British names as `@deprecated` delegates for one minor release.** See above; the consumer adapts once, with the table.
+- **Renaming the stored names without a migration.** A stored design naming `:colour_safe` would stop drawing in its theme, and a stored `$colours` range would be refused by D-182's reader.
+- **Accepting both spellings everywhere** (a key `colour:` beside `color:`). Two names for one key is the ambiguity the style grammar removed (D-172).
+
+**Consequences.**
+- A host that calls a renamed function or matches `{:type, :colour}` changes the name, by the CHANGELOG's table. A host passing `theme: :colour_safe` in code passes `:color_safe`; a stored design that names it keeps working.
+- New code and docs are held to American spelling by the gate.

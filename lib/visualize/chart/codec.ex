@@ -110,7 +110,7 @@ defmodule Visualize.Chart.Codec do
       |> Enum.sort_by(fn {category, _colour} -> category end)
       |> Enum.map(fn {category, colour} -> [term(category), value(:colour, colour)] end)
 
-    Tags.tag("$colours", pairs)
+    Tags.tag("$colors", pairs)
   end
 
   defp value({:node, kind}, v) when is_map(v) and not is_struct(v), do: node(kind, v)
@@ -308,7 +308,7 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  defp read(:colour_map, %{"$colours" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
+  defp read(:colour_map, %{"$colors" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
     if Enum.all?(pairs, &match?([_, _], &1)),
       do:
         Map.new(pairs, fn [category, colour] -> {read_term(category), read(:colour, colour)} end),
@@ -481,7 +481,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?(:ramp, v), do: is_map(v) and is_map_key(v, "$ramp") and map_size(v) == 1
 
   defp json_shape?(:colour_map, v),
-    do: is_map(v) and is_map_key(v, "$colours") and map_size(v) == 1
+    do: is_map(v) and is_map_key(v, "$colors") and map_size(v) == 1
 
   # An enumeration's JSON is a string, so a tagged object beside one is never it (#492).
   defp json_shape?({:enum, _}, v), do: is_binary(v)
