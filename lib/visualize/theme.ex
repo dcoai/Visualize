@@ -283,8 +283,7 @@ defmodule Visualize.Theme do
               "Visualize.Theme.style_names/1"
     end
 
-    entry = Map.get(own_styles(theme), name) || Map.fetch!(Palette.builtin(), name)
-    cued(name, entry)
+    cued(name, composed(own_styles(theme), name))
   end
 
   def style(%__MODULE__{} = theme, name) do
@@ -313,11 +312,20 @@ defmodule Visualize.Theme do
   @spec palette(t()) :: %{atom() => map()}
   def palette(%__MODULE__{} = theme) do
     own = own_styles(theme)
-    builtin = Palette.builtin()
 
     theme
     |> style_names()
-    |> Map.new(&{&1, cued(&1, Map.get(own, &1) || Map.fetch!(builtin, &1))})
+    |> Map.new(&{&1, cued(&1, composed(own, &1))})
+  end
+
+  # An entry as one node: a list of palette names and nodes stacked (spec/08 §7.7, #658).
+  # A theme `new/1` built holds no list that cannot be composed; a struct written by hand
+  # may, and its entry then lays nothing rather than raise where it is drawn.
+  defp composed(own, name) do
+    case Palette.compose(own, name) do
+      {:ok, node} -> node
+      {:error, _message} -> %{}
+    end
   end
 
   defp own_styles(%__MODULE__{styles: styles}) when is_map(styles), do: styles

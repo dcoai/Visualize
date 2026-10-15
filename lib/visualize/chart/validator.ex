@@ -219,14 +219,15 @@ defmodule Visualize.Chart.Validator do
 
   # -- style derivation (spec/14 §3.5) --------------------------------------------------
 
-  # A style that reaches itself through `extends` is `:cycle` at its own path; a style that
-  # merely extends one that is on a cycle is not at fault and is not reported.
+  # A style that reaches itself — through `extends`, a name or a list (spec/14 §3.5, §3.6,
+  # #658) — is `:cycle` at its own path; a style that merely reaches one that is on a cycle
+  # is not at fault and is not reported.
   defp cycles(map) do
     case map[:styles] do
       styles when is_map(styles) and not is_struct(styles) ->
         for {name, _node} <- styles,
             name?(name),
-            walk(styles, parent(styles, name), name, []),
+            reaches?(styles, refs(Map.get(styles, name)), name, []),
             do: {[:styles, name], :cycle}
 
       _other ->
@@ -234,21 +235,21 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
-  defp walk(_styles, nil, _target, _seen), do: false
-  defp walk(_styles, target, target, _seen), do: true
+  defp reaches?(styles, names, target, seen) do
+    Enum.any?(names, fn
+      ^target ->
+        true
 
-  defp walk(styles, name, target, seen) do
-    if name in seen,
-      do: false,
-      else: walk(styles, parent(styles, name), target, [name | seen])
+      name ->
+        name not in seen and reaches?(styles, refs(Map.get(styles, name)), target, [name | seen])
+    end)
   end
 
-  defp parent(styles, name) do
-    case Map.get(styles, name) do
-      %{extends: parent} -> if name?(parent), do: parent
-      _other -> nil
-    end
-  end
+  # The style names an entry refers to: itself as a name, a list's entries, an `extends`.
+  defp refs(entries) when is_list(entries), do: Enum.flat_map(entries, &refs/1)
+  defp refs(%{extends: parent} = node) when not is_struct(node), do: refs(parent)
+  defp refs(name) when is_atom(name), do: if(name?(name), do: [name], else: [])
+  defp refs(_entry), do: []
 
   # -- context: what the design declares -----------------------------------------------
 
@@ -749,6 +750,23 @@ defmodule Visualize.Chart.Validator do
 
       {name, %Var{} = var} ->
         check(:term, var, path ++ [name], ctx)
+
+      # A list of palette names and nodes, or one name (#658): its names are the
+      # contract's to hold, its nodes style nodes.
+      {name, entries} when is_list(entries) or (is_atom(entries) and entries != nil) ->
+        entries
+        |> List.wrap()
+        |> Enum.with_index()
+        |> Enum.flat_map(fn
+          {entry, i} when is_map(entry) and not is_struct(entry) ->
+            node(:style, Palette.entry(entry), path ++ [name, i], ctx)
+
+          {entry, _i} when is_atom(entry) ->
+            []
+
+          {_entry, i} ->
+            [{path ++ [name, i], {:type, Schema.style_entry()}}]
+        end)
 
       {name, _other} ->
         [{path ++ [name], {:type, {:node, :style}}}]

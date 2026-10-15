@@ -81,6 +81,14 @@ release it merely follows.
   and `:outline` each change one thing, to stack on a look: `style: [:bad, :outline]` is the
   bad look's dashed outline with no fill. A role's cue is `:cue` on `stroke.dash` and
   `marker.shape`; contract messages name the part (`fill.color must be :bad or absent`).
+- **A list of styles goes anywhere a style goes** (#658, D-172). A `styles` entry may be a
+  list or another style's name — `styles: %{bad_bold: [:bad, :bold], alert: :bad}` — as may
+  `extends:` (`%{extends: [:bad, :bold], fill: :none}`) and a theme's palette entry
+  (`Visualize.Theme.new(styles: %{emphasis: [:bold, :thick]})`); each stacks left to right,
+  part by part. A style that reaches itself through a name, a list or `extends` is a `:cycle`
+  validation fault. A board now lays its selection's view state before a mark's trailing
+  inline style, so a local edit still wins over `:selected`/`:muted`
+  (`Visualize.Chart.Style.with_state/2`).
 - **New in `Visualize.Chart.Style`**: `normalize/1` (any spelling to the stored parts),
   `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
   `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and

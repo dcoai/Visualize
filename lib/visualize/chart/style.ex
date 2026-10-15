@@ -234,64 +234,81 @@ defmodule Visualize.Chart.Style do
   def node(styles, stack, pick), do: styles |> compound(stack, pick) |> Parts.project()
 
   @doc false
-  # `node/3` before the projection: the stack's style in its parts.
+  # `node/3` before the projection: the stack's style in its parts. A list stacks left to
+  # right wherever it stands — at the site, as a named style's entry, under `extends`
+  # (spec/14 §3.6, #658) — and `seen` carries the names on the way, so a style that reaches
+  # itself through a name, a list or an `extends` raises.
   @spec compound(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
-  def compound(_styles, nil, _pick), do: %{}
-  def compound(_styles, %Var{name: name}, _pick), do: unresolved!(name)
-
-  def compound(styles, stack, pick) when is_list(stack) do
-    Enum.reduce(stack, %{}, fn entry, resolved ->
-      Parts.merge(resolved, compound(styles, entry, pick))
-    end)
-  end
-
-  def compound(styles, {:field, _field} = entry, pick) do
-    case pick.(entry) do
-      nil -> %{}
-      name -> flatten(styles, name, [])
-    end
-  end
-
-  # An inline node is already the style: only its own `extends` needs flattening, and it is
-  # looked up under no name, so nothing can reach it and no cycle can start here.
-  def compound(styles, inline, _pick) when is_map(inline),
-    do: inline_node(styles, Parts.normalize(inline))
-
-  def compound(styles, name, _pick), do: flatten(styles, name, [])
+  def compound(styles, stack, pick), do: lay(styles, stack, pick, [])
 
   @doc false
   # The `{:field, f}` entries of a stack, in order (spec/14 §3.6).
   @spec by_data(term()) :: [{:field, atom()}]
   def by_data(stack), do: stack |> List.wrap() |> Enum.filter(&match?({:field, _}, &1))
 
-  defp no_style(_entry), do: nil
+  @doc """
+  The stack with a view-state entry laid at its layer (spec/14 §3.7, D-172): after its names
+  and field entries and before a trailing inline node — the site's local edit — so the
+  state beats the data's choice and the local edit beats the state.
 
-  defp inline_node(styles, inline) do
-    case Map.fetch(inline, :extends) do
-      :error -> inline
-      {:ok, parent} -> Parts.merge(flatten(styles, parent, []), Map.delete(inline, :extends))
+      iex> Visualize.Chart.Style.with_state([:series, %{stroke: %{width: 5}}], {:field, :state})
+      [:series, {:field, :state}, %{stroke: %{width: 5}}]
+      iex> Visualize.Chart.Style.with_state(:series, {:field, :state})
+      [:series, {:field, :state}]
+      iex> Visualize.Chart.Style.with_state(nil, {:field, :state})
+      [{:field, :state}]
+  """
+  @spec with_state(term(), term()) :: list()
+  def with_state(stack, entry) do
+    case Enum.reverse(List.wrap(stack)) do
+      [local | before] when is_map(local) and not is_struct(local) ->
+        Enum.reverse(before, [entry, local])
+
+      reversed ->
+        Enum.reverse(reversed, [entry])
     end
   end
 
-  defp flatten(_styles, %Var{name: name}, _seen), do: unresolved!(name)
+  defp no_style(_entry), do: nil
 
-  defp flatten(styles, name, seen) do
-    if name in seen, do: cycle!(name)
+  defp lay(_styles, nil, _pick, _seen), do: %{}
+  defp lay(_styles, %Var{name: name}, _pick, _seen), do: unresolved!(name)
 
-    node = styles |> Map.get(name, %{}) |> Parts.normalize()
+  defp lay(styles, stack, pick, seen) when is_list(stack) do
+    Enum.reduce(stack, %{}, fn entry, resolved ->
+      Parts.merge(resolved, lay(styles, entry, pick, seen))
+    end)
+  end
 
-    case Map.fetch(node, :extends) do
-      :error ->
-        node
-
-      {:ok, parent} ->
-        Parts.merge(flatten(styles, parent, [name | seen]), Map.delete(node, :extends))
+  defp lay(styles, {:field, _field} = entry, pick, seen) do
+    case pick.(entry) do
+      nil -> %{}
+      name -> named(styles, name, pick, seen)
     end
+  end
+
+  # An inline node is already the style: only its own `extends` needs laying under it.
+  defp lay(styles, inline, pick, seen) when is_map(inline) do
+    inline = Parts.normalize(inline)
+
+    case Map.fetch(inline, :extends) do
+      :error -> inline
+      {:ok, parent} -> Parts.merge(lay(styles, parent, pick, seen), Map.delete(inline, :extends))
+    end
+  end
+
+  defp lay(styles, name, pick, seen), do: named(styles, name, pick, seen)
+
+  # A named style's entry, laid with its name on the way: a node, a name or a list.
+  defp named(styles, name, pick, seen) do
+    if name in seen, do: cycle!(name)
+    lay(styles, Map.get(styles, name, %{}), pick, [name | seen])
   end
 
   defp cycle!(name) do
     raise ArgumentError,
-          "style #{inspect(name)} extends itself: a cycle of `extends` (spec/14 §3.5)"
+          "style #{inspect(name)} reaches itself: a cycle through `extends`, a name or a " <>
+            "list (spec/14 §3.5, §3.6)"
   end
 
   @doc false
