@@ -218,11 +218,14 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 | `:stroke_width` | `{:set_lineWidth, [w]}`; with `vector_effect: :non_scaling_stroke`, `{:nonScalingLineWidth, [w]}` | the second sets `lineWidth` to `w` divided by the scale of the transform current when it runs, `√|a·d − b·c|` of `getTransform()`, so the stroke keeps its width on screen (spec/14 §3.9, #651). It is the one command that names no Canvas 2D method (D-37): the width depends on the transform at draw time |
 | `:stroke_linecap` | `{:set_lineCap, [to_string(v)]}` | |
 | `:stroke_linejoin` | `{:set_lineJoin, [to_string(v)]}` | |
+| `:stroke_dasharray` | `{:setLineDash, [lengths]}` | the lengths of SVG's `stroke-dasharray`, apart by spaces or commas, or a list of numbers; `none` is `[]`, the solid line; a value that does not read writes nothing (#675) |
 | `:opacity` | `{:set_globalAlpha, [o]}` | |
 | `:blend` | `{:set_globalCompositeOperation, [to_string(v)]}` | omitted for `:normal` |
 | `:effect` | `:shadow`: `{:set_shadowColor, [c]}`, `{:set_shadowBlur, [r]}`, `{:set_shadowOffsetX, [dx]}`, `{:set_shadowOffsetY, [dy]}`; `:blur`: `{:set_filter, ["blur(<r>px)"]}`; `r` the `:effect_radius`, `3` when absent; `[dx, dy]` the `:effect_offset`, `[r / 2, r / 2]` when absent; `c` the `:effect_color` as `rgba()` (as a stop is, 3.3.3), `"rgba(0,0,0,0.35)"` when absent (#674) | omitted for `:none` |
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
+
+**A paint's own opacity** (#675, D-180). Where the effective style (3.3.1) has a `:fill_opacity` other than `1`, the fill's draw — `{:fill, []}`, or a paint's `save` … `restore` — is preceded by `{:set_globalAlpha, [o · f]}` and followed by `{:set_globalAlpha, [o]}`, `o` the effective `:opacity` (`1` when absent) and `f` the fill's opacity; a `:stroke_opacity` does the same around the stroke's draw, a `:line`'s included, and a `:text`'s `fillText` takes its `:fill_opacity` alike. The element's own alpha is `o` everywhere else, so a paint's opacity is its draw's alone, as SVG's `fill-opacity` and `stroke-opacity` are; inside a leaf's `save`/`restore` (3.3.1) nothing of it outlives the element. A gradient's stops carry their own alpha (below), which the context multiplies with it. `setLineDash` is a Canvas 2D method, so `:json` and `:js` need no helper for it.
 
 **A paint is drawn, not set** (#652, D-175). A `:fill` or `:stroke` that is a `Visualize.IR.Paint` (spec/02 §2.1) emits no `set_fillStyle`/`set_strokeStyle` in the setup: a canvas gradient lives in absolute coordinates, so it is built for each element over that element's own box, SVG's `objectBoundingBox`, where the element is drawn. Where the *effective* style (own over the groups', 3.3.1) holds a paint, the `{:fill, []}` or `{:stroke, []}` of the apply commands is replaced by the paint's draw, taken over the element's tight bounding box `{x, y, w, h}` (`Visualize.IR.Paint.bounds/1`) and wrapped in `{:save, []}` … `{:restore, []}`, so the gradient never becomes the state a later sibling inherits:
 
@@ -332,8 +335,11 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `effect` | `0x52` | The shadow or the blur the following draws are made with, version 2 (4.3.14) |
 | `motion` | `0x53` | A motion span begins: an element's identity and its transition, version 2 (4.3.15) |
 | `motion_end` | `0x54` | The motion span ends, version 2 (4.3.16) |
+| `paint_state` | `0x55` | A paint's own alpha, the cap, the join and the dash, version 3 (4.3.17) |
 
 **Stream versions** (#652, D-175). The records above `version` are **version 1**, the stream as it was before paints. **Version 2** adds `version`, `paint`, `box`, `effect` (#674), `motion` and `motion_end` (#653), and bits 5 and 6 of the style record. A stream that uses none of them is a version 1 stream, byte for byte the same as before, and the encoder writes it so: only a stream that draws a paint, an effect or a motion span carries the version 2 records, and it begins with the record `0x00 0x02`. So a version 1 decoder — a page still running an older hook — reads every stream it could read before, and on a version 2 stream it throws at the first byte, an unknown opcode `0x00`, rather than drawing a gradient as black; a version 2 decoder reads both. A stream is still a concatenation of records with no header: two streams concatenated, as `render_scene/2` does (3.2), are one stream, each part declaring its own version and defining its own paints before it uses them. A `version` record may stand anywhere and states the version of the records after it; a decoder MUST refuse a version it does not know.
+
+**Version 3** (#675, D-180) adds `paint_state`, under the same rule: only a stream whose styles set a paint's opacity, a cap, a join or a dash carries it and begins `0x00 0x03`, every other stream is what it was, and a version 2 decoder throws at the version record rather than drawing the paint opaque. A version 3 stream may hold every version 2 record.
 
 No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's doc comment carries the same table, and `test/visualize/backend/canvas_binary_test.exs` holds it to `Opcodes`. `test/support/canvas_binary_decoder.ex` is a decoder written from this section, not from the encoder, and the same test file proves `decode(encode(path))` over random paths (D-36).
 
@@ -470,7 +476,7 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 0x00  version:u8
 ```
 
-The version of the records that follow (4.2): `2` is the one the encoder writes, first in a stream that draws a paint. A decoder MUST raise on a version it does not know; the reference decoder knows `1` and `2`.
+The version of the records that follow (4.2): `3` is the one the encoder writes first in a stream whose styles set a paint's state (4.3.17), else `2` in one that draws a paint, an effect or a motion span. A decoder MUST raise on a version it does not know; the reference decoder knows `1`, `2` and `3`.
 
 #### 4.3.12 `paint` (0x50)
 
@@ -521,6 +527,14 @@ A motion span begins (3.3.5, #653): `json` is the UTF-8 text of the JSON array t
 
 The span the last `motion` record began ends. One byte.
 
+#### 4.3.17 `paint_state` (0x55)
+
+```
+0x55  flags:u8  [fill_alpha:f32]  [stroke_alpha:f32]  [cap:u8]  [join:u8]  [count:u8 length:f32 × count]
+```
+
+Version 3 (#675, D-180). What a fill or a stroke paints with that the style record has no field for, each field present when its bit is set, in this order: `0x01` the fill's own opacity (`fill_opacity`), `0x02` the stroke's (`stroke_opacity`), `0x04` the cap (`0` butt, `1` round, `2` square), `0x08` the join (`0` miter, `1` round, `2` bevel), `0x10` the dash, its lengths as `setLineDash` takes them (3.3.3), at most 255. The IR encoder writes it directly after an element's or a group's style record (and its `effect` record) when the style sets any of the five. A reader sets the cap, the join and the dash on the context, and keeps the two alphas as state that `save` and `restore` scope as they scope the paints (4.3.5), each `1` at the start of a stream: a `fill` drawn while the fill's alpha is not `1` is drawn at `globalAlpha` times it, and the context's alpha is set back after the draw; likewise a `stroke`. The SVG encoder (4.7) never writes it: it folds the two opacities into its colours' alpha.
+
 ### 4.4 Encoding IR elements
 
 `encode_element/1` on an `IR.Element` writes, per type:
@@ -535,6 +549,8 @@ The span the last `motion` record began ends. One byte.
 | any other type | nothing (zero bytes) |
 
 **A leaf's records are its own** (#679, D-179), as a leaf's commands are (3.3.1): a `:path`, `:circle` or `:rect` — and a type encoded as the path it is — that writes a `transform` or a `style` record is written between a `save` and a `restore`, so neither the transform nor the state the style record sets (the colours, the width, the alpha, a paint, an effect) reaches the element after it; one that writes neither has no `save`. A reader needs nothing new: it scopes the fill and stroke paints with `save` and `restore` already (4.3.5).
+
+**A paint's state** (#675, D-180). When any style in the tree sets `:fill_opacity`, `:stroke_opacity`, `:stroke_linecap`, `:stroke_linejoin` or a readable `:stroke_dasharray`, the stream begins with `version` 3 and each such style record is followed by its `paint_state` record (4.3.17), so a translucent paint draws at the element's alpha times its own on a binary canvas as on SVG.
 
 **Paints** (#652, D-175). When any `:fill` or `:stroke` in the tree's styles is a `Visualize.IR.Paint`, or any `:effect` a shadow or a blur (#674), the stream begins with `version` 2 and one `paint` record per distinct paint (4.3.11, 4.3.12); a style that holds a paint sets bit 5 or 6 with the paint's index in place of the RGBA field; and every element whose effective fill or stroke is a paint gets a `box` record between its geometry and its draw records (4.3.13). An element drawn as the path it is — a `:line`, `:ellipse`, `:polyline`, `:polygon` — takes the box of the shape it was.
 

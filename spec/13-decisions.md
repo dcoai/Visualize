@@ -2022,7 +2022,7 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 
 **Consequences.**
 - spec/14 §3.2's "first stop on canvas" rule is gone; #357 and #358 are answered.
-- A canvas still ignores `fill_opacity` and `stroke_opacity`, for a gradient as for a colour (spec/09 §3.3.3 reads `opacity` alone): a paint's own `opacity` is the element's, so a translucent gradient is opaque on a canvas until those keys are read there.
+- A canvas still ignores `fill_opacity` and `stroke_opacity`, for a gradient as for a colour (spec/09 §3.3.3 reads `opacity` alone): a paint's own `opacity` is the element's, so a translucent gradient is opaque on a canvas until those keys are read there. *Answered by #675, D-180: every canvas draws them.*
 - The hatch paint (work item #673) and the shadow's offset and color (#674) amend this decision.
 
 **Amended by #673** (work item 2 of #652). **A hatch is a paint.**
@@ -2185,3 +2185,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A transformed or styled leaf costs one `save` and one `restore`, two bytes on the binary stream. No golden changes: the charts and builder goldens hold SVG.
 - #675 sets each paint's alpha inside a leaf's pair.
 - `test/visualize/backend/canvas_scope_test.exs` is the guard: siblings on three streams, and a symbol scatter against resvg in CI.
+
+## 180. D-180 — A paint's own opacity is drawn on every canvas: its draw at the element's alpha times the paint's, and the binary stream's version 3 carries it
+
+**Context.** #675, recorded as out of scope in D-175 and found by #652 (work item #672); work item #690. Only the SVG backend wrote `fill_opacity` and `stroke_opacity`. `grep` over the canvas encoders and hooks at c36a6198 found neither key: the canvas command set never carried a paint's own opacity, only the element's `opacity` as `globalAlpha`. So a `fill: %{color: …, opacity: 0.4}`, a theme's translucent band or a percentile band's 0.2/0.4 fills (`Mark.Shapes`) drew **opaque** on every canvas and translucent in SVG. It went unseen because the goldens that hold `fill-opacity` (the charts, designs and builder goldens) are SVG, the gallery charts that use one render through SVG, and the canvas parity checks — the hook harness and the raster comparisons — drew only opaque paints. The parity test this decision adds found the same gap for `stroke_dasharray` on both canvases and for the cap and the join on the binary canvas, which reads the paint keys from one table.
+
+**Decision.**
+- **The draw is at the element's alpha times the paint's.** On the `:json`/`:js` commands, a fill's draw is preceded by `set_globalAlpha` of `o · f` and followed by `set_globalAlpha` of `o`, `o` the effective `opacity`, `f` the effective `fill_opacity`; a stroke's likewise, a line's and a text's included (spec/09 §3.3.3). A gradient's stops keep their own alpha, which the context multiplies.
+- **The binary stream's version 3** adds a `paint_state` record (`0x55`) after a style record that sets a paint's opacity, a cap, a join or a dash (spec/09 §4.3.17), under D-175's version-record rule: only such a stream carries it and begins `0x00 0x03`; every other stream is byte for byte what it was. The hook keeps the two alphas as state `save`/`restore` scope, multiplies `globalAlpha` at each `fill`/`stroke` and sets it back.
+- **The dash, the cap and the join ride with them.** The parity guard is driven by the fill and stroke parts' keys (`Style.Parts.paint_keys/0`); a canvas that dropped any key SVG writes fails it, so `stroke_dasharray` becomes `setLineDash` on every canvas and the cap and join reach the binary one.
+- **A canvas's `globalAlpha` stays the element's** between draws: the paint's opacity belongs to its draw alone, as SVG's attributes do.
+
+**Rejected.**
+- **Folding the opacity into the colour's alpha**, as the SVG-element encoder does. It does not reach a gradient or a hatch, whose colours are built in the hook, and a colour that is `currentColor` has no alpha to fold into.
+- **Multiplying in the hook for `:json`** with a command of its own. The server knows the effective style; a `set_globalAlpha` of the product is a Canvas assignment every reader, `:js` included, executes as it is.
+- **More style-record flag bits.** The style record has one bit left (D-175, #674); five fields of mixed widths read as a record of their own.
+- **Leaving the dash, cap and join to a later issue.** The guard the acceptance asks for fails on them, and a dashed grid line drawn solid on a canvas is the same class of defect as an opaque band.
+
+**Consequences.**
+- A stream with a translucent paint, a dash, a cap or a join is version 3; a page still running a version 2 hook throws on it rather than drawing it wrong.
+- `test/visualize/backend/paint_opacity_test.exs` is the guard: the key-driven parity test, the hooks on three streams, and a translucent band against resvg (`:js_resvg`, in CI since D-179).
