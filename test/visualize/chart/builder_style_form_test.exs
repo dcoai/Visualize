@@ -118,7 +118,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
 
       assert series(s).fill.stops == [
                %{at: 0, color: "#123456", opacity: 0.8},
-               %{at: 1, color: :axis, opacity: 0.1}
+               %{at: 1, color: {:color, :axis}, opacity: 0.1}
              ]
 
       {:noreply, picked} =

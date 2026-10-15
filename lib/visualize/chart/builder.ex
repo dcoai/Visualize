@@ -103,6 +103,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 Events.Tree,
                 Events.Form,
                 Events.Variables,
+                Events.Colour,
                 Events.Graph
               ] ++ Modes.all()
 
@@ -828,7 +829,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
               key={@colour.key}
               spec={@colour.spec}
               value={@colour.value}
-              swatches={@colour.swatches}
+              groups={@colour.groups}
+              theme={@colour.theme}
               recent={@colour.recent}
               target={@myself}
             />

@@ -32,6 +32,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Editor,
       Modes,
       Palette,
+      Picker,
       Preview,
       Scales,
       Sources,
@@ -216,11 +217,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         key: located && field,
         spec: (located && located.spec) || %{type: :colour, range: nil},
         value: located && Editor.value_at(entry.kind, node, located.path),
-        swatches:
-          Enum.map(
-            Theme.colour_slots(theme),
-            &{to_string(&1), Theme.resolve(theme, &1, :literal)}
-          ),
+        groups: Picker.groups(theme),
         recent: recent_colours(design)
       }
     end

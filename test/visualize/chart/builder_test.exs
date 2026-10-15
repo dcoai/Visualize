@@ -2378,7 +2378,7 @@ defmodule Visualize.Chart.BuilderTest do
                %{"_target" => ["fill.color.slot"], "fill.color.slot" => "axis"},
                solid
              ) ==
-               [fill: {:ok, %{type: :solid, color: :axis}}]
+               [fill: {:ok, %{type: :solid, color: {:color, :axis}}}]
 
       assert Editor.changes(
                :style,
@@ -3108,13 +3108,20 @@ defmodule Visualize.Chart.BuilderTest do
         assert html =~ ~s(draggable="true" data-builder-colour="#{slot}")
       end
 
-      assert html =~ ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1")
+      # The color table by name, grouped by use; each patch titled with its color.
+      assert html =~
+               ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1 · #3b6fa8")
+
+      for group <- ["series", "roles", "furniture", "the theme&#39;s colors", "CSS names"] do
+        assert html =~ ~s(<summary class="vis-builder-colour-group-title">#{group}</summary>)
+      end
+
       assert length(Regex.scan(~r/class="vis-builder-hue"/, html)) >= 35
       assert html =~ ~s(<input type="color" name="stroke.color" class="vis-builder-colour")
       refute html =~ "stroke.color.var"
 
       # The patches come before the hues and the picker.
-      {swatches, _} = :binary.match(html, ~s(aria-label="theme slots"))
+      {swatches, _} = :binary.match(html, ~s(aria-label="series"))
       {hues, _} = :binary.match(html, ~s(aria-label="hues"))
       {picker, _} = :binary.match(html, ~s(<input type="color" name="stroke.color"))
       assert swatches < hues and hues < picker
@@ -3126,9 +3133,10 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      # The flat house style is written in its parts by the edit (D-178).
+      # The flat house style is written in its parts by the edit (D-178); a name is a typed
+      # color (#683).
       assert get_in(hd(s.assigns.uses).local, [:styles, :series]) ==
-               %{stroke: %{type: :solid, color: :axis, width: 2}}
+               %{stroke: %{type: :solid, color: {:color, :axis}, width: 2}}
 
       # With no colour field selected the panel shows the colours and writes nothing.
       {:noreply, off} = Builder.handle_event("select_field", %{"field" => "stroke.width"}, s)
@@ -3146,7 +3154,8 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("drop_colour", %{"field" => "stroke.color", "colour" => "axis"}, s)
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) == :axis
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) ==
+               {:color, :axis}
 
       {:noreply, s} =
         Builder.handle_event(
@@ -5495,6 +5504,19 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, boarded} = Builder.handle_event("new_fragment", %{"kind" => "board"}, boarded)
       {:noreply, boarded} = Builder.handle_event("board_add", %{"ref" => "composite:1"}, boarded)
 
+      # A transformed color selected in the chooser: the chain's form (spec/14 §19.10).
+      {:noreply, chained} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
+
+      {:noreply, chained} =
+        Builder.handle_event("select_field", %{"field" => "stroke.color"}, chained)
+
+      {:noreply, chained} =
+        Builder.handle_event(
+          "colour_chain",
+          %{"_target" => ["stroke.color.step"], "stroke.color.step" => "alpha"},
+          chained
+        )
+
       # Frames on a layout, the frames root open: each frame's cell and span (#617).
       gridded = BuilderFixture.socket(BuilderFixture.gridded_frames())
       {:noreply, gridded} = Builder.handle_event("pick", %{"node" => "frames.now"}, gridded)
@@ -5511,7 +5533,8 @@ defmodule Visualize.Chart.BuilderTest do
             variables,
             themed,
             boarded,
-            gridded
+            gridded,
+            chained
           ],
         &BuilderFixture.render/1
       ) ++ Enum.map(Keyword.keys(BuilderFixture.cases()), &rendered/1)

@@ -25,7 +25,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Editor, Fields, Writes}
+    alias Visualize.Chart.Builder.{Chain, Editor, Fields, Writes}
     alias Visualize.Chart.{Schema, Validator}
     alias Visualize.Chart.Style.Parts
     alias Visualize.Chart.Var
@@ -186,19 +186,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
           end
 
         %{path: path, spec: spec, suffix: suffix} ->
-          writes(node, [{path, read(spec.type, suffix, value)}], seed)
+          parsed = spec.type |> read(suffix, value) |> picked(spec, path, node, seed)
+          writes(node, [{path, parsed}], seed)
       end
     end
 
     # A slot face writes the slot's atom; a host's name the string; every other control
     # reads by its key's type (§18.6).
-    defp read(_type, "slot", value),
-      do: if(value in [nil, ""], do: :error, else: Editor.parse(:slot, value))
+    # A name of the color table picked is a typed color, `color(:name)` (spec/14 §19.10).
+    defp read(_type, "slot", value), do: Editor.named(value)
 
     defp read({:one_of, [{:enum, _}, :string]}, "other", value),
       do: Editor.submitted(:string, value)
 
     defp read(type, _suffix, value), do: Editor.submitted(type, value)
+
+    # A color picked for a field holding a chain is the chain's new base (spec/14 §19.10):
+    # the field's own value, else the one the site resolves to.
+    defp picked({:ok, color}, %{type: :colour}, path, node, seed) do
+      current =
+        Writes.at(Parts.normalize(map_or_empty(node)), path) ||
+          Writes.at(Parts.normalize(map_or_empty(seed)), path)
+
+      {:ok, Chain.rebase(current, color)}
+    end
+
+    defp picked(parsed, _spec, _path, _node, _seed), do: parsed
 
     @doc """
     The top-level writes one edit at a path means for the node it lands in (spec/14 §18.7,
