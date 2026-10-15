@@ -1141,6 +1141,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       border-color: var(--vis-builder-accent);
     }
 
+    /* A size's unit beside its box (spec/14 §18.6, #684). */
+    .vis-builder-unit {
+      width: auto;
+      margin-top: 4px;
+      font: inherit;
+      font-size: 12px;
+    }
+
+    /* A defaults node's mark kinds, added one at a time (spec/14 §18.7, #684). */
+    .vis-builder-part-kinds {
+      grid-column: 1 / -1;
+    }
+
+    .vis-builder-site-defaults {
+      margin-top: var(--vis-builder-gap);
+    }
+
     .vis-builder-part-name {
       padding: 0 4px;
       color: var(--vis-builder-muted);

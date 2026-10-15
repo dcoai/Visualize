@@ -33,7 +33,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @events ~w(
       toggle_axis toggle_grid add_style_entry remove_style_entry select_style_entry
       edit_style add_style select_style edit submitted set_var set_key list_add
-      list_remove style_item
+      list_remove style_item edit_defaults
     )
 
     @doc false
@@ -165,6 +165,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         case {op, Integer.parse(Map.get(params, "index", ""))} do
           {"add", _index} -> :add
           {"remove", {i, ""}} -> {:remove, i}
+          {"drop", _index} -> :drop
           _other -> nil
         end
 
@@ -177,12 +178,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {change, "edit_style"} ->
           {:noreply, styled(socket, &items(:style, field, change, &1, &2))}
 
+        {change, "edit_defaults"} ->
+          {:noreply, site_defaults(socket, &items(:defaults, field, change, &1, &1))}
+
         {change, _edit} ->
           %{entry: entry, editing: node} = editing(socket.assigns)
           writes = items(entry.kind, field, change, node, node)
           {:noreply, update_node(socket, entry.path, writes)}
       end
     end
+
+    # A layer's or a group's own defaults, from the site's context (spec/14 §18.7, #684):
+    # written into the composite's `defaults`, never into what it holds.
+    def handle_event("edit_defaults", %{"_target" => [_target]} = params, socket) do
+      {:noreply, site_defaults(socket, &Editor.changes(:defaults, params, &1))}
+    end
+
+    def handle_event("edit_defaults", _params, socket), do: {:noreply, socket}
 
     # -- the form, the parameters, the document ------------------------------------------
 
@@ -432,11 +444,44 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp write_key(node, {key, {:ok, value}}), do: Map.put(node, key, value)
     defp write_key(node, {key, :error}), do: Map.delete(node, key)
 
+    # The writes `writes.(own)` means, laid in the selected group's own `defaults`; a site
+    # that is no inline group has none to write (§18.7, #684).
+    defp site_defaults(socket, writes) do
+      %{uses: uses, selected: selected} = socket.assigns
+
+      case Stack.get(uses, selected) do
+        %Use{} = use ->
+          if Stack.group?(use) do
+            own = get_in(use.local, [:composite, :defaults]) || %{}
+            updated = Enum.reduce(writes.(own), own, &write_key(&2, &1))
+
+            composite =
+              if updated == %{},
+                do: Map.delete(use.local.composite, :defaults),
+                else: Map.put(use.local.composite, :defaults, updated)
+
+            uses =
+              Stack.update(uses, use.id, &%{&1 | local: Map.put(&1.local, :composite, composite)})
+
+            assign(socket, uses: uses, notice: nil)
+          else
+            socket
+          end
+
+        nil ->
+          socket
+      end
+    end
+
     # An item added to or removed from a style's list of nodes at a field's path.
     defp items(kind, field, change, node, resolved) do
       case StyleForm.kind?(kind) && StyleForm.locate(kind, field) do
-        %{path: path, spec: %{type: {:list, {:node, _}}}, suffix: nil} ->
+        %{path: path, spec: %{type: {:list, {:node, _}}}, suffix: nil} when change != :drop ->
           StyleForm.item(node, path, change, resolved)
+
+        # A defaults node's entry for a mark kind dropped (§18.7, #684).
+        %{path: path, spec: %{type: {:node, :kind_defaults}}, suffix: nil} when change == :drop ->
+          StyleForm.item(node, path, :drop, resolved)
 
         _other ->
           []

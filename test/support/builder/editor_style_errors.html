@@ -30,6 +30,8 @@
   
   
   
+  
+  
 </label>
 <fieldset class="vis-builder-part" data-builder-part="fill">
   <legend class="vis-builder-part-name">fill</legend>
@@ -42,6 +44,8 @@
     type
     
   </span>
+  
+  
   
   
   
@@ -107,6 +111,8 @@
   
   
   
+  
+  
 </label>
 
 </fieldset><fieldset class="vis-builder-part" data-builder-part="stroke">
@@ -122,6 +128,8 @@
     type
     <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke.type" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
   </span>
+  
+  
   
   
   
@@ -170,6 +178,8 @@
   
   
   
+  
+  
   <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="series_1" role="img" aria-label="stroke.color: series_1" data-builder-well="stroke.color"></span>
   
   
@@ -208,6 +218,8 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="stroke.width" phx-keyup="select_field" phx-value-field="stroke.width">
   <span class="vis-builder-key">
@@ -223,6 +235,11 @@
   </span>
   
   
+  
+  <select name="stroke.width.unit" class="vis-builder-unit" aria-label="stroke.width, its unit">
+    <option value="" selected>units</option>
+    <option value="px">px</option><option value="pt">pt</option><option value="pc">pc</option><option value="in">in</option><option value="cm">cm</option><option value="mm">mm</option><option value="em">em</option>
+  </select>
   
   
   
@@ -260,6 +277,8 @@
   
   
   
+  
+  
 </label>
 
 <div class="vis-builder-field" data-builder-bind="stroke.join" phx-keyup="select_field" phx-value-field="stroke.join">
@@ -267,6 +286,8 @@
     join
     
   </span>
+  
+  
   
   
   
@@ -315,6 +336,8 @@
   
   
   
+  
+  
   <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.cap">
     <label class="vis-builder-glyph" title="butt">
       <input type="radio" name="stroke.cap" value="butt" aria-label="butt">
@@ -337,6 +360,8 @@
     placement
     
   </span>
+  
+  
   
   
   
@@ -392,6 +417,8 @@
   
   
   
+  
+  
 </label>
 
 </fieldset><fieldset class="vis-builder-part" data-builder-part="font">
@@ -422,6 +449,8 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="font.size" phx-keyup="select_field" phx-value-field="font.size">
   <span class="vis-builder-key">
@@ -437,6 +466,11 @@
   </span>
   
   
+  
+  <select name="font.size.unit" class="vis-builder-unit" aria-label="font.size, its unit">
+    <option value="" selected>units</option>
+    <option value="px">px</option><option value="pt">pt</option><option value="pc">pc</option><option value="in">in</option><option value="cm">cm</option><option value="mm">mm</option><option value="em">em</option><option value="pct">%</option>
+  </select>
   
   
   
@@ -492,6 +526,8 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="font.line_height" phx-keyup="select_field" phx-value-field="font.line_height">
   <span class="vis-builder-key">
@@ -505,6 +541,8 @@
     
     <input type="range" name="font.line_height.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0.8" max="3" step="0.1" value="0.8" aria-label="font.line_height, dragged">
   </span>
+  
+  
   
   
   
@@ -548,6 +586,8 @@
   
   
   
+  
+  
   <span class="vis-builder-glyphs" role="radiogroup" aria-label="text.anchor">
     <label class="vis-builder-glyph" title="start">
       <input type="radio" name="text.anchor" value="start" aria-label="start">
@@ -570,6 +610,8 @@
     baseline
     
   </span>
+  
+  
   
   
   
@@ -622,6 +664,8 @@
   
   
   
+  
+  
   <div class="vis-builder-items">
     
     <span class="vis-builder-item-add" data-builder-bind="text.offset">
@@ -658,6 +702,8 @@
   
   
   
+  
+  
 </label>
 
 </fieldset><fieldset class="vis-builder-part" data-builder-part="effect">
@@ -671,6 +717,8 @@
     type
     
   </span>
+  
+  
   
   
   
@@ -715,6 +763,11 @@
   
   
   
+  <select name="effect.radius.unit" class="vis-builder-unit" aria-label="effect.radius, its unit">
+    <option value="" selected>units</option>
+    <option value="px">px</option><option value="pt">pt</option><option value="pc">pc</option><option value="in">in</option><option value="cm">cm</option><option value="mm">mm</option><option value="em">em</option>
+  </select>
+  
   
   
   
@@ -748,6 +801,8 @@
   
   
   
+  
+  
   <div class="vis-builder-items">
     
     <span class="vis-builder-item-add" data-builder-bind="effect.offset">
@@ -762,6 +817,8 @@
     color
     
   </span>
+  
+  
   
   
   
@@ -809,12 +866,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="blend" phx-keyup="select_field" phx-value-field="blend">
   <span class="vis-builder-key">
     blend
     
   </span>
+  
+  
   
   
   
@@ -848,6 +909,8 @@
     shape
     
   </span>
+  
+  
   
   
   
@@ -900,6 +963,11 @@
   
   
   <input type="text" name="marker.size">
+  <select name="marker.size.unit" class="vis-builder-unit" aria-label="marker.size, its unit">
+    <option value="" selected>units</option>
+    <option value="px">px</option><option value="pt">pt</option><option value="pc">pc</option><option value="in">in</option><option value="cm">cm</option><option value="mm">mm</option><option value="em">em</option><option value="pct">%</option>
+  </select>
+  
   
   
   
@@ -927,6 +995,8 @@
     type
     
   </span>
+  
+  
   
   
   
@@ -1006,6 +1076,8 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="curve.alpha" phx-keyup="select_field" phx-value-field="curve.alpha">
   <span class="vis-builder-key">
@@ -1016,6 +1088,8 @@
   
   
   <input type="number" name="curve.alpha">
+  
+  
   
   
   
@@ -1064,12 +1138,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="transition.easing" phx-keyup="select_field" phx-value-field="transition.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1124,12 +1202,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="transition.fill.easing" phx-keyup="select_field" phx-value-field="transition.fill.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1185,12 +1267,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="transition.stroke.easing" phx-keyup="select_field" phx-value-field="transition.stroke.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1246,12 +1332,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="transition.opacity.easing" phx-keyup="select_field" phx-value-field="transition.opacity.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1286,6 +1376,8 @@
     name
     
   </span>
+  
+  
   
   
   
@@ -1335,12 +1427,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="animation.easing" phx-keyup="select_field" phx-value-field="animation.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1386,6 +1482,8 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="animation.delay" phx-keyup="select_field" phx-value-field="animation.delay">
   <span class="vis-builder-key">
@@ -1396,6 +1494,8 @@
   
   
   <input type="number" name="animation.delay">
+  
+  
   
   
   
@@ -1422,6 +1522,8 @@
     name
     
   </span>
+  
+  
   
   
   
@@ -1471,12 +1573,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="enter.easing" phx-keyup="select_field" phx-value-field="enter.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1510,6 +1616,8 @@
     name
     
   </span>
+  
+  
   
   
   
@@ -1559,12 +1667,16 @@
   
   
   
+  
+  
 </label>
 <label class="vis-builder-field" data-builder-bind="exit.easing" phx-keyup="select_field" phx-value-field="exit.easing">
   <span class="vis-builder-key">
     easing
     
   </span>
+  
+  
   
   
   
@@ -1599,6 +1711,8 @@
   
   
   <input type="text" name="class">
+  
+  
   
   
   

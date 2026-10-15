@@ -19,6 +19,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @drawn [
       :paint_type,
+      :hatch_pattern,
       :effect,
       :vertical_align,
       :stroke_style,
@@ -226,6 +227,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A square's edge with the stroke where the style puts it: on it, twice, within, without.
+    # A hatch's pattern (spec/14 §18.6, #684): lines, crossed lines, dots — drawn as lines
+    # and circles, never a paint server, so no id (#471).
+    defp picture(:hatch_pattern, pattern) when pattern in [:lines, :crosshatch, :dots] do
+      frame =
+        ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/>|
+
+      inner =
+        case pattern do
+          :lines ->
+            ~s|<path d="M5 12 L12 5 M5 19 L19 5 M12 19 L19 12" stroke="currentColor" stroke-width="1.5"/>|
+
+          :crosshatch ->
+            ~s|<path d="M5 12 L12 5 M5 19 L19 5 M12 19 L19 12 M12 5 L19 12 M5 5 L19 19 M5 12 L12 19" stroke="currentColor" stroke-width="1.2"/>|
+
+          :dots ->
+            for(
+              x <- [8.5, 12, 15.5],
+              y <- [8.5, 12, 15.5],
+              into: "",
+              do: ~s|<circle cx="#{x}" cy="#{y}" r="1.2" fill="currentColor"/>|
+            )
+        end
+
+      frame <> inner
+    end
+
     defp picture(:stroke_style, :center), do: picture(:stroke_style, :single)
 
     defp picture(:stroke_style, style) when style in [:single, :double, :inside, :outside] do

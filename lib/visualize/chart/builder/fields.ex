@@ -15,6 +15,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart.Builder.{Chain, Editor, Glyphs, Store}
     alias Visualize.Chart.{Text, Validator, Var}
+    alias Visualize.Chart.Validator.Units
     alias Visualize.{Color, Theme}
 
     attr(:field, :map, required: true)
@@ -155,6 +156,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
           placeholder={@field.placeholder}
           data-builder-text={@field.text? && "true"}
         />
+        <select
+          :if={is_nil(@field.variable) and @field.units != []}
+          name={"#{@field.name}.unit"}
+          class="vis-builder-unit"
+          aria-label={"#{@field.name}, its unit"}
+        >
+          <option value="" selected={@field.unit == nil}>units</option>
+          <option :for={unit <- @field.units} value={unit} selected={@field.unit == unit}>{unit_word(unit)}</option>
+        </select>
+        <span :if={is_nil(@field.variable) and @field.widget == :pair} class="vis-builder-pair">
+          <input
+            :for={{member, i} <- Enum.with_index(@field.pair)}
+            type="number"
+            name={"#{@field.name}.#{i}"}
+            value={member}
+            step="0.05"
+            aria-label={"#{@field.name} #{i}"}
+          />
+        </span>
         <span :if={is_nil(@field.variable) and @field.points != nil} class="vis-builder-item-text">
           {@field.points} pt between lines
         </span>
@@ -329,6 +349,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       node = Keyword.get(opts, :node, assigns.node)
       node = if is_map(node) and not is_struct(node), do: node, else: %{}
       glyph = Keyword.get(opts, :glyph, & &1.key)
+      # A style's form (§18.7): sizes take a unit select, pairs two boxes.
+      units? = Keyword.get(opts, :units, false)
+      kind = Keyword.get(opts, :kind, assigns.kind)
       origins = Keyword.get(opts, :origins, Map.get(assigns, :origins) || %{})
       refs = Map.get(assigns, :refs) || %{}
       faced? = Enum.any?(specs, &(&1.key == :style)) and Enum.any?(specs, &(&1.key == :weight))
@@ -359,12 +382,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
             ),
           faces: if(face?, do: face_rows(node), else: []),
           face_name: name(prefix, :face),
-          # The face list stands in for the weight's box (§18.6).
-          widget: if(face?, do: :faces, else: shape(widget)),
+          # The face list stands in for the weight's box (§18.6); a pair is two boxes.
+          widget:
+            cond do
+              face? -> :faces
+              units? and pair(spec, value) != nil -> :pair
+              true -> shape(widget)
+            end,
           ref: ref_field(spec.type),
           text?: spec.type == :text,
           glyphs: glyphs(glyph.(spec), widget),
           other: other?(spec.type),
+          # A size's unit, chosen beside its box (§18.6, #684), where the caller asks.
+          units: units_of(units?, kind, spec, value),
+          unit: unit_of(value),
+          pair: if(units?, do: pair(spec, value)),
           other_value: other_value(spec.type, value),
           range: range(spec.range),
           slider: slider(Map.fetch(node, spec.key), spec),
@@ -613,12 +645,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp as_text(%{type: :channel}, {:ok, value}) when not (is_atom(value) or is_number(value)),
       do: {:ok, inspect(value)}
 
-    # A size or a length written in a unit, `{12, :pt}`, is its literal until the unit
-    # picker (#684) gives it a control of its own.
-    defp as_text(%{type: type}, {:ok, {n, unit}}) when type in [:size, :length] and is_atom(unit),
-      do: {:ok, inspect({n, unit})}
+    # A size or a length written in a unit, `{12, :pt}`: the box shows the number, the unit
+    # select the unit (§18.6, #684).
+    defp as_text(%{type: type}, {:ok, {n, unit}})
+         when type in [:size, :length] and is_number(n) and is_atom(unit),
+         do: {:ok, n}
 
     defp as_text(_spec, value), do: value
+
+    # The units a size may be written in, where the form offers a unit select (§18.6): none
+    # for a slot word, a variable or a key with no unit.
+    defp units_of(false, _kind, _spec, _value), do: []
+
+    defp units_of(true, kind, %{type: type, key: key}, value) when type in [:size, :length] do
+      if is_atom(value) and value != nil, do: [], else: Units.units(kind, key)
+    end
+
+    defp units_of(true, _kind, _spec, _value), do: []
+
+    defp unit_of({n, unit}) when is_number(n) and is_atom(unit), do: unit
+    defp unit_of(_value), do: nil
+
+    defp unit_word(:pct), do: "%"
+    defp unit_word(unit), do: to_string(unit)
+
+    # A pair of numbers — a gradient's centre — as two boxes, from the default where the
+    # key has none (§18.6, #684).
+    defp pair(%{type: {:list, :number}, default: [_, _] = default}, value) do
+      case value do
+        [a, b] when is_number(a) and is_number(b) -> [a, b]
+        _other -> default
+      end
+    end
+
+    defp pair(_spec, _value), do: nil
 
     defp extent_text(:auto), do: "auto"
     defp extent_text([lo, hi]), do: "#{bound_text(lo)}, #{bound_text(hi)}"

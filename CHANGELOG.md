@@ -17,6 +17,15 @@ release it merely follows.
 
 ### Added
 
+- **Units and defaults in the builder** (#684, D-178). A size in a style — a stroke's width,
+  a font's size, a marker's size, a hatch's spacing — has a unit select beside its box
+  (user units, px, pt, pc, mm, cm, in, em, and % where the size has a box), so `{12, :pt}`
+  reads `12 · pt`. A gradient's centre is two boxes, and a hatch's pattern is chosen by
+  its picture. Defaults are edited where their container is: a frame's and the design's on
+  the frame's page, a layer's or a group's in the site's context — by part, and by mark
+  kind (an entry added from **+ kind** and dropped with ×). A group's defaults now reach
+  the builder's preview as they reach a deployed design.
+
 - **The builder's color chooser picks by name and builds transforms** (#683, D-178). The
   chooser lists the theme's color table by name, grouped by use — series, roles,
   furniture, the theme's own colors, and the CSS names folded away — each patch in the

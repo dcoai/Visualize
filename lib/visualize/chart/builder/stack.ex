@@ -388,11 +388,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
             []
 
           # An inline group is its objects, each attributed to itself (#380); the group's
-          # own vars are placed as the group's.
+          # own vars are placed as the group's, and its defaults laid under what each of its
+          # objects places, as the flattening lays them (spec/14 §3.8, §18.7, #684).
           group?(use) ->
             vars = get_in(use.local, [:composite, :vars]) || %{}
+            defaults = get_in(use.local, [:composite, :defaults])
             own = if map_size(vars) == 0, do: [], else: [{use.id, %{vars: vars}}]
-            own ++ placed(children(use), fetch)
+
+            own ++
+              for {id, layer} <- placed(children(use), fetch),
+                  do: {id, Composite.scope(layer, defaults)}
 
           true ->
             case Composite.place(shown_fragment(use, fetch), use) do

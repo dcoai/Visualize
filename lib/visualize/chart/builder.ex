@@ -706,6 +706,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   path={top.path}
                   label={top.label}
                   before={top.before}
+                  design_defaults={top[:design_defaults]}
                   collapsed={@collapsed}
                   errors={@errors}
                   refs={@refs}
@@ -766,6 +767,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 path={@page.single.path}
                 label={@page.single.label}
                 before={@page.single.before}
+                design_defaults={@page.single[:design_defaults]}
                 collapsed={@collapsed}
                 errors={@errors}
                 refs={@refs}
@@ -855,6 +857,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
               store?={@store != nil}
               target={@myself}
             />
+            <section
+              :if={@context == :inspect && @site && Stack.group?(@site.use) && !(@style_site && @style_entry) && !@theme_mode && !@board_mode}
+              class="vis-builder-site-defaults"
+            >
+              <h3 class="vis-builder-context-title">defaults</h3>
+              <p class="vis-builder-context-note">what everything in {@site.label} inherits under its styles (spec/14 §3.8)</p>
+              <Editor.form_body
+                id={@id <> "-site-defaults"}
+                kind={:defaults}
+                node={get_in(@site.use.local, [:composite, :defaults]) || %{}}
+                event="edit_defaults"
+                refs={@refs}
+                theme={@colour.theme}
+                defs={@defs}
+                target={@myself}
+              />
+            </section>
             <Variables.panel
               :if={@context == :variables}
               id={@id <> "-variables"}

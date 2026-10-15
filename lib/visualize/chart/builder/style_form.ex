@@ -35,7 +35,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @kinds [:style, :defaults, :kind_defaults]
 
     # The suffixes a control's name may end in after its key's path (§18.6).
-    @suffixes ["slot", "range", "other"]
+    @suffixes ["slot", "range", "other", "unit"]
 
     # The paint kinds, whose `type` decides which keys follow it (§18.6).
     @paint_kinds [:paint, :stroke]
@@ -63,7 +63,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:text_layout, :anchor} => :text_anchor,
       {:text_layout, :baseline} => :vertical_align,
       {:marker, :shape} => :symbol,
-      {:curve, :type} => :curve
+      {:curve, :type} => :curve,
+      {:paint, :pattern} => :hatch_pattern
     }
 
     # A fresh gradient fades its color from 0.8 to 0.1: the area chart's convention.
@@ -135,6 +136,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # A member of a pair — a gradient's centre, `fill.center.1` (§18.6): the element's type,
+    # and the pair's default to start from where the part has none.
+    defp descend(%{default: [_, _] = default} = spec, {:list, scalar}, [index], path)
+         when is_atom(scalar) do
+      case Integer.parse(index) do
+        {i, ""} when i in [0, 1] ->
+          %{path: path ++ [i], spec: %{spec | type: scalar}, suffix: nil, pair: default}
+
+        _other ->
+          nil
+      end
+    end
+
     defp descend(_spec, _type, _rest, _path), do: nil
 
     defp find(kind, segment),
@@ -168,10 +182,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {atom(), {:ok, term()} | :error}
           ]
     def changes(kind, target, value, node, seed) do
-      case locate(kind, target) do
-        nil ->
+      case {kind_entry(kind, target, value), locate(kind, target)} do
+        # A mark kind's entry added to a defaults node (§18.7, #684).
+        {{:ok, type}, _located} ->
+          writes(node, [{[type], {:ok, %{}}}], seed)
+
+        {:error, nil} ->
           []
 
+        {:error, located} ->
+          located_changes(located, value, node, seed)
+      end
+    end
+
+    defp located_changes(located, value, node, seed) do
+      case located do
         %{face: true, path: path} ->
           case Enum.find(Editor.faces(), fn {face, _w, _s} -> to_string(face) == value end) do
             {_face, weight, style} ->
@@ -185,11 +210,80 @@ if Code.ensure_loaded?(Phoenix.Component) do
               []
           end
 
-        %{path: path, spec: spec, suffix: suffix} ->
-          parsed = spec.type |> read(suffix, value) |> picked(spec, path, node, seed)
-          writes(node, [{path, parsed}], seed)
+        %{path: path, suffix: "unit"} ->
+          case united(current(path, node, seed), value) do
+            nil -> []
+            parsed -> writes(node, [{path, parsed}], seed)
+          end
+
+        %{path: path, spec: spec, suffix: suffix} = located ->
+          parsed =
+            spec.type
+            |> read(suffix, value)
+            |> picked(spec, path, node, seed)
+            |> kept_unit(spec, current(path, node, seed))
+
+          writes(node, paired(located, node, seed) ++ [{path, parsed}], seed)
       end
     end
+
+    # `+kind` on a defaults node names a mark type to give an entry (§18.7).
+    defp kind_entry(:defaults, "+kind", value) do
+      case Enum.find(kind_entries(), &(to_string(&1) == value)) do
+        nil -> :error
+        type -> {:ok, type}
+      end
+    end
+
+    defp kind_entry(_kind, _target, _value), do: :error
+
+    defp kind_entries,
+      do: for(%{key: key, type: {:node, :kind_defaults}} <- Schema.describe(:defaults), do: key)
+
+    # The value at a path: the node's own, else the one the site resolves to.
+    defp current(path, node, seed) do
+      Writes.at(Parts.normalize(map_or_empty(node)), path) ||
+        Writes.at(Parts.normalize(map_or_empty(seed)), path)
+    end
+
+    # A unit chosen for a size (§18.6, #684): the size's number in that unit, or bare in
+    # user units; nothing where the size has no number to carry.
+    defp united(current, unit) do
+      n =
+        case current do
+          {n, _unit} when is_number(n) -> n
+          n when is_number(n) -> n
+          _other -> nil
+        end
+
+      cond do
+        n == nil -> nil
+        unit in [nil, ""] -> {:ok, n}
+        true -> unit(n, unit)
+      end
+    end
+
+    defp unit(n, word) do
+      case Enum.find(Visualize.Units.units(), &(to_string(&1) == word)) do
+        nil -> nil
+        unit -> {:ok, {n, unit}}
+      end
+    end
+
+    # A number typed for a size in a unit keeps the unit (§18.6).
+    defp kept_unit({:ok, n}, %{type: type}, {_old, unit})
+         when type in [:size, :length] and is_number(n) and is_atom(unit),
+         do: {:ok, {n, unit}}
+
+    defp kept_unit(parsed, _spec, _current), do: parsed
+
+    # A pair's member written where the part has no pair starts from the default.
+    defp paired(%{pair: default, path: path}, node, seed) do
+      list = Enum.drop(path, -1)
+      if current(list, node, seed) == nil, do: [{list, {:ok, default}}], else: []
+    end
+
+    defp paired(_located, _node, _seed), do: []
 
     # A slot face writes the slot's atom; a host's name the string; every other control
     # reads by its key's type (§18.6).
@@ -351,27 +445,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     The writes an item added to or removed from a list of nodes at `path` means — a
     gradient's stops (§18.6): `:add` appends a copy of the last item at the end of the
-    list (a stop at `1`), `{:remove, i}` takes the item out. A node that holds no list
+    list (a stop at `1`), `{:remove, i}` takes the item out, and `:drop` takes the whole
+    key out — a defaults node's entry for a mark kind (#684). A node that holds no list
     there starts from `seed`'s, the list the site resolves to.
 
         iex> node = %{fill: %{type: :linear, stops: [%{at: 0, color: "#abc"}]}}
         iex> Visualize.Chart.Builder.StyleForm.item(node, [:fill, :stops], :add, %{})
         [fill: {:ok, %{type: :linear, stops: [%{at: 0, color: "#abc"}, %{at: 1, color: "#abc"}]}}]
     """
-    @spec item(term(), [atom()], :add | {:remove, non_neg_integer()}, term()) :: [
+    @spec item(term(), [atom()], :add | :drop | {:remove, non_neg_integer()}, term()) :: [
             {atom(), {:ok, term()} | :error}
           ]
     def item(node, path, op, seed) do
       own = Writes.at(Parts.normalize(map_or_empty(node)), path)
       list = List.wrap(own || Writes.at(Parts.normalize(map_or_empty(seed)), path))
 
-      updated =
-        case op do
-          :add -> list ++ [added(List.last(list))]
-          {:remove, i} -> List.delete_at(list, i)
-        end
+      case op do
+        :drop ->
+          write(node, path, :error, seed)
 
-      write(node, path, if(updated == [], do: :error, else: {:ok, updated}), seed)
+        :add ->
+          write(node, path, {:ok, list ++ [added(List.last(list))]}, seed)
+
+        {:remove, i} ->
+          updated = List.delete_at(list, i)
+          write(node, path, if(updated == [], do: :error, else: {:ok, updated}), seed)
+      end
     end
 
     defp map_or_empty(node) when is_map(node) and not is_struct(node), do: node
@@ -435,7 +534,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp item(%{item: %{kind: :part}} = assigns) do
       ~H"""
       <fieldset class={part_class(@item)} data-builder-part={@item.name}>
-        <legend class="vis-builder-part-name">{@item.key}</legend>
+        <legend class="vis-builder-part-name">{@item.key}<button
+            :if={@item.drop}
+            type="button"
+            class="vis-builder-item-remove"
+            phx-click="style_item"
+            phx-value-field={@item.name}
+            phx-value-op="drop"
+            phx-value-edit={@event}
+            phx-value-node={@label}
+            phx-target={@target}
+            aria-label={"drop the #{@item.key} entry"}
+          >×</button></legend>
         <p :if={@item.note} class="vis-builder-context-note vis-builder-part-note">{@item.note}</p>
         <p :if={@item.variable} class="vis-builder-context-note">{@item.name} = var(:{@item.variable})</p>
         <ul :if={@item.errors != []} class="vis-builder-key-errors">
@@ -443,6 +553,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </ul>
         <.item :for={inner <- @item.items} item={inner} label={@label} selected={@selected} found={@found} event={@event} target={@target} />
       </fieldset>
+      """
+    end
+
+    defp item(%{item: %{kind: :kinds}} = assigns) do
+      ~H"""
+      <label class="vis-builder-field vis-builder-part-kinds">
+        <span class="vis-builder-key">by mark kind</span>
+        <select name="+kind" aria-label="add defaults for a mark kind">
+          <option value="">+ kind</option>
+          <option :for={type <- @item.absent} value={type}>{type}</option>
+        </select>
+      </label>
       """
     end
 
@@ -502,14 +624,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> Fields.views(assigns,
           prefix: prefix,
           node: node,
+          kind: kind,
+          units: true,
           glyph: &Map.get(@glyphs, {kind, &1.key})
         )
         |> Map.new(&{&1.key, &1})
 
       undrawn = if top? && assigns.drawn_by, do: Parts.undrawn(assigns.drawn_by), else: []
 
-      Enum.flat_map(specs, fn spec ->
+      specs
+      |> Enum.flat_map(fn spec ->
         case spec.type do
+          # A defaults node's entry for a mark kind is shown where it has one (§18.7, #684).
+          {:node, :kind_defaults} ->
+            if Map.has_key?(node, spec.key),
+              do: [
+                %{
+                  part(:kind_defaults, spec.key, node[spec.key], prefix, assigns, false)
+                  | drop: true
+                }
+              ],
+              else: []
+
           {:node, inner} ->
             [part(inner, spec.key, Map.get(node, spec.key), prefix, assigns, spec.key in undrawn)]
 
@@ -523,7 +659,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
             end
         end
       end)
+      |> Kernel.++(kinds(kind, node))
     end
+
+    # The mark kinds a defaults node has no entry for, to add one (§18.7, #684).
+    defp kinds(:defaults, node) do
+      case Enum.reject(kind_entries(), &Map.has_key?(node, &1)) do
+        [] -> []
+        absent -> [%{kind: :kinds, absent: absent}]
+      end
+    end
+
+    defp kinds(_kind, _node), do: []
 
     defp part(kind, key, value, prefix, assigns, undrawn?) do
       path = prefix ++ [key]
@@ -535,6 +682,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         name: join(path),
         note: if(undrawn?, do: "not drawn by " <> article(assigns.drawn_by)),
         variable: variable(value),
+        drop: false,
         # A fault of the part as a whole — a shorthand that does not read — is the part's.
         errors: errors(assigns, path),
         items: if(is_struct(value, Var), do: [], else: items(kind, node, path, assigns, false))

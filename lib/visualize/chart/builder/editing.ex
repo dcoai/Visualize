@@ -83,7 +83,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             first_node(nodes, mine)
 
           label ->
-            Enum.find(nodes, &(&1.label == label)) || implied(label) || first_node(nodes, mine)
+            Enum.find(nodes, &(&1.label == label)) || implied(label, design) ||
+              first_node(nodes, mine)
         end
 
       preview_theme = preview_theme(assigns, design)
@@ -379,8 +380,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A node the layer does not carry yet but a page shows a form for — the frame's meta
     # (§18.15) — is implied by its label: writing to it creates it.
-    defp implied("meta"), do: %{path: [:meta], kind: :meta, label: "meta"}
-    defp implied(_label), do: nil
+    defp implied("meta", _design), do: %{path: [:meta], kind: :meta, label: "meta"}
+
+    # A container's defaults, edited on the frame's page before the node exists (§18.7,
+    # #684): the design's, and a frame's by its name.
+    defp implied("defaults", _design),
+      do: %{path: [:defaults], kind: :defaults, label: "defaults"}
+
+    defp implied("frames." <> rest = label, design) do
+      with [name, "defaults"] <- String.split(rest, ".", parts: 2),
+           frames when is_map(frames) <- Map.get(design, :frames),
+           frame when frame != nil <- Enum.find(Map.keys(frames), &(to_string(&1) == name)) do
+        %{path: [:frames, frame, :defaults], kind: :defaults, label: label}
+      else
+        _other -> nil
+      end
+    end
+
+    defp implied(_label, _design), do: nil
 
     defp first_node(nodes, mine) do
       Enum.find(nodes, &(&1.label != "design" and &1.path in mine)) ||
@@ -582,7 +599,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             needs: Map.get(needs, node.label, 0),
             layer: Map.get(owners, node.path),
             other?: Map.get(owners, node.path) not in [nil, layer_label],
-            before: if(node.kind == :frame, do: [meta_form(layer)], else: [])
+            before: if(node.kind == :frame, do: [meta_form(layer)], else: []),
+            # The design's defaults are edited on the frame's page (spec/14 §18.7, #684).
+            design_defaults: if(node.kind == :frame, do: Map.get(layer, :defaults) || %{})
           }
           |> Map.merge(frame_parts(layer, node))
         end
