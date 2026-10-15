@@ -189,7 +189,20 @@
   
   <select name="extends">
     <option value=""></option>
-    <option value="series">series</option>
+    
+    <optgroup label="design">
+      <option value="series">series</option>
+    </optgroup><optgroup label="style series">
+      <option value="style_1">style_1</option><option value="style_2">style_2</option><option value="style_3">style_3</option><option value="style_4">style_4</option><option value="style_5">style_5</option><option value="style_6">style_6</option><option value="style_7">style_7</option><option value="style_8">style_8</option><option value="style_9">style_9</option><option value="style_10">style_10</option>
+    </optgroup><optgroup label="roles">
+      <option value="good">good</option><option value="warning">warning</option><option value="bad">bad</option><option value="info">info</option><option value="neutral">neutral</option>
+    </optgroup><optgroup label="states">
+      <option value="hover">hover</option><option value="focused">focused</option><option value="selected">selected</option><option value="active">active</option><option value="disabled">disabled</option><option value="muted">muted</option><option value="emphasis">emphasis</option><option value="breakpoint">breakpoint</option>
+    </optgroup><optgroup label="furniture">
+      <option value="axis">axis</option><option value="grid">grid</option><option value="label">label</option><option value="title">title</option><option value="caption">caption</option><option value="value">value</option><option value="annotation">annotation</option>
+    </optgroup><optgroup label="modifiers">
+      <option value="bold">bold</option><option value="italic">italic</option><option value="thin">thin</option><option value="thick">thick</option><option value="dashed">dashed</option><option value="dotted">dotted</option><option value="outline">outline</option>
+    </optgroup>
   </select>
   
   
@@ -1053,6 +1066,7 @@
   <select name="blend">
     <option value=""></option>
     <option value="normal">normal</option><option value="multiply">multiply</option><option value="screen">screen</option><option value="overlay">overlay</option><option value="darken">darken</option><option value="lighten">lighten</option>
+    
   </select>
   
   
@@ -1323,6 +1337,7 @@
   <select name="transition.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1387,6 +1402,7 @@
   <select name="transition.fill.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1452,6 +1468,7 @@
   <select name="transition.stroke.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1517,6 +1534,7 @@
   <select name="transition.opacity.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1553,6 +1571,7 @@
   <select name="animation.name">
     <option value=""></option>
     <option value="pulse">pulse</option><option value="blink">blink</option><option value="shake">shake</option><option value="spin">spin</option>
+    
   </select>
   <input type="text" name="animation.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="animation.name, a name the list lacks">
   
@@ -1612,6 +1631,7 @@
   <select name="animation.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1699,6 +1719,7 @@
   <select name="enter.name">
     <option value=""></option>
     <option value="fade">fade</option><option value="grow">grow</option>
+    
   </select>
   <input type="text" name="enter.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="enter.name, a name the list lacks">
   
@@ -1758,6 +1779,7 @@
   <select name="enter.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -1793,6 +1815,7 @@
   <select name="exit.name">
     <option value=""></option>
     <option value="fade">fade</option><option value="shrink">shrink</option><option value="explode">explode</option>
+    
   </select>
   <input type="text" name="exit.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="exit.name, a name the list lacks">
   
@@ -1852,6 +1875,7 @@
   <select name="exit.easing">
     <option value=""></option>
     <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+    
   </select>
   
   
@@ -2010,6 +2034,7 @@
         <span class="vis-builder-swatch" style=""></span>
         <span class="vis-builder-palette-name">series</span>
         <span class="vis-builder-palette-summary">stroke, stroke_width</span>
+        
       </button>
     </li>
   </ul>
@@ -2018,6 +2043,477 @@
     <input type="text" name="name" value="" class="vis-builder-palette-input" placeholder="new style">
     <button type="submit" class="vis-builder-palette-add">Add style</button>
   </form>
+  <h3 class="vis-builder-palette-theme">The theme's palette</h3>
+  <section class="vis-builder-palette-group">
+    <h4 class="vis-builder-palette-group-title">style series</h4>
+    <ul class="vis-builder-palette-list">
+      <li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_1 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_1" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#3b6fa8" stroke="#3b6fa8" stroke-width="1.5"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#3b6fa8" stroke-width="1.5"></line>
+            <text x="50" y="16" fill="#3b6fa8" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_1</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_2 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_2" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#d9730d" stroke="#d9730d" stroke-width="1.5" stroke-dasharray="8 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#d9730d" stroke-width="1.5" stroke-dasharray="8 3"></line>
+            <text x="50" y="16" fill="#d9730d" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_2</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_3 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_3" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#c8373b" stroke="#c8373b" stroke-width="1.5" stroke-dasharray="3 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#c8373b" stroke-width="1.5" stroke-dasharray="3 3"></line>
+            <text x="50" y="16" fill="#c8373b" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_3</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_4 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_4" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#2f8f86" stroke="#2f8f86" stroke-width="1.5" stroke-dasharray="8 3 3 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#2f8f86" stroke-width="1.5" stroke-dasharray="8 3 3 3"></line>
+            <text x="50" y="16" fill="#2f8f86" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_4</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_5 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_5" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#3f8a37" stroke="#3f8a37" stroke-width="1.5" stroke-dasharray="1 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#3f8a37" stroke-width="1.5" stroke-dasharray="1 3"></line>
+            <text x="50" y="16" fill="#3f8a37" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_5</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_6 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_6" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#a8891a" stroke="#a8891a" stroke-width="1.5"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#a8891a" stroke-width="1.5"></line>
+            <text x="50" y="16" fill="#a8891a" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_6</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_7 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_7" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#8f5f99" stroke="#8f5f99" stroke-width="1.5" stroke-dasharray="8 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#8f5f99" stroke-width="1.5" stroke-dasharray="8 3"></line>
+            <text x="50" y="16" fill="#8f5f99" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_7</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_8 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_8" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#c9527f" stroke="#c9527f" stroke-width="1.5" stroke-dasharray="3 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#c9527f" stroke-width="1.5" stroke-dasharray="3 3"></line>
+            <text x="50" y="16" fill="#c9527f" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_8</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_9 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_9" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#8a6a4f" stroke="#8a6a4f" stroke-width="1.5" stroke-dasharray="8 3 3 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#8a6a4f" stroke-width="1.5" stroke-dasharray="8 3 3 3"></line>
+            <text x="50" y="16" fill="#8a6a4f" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_9</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="style_10 — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="style_10" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" stroke="#6f7480" stroke-width="1.5" stroke-dasharray="1 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1.5" stroke-dasharray="1 3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">style_10</span>
+          
+        </button>
+        
+      </li>
+    </ul>
+  </section><section class="vis-builder-palette-group">
+    <h4 class="vis-builder-palette-group-title">roles</h4>
+    <ul class="vis-builder-palette-list">
+      <li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="good — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="good" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#4ca34b" stroke="#4ca34b"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#4ca34b"></line>
+            <text x="50" y="16" fill="#4ca34b" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">good</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="warning — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="warning" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#bd7407" stroke="#bd7407" stroke-dasharray="6 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#bd7407" stroke-dasharray="6 3"></line>
+            <text x="50" y="16" fill="#bd7407" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">warning</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="bad — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="bad" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#c23238" stroke="#c23238" stroke-dasharray="2 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#c23238" stroke-dasharray="2 3"></line>
+            <text x="50" y="16" fill="#c23238" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">bad</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="info — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="info" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#3b6fa8" stroke="#3b6fa8" stroke-dasharray="8 3 2 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#3b6fa8" stroke-dasharray="8 3 2 3"></line>
+            <text x="50" y="16" fill="#3b6fa8" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">info</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="neutral — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="neutral" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" stroke="#6f7480" stroke-dasharray="1 4"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-dasharray="1 4"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">neutral</span>
+          
+        </button>
+        
+      </li>
+    </ul>
+  </section><section class="vis-builder-palette-group">
+    <h4 class="vis-builder-palette-group-title">states</h4>
+    <ul class="vis-builder-palette-list">
+      <li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="hover — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="hover" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#333333" stroke-width="2"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#333333" stroke-width="2"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">hover</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="focused — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="focused" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#333333" stroke-width="2" stroke-dasharray="4 2"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#333333" stroke-width="2" stroke-dasharray="4 2"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">focused</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="selected — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="selected" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="2"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="2"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">selected</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="active — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="active" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#333333" stroke-width="3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#333333" stroke-width="3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">active</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="disabled — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="disabled" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1" stroke-dasharray="2 2" opacity="0.4"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1" stroke-dasharray="2 2" opacity="0.4"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12" opacity="0.4">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">disabled</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="muted — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="muted" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1" opacity="0.25"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1" opacity="0.25"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12" opacity="0.25">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">muted</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="emphasis — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="emphasis" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12" font-weight="bold">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">emphasis</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="breakpoint — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="breakpoint" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#c23238" stroke-width="2" stroke-dasharray="6 2 2 2"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#c23238" stroke-width="2" stroke-dasharray="6 2 2 2"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">breakpoint</span>
+          
+        </button>
+        
+      </li>
+    </ul>
+  </section><section class="vis-builder-palette-group">
+    <h4 class="vis-builder-palette-group-title">furniture</h4>
+    <ul class="vis-builder-palette-list">
+      <li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="axis — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="axis" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333" stroke="#666666"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#666666"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="10">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">axis</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="grid — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="grid" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="none" stroke="#e0e0e0"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#e0e0e0"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">grid</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="label — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="label" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333"></rect>
+            <line x1="26" y1="11" x2="46" y2="11"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">label</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="title — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="title" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333"></rect>
+            <line x1="26" y1="11" x2="46" y2="11"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="16" font-weight="bold">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">title</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="caption — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="caption" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333"></rect>
+            <line x1="26" y1="11" x2="46" y2="11"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="10" font-style="italic">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">caption</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="value — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="value" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333"></rect>
+            <line x1="26" y1="11" x2="46" y2="11"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="16" font-weight="500">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">value</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="annotation — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="annotation" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#333333"></rect>
+            <line x1="26" y1="11" x2="46" y2="11"></line>
+            <text x="50" y="16" fill="#333333" font-family="sans-serif" font-size="10">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">annotation</span>
+          
+        </button>
+        
+      </li>
+    </ul>
+  </section><section class="vis-builder-palette-group">
+    <h4 class="vis-builder-palette-group-title">modifiers</h4>
+    <ul class="vis-builder-palette-list">
+      <li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="bold — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="bold" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12" font-weight="bold">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">bold</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="italic — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="italic" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12" font-style="italic">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">italic</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="thin — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="thin" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">thin</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="thick — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="thick" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">thick</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="dashed — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="dashed" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1" stroke-dasharray="6 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1" stroke-dasharray="6 3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">dashed</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="dotted — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="dotted" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="#6f7480" fill-opacity="0.35" stroke="#6f7480" stroke-width="1" stroke-dasharray="1 3"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1" stroke-dasharray="1 3"></line>
+            <text x="50" y="16" fill="#6f7480" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">dotted</span>
+          
+        </button>
+        
+      </li><li class="vis-builder-palette-entry">
+        <button type="button" class="vis-builder-palette-style" title="outline — the theme&#39;s; click to override it" phx-click="choose_palette_style" phx-value-name="outline" phx-target="-1">
+          <svg class="vis-builder-palette-preview" width="76" height="22" viewBox="0 0 76 22" aria-hidden="true">
+            <rect width="76" height="22" fill="#ffffff"></rect>
+            <rect x="2" y="4" width="20" height="14" rx="2" fill="none" fill-opacity="0.35" stroke="#6f7480" stroke-width="1"></rect>
+            <line x1="26" y1="11" x2="46" y2="11" stroke="#6f7480" stroke-width="1"></line>
+            <text x="50" y="16" fill="none" font-family="sans-serif" font-size="12">Aa</text>
+          </svg>
+          <span class="vis-builder-palette-name">outline</span>
+          
+        </button>
+        
+      </li>
+    </ul>
+  </section>
 </div>
     <table id="builder-inspector" class="vis-builder-inspector" phx-hook="BuilderHook" data-builder-target="-1">
   <tbody>

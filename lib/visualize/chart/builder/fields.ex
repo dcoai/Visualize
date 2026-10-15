@@ -231,9 +231,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
           <option value=""></option>
           <option
             :for={{value, label} <- @field.options}
+            :if={@field.option_groups == nil}
             value={value}
             selected={@field.value == value}
           >{label}</option>
+          <optgroup :for={{group, options} <- @field.option_groups || []} label={group}>
+            <option
+              :for={{value, label} <- options}
+              value={value}
+              selected={@field.value == value}
+            >{label}</option>
+          </optgroup>
         </select>
         <input
           :if={is_nil(@field.variable) and @field.other}
@@ -364,8 +372,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           spec.key not in hidden,
           not (faced? and spec.key == :style) do
         widget =
-          pooled(assigns.kind, spec.key, pool) || columned(assigns, spec) ||
-            referenced(spec.type, refs)
+          (pooled(assigns.kind, spec.key, pool) || columned(assigns, spec) ||
+             referenced(spec.type, refs))
+          |> chosen(spec.type, Map.get(node, spec.key))
 
         name = name(prefix, spec.key)
         value = Map.get(node, spec.key)
@@ -403,6 +412,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           dash: dash(spec.key, prefix, value),
           items: items(widget, value),
           options: options(widget),
+          option_groups: option_groups(widget),
           checked: value == true,
           value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
           well: well(widget, value, Map.get(assigns, :theme), Map.get(assigns, :defs) || %{}),
@@ -463,6 +473,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # itself stays a function of the type alone, which is what makes it total over the schema.
     defp referenced({:ref, kind} = type, refs) do
       case Map.get(refs, kind) do
+        # Names in groups — a style's (§18.14, #685): one optgroup each.
+        [{group, _names} | _] = groups when is_binary(group) -> {:select_groups, groups}
         [_ | _] = names -> {:select, names}
         _none -> Editor.widget(type)
       end
@@ -480,7 +492,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp referenced(type, _refs), do: Editor.widget(type)
 
+    # A select shows one name; a value it cannot — a stack of several, an inline node — is
+    # a literal, which shows the whole value (§18.18 edits a stack).
+    defp chosen({select, _names} = widget, _type, value)
+         when select in [:select, :select_groups] do
+      if is_list(value) or (is_map(value) and not is_struct(value)),
+        do: :textarea,
+        else: widget
+    end
+
+    defp chosen(widget, _type, _value), do: widget
+
     defp narrowed({:select, names}, _type), do: {:select, names}
+    defp narrowed({:select_groups, groups}, _type), do: {:select_groups, groups}
     defp narrowed(_other, type), do: Editor.widget(type)
 
     # A choice of words or a host's name — an animation's `name` (spec/14 §3.11) — is the
@@ -499,6 +523,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp variable_name(_value), do: nil
 
     defp shape({:select, _allowed}), do: :select
+    defp shape({:select_groups, _groups}), do: :select
     defp shape({:columns, _columns}), do: :select
     defp shape({:pool, _names}), do: :pool
     defp shape({:items, _scalar}), do: :items
@@ -569,6 +594,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp options({:pool, names}), do: Enum.map(names, &{&1, &1})
     defp options(_widget), do: []
+
+    defp option_groups({:select_groups, groups}) do
+      for {group, names} <- groups, names != [] do
+        {group, Enum.map(names, &{option(&1), option(&1)})}
+      end
+    end
+
+    defp option_groups(_widget), do: nil
 
     defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
     defp option(value), do: to_string(value)
@@ -779,6 +812,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: inspect(value, limit: :infinity, printable_limit: :infinity)
 
     defp shown({:select, _}, {:ok, value}), do: option(value)
+    defp shown({:select_groups, _}, {:ok, value}), do: option(value)
     defp shown({:columns, _}, {:ok, value}), do: to_string(value)
     defp shown({:pool, _}, {:ok, value}), do: option(value)
     defp shown({:items, _}, {:ok, _value}), do: nil

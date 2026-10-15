@@ -24,7 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @chrome [:background, :surface, :text, :axis, :grid]
     @sizes [:font_size, :label_size, :title_size]
-    @fields [:name, :series | @chrome] ++ [:ramps, :colors, :font_family | @sizes]
+    @fields [:name, :series | @chrome] ++ [:ramps, :colors, :styles, :font_family | @sizes]
 
     attr(:id, :string, required: true, doc: "the panel's id")
 

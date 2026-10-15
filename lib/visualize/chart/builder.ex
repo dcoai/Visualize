@@ -221,6 +221,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          added: nil,
          library_view: :group,
          style_entry: nil,
+         palette_chosen: nil,
          field: nil,
          menu: nil,
          reverting: nil,
@@ -332,6 +333,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         value={@style_site.value}
         fallback={@style_site.fallback}
         design={@design}
+        theme={@theme}
         open={@style_entry}
         target={@target}
       />
@@ -340,8 +342,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         id={@id <> "-style-editor"}
         class="vis-builder-style-panel"
         kind={:style}
-        node={StyleStack.resolved(@design, @style_site.stack)}
-        origins={StyleStack.origins(@design, @style_site.stack)}
+        node={StyleStack.resolved(@design, @style_site.stack, @theme)}
+        origins={StyleStack.origins(@design, @style_site.stack, @theme)}
         strip={false}
         event="edit_style"
         drawn_by={@style_site.drawn_by}
@@ -734,7 +736,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                       style_entry={@style_entry}
                       design={@design}
                       refs={@refs}
-                      theme={@colour.theme}
+                      theme={@palette_theme}
                       defs={@defs}
                       target={@myself}
                     />
@@ -747,7 +749,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   style_entry={@style_entry}
                   design={@design}
                   refs={@refs}
-                  theme={@colour.theme}
+                  theme={@palette_theme}
                   defs={@defs}
                   target={@myself}
                 />
@@ -795,7 +797,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                     style_entry={@style_entry}
                     design={@design}
                     refs={@refs}
-                    theme={@colour.theme}
+                    theme={@palette_theme}
                     defs={@defs}
                     target={@myself}
                   />
@@ -808,7 +810,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 style_entry={@style_entry}
                 design={@design}
                 refs={@refs}
-                theme={@colour.theme}
+                theme={@palette_theme}
                 defs={@defs}
                 target={@myself}
               />
@@ -908,7 +910,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </li>
         </menu>
         <div class="vis-builder-tray">
-          <Palette.panel id={@id <> "-palette"} design={@design} open={@open_style} target={@myself} />
+          <Palette.panel id={@id <> "-palette"} design={@design} theme={@palette_theme} open={@open_style} chosen={@palette_chosen} target={@myself} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel id={@id <> "-document"} design={@design} kind={@kind} target={@myself} />
         </div>

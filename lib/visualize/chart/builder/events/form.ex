@@ -27,13 +27,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.Builder.{Editor, Params, Stack, StyleForm, StyleStack}
     alias Visualize.Chart.{Fragment, Schema, Use, Var}
+    alias Visualize.Theme
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
       toggle_axis toggle_grid add_style_entry remove_style_entry select_style_entry
       edit_style add_style select_style edit submitted set_var set_key list_add
-      list_remove style_item edit_defaults
+      list_remove style_item edit_defaults choose_palette_style override_style
     )
 
     @doc false
@@ -146,6 +147,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         _error_or_id ->
           {:noreply, assign(socket, :notice, "a style needs a name")}
+      end
+    end
+
+    # A theme palette entry chosen in the palette panel: marked, and offered for override
+    # (spec/14 §18.14, #685).
+    def handle_event("choose_palette_style", %{"name" => submitted}, socket) do
+      {:noreply, assign(socket, :palette_chosen, palette_name(socket, submitted))}
+    end
+
+    # The theme's entry declared in the design as a style site of its name, holding the
+    # entry to change (§18.14, D-178); a name the design declares is opened instead.
+    def handle_event("override_style", %{"name" => submitted}, socket) do
+      %{design: design, palette_theme: theme} = editing(socket.assigns)
+
+      case palette_name(socket, submitted) do
+        nil ->
+          {:noreply, socket}
+
+        name ->
+          socket = assign(socket, :palette_chosen, nil)
+
+          if Map.has_key?(Map.get(design, :styles) || %{}, name),
+            do: {:noreply, opened_style(socket, name)},
+            else: {:noreply, declared_style(socket, name, Theme.style(theme, name))}
       end
     end
 
@@ -415,9 +440,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # entry when it is a node, else a new one (D-98). `resolved` is the site's stack in its
     # parts, which a paint's type change and a list's rows start from (§18.19).
     defp styled(socket, writes) do
-      %{design: design, style_site: site} = editing(socket.assigns)
+      %{design: design, style_site: site, palette_theme: theme} = editing(socket.assigns)
       stack = (site && site.stack) || []
-      resolved = StyleStack.resolved(design, stack)
+      resolved = StyleStack.resolved(design, stack, theme)
 
       local =
         case List.last(stack) do
@@ -530,9 +555,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A style site keyed by the name, appended at the chart's top level, selected and its
     # node opened (§18.14, D-178).
-    defp declared_style(socket, name) do
+    defp declared_style(socket, name, body \\ %{}) do
       %{uses: uses, labels: labels} = socket.assigns
-      site = %{Use.new(nil, uses) | ref: nil, local: %{style: %{}}, key: name}
+      site = %{Use.new(nil, uses) | ref: nil, local: %{style: body}, key: name}
 
       socket
       |> assign(
@@ -542,6 +567,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         notice: nil
       )
       |> opened("styles." <> to_string(name))
+    end
+
+    # A name of the theme's palette, read without making an atom (§18.14).
+    defp palette_name(socket, submitted) do
+      %{palette_theme: theme} = editing(socket.assigns)
+      Enum.find(Theme.style_names(theme), &(to_string(&1) == submitted))
     end
 
     # A declared style opened where the highest layer declaring it is.

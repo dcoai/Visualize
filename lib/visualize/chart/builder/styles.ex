@@ -1493,6 +1493,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       white-space: nowrap;
     }
 
+    /* The theme's palette beneath the design's styles (spec/14 §18.14, #685): a group per
+       use, each entry a small preview; a shadowed entry struck through. */
+    .vis-builder-palette-theme {
+      margin: 14px 0 4px;
+      font-size: 12px;
+    }
+
+    .vis-builder-palette-group-title {
+      margin: 8px 0 2px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .vis-builder-palette-preview {
+      flex: 0 0 auto;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: 3px;
+    }
+
+    .vis-builder-palette-entry-shadowed .vis-builder-palette-name {
+      text-decoration: line-through;
+      color: var(--vis-builder-muted);
+    }
+
+    .vis-builder .vis-builder-palette-override {
+      margin: 2px 0 4px 6px;
+      font-size: 11px;
+    }
+
     .vis-builder-palette-empty {
       margin: 0 0 8px;
       color: var(--vis-builder-muted);

@@ -464,8 +464,16 @@ defmodule Visualize.Chart.BuilderThemeTest do
       assert seen =~ ~s(data-vision="deuteranopia")
 
       # The sheet's colours are the simulated ones: the default's red series colour is gone
-      # from it, and its deuteranope reading is there.
-      sheet = fn html -> html |> String.split("vis-builder-theme-sheet") |> Enum.at(1) end
+      # from it, and its deuteranope reading is there. The sheet ends where the tray's style
+      # palette begins, whose previews are the theme as drawn, not simulated (§18.14, #685).
+      sheet = fn html ->
+        html
+        |> String.split("vis-builder-theme-sheet")
+        |> Enum.at(1)
+        |> String.split(~s(class="vis-builder-palette"))
+        |> hd()
+      end
+
       assert sheet.(normal) =~ ~s(stroke="#c8373b")
       refute sheet.(seen) =~ ~s(stroke="#c8373b")
 

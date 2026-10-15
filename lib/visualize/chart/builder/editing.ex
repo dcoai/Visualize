@@ -88,6 +88,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       preview_theme = preview_theme(assigns, design)
+      # The theme a palette name resolves against: the preview's (spec/14 §18.14, #685).
+      palette_theme = preview_theme || design |> Map.get(:theme, :default) |> theme()
       errors = faults(kind, design, Map.put(assigns, :theme, preview_theme), cycle)
       {tabs, children} = strip(nodes, entry, design, errors, layer == design, assigns.context)
 
@@ -108,7 +110,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         sites: Stack.sites(assigns.uses, assigns.labels, fetch),
         find_hit: find_hit(assigns.find),
         site: site(assigns, fetch),
-        refs: refs(design, assigns.store),
+        refs: refs(design, assigns.store, palette_theme),
+        palette_theme: palette_theme,
         colour: colour(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
         pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
@@ -167,12 +170,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A reference may be a local name or a library id of the kind (spec/14 §19.10).
-    defp refs(design, store) do
+    # A style's names are grouped (§18.14, #685): the design's, the theme's palette group by
+    # group, then the library's.
+    defp refs(design, store, theme) do
       entries = if store, do: Store.list(store), else: []
       ids = fn kind -> for %{kind: ^kind, id: id} <- entries, do: id end
 
       %{
-        style: Palette.names(design) ++ ids.(:style),
+        style:
+          Palette.groups(design, theme) ++
+            Enum.reject([{"library", ids.(:style)}], &match?({_group, []}, &1)),
         scale: scale_names(design) ++ ids.(:scale),
         source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source),
         # A `defs` paint a paint of type `:paint` names (spec/14 §2.7, §18.6).

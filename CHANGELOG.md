@@ -17,6 +17,17 @@ release it merely follows.
 
 ### Added
 
+- **The builder's palette panel is back, with the theme's palette** (#685, D-178). Beneath
+  the design's styles the panel lists the palette of the theme the chart is drawn with, in
+  five groups — style series, roles, states, furniture and modifiers — each entry drawn as
+  a small preview (a sample shape, its stroke, an `Aa` label); states and modifiers over a
+  neutral sample. A design style of a palette name is marked as shadowing the theme's.
+  **Override in the design** declares the theme's entry as a style site of that name, ready
+  to change. A mark's `style` select and the style stack's **Add** offer the design's
+  names, the palette's groups and the library's entries as grouped options. The style
+  context panel now resolves palette names against the design's own theme, and an inline
+  theme's `styles` reach the builder's preview.
+
 - **Units and defaults in the builder** (#684, D-178). A size in a style — a stroke's width,
   a font's size, a marker's size, a hatch's spacing — has a unit select beside its box
   (user units, px, pt, pc, mm, cm, in, em, and % where the size has a box), so `{12, :pt}`
