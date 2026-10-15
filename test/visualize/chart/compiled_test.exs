@@ -461,13 +461,21 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.svg =~ ~r/class="mark mark-area" fill="url\(#vis-paint-\w+-fade\)"/
     end
 
-    test "the canvas layer paints the first stop's colour, and the one-string form is the frame's" do
+    test "the canvas layer draws the gradient, and the one-string form is the frame's" do
       sources = %{primary: rows(5)}
       compiled = compile!(painted(), sources: sources, ceiling: 1)
       {payload, _} = Compiled.tick(compiled, sources)
       records = Visualize.Backend.CanvasBinary.Decoder.decode(Base.decode64!(payload.canvas))
+      # A version 2 stream: the gradient once, the area's style referring to it, its box (#652).
+      assert [
+               {:version, 2},
+               {:paint, 0, %{type: :linear, stops: [{+0.0, {59, 111, 168, _}} | _]}} | _
+             ] =
+               records
+
       [{:style, area} | _] = Enum.filter(records, &match?({:style, _}, &1))
-      assert area.fill == {59, 111, 168, 255}
+      assert area.fill_paint == 0
+      assert Enum.any?(records, &match?({:box, _}, &1))
 
       applied = compile!(painted(), sources: sources, ceiling: 100)
 

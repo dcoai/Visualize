@@ -17,6 +17,25 @@ release it merely follows.
 
 ### Added
 
+- **Gradients draw on the canvas** (#672, D-175). A `:linear` or `:radial` paint — declared
+  under `defs` or written in a style — now draws as a gradient on every canvas backend, not
+  as its first stop's colour: the `:json` and `:js` commands and the binary stream build it
+  over each element's own bounding box, matching SVG's `objectBoundingBox`, and a gradient on
+  a group is built over each child. A `resolve: :literal` render (the PNG path) draws the
+  gradient too. In an IR you build yourself, a `:fill` or `:stroke` may be a
+  `%Visualize.IR.Paint{}`, with `Visualize.IR.Paint.definition/1` for its `<defs>` entry.
+  - **The binary stream has a version 2**, written only when a stream draws a paint: a
+    `version` record (`0x00 0x02`), each paint once (`0x50`), a paint index in the style
+    record (bits 5 and 6) and the element's box (`0x51`) before its draws. Every other stream
+    is byte for byte what it was. The hooks shipped with the library read both versions; a
+    page running hooks from an older release throws on a version 2 stream instead of
+    drawing it wrongly, so update the hooks with the library.
+  - The `CanvasChart` commands gain `linearGradient` and `radialGradient`, and a JSON
+    command's arguments may now hold a list.
+  - Two deviations remain, both stated in spec/09 §3.3.3: a radial gradient on a *stroke*
+    over a box that is not square is drawn as the circle of the same area, and a canvas
+    text filled with a gradient takes its first stop.
+
 - **Sizes in units, and strokes that do not scale** (#671, D-174). A style size can now be
   written in a unit: `stroke: %{width: pt(1.5), dash: [mm(2), 4]}`, `font: %{size: em(1.2)}`,
   `text: %{offset: [pct(10), 0]}`. `import Visualize.Units` gives `px/1`, `pt/1`, `pc/1`,

@@ -519,19 +519,22 @@ defmodule Visualize.Chart.FrameTest do
       assert first.type != :defs
     end
 
-    test "a fill that is a paint is url(#id) in css and the first stop's colour in literal" do
+    test "a fill that is a paint is the paint in both modes: url(#id) on SVG, a gradient on a canvas" do
       frame = Frame.new(painted(@defs), sources: %{primary: @rows}, size: @size)
       prefix = Visualize.Chart.Frame.Defs.prefix(@defs)
 
       css = Frame.generate(frame, sources: %{primary: @rows}, size: @size)
       mark = Enum.find(css.children, &(&1.style[:class] == "mark mark-area"))
-      assert mark.style.fill == "url(#vis-paint-#{prefix}-fade)"
+      assert %Visualize.IR.Paint{id: id, type: :linear} = mark.style.fill
+      assert id == "vis-paint-#{prefix}-fade"
 
+      # In :literal the stops are literals, which a canvas builds its gradient from (#652).
       literal = Frame.generate(frame, sources: %{primary: @rows}, resolve: :literal)
       mark = Enum.find(literal.children, &(&1.style[:class] == "mark mark-area"))
-      assert mark.style.fill == "#3b6fa8"
+      assert %Visualize.IR.Paint{id: ^id, stops: [{+0.0, "#3b6fa8", 0.8} | _]} = mark.style.fill
 
-      # The SVG carries the reference and the definition; a canvas the plain colour.
+      # The SVG carries the reference and the definition, in either mode; a canvas the
+      # gradient itself.
       svg = Render.to_string(css)
 
       assert svg =~
@@ -539,7 +542,8 @@ defmodule Visualize.Chart.FrameTest do
 
       assert svg =~ ~s|fill="url(#vis-paint-#{prefix}-fade)"|
       js = literal |> Visualize.Backend.Canvas.render_element() |> IO.iodata_to_binary()
-      assert js =~ "ctx.fillStyle = '#3b6fa8';"
+      assert js =~ "ctx.createLinearGradient("
+      assert literal |> Render.to_string() =~ ~s|fill="url(#vis-paint-#{prefix}-fade)"|
     end
 
     test "two charts with different paints have different ids; an undeclared paint is refused" do
@@ -589,10 +593,10 @@ defmodule Visualize.Chart.FrameTest do
       assert %{x1: +0.0, y1: 0.5, x2: 1.0, y2: 0.5} = gradient.attrs
 
       mark = Enum.find(css.children, &(&1.style[:class] == "mark mark-area"))
-      assert mark.style.fill == "url(##{gradient.attrs.id})"
+      assert Visualize.IR.Paint.url(mark.style.fill) == "url(##{gradient.attrs.id})"
       assert mark.style.fill_opacity == 0.5
 
-      # The same gradient written twice is one definition; a canvas draws its first stop.
+      # The same gradient written twice is one definition; a canvas draws it from literals.
       twice = painted(%{}, fill) |> Map.update!(:marks, &(&1 ++ &1))
 
       css =
@@ -604,7 +608,9 @@ defmodule Visualize.Chart.FrameTest do
 
       literal = Frame.generate(frame, sources: %{primary: @rows}, resolve: :literal)
       mark = Enum.find(literal.children, &(&1.style[:class] == "mark mark-area"))
-      assert mark.style.fill == "#3b6fa8"
+
+      assert %Visualize.IR.Paint{stops: [{+0.0, "#3b6fa8", 1}, {1.0, "#fff", 1}]} =
+               mark.style.fill
     end
   end
 

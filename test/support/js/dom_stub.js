@@ -47,6 +47,15 @@ const Stub = (() => {
     return new Proxy(props, {
       get: (_t, name) => name === 'getTransform' ? () => ({...state.m}) :
         name in props ? props[name] :
+        // A gradient is an object the scenario reads back (#652): its constructor and
+        // arguments, and every stop added, in order. Assigned as a fill or a stroke, it is
+        // logged as that object and serialised with its stops when the log is printed.
+        (name === 'createLinearGradient' || name === 'createRadialGradient') ? (...args) => {
+          log.push({on: canvas.id, kind: 'call', name, args});
+          const gradient = {gradient: name, args, stops: []};
+          Object.defineProperty(gradient, 'addColorStop', {value: (at, colour) => gradient.stops.push([at, colour])});
+          return gradient;
+        } :
         (...args) => { transforms(state, name, args); log.push({on: canvas.id, kind: 'call', name, args}); },
       set: (_t, name, value) => {
         props[name] = value;

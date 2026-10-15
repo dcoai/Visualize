@@ -381,7 +381,10 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              save: Opcodes.save(),
              restore: Opcodes.restore(),
              fill: Opcodes.fill(),
-             stroke: Opcodes.stroke()
+             stroke: Opcodes.stroke(),
+             version: Opcodes.version(),
+             paint: Opcodes.paint(),
+             box: Opcodes.box()
            ]
   end
 

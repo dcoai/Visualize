@@ -19,7 +19,9 @@ defmodule Visualize.Hooks.Canvas do
 
   Every command of the `:json` output names a Canvas 2D method (`set_*` commands assign
   the property), so the hook needs no path helpers (D-37) — but `nonScalingLineWidth`, the
-  width divided by the scale of the current transform (spec/09 §3.3.3, spec/14 §3.9).
+  width divided by the scale of the current transform (spec/09 §3.3.3, spec/14 §3.9), and
+  `linearGradient` and `radialGradient`, which build a gradient with `visualizeGradient`
+  from `Visualize.Hooks.CanvasBinary.js_decoder/0` (spec/10 §7.2, #652).
   """
 
   @doc """
@@ -72,6 +74,11 @@ defmodule Visualize.Hooks.Canvas do
               // A stroke that keeps its width on screen (spec/09 §3.3.3).
               const t = ctx.getTransform();
               ctx.lineWidth = args[0] / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
+            } else if (cmd === 'linearGradient' || cmd === 'radialGradient') {
+              // A gradient in user units (spec/09 §3.3.3, #652): target, geometry, stops.
+              const [target, ...rest] = args;
+              const stops = rest.pop();
+              visualizeGradient(ctx, target, cmd === 'linearGradient' ? 'linear' : 'radial', rest, stops);
             } else {
               ctx[cmd](...args);
             }

@@ -7,7 +7,7 @@ defmodule Visualize.Backend.SVG do
 
   @behaviour Visualize.Backend
 
-  alias Visualize.IR.{Element, Path, Transform}
+  alias Visualize.IR.{Element, Paint, Path, Transform}
   alias Visualize.SVG.Renderer
 
   # ============================================================
@@ -350,6 +350,7 @@ defmodule Visualize.Backend.SVG do
       {:fill, :current_color} -> {:fill, "currentColor"}
       {:stroke, :none} -> {:stroke, "none"}
       {:stroke, :current_color} -> {:stroke, "currentColor"}
+      {key, %Paint{} = paint} when key in [:fill, :stroke] -> {key, Paint.url(paint)}
       {:text_anchor, :start} -> {:text_anchor, "start"}
       {:text_anchor, :middle} -> {:text_anchor, "middle"}
       {:text_anchor, :end} -> {:text_anchor, "end"}

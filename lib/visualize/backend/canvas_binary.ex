@@ -28,6 +28,9 @@ defmodule Visualize.Backend.CanvasBinary do
   | `restore` | `0x31` | `ctx.restore()` |
   | `fill` | `0x40` | `ctx.fill()` on the current path |
   | `stroke` | `0x41` | `ctx.stroke()` on the current path |
+  | `version` | `0x00` | `version:u8` — version 2 and later; first in a stream that draws a paint |
+  | `paint` | `0x50` | `index:u16 kind:u8`, the geometry in box units (f32), `count:u8` stops `at:f32 r g b a` |
+  | `box` | `0x51` | `x y w h` (f32): the box the next draw's paint is built over |
 
   The point-list record is used only for a path that is one `M` followed by `L`
   commands, and the cubic run only for one `M` followed by `C` commands — the shapes
@@ -38,6 +41,11 @@ defmodule Visualize.Backend.CanvasBinary do
   value below 16,384 to within 2⁻¹¹ px, and `precision: :f64` selects the f64 records
   (D-73; spec/09 §4.5). Transforms fold into one matrix in SVG order. Colours are parsed
   by `Visualize.Color.parse/1`.
+
+  A stream that draws a `Visualize.IR.Paint` is **version 2** (spec/09 §4.2, D-175): it begins
+  with `version` 2 and one `paint` record per distinct paint, its style records refer to a
+  paint by index (bits 5 and 6), and each element drawn with one has a `box` record before
+  its draws. A stream without a paint is version 1, byte for byte.
 
   ## Performance
 
@@ -52,7 +60,7 @@ defmodule Visualize.Backend.CanvasBinary do
 
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder, SVG}
   alias Visualize.Color
-  alias Visualize.IR.{Element, Path, Transform}
+  alias Visualize.IR.{Element, Paint, Path, Transform}
   require Opcodes
 
   # Nx is optional: the calls below stay direct (so a missing Nx raises
@@ -131,7 +139,7 @@ defmodule Visualize.Backend.CanvasBinary do
     precision = precision!(opts)
 
     if available?() do
-      {:ok, do_encode_element(element, precision, %{})}
+      {:ok, encode_tree(element, precision)}
     else
       {:error, :nx_not_available}
     end
@@ -228,8 +236,8 @@ defmodule Visualize.Backend.CanvasBinary do
   defp encode_simple_path(points, :f32), do: PathEncoder.encode_polyline(points, :f32)
 
   defp do_encode_element(
-         %Element{type: :path, path: path, style: style, transform: transform},
-         precision,
+         %Element{type: :path, path: path, style: style, transform: transform} = element,
+         ctx,
          inherited
        ) do
     parts = []
@@ -245,23 +253,23 @@ defmodule Visualize.Backend.CanvasBinary do
     # Style
     parts =
       if map_size(style) > 0 do
-        parts ++ [encode_style(style)]
+        parts ++ [encode_style(style, ctx.paints)]
       else
         parts
       end
 
     # Path data
-    parts = parts ++ [do_encode_path(path.commands, precision)]
+    parts = parts ++ [do_encode_path(path.commands, ctx.precision)]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
+    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
 
     IO.iodata_to_binary(parts)
   end
 
   defp do_encode_element(
-         %Element{type: :circle, attrs: attrs, style: style, transform: transform},
-         _precision,
+         %Element{type: :circle, attrs: attrs, style: style, transform: transform} = element,
+         ctx,
          inherited
        ) do
     %{cx: cx, cy: cy, r: r} = attrs
@@ -277,7 +285,7 @@ defmodule Visualize.Backend.CanvasBinary do
 
     parts =
       if map_size(style) > 0 do
-        parts ++ [encode_style(style)]
+        parts ++ [encode_style(style, ctx.paints)]
       else
         parts
       end
@@ -291,14 +299,14 @@ defmodule Visualize.Backend.CanvasBinary do
         ]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
+    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
 
     IO.iodata_to_binary(parts)
   end
 
   defp do_encode_element(
-         %Element{type: :rect, attrs: attrs, style: style, transform: transform},
-         _precision,
+         %Element{type: :rect, attrs: attrs, style: style, transform: transform} = element,
+         ctx,
          inherited
        ) do
     %{x: x, y: y, width: w, height: h} = attrs
@@ -314,7 +322,7 @@ defmodule Visualize.Backend.CanvasBinary do
 
     parts =
       if map_size(style) > 0 do
-        parts ++ [encode_style(style)]
+        parts ++ [encode_style(style, ctx.paints)]
       else
         parts
       end
@@ -328,7 +336,7 @@ defmodule Visualize.Backend.CanvasBinary do
         ]
 
     # Draw commands
-    parts = parts ++ encode_draw_commands(Map.merge(inherited, style))
+    parts = parts ++ draw_records(Map.merge(inherited, style), element, ctx)
 
     IO.iodata_to_binary(parts)
   end
@@ -337,7 +345,7 @@ defmodule Visualize.Backend.CanvasBinary do
   # what they inherit for their draw records (spec/09 §4.4, D-111).
   defp do_encode_element(
          %Element{type: :group, children: children, style: style, transform: transform},
-         precision,
+         ctx,
          inherited
        ) do
     parts = [<<Opcodes.save()::8>>]
@@ -349,11 +357,11 @@ defmodule Visualize.Backend.CanvasBinary do
         parts
       end
 
-    parts = if map_size(style) > 0, do: parts ++ [encode_style(style)], else: parts
+    parts = if map_size(style) > 0, do: parts ++ [encode_style(style, ctx.paints)], else: parts
 
     # Encode all children
     child_data =
-      Enum.map(children, &do_encode_element(&1, precision, Map.merge(inherited, style)))
+      Enum.map(children, &do_encode_element(&1, ctx, Map.merge(inherited, style)))
 
     parts = parts ++ child_data
 
@@ -365,18 +373,18 @@ defmodule Visualize.Backend.CanvasBinary do
   # The geometric types that are not paths are encoded as the path they are (spec/09
   # §4.4, #269): each becomes a `:path` element with the same style and transform, so it
   # takes the same record and form selection as any path.
-  defp do_encode_element(%Element{type: type} = element, precision, inherited)
+  defp do_encode_element(%Element{type: type} = element, ctx, inherited)
        when type in [:line, :polyline, :polygon, :ellipse] do
-    do_encode_element(%{element | type: :path, path: as_path(element)}, precision, inherited)
+    do_encode_element(%{element | type: :path, path: as_path(element)}, ctx, inherited)
   end
 
-  defp do_encode_element(%Element{type: :root, children: children}, precision, inherited) do
+  defp do_encode_element(%Element{type: :root, children: children}, ctx, inherited) do
     children
-    |> Enum.map(&do_encode_element(&1, precision, inherited))
+    |> Enum.map(&do_encode_element(&1, ctx, inherited))
     |> IO.iodata_to_binary()
   end
 
-  defp do_encode_element(_element, _precision, _inherited) do
+  defp do_encode_element(_element, _ctx, _inherited) do
     <<>>
   end
 
@@ -432,9 +440,10 @@ defmodule Visualize.Backend.CanvasBinary do
     end
   end
 
-  defp encode_style(style) do
+  defp encode_style(style, paints) do
     # Flags: bit 0 = has fill, bit 1 = has stroke, bit 2 = has stroke_width, bit 3 = has
-    # opacity, bit 4 = the stroke width does not scale
+    # opacity, bit 4 = the stroke width does not scale; version 2: bit 5 = the fill is a
+    # paint, bit 6 = the stroke is one, each an index after the four fields above
     flags = 0
     parts = []
 
@@ -444,6 +453,9 @@ defmodule Visualize.Backend.CanvasBinary do
           {flags, parts}
 
         :none ->
+          {flags, parts}
+
+        %Paint{} ->
           {flags, parts}
 
         color ->
@@ -457,6 +469,9 @@ defmodule Visualize.Backend.CanvasBinary do
           {flags, parts}
 
         :none ->
+          {flags, parts}
+
+        %Paint{} ->
           {flags, parts}
 
         color ->
@@ -478,27 +493,89 @@ defmodule Visualize.Backend.CanvasBinary do
         o -> {flags ||| 0x08, parts ++ [<<o::little-float-32>>]}
       end
 
+    {flags, parts} = paint_field(style[:fill], 0x20, paints, {flags, parts})
+    {flags, parts} = paint_field(style[:stroke], 0x40, paints, {flags, parts})
+
     <<Opcodes.style()::8, flags::8>> <> IO.iodata_to_binary(parts)
   end
 
-  defp encode_draw_commands(style) do
-    cmds = []
+  # The draw records of an element under its effective style, with the box its paints are
+  # built over first when it draws one (spec/09 §4.3.13).
+  defp draw_records(style, element, _ctx) do
+    fill = style[:fill] not in [nil, :none]
+    stroke = style[:stroke] not in [nil, :none]
 
-    cmds =
-      case style[:fill] do
-        nil -> cmds
-        :none -> cmds
-        _ -> cmds ++ [<<Opcodes.fill()::8>>]
+    box =
+      if is_struct(style[:fill], Paint) or is_struct(style[:stroke], Paint),
+        do: [box_record(Paint.bounds(element))],
+        else: []
+
+    box ++
+      if(fill, do: [<<Opcodes.fill()::8>>], else: []) ++
+      if(stroke, do: [<<Opcodes.stroke()::8>>], else: [])
+  end
+
+  defp box_record({x, y, w, h}),
+    do:
+      <<Opcodes.box()::8, x::little-float-32, y::little-float-32, w::little-float-32,
+        h::little-float-32>>
+
+  defp box_record(nil), do: box_record({0, 0, 0, 0})
+
+  # A paint in the style record (bit 5 for the fill, 6 for the stroke): its index among the
+  # stream's paints (spec/09 §4.3.5).
+  defp paint_field(%Paint{} = paint, bit, paints, {flags, parts}),
+    do: {flags ||| bit, parts ++ [<<Map.fetch!(paints, paint)::little-16>>]}
+
+  defp paint_field(_colour, _bit, _paints, acc), do: acc
+
+  # -- version 2: the stream's paints -----------------------------------------------------
+
+  # The tree's records, after a `version` 2 record and one `paint` record per distinct paint
+  # when its styles hold any (spec/09 §4.2, §4.4, D-175); a tree without one is a version 1
+  # stream, byte for byte.
+  defp encode_tree(element, precision) do
+    paints = element |> paints() |> Enum.uniq() |> Enum.with_index()
+    ctx = %{precision: precision, paints: Map.new(paints)}
+    body = do_encode_element(element, ctx, %{})
+
+    case paints do
+      [] ->
+        body
+
+      _ ->
+        IO.iodata_to_binary([
+          <<Opcodes.version()::8, 2::8>>,
+          Enum.map(paints, &paint_record/1),
+          body
+        ])
+    end
+  end
+
+  defp paints(%Element{style: style, children: children}) do
+    Enum.filter([style[:fill], style[:stroke]], &is_struct(&1, Paint)) ++
+      Enum.flat_map(children, &paints/1)
+  end
+
+  defp paint_record({%Paint{type: type, geometry: g} = paint, index}) do
+    {kind, geometry} =
+      case type do
+        :linear -> {0x01, [g.x1, g.y1, g.x2, g.y2]}
+        :radial -> {0x02, [g.cx, g.cy, g.r]}
       end
 
-    cmds =
-      case style[:stroke] do
-        nil -> cmds
-        :none -> cmds
-        _ -> cmds ++ [<<Opcodes.stroke()::8>>]
+    stops =
+      for {at, _colour, _opacity} = stop <- paint.stops do
+        {r, gr, b, a} = Paint.rgba(stop)
+        <<at::little-float-32, r::8, gr::8, b::8, a::8>>
       end
 
-    cmds
+    [
+      <<Opcodes.paint()::8, index::little-16, kind::8>>,
+      Enum.map(geometry, &<<&1::little-float-32>>),
+      <<length(stops)::8>>,
+      stops
+    ]
   end
 
   # Every colour syntax `Visualize.Color.parse/1` knows — hex, `rgb()`/`rgba()`, `hsl()`
