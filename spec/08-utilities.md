@@ -181,13 +181,18 @@ A helper raises `ArgumentError` for a number outside `0..1`, an operand that is 
 | `Visualize.Color.intensity/2` | `{:intensity, c, t}` |
 | `Visualize.Color.blend/1` | `{:blend, list}`, a non-empty list of color values |
 | `Visualize.Color.alpha/2` | `{:alpha, c, a}` |
-| `Visualize.Color.lighten/2`, `darken/2` | `{:lighten, c, t}`, `{:darken, c, t}` |
+| `Visualize.Color.lighten/2` | `{:lighten, c, t}` |
+| `Visualize.Color.darken/2` | `{:darken, c, t}` |
 | `Visualize.Color.saturate/2` | on a color value, `{:saturate, c, t}`; on a `%Visualize.Color{}`, 1.5 |
 | `Visualize.Color.contrast/1` | `{:contrast, c}` |
 | `Visualize.Color.value?/1` | whether a term is a color value of the table above, operands included |
 | `Visualize.Color.resolve/3` | `resolve(value, theme, mode)`: the color as `Visualize.Theme.resolve/3` gives a slot, or a transform's literal |
-| `Visualize.Color.to_oklab/1`, `to_oklch/1` | OKLab and OKLCH maps |
-| `Visualize.Color.oklab/3,4`, `oklch/3,4` | a color from OKLab or OKLCH, gamut-mapped |
+| `Visualize.Color.to_oklab/1` | the OKLab map |
+| `Visualize.Color.to_oklch/1` | the OKLCH map |
+| `Visualize.Color.oklab/3` | `oklab(l, a, b, 1.0)` |
+| `Visualize.Color.oklab/4` | a color from OKLab, gamut-mapped |
+| `Visualize.Color.oklch/3` | `oklch(l, c, h, 1.0)` |
+| `Visualize.Color.oklch/4` | a color from OKLCH, gamut-mapped |
 
 ## 2. Interpolate
 
