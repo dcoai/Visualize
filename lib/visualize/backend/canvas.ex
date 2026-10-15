@@ -44,7 +44,7 @@ defmodule Visualize.Backend.Canvas do
   # Backend Callbacks
   # ============================================================
 
-  # Every IR path command becomes an executable Canvas call: the path is normalised to
+  # Every IR path command becomes an executable Canvas call: the path is normalized to
   # absolute `M L C Q A Z` first (`Visualize.IR.Path.absolute/1`) and an arc is converted
   # to an `ellipse` call from the current point (D-37).
   @impl true
@@ -584,16 +584,16 @@ defmodule Visualize.Backend.Canvas do
     cmds =
       case style[:effect] do
         :shadow ->
-          # The offset and the colour a shadow gives, else half the radius and black at 0.35
+          # The offset and the color a shadow gives, else half the radius and black at 0.35
           # (spec/09 §3.3.3, #674).
           [dx, dy] = style[:effect_offset] || [radius / 2, radius / 2]
 
-          colour =
-            if c = style[:effect_color], do: Paint.canvas_colour(c), else: "rgba(0,0,0,0.35)"
+          color =
+            if c = style[:effect_color], do: Paint.canvas_color(c), else: "rgba(0,0,0,0.35)"
 
           cmds ++
             [
-              {:set_shadowColor, [colour]},
+              {:set_shadowColor, [color]},
               {:set_shadowBlur, [radius]},
               {:set_shadowOffsetX, [dx]},
               {:set_shadowOffsetY, [dy]}
@@ -683,11 +683,11 @@ defmodule Visualize.Backend.Canvas do
 
   defp fill_commands(fill, _element) when fill in [nil, :none], do: []
   defp fill_commands(%Paint{} = paint, element), do: paint_commands(paint, :fill, element)
-  defp fill_commands(_colour, _element), do: [{:fill, []}]
+  defp fill_commands(_color, _element), do: [{:fill, []}]
 
   defp stroke_commands(stroke, _element) when stroke in [nil, :none], do: []
   defp stroke_commands(%Paint{} = paint, element), do: paint_commands(paint, :stroke, element)
-  defp stroke_commands(_colour, _element), do: [{:stroke, []}]
+  defp stroke_commands(_color, _element), do: [{:stroke, []}]
 
   # A paint is drawn over the element's own box, inside a save/restore so the gradient is
   # never state a sibling inherits; a box without area draws nothing, as SVG draws no
@@ -701,8 +701,8 @@ defmodule Visualize.Backend.Canvas do
       g.angle,
       g.spacing,
       g.width,
-      Paint.canvas_colour(paint.color),
-      paint.background && Paint.canvas_colour(paint.background)
+      Paint.canvas_color(paint.color),
+      paint.background && Paint.canvas_color(paint.background)
     ]
 
     [{:save, []}, {:hatchPattern, args}, {op, []}, {:restore, []}]
@@ -769,7 +769,7 @@ defmodule Visualize.Backend.Canvas do
         nil -> cmds
         :none -> cmds
         :current_color -> cmds ++ [{:set_fillStyle, ["currentColor"]}]
-        %Paint{} = paint -> cmds ++ [{:set_fillStyle, [Paint.first_colour(paint)]}]
+        %Paint{} = paint -> cmds ++ [{:set_fillStyle, [Paint.first_color(paint)]}]
         color -> cmds ++ [{:set_fillStyle, [to_string(color)]}]
       end
 
@@ -991,8 +991,8 @@ defmodule Visualize.Backend.Canvas do
 
   defp gradient_js(target, create, stops) do
     adds =
-      Enum.map(stops, fn [at, colour] ->
-        ["g.addColorStop(", format_num(at), ", '", escape_js(colour), "');"]
+      Enum.map(stops, fn [at, color] ->
+        ["g.addColorStop(", format_num(at), ", '", escape_js(color), "');"]
       end)
 
     ["ctx.", target, "Style = (function(g){", adds, "return g;})(", create, ");"]
@@ -1009,11 +1009,11 @@ defmodule Visualize.Backend.Canvas do
   # transform `rotate(angle) · scale(spacing / n)`.
   @spec hatch_js() :: String.t()
   def hatch_js do
-    "function(ctx, pattern, angle, s, w, colour, background) {" <>
+    "function(ctx, pattern, angle, s, w, color, background) {" <>
       "var n = Math.max(1, Math.ceil(4 * s)), tile = document.createElement('canvas');" <>
       "tile.width = n; tile.height = n; var t = tile.getContext('2d'); t.scale(n / s, n / s);" <>
       "if (background) { t.fillStyle = background; t.fillRect(0, 0, s, s); }" <>
-      "t.strokeStyle = colour; t.fillStyle = colour; t.lineWidth = w; t.beginPath();" <>
+      "t.strokeStyle = color; t.fillStyle = color; t.lineWidth = w; t.beginPath();" <>
       "if (pattern === 'dots') { t.arc(s / 2, s / 2, w, 0, 2 * Math.PI); t.fill(); } else {" <>
       "t.moveTo(0, s / 2); t.lineTo(s, s / 2);" <>
       "if (pattern === 'crosshatch') { t.moveTo(s / 2, 0); t.lineTo(s / 2, s); } t.stroke(); }" <>
@@ -1091,7 +1091,7 @@ defmodule Visualize.Backend.Canvas do
     |> String.replace("<", "\\x3c")
   end
 
-  # The one number formatter of every serialiser (spec/09 §1.3, D-12, D-32).
+  # The one number formatter of every serializer (spec/09 §1.3, D-12, D-32).
   defp format_num(n) when is_number(n), do: Path.format_number(n)
 
   defp format_num(n) when is_boolean(n), do: Atom.to_string(n)

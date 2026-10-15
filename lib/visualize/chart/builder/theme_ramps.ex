@@ -4,12 +4,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The theme editor's ramps and roles, checked as they are edited (spec/14 §20.4, §20.5,
     D-139).
 
-    Each ramp is drawn as the theme interpolates it, again as a colour-vision deficiency
-    sees it when one is chosen, and as the lightness of each of its colours — what a reader
-    with no hue at all reads. Its anchors are colour inputs of the editor's form, and a
+    Each ramp is drawn as the theme interpolates it, again as a color-vision deficiency
+    sees it when one is chosen, and as the lightness of each of its colors — what a reader
+    with no hue at all reads. Its anchors are color inputs of the editor's form, and a
     contract it breaks is said beneath it in the contract's own words
     (`Visualize.Theme.violations/1`). The status roles are drawn at the positions the library
-    fixes for them, and set by the colour there.
+    fixes for them, and set by the color there.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Color.Vision
     alias Visualize.Theme
 
-    # How many colours a ramp is drawn with: enough that the Lab interpolation reads as a
+    # How many colors a ramp is drawn with: enough that the Lab interpolation reads as a
     # continuum at the inspector's width.
     @steps 24
 
@@ -66,7 +66,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         >
           <span class="vis-builder-theme-ramp-name">{ramp.name} <span class="vis-builder-theme-ramp-meaning">{ramp.meaning}</span></span>
           <div class="vis-builder-theme-strip" role="img" aria-label={"#{ramp.name}, as drawn"}>
-            <span :for={colour <- ramp.colors} style={"background: #{colour}"}></span>
+            <span :for={color <- ramp.colors} style={"background: #{color}"}></span>
             <span
               :for={{role, at} <- ramp.markers}
               class="vis-builder-theme-marker"
@@ -81,10 +81,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
             aria-label={"#{ramp.name}, under #{@vision}"}
             title={"under #{@vision}"}
           >
-            <span :for={colour <- ramp.seen} style={"background: #{colour}"}></span>
+            <span :for={color <- ramp.seen} style={"background: #{color}"}></span>
           </div>
           <div class="vis-builder-theme-strip vis-builder-theme-lightness" role="img" aria-label={"#{ramp.name}, its lightness"} title="lightness, CIE L*">
-            <span :for={grey <- ramp.lightness} style={"background: #{grey}"}></span>
+            <span :for={gray <- ramp.lightness} style={"background: #{gray}"}></span>
           </div>
           <div class="vis-builder-theme-anchors">
             <span :for={{anchor, i} <- ramp.anchors} class="vis-builder-theme-swatch">
@@ -141,18 +141,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # One ramp as the section draws it: its colours at `@steps` positions, those colours as
-    # the deficiency sees them, their lightness as greys, its anchors with their L*, the
+    # One ramp as the section draws it: its colors at `@steps` positions, those colors as
+    # the deficiency sees them, their lightness as grays, its anchors with their L*, the
     # status roles' markers, and its fault.
     defp ramp(name, theme, drawn, vision, faults) do
-      colours = for k <- 0..(@steps - 1), do: Theme.ramp(drawn, name, k / (@steps - 1))
+      colors = for k <- 0..(@steps - 1), do: Theme.ramp(drawn, name, k / (@steps - 1))
 
       %{
         name: name,
         meaning: Map.fetch!(@meanings, name),
-        colors: colours,
-        seen: Enum.map(colours, &seen(&1, vision)),
-        lightness: Enum.map(colours, &grey/1),
+        colors: colors,
+        seen: Enum.map(colors, &seen(&1, vision)),
+        lightness: Enum.map(colors, &gray/1),
         anchors:
           drawn.ramps
           |> Map.fetch!(name)
@@ -171,10 +171,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           do: own,
           else: drawn
 
-      for colour <- shown do
+      for color <- shown do
         %{
-          color: colour,
-          l: colour |> Color.parse() |> Color.to_lab() |> Map.fetch!(:l) |> round()
+          color: color,
+          l: color |> Color.parse() |> Color.to_lab() |> Map.fetch!(:l) |> round()
         }
       end
     end
@@ -218,13 +218,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       status_roles ++ own_roles
     end
 
-    defp seen(colour, :none), do: colour
+    defp seen(color, :none), do: color
 
-    defp seen(colour, vision),
-      do: colour |> Color.parse() |> Vision.simulate(vision) |> Color.to_hex()
+    defp seen(color, vision),
+      do: color |> Color.parse() |> Vision.simulate(vision) |> Color.to_hex()
 
-    defp grey(colour) do
-      %{l: l} = colour |> Color.parse() |> Color.to_lab()
+    defp gray(color) do
+      %{l: l} = color |> Color.parse() |> Color.to_lab()
       l |> Color.lab(0, 0) |> Color.to_hex()
     end
 

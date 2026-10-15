@@ -102,7 +102,7 @@ defmodule Visualize.Chart.Summary.Table do
   end
 
   defp columns(%{frame: frame, mark: mark} = ctx) do
-    labelled = label_columns(mark)
+    labeled = label_columns(mark)
     steps = steps(mark)
 
     cond do
@@ -120,16 +120,16 @@ defmodule Visualize.Chart.Summary.Table do
 
       layout = Enum.find(steps, &(&1.op in @hierarchies and Map.get(&1, :field))) ->
         sized = %{
-          title: humanise(layout.field),
+          title: humanize(layout.field),
           read: &Table.get(&1, layout.field),
           format: &Summary.plain/1
         }
 
-        labelled ++ [sized]
+        labeled ++ [sized]
 
       true ->
         channels = for channel <- @columns, column = channel_column(ctx, channel), do: column
-        Enum.uniq_by(labelled ++ channels, & &1.title)
+        Enum.uniq_by(labeled ++ channels, & &1.title)
     end
   end
 
@@ -141,13 +141,13 @@ defmodule Visualize.Chart.Summary.Table do
 
     if field && (raw? or Map.has_key?(frame.scales, scale)) do
       format = if raw?, do: &Summary.plain/1, else: Summary.formatter(frame, scale)
-      %{title: humanise(field), read: &Channels.reading(ctx, channel, &1), format: format}
+      %{title: humanize(field), read: &Channels.reading(ctx, channel, &1), format: format}
     end
   end
 
   defp label_columns(%{label: %{text: text}}) do
     for {:field, field} <- Text.parse!(text),
-        do: %{title: humanise(field), read: &Table.get(&1, field), format: &Summary.plain/1}
+        do: %{title: humanize(field), read: &Table.get(&1, field), format: &Summary.plain/1}
   end
 
   defp label_columns(_mark), do: []
@@ -186,14 +186,14 @@ defmodule Visualize.Chart.Summary.Table do
   defp steps(%{data: %{transforms: steps}}) when is_list(steps), do: steps
   defp steps(_mark), do: []
 
-  defp source(%{data: %{source: name}}), do: humanise(name)
-  defp source(%{data: name}) when is_atom(name), do: humanise(name)
+  defp source(%{data: %{source: name}}), do: humanize(name)
+  defp source(%{data: name}) when is_atom(name), do: humanize(name)
 
   defp field(field) when is_atom(field) and field not in [nil, true, false], do: field
   defp field({:field, field}) when is_atom(field), do: field
   defp field(_spec), do: nil
 
-  defp humanise(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
+  defp humanize(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
 
   @doc false
   # Text escaped for HTML content and attribute values alike.

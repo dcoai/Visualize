@@ -5,7 +5,7 @@ defmodule Visualize.Layout.Tree do
   Implements the Reingold–Tilford "tidy" algorithm as refined by Buchheim, Jünger and
   Leipert (linear time, threads and accumulated shifts), ported from d3-hierarchy's
   `tree`: children of one parent are placed left to right with the gap given by
-  `separation`, every parent is centred over its children, and subtrees are shifted so
+  `separation`, every parent is centered over its children, and subtrees are shifted so
   that nodes at the same depth never overlap while adjacent subtrees keep their
   separation.
 
@@ -120,7 +120,7 @@ defmodule Visualize.Layout.Tree do
   end
 
   # ------------------------------------------------------------------
-  # The layout works on a store of plain maps keyed by pre-order index, the analogue of
+  # The layout works on a store of plain maps keyed by pre-order index, the analog of
   # d3's TreeNode wrappers: `z` prelim x, `m` modifier, `c` change, `s` shift, `t` thread
   # (an id or nil), `a` ancestor (an id), `anc` default ancestor (an id or nil), `i` the
   # index among siblings, `parent` and `children` as ids, `node` the hierarchy node.

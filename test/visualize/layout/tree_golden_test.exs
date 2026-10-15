@@ -74,7 +74,7 @@ defmodule Visualize.Layout.TreeGoldenTest do
     assert_in_delta b2 - b1, 1, 1.0e-9
   end
 
-  test "every parent is centred over its children and the root sits at 0" do
+  test "every parent is centered over its children and the root sits at 0" do
     root = Tree.generate(Tree.new(), Hierarchy.new(trees()[:unbalanced]))
     assert root.x == 0
 
@@ -101,7 +101,7 @@ defmodule Visualize.Layout.TreeGoldenTest do
     end)
   end
 
-  test "size normalises the extent to the box; node_size multiplies the raw units" do
+  test "size normalizes the extent to the box; node_size multiplies the raw units" do
     sized = Tree.generate(Tree.new() |> Tree.size([400, 200]), Hierarchy.new(trees()[:cousins]))
     xs = sized |> Hierarchy.descendants() |> Enum.map(& &1.x)
     ys = sized |> Hierarchy.descendants() |> Enum.map(& &1.y)

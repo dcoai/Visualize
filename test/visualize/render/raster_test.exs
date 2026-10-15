@@ -40,7 +40,7 @@ defmodule Visualize.Render.RasterTest do
   describe "to_png/2 through resvg" do
     @describetag :resvg
 
-    test "every gallery design rasterises at the frame's size, without warnings" do
+    test "every gallery design rasterizes at the frame's size, without warnings" do
       for name <- Designs.names() do
         applied = Designs.apply(name)
         assert {:ok, png, []} = Render.to_png(literal_design(name), @fonts), "#{name}"
@@ -59,7 +59,7 @@ defmodule Visualize.Render.RasterTest do
       assert PNGPixels.size(Render.to_png!(swatch(), scale: 1.5)) == {15, 9}
     end
 
-    test "an SVG string rasterises as the root it was rendered from" do
+    test "an SVG string rasterizes as the root it was rendered from" do
       svg = Chart.render(Designs.apply(:bar), root: true, resolve: :literal)
       assert {:ok, from_string, []} = Render.to_png(svg, @fonts)
       assert {:ok, from_ir, []} = Render.to_png(literal_design(:bar), @fonts)
@@ -92,7 +92,7 @@ defmodule Visualize.Render.RasterTest do
   end
 
   describe "before the binary" do
-    test "a theme reference is an error, not a picture in the wrong colours" do
+    test "a theme reference is an error, not a picture in the wrong colors" do
       css = Chart.generate(Designs.apply(:line), root: true, resolve: :css)
       assert Raster.to_png(css, [], true) == {:error, :css_references}
       assert_raise RuntimeError, ~r/css_references/, fn -> Raster.to_png!(css, [], true) end

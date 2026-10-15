@@ -32,7 +32,7 @@ defmodule Visualize.Chart.InferredDomainTest do
 
   defp rows, do: for(t <- 100..199, do: %{t: t, v: rem(t, 7) + 10})
 
-  # The domain the frame realises, the design taken as it is: a faulty one is built
+  # The domain the frame realizes, the design taken as it is: a faulty one is built
   # unchecked, as a frame drew it before the validator saw it.
   defp x_domain(design) do
     frame = Frame.new(struct!(Chart, design), sources: %{s: rows()})
@@ -49,7 +49,7 @@ defmodule Visualize.Chart.InferredDomainTest do
     # read as data: the check is about what the design says, not what the rows happen to be.
     assert y_fault == {[:marks, 1, :channels, :y], {:feeds_domain, :y, 12}}
 
-    # Why: the realised domain runs from the constant, not from the series.
+    # Why: the realized domain runs from the constant, not from the series.
     assert x_domain(faulty) == [0, 199]
   end
 

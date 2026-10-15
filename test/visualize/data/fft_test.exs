@@ -58,7 +58,7 @@ defmodule Visualize.Data.FFTTest do
         assert_in_delta peak.magnitude, 3.0, 0.01
       end
 
-      # An offset leaks from the DC line into its neighbours under a window; detrended, the
+      # An offset leaks from the DC line into its neighbors under a window; detrended, the
       # tone alone stands.
       offset = Enum.map(values, &(&1 + 40))
       leaked = FFT.spectrum(offset, every)

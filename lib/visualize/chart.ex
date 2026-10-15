@@ -12,7 +12,7 @@ defmodule Visualize.Chart do
 
   A design is a template: its sources are typed slots and its variables are terms.
   `apply/2` resolves the variables, binds the slots from a pool of named sources and
-  realises the frame into a `Visualize.Chart.Applied` that `render/2` draws (spec/14 §7.3);
+  realizes the frame into a `Visualize.Chart.Applied` that `render/2` draws (spec/14 §7.3);
   `compose/2` merges fragments by the schema's merge rules and `stack/1` layers them (§8).
 
   ## Examples
@@ -315,7 +315,7 @@ defmodule Visualize.Chart do
   cannot take (spec/14 §7.4, D-153): `{:type_mismatch, slot, field, expected, given}` at
   the read's path, ordered by path.
 
-  A read is a channel naming a scale, a style's `{:field, f}` colour or an offset's field,
+  A read is a channel naming a scale, a style's `{:field, f}` color or an offset's field,
   over rows that are the slot's own. A time scale needs `:time`; band and ordinal need
   `:category`; every other kind needs `:number`. `types` maps a slot to what is known of
   its fields. A `Visualize.Data.Schema` says what they mean: `:text` satisfies a category,
@@ -408,7 +408,7 @@ defmodule Visualize.Chart do
 
   @doc """
   The design applied to its data (spec/14 §7.3): variables resolved, slots bound, the
-  frame realised.
+  frame realized.
 
   The design is a chart or a design map, which goes through `from_map/1` first. Three
   steps follow, each reporting every fault it finds by path and stopping before the
@@ -418,7 +418,7 @@ defmodule Visualize.Chart do
   entry under its own name, else its default (`{:unbound, :source, name}` at
   `[:sources, name]`), and every field it declares must be a key of some row of the
   bound source (`{:missing_field, field}` there); then the result is validated and
-  `Visualize.Chart.Frame.new/2` realises its frame, inferring every `:auto` domain.
+  `Visualize.Chart.Frame.new/2` realizes its frame, inferring every `:auto` domain.
 
   ## Options
 
@@ -518,9 +518,9 @@ defmodule Visualize.Chart do
     Map.merge(defaults, Map.take(given, Map.keys(defaults)))
   end
 
-  # Every frame realised, and a scale adopted from another frame realised again over one
+  # Every frame realized, and a scale adopted from another frame realized again over one
   # domain (spec/14 §4.3, #384). Two passes, because a shared domain is inferred over the
-  # channels of every frame taking part and a frame is realised over its own marks: the
+  # channels of every frame taking part and a frame is realized over its own marks: the
   # first pass gives each its own extent, and the second gives every frame of a group the
   # union of them through the `domains:` option, which skips the inference.
   defp realize_frames(%__MODULE__{} = chart, shared) do
@@ -840,7 +840,7 @@ defmodule Visualize.Chart do
 
   The result is **one compiled chart per frame**, by name (§12.1, #385) — a design of one
   frame is a map of one, so a caller has one shape to read whatever the design holds.
-  Each is compiled over its own realised frame and the marks and labels that say it.
+  Each is compiled over its own realized frame and the marks and labels that say it.
 
   An applied chart is compiled as it is; a chart or a design map is applied first with
   the `sources:`, `vars:`, `theme:`, `size:`, `now:`, `system:`, `generators:` and `assigns:` options of `apply/2`, and its errors are this
@@ -923,7 +923,7 @@ defmodule Visualize.Chart do
         %Applied{chart: chart, frame: frame, frames: frames, sources: sources} = applied,
         opts
       ) do
-    group = frames_group(realised(frames, frame), sources, opts)
+    group = frames_group(realized(frames, frame), sources, opts)
 
     if Keyword.get(opts, :root, false) do
       meta = chart.meta || %{}
@@ -985,10 +985,10 @@ defmodule Visualize.Chart do
 
   defp sentence_end(text), do: if(String.ends_with?(text, [".", "!", "?"]), do: " ", else: ". ")
 
-  # An `%Applied{}` assembled by hand — one frame realised through `Visualize.Chart.Frame.new/2`
+  # An `%Applied{}` assembled by hand — one frame realized through `Visualize.Chart.Frame.new/2`
   # and no `frames` — draws that frame alone, so a caller that has one frame need not name it.
-  defp realised(frames, frame) when frames == %{} or is_nil(frames), do: %{frame.name => frame}
-  defp realised(frames, _frame), do: frames
+  defp realized(frames, frame) when frames == %{} or is_nil(frames), do: %{frame.name => frame}
+  defp realized(frames, _frame), do: frames
 
   # Every frame drawn at its own pixel box, in `z` order with ties broken by name
   # (spec/14 §4.7, #383): one group per frame, the design's own group when there is only
@@ -1051,7 +1051,7 @@ defmodule Visualize.Chart do
   def render(%Applied{} = applied), do: render(applied, [])
 
   @doc """
-  The applied chart drawn: `generate/2` serialised through `Visualize.Render.to_string/2`
+  The applied chart drawn: `generate/2` serialized through `Visualize.Render.to_string/2`
   — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), and
   `paths:`, `root:`, `title:`, `description:` and `responsive:` as `generate/2` takes them.
   """

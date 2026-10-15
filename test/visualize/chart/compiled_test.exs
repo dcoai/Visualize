@@ -89,7 +89,7 @@ defmodule Visualize.Chart.CompiledTest do
              ]
     end
 
-    test "a legend on an inferred colour scale and a data-anchored label are dynamic" do
+    test "a legend on an inferred color scale and a data-anchored label are dynamic" do
       scales = Map.put(@fixed, :color, %{kind: :ordinal})
 
       extra = %{
@@ -268,14 +268,14 @@ defmodule Visualize.Chart.CompiledTest do
           )
         end
 
-        labelled = %{
+        labeled = %{
           marks: [circle.(%{label: %{text: [{:field, :t}]}})],
           styles: %{outline: outline}
         }
 
         plain = %{marks: [circle.(%{})], styles: %{outline: outline}}
         sources = %{primary: rows(3)}
-        map = Compiled.render(compile!(design(@fixed, labelled), sources: sources), sources)
+        map = Compiled.render(compile!(design(@fixed, labeled), sources: sources), sources)
         bare = Compiled.render(compile!(design(@fixed, plain), sources: sources), sources)
 
         # The SVG layer: the wrapper and its labels' group, no stroke above any text.
@@ -296,11 +296,11 @@ defmodule Visualize.Chart.CompiledTest do
                    mark.children
         else
           # The canvas layer: the wrapper holds the elements' group alone, which is the
-          # unlabelled mark's group with its class — so the canvas draws what it drew.
+          # unlabeled mark's group with its class — so the canvas draws what it drew.
           assert [%{style: %{class: "mark mark-circle"}, children: [elements]}] = map.dynamic
-          assert [unlabelled] = bare.dynamic
-          assert elements.style == %{unlabelled.style | class: "mark-elements"}
-          assert elements.children == unlabelled.children
+          assert [unlabeled] = bare.dynamic
+          assert elements.style == %{unlabeled.style | class: "mark-elements"}
+          assert elements.children == unlabeled.children
         end
       end
     end
@@ -843,7 +843,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert Enum.any?(records, &match?({:path32, _}, &1))
       assert second.bytes == byte_size(second.svg) + byte_size(second.incremental.binary)
 
-      # The strip draws the rows under it and three neighbours each side, not the window
+      # The strip draws the rows under it and three neighbors each side, not the window
       # (§12.5, D-108): the window at hi = 22 is t ∈ [12, 22], 11 rows; the 20 px strip
       # is the last 2 units, t ∈ [20, 22], 3 rows, and the three before make 6 — so the
       # path has six points and the payload is a fraction of the full redraw's.
@@ -894,12 +894,12 @@ defmodule Visualize.Chart.CompiledTest do
       large = cost.(3200, rows(4480))
 
       # Sixteen times the window: under twice the work of the tick. It is 1.7; rebuilding
-      # the neighbours as a list per row made it 2.5.
+      # the neighbors as a list per row made it 2.5.
       assert large < small * 2,
              "a 16x window cost #{Float.round(large / small, 2)}x the tick's reductions"
 
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
-      # 100 px scrolled 20 px carries 200 rows and six neighbours against 1,001.
+      # 100 px scrolled 20 px carries 200 rows and six neighbors against 1,001.
       big = %{
         @stream
         | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 1000}}}
@@ -923,7 +923,7 @@ defmodule Visualize.Chart.CompiledTest do
 
     test "a scroll tick builds the strip and nothing else: its cost does not follow the window (#404)" do
       # A window of 20,000 rows on 100 px: a scroll exposes 20 px, about 200 rows and six
-      # neighbours. Whatever the whole window costs to build, the scroll must not pay it.
+      # neighbors. Whatever the whole window costs to build, the scroll must not pay it.
       big = %{
         @stream
         | frames: %{main: %{@stream.frames.main | viewport: %{scale: :x, span: 10_000}}}
@@ -945,7 +945,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.incremental.mode == "scroll_x"
 
       # What each encodes: the full redraw draws the window's 10,001 rows; the scroll
-      # draws the 190 rows under its strip and three neighbours each side.
+      # draws the 190 rows under its strip and three neighbors each side.
       assert path_points(redraw) == 10_001
       assert path_points(payload) == 196
 
@@ -1031,7 +1031,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert payload.incremental.mode == "scroll_x"
 
       # A full redraw of that window draws its 50,001 rows; the scroll draws the strip's
-      # rows and their neighbours — it was one to one when the strip was picked out of a
+      # rows and their neighbors — it was one to one when the strip was picked out of a
       # window that had been built in full.
       {full_work, {redraw, _}} =
         Work.reductions(fn ->

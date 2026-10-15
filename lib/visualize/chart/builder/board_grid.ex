@@ -158,7 +158,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # The grid's rules, appended to the builder's stylesheet (spec/14 §18.13): every rule
-    # under `.vis-builder`, every colour one of its properties.
+    # under `.vis-builder`, every color one of its properties.
     def css do
       """
 

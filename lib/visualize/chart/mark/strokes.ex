@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Mark.Strokes do
   @moduledoc false
   # The stroke style of a mark (spec/14 §5.6): how the stroke sits on the edge. `:single`
   # is the element as it is; `:inside` and `:outside` clip a doubled stroke to the shape
-  # or to everything but it; `:double` lays a thinner stroke in the fill colour over the
+  # or to everything but it; `:double` lays a thinner stroke in the fill color over the
   # first. The style node carries the key — it is not an element key — and the mark
   # reads it here, after its elements are bound.
 
@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Mark.Strokes do
   def apply(elements, ctx) do
     case Map.get(ctx.style_node, :stroke_style, :single) do
       :single -> elements
-      :double -> Enum.flat_map(elements, &double(&1, width(ctx), gap_colour(ctx)))
+      :double -> Enum.flat_map(elements, &double(&1, width(ctx), gap_color(ctx)))
       style when style in [:inside, :outside] -> edged(elements, style, ctx)
     end
   end
@@ -52,11 +52,11 @@ defmodule Visualize.Chart.Mark.Strokes do
     end)
   end
 
-  defp double(element, width, colour) do
+  defp double(element, width, color) do
     if element.type in @shapes,
       do: [
         element,
-        Element.set_style(element, %{fill: :none, stroke: colour, stroke_width: width / 3})
+        Element.set_style(element, %{fill: :none, stroke: color, stroke_width: width / 3})
       ],
       else: [element]
   end
@@ -69,10 +69,10 @@ defmodule Visualize.Chart.Mark.Strokes do
     end
   end
 
-  # The colour between a double stroke's lines: the paint when the paint is the fill,
+  # The color between a double stroke's lines: the paint when the paint is the fill,
   # else the theme's background.
-  defp gap_colour(%{paint: {:fill, colour}}) when is_binary(colour), do: colour
+  defp gap_color(%{paint: {:fill, color}}) when is_binary(color), do: color
 
-  defp gap_colour(%{frame: %{theme: theme}, mode: mode}),
+  defp gap_color(%{frame: %{theme: theme}, mode: mode}),
     do: Theme.resolve(theme, :background, mode)
 end

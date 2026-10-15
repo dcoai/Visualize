@@ -65,7 +65,7 @@ defmodule Visualize.Event do
   @typedoc """
   A click as `decode/1` reads it from the wire: the declared name, the frame's name as
   sent, the mark's position among its frame's marks, the row's ordinal in the mark's
-  realised rows, the drawing's token, the pointer in the chart's user units and the
+  realized rows, the drawing's token, the pointer in the chart's user units and the
   modifiers.
   """
   @type click :: %{
@@ -143,10 +143,10 @@ defmodule Visualize.Event do
   A click resolved against the drawing of an applied chart (spec/10 §19.2, D-170):
   `{:ok, event}`, or `:error` when the click's `drawn` is not the drawing's token, or the
   applied chart has no frame of the click's name, no mark at its position, no row at its
-  ordinal of that mark's realised rows (`Visualize.Chart.Mark.rows/3` over the applied
+  ordinal of that mark's realized rows (`Visualize.Chart.Mark.rows/3` over the applied
   chart's sources), or when that mark declares no event of the click's name.
 
-  The row is the realised row, typed as the source holds it; the item is the slot's
+  The row is the realized row, typed as the source holds it; the item is the slot's
   declared identity, else the inference of `identity/3`; `at` is the pointer less the
   frame's box and margins, in its plot area.
 

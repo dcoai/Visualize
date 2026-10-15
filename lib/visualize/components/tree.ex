@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     - A root-only hierarchy is the empty case: the tree draws its one node, the treemap
       one cell, the sunburst nothing but the `<svg>` (the root is never an arc).
-    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0` or an explicit colour
+    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0` or an explicit color
       list, taken by index and cycled, as in `Visualize.Components`; an unknown scheme or an
       empty list raises `ArgumentError`.
     - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark;
@@ -66,7 +66,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Links are cubic Béziers between parent and child with both control points at the
     midpoint of the depth axis. Horizontal labels sit at `x = −10`, anchored `end`, for
     internal nodes and at `x = 10`, anchored `start`, for leaves; vertical labels are
-    centred at `x = 0`.
+    centered at `x = 0`.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: @tree.width)
@@ -92,7 +92,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       orientation = assigns.orientation
       circles = Enum.filter(nodes.children, &(&1.type == :circle))
 
-      # One group per circle at the circle's centre; the text's anchor and offset follow
+      # One group per circle at the circle's center; the text's anchor and offset follow
       # the node (spec/10 §3.2), which is why the group is the component's (spec/14 §15.4).
       groups =
         Enum.zip_with(circles, node_rows, fn circle, n ->
@@ -148,12 +148,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `label` - as `tree_diagram/1`
     * `tile` - a `Visualize.Layout.Treemap.tile/2` algorithm (default `:squarify`)
     * `padding` - uniform cell padding (default 2)
-    * `colors` - per the module conventions; each child of the root takes the next colour
-      and every leaf beneath it that colour (default `:category10`)
+    * `colors` - per the module conventions; each child of the root takes the next color
+      and every leaf beneath it that color (default `:category10`)
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
       conventions
 
-    A `:label_size` label is drawn at the centre of its cell, inked the theme's text or
+    A `:label_size` label is drawn at the center of its cell, inked the theme's text or
     background, whichever reads on the cell, and cut with `…` to the cell's width; a cell
     shorter than the label's font size, a zero-area one among them, draws none.
     """
@@ -180,7 +180,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # One cell per `:rect` element — the design filters to the leaves — then the labels
       # the layer kept, cut to their cells and each in its own contrast ink, at the mark's
-      # own texts, the cells' centres (spec/10 §3.3, #497). A root-only hierarchy's cell
+      # own texts, the cells' centers (spec/10 §3.3, #497). A root-only hierarchy's cell
       # has no `branch`, so its bound fill is `:none` (spec/14 §3.4, D-122), and takes the
       # theme's `:grid`.
       labels =
@@ -254,7 +254,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     turn, each child a share of its parent's arc proportional to its summed value, and a
     node of value 0 a zero-width slot that draws nothing. Ring radii are
     `depth / (height + 1) · radius`. Each arc is `Visualize.Shape.Arc` — angles clockwise
-    from 12 o'clock — as a `<path fill={colour} stroke={:background} stroke-width="1">`.
+    from 12 o'clock — as a `<path fill={color} stroke={:background} stroke-width="1">`.
     """
     attr(:data, :map, required: true)
     attr(:width, :integer, default: @sunburst.width)
@@ -338,7 +338,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp fmt(number), do: Support.fmt(number)
 
-    # A leaf's cell takes its branch colour; the root of a root-only hierarchy has none.
+    # A leaf's cell takes its branch color; the root of a root-only hierarchy has none.
     defp cell_fill(:none, root_fill), do: root_fill
     defp cell_fill(fill, _root_fill), do: fill
   end

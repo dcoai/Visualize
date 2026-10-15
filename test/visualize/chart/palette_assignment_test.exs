@@ -78,7 +78,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
   # -- by name -------------------------------------------------------------------------
 
   describe "a palette name is a style reference" do
-    test "a site names a whole role style, drawn in the theme's colours with its cue" do
+    test "a site names a whole role style, drawn in the theme's colors with its cue" do
       {group, [element | _]} = elements(design(%{style: :warning}))
       theme = Theme.default()
 
@@ -106,7 +106,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
 
       assert group.style.fill == "#111111"
       assert group.style.stroke_width == 2
-      # The built-in :selected is heavier only (#638): no stroke colour of its own.
+      # The built-in :selected is heavier only (#638): no stroke color of its own.
       refute Map.has_key?(group.style, :stroke)
     end
 
@@ -122,7 +122,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
       for theme <- [Theme.default(), Theme.dark(), Theme.color_safe(), Theme.print()] do
         {group, _} = elements(design(%{style: :bad}), :literal, theme: theme)
 
-        # The print theme's :bad is a crosshatch in its colour (#673).
+        # The print theme's :bad is a crosshatch in its color (#673).
         case group.style.fill do
           {:paint, name} ->
             assert theme.name == :print
@@ -439,7 +439,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
       end
     end
 
-    test "a style name in a map range is an undeclared color, a role a colour" do
+    test "a style name in a map range is an undeclared color, a role a color" do
       node = %{kind: :ordinal, range: %{"down" => :bad, "maint" => :muted}}
       design = put_in(design(%{}), [:frames, :main, :scales, :health], node)
 

@@ -66,7 +66,7 @@ defmodule Visualize.Chart.Schema.Frame do
     [
       spec(:kind, {:enum, @scale_kinds}, :geometry, required: true),
       spec(:domain, :extent, :geometry, default: :auto),
-      # A map of colours pins each category by name: a schema's `status` (§4.3, D-143).
+      # A map of colors pins each category by name: a schema's `status` (§4.3, D-143).
       spec(:range, {:one_of, [:extent, :ramp, :color_map, :name]}, :geometry, default: :auto),
       spec(:nice, :boolean, :geometry, default: false),
       spec(:clamp, :boolean, :geometry, default: false),

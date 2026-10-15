@@ -9,7 +9,7 @@ defmodule Visualize.Scale.Behaviour do
 
   Operations that do not apply to a scale kind are still defined and behave as identity
   (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0`
-  (`bandwidth/1`). The discretising scales (`Quantile`, `Quantize`, `Threshold`) return their
+  (`bandwidth/1`). The discretizing scales (`Quantile`, `Quantize`, `Threshold`) return their
   thresholds from `ticks/2`.
   """
 

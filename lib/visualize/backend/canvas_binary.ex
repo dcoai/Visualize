@@ -31,7 +31,7 @@ defmodule Visualize.Backend.CanvasBinary do
   | `version` | `0x00` | `version:u8` — version 2 and later; first in a stream that draws a paint |
   | `paint` | `0x50` | `index:u16 kind:u8`, the geometry in box units (f32), `count:u8` stops `at:f32 r g b a` |
   | `box` | `0x51` | `x y w h` (f32): the box the next draw's paint is built over |
-  | `effect` | `0x52` | `kind:u8 radius:f32`, and for a shadow `dx dy:f32` and its RGBA colour |
+  | `effect` | `0x52` | `kind:u8 radius:f32`, and for a shadow `dx dy:f32` and its RGBA color |
   | `motion` | `0x53` | `length:u16` then the UTF-8 JSON of a motion span's arguments, `[id, box, transitions]` |
   | `motion_end` | `0x54` | the motion span ends |
   | `paint_state` | `0x55` | version 3: `flags:u8`, then the fill's and the stroke's alpha (f32), the cap and the join (u8), the dash (`count:u8` and f32 lengths) the flags select |
@@ -43,7 +43,7 @@ defmodule Visualize.Backend.CanvasBinary do
   `C`/`Q` first so the command count is exact (D-36). Both come in an f32 and an f64 form: the encoder writes the f32
   records by default, since a canvas coordinate is a pixel position and an f32 holds a
   value below 16,384 to within 2⁻¹¹ px, and `precision: :f64` selects the f64 records
-  (D-73; spec/09 §4.5). Transforms fold into one matrix in SVG order. Colours are parsed
+  (D-73; spec/09 §4.5). Transforms fold into one matrix in SVG order. Colors are parsed
   by `Visualize.Color.parse/1`.
 
   A stream that draws a `Visualize.IR.Paint` is **version 2** (spec/09 §4.2, D-175): it begins
@@ -464,8 +464,8 @@ defmodule Visualize.Backend.CanvasBinary do
       IO.iodata_to_binary(parts) <> effect_record(style) <> paint_state_record(style)
   end
 
-  # Version 2: a shadow's radius, offset and colour, or a blur's radius, after the style record
-  # (spec/09 §4.3.14, #674); the offset and colour default as the canvas commands' do.
+  # Version 2: a shadow's radius, offset and color, or a blur's radius, after the style record
+  # (spec/09 §4.3.14, #674); the offset and color default as the canvas commands' do.
   defp effect_record(%{effect: :shadow} = style) do
     r = style[:effect_radius] || 3
     [dx, dy] = style[:effect_offset] || [r / 2, r / 2]
@@ -550,7 +550,7 @@ defmodule Visualize.Backend.CanvasBinary do
   defp paint_field(%Paint{} = paint, bit, paints, {flags, parts}),
     do: {flags ||| bit, parts ++ [<<Map.fetch!(paints, paint)::little-16>>]}
 
-  defp paint_field(_colour, _bit, _paints, acc), do: acc
+  defp paint_field(_color, _bit, _paints, acc), do: acc
 
   # -- version 2: the stream's paints -----------------------------------------------------
 
@@ -596,7 +596,7 @@ defmodule Visualize.Backend.CanvasBinary do
       Enum.flat_map(children, &paints/1)
   end
 
-  # A hatch (#673): the pattern, the angle, spacing and width, then its colour and its ground,
+  # A hatch (#673): the pattern, the angle, spacing and width, then its color and its ground,
   # a ground of alpha 0 being none; no stops.
   defp paint_record({%Paint{type: :hatch, geometry: g} = paint, index}) do
     pattern = Map.fetch!(%{lines: 0x01, crosshatch: 0x02, dots: 0x03}, g.pattern)
@@ -618,7 +618,7 @@ defmodule Visualize.Backend.CanvasBinary do
       end
 
     stops =
-      for {at, _colour, _opacity} = stop <- paint.stops do
+      for {at, _color, _opacity} = stop <- paint.stops do
         {r, gr, b, a} = Paint.rgba(stop)
         <<at::little-float-32, r::8, gr::8, b::8, a::8>>
       end
@@ -631,7 +631,7 @@ defmodule Visualize.Backend.CanvasBinary do
     ]
   end
 
-  # Every colour syntax `Visualize.Color.parse/1` knows — hex, `rgb()`/`rgba()`, `hsl()`
+  # Every color syntax `Visualize.Color.parse/1` knows — hex, `rgb()`/`rgba()`, `hsl()`
   # and the CSS names — to RGBA bytes; anything it cannot parse is opaque black.
   defp parse_color(color) when is_binary(color) do
     case Color.parse(color) do

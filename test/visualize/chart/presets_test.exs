@@ -153,7 +153,7 @@ defmodule Visualize.Chart.PresetsTest do
     assert line.([]) == %{kind: :linear}
   end
 
-  test "the assigns reach the design: colours, options, labels, meta and the transform" do
+  test "the assigns reach the design: colors, options, labels, meta and the transform" do
     design = Presets.line_chart(Map.put(assigns().line_chart, :stroke, "tomato"))
 
     assert Style.project(design.styles.line) == %{
@@ -312,7 +312,7 @@ defmodule Visualize.Chart.PresetsTest do
     end
   end
 
-  test "an empty colour list is an ArgumentError naming the scale" do
+  test "an empty color list is an ArgumentError naming the scale" do
     a = Map.put(assigns().pie_chart, :colors, [])
 
     assert_raise ArgumentError, ~r/scale :color: an empty range/, fn ->
@@ -396,9 +396,9 @@ defmodule Visualize.Chart.PresetsTest do
         assert paths == Enum.map(tags(component, "path"), & &1["d"])
         assert length(paths) == length(Presets.sources(:tree_diagram, a).data) - 1
 
-        centres = Enum.map(tags(svg, "circle"), &{num(&1["cx"]), num(&1["cy"])})
+        centers = Enum.map(tags(svg, "circle"), &{num(&1["cx"]), num(&1["cy"])})
 
-        assert centres ==
+        assert centers ==
                  for(
                    [_, x, y] <- Regex.scan(~r/translate\(([^,]+), ([^)]+)\)/, component),
                    do: {x, y}
@@ -406,7 +406,7 @@ defmodule Visualize.Chart.PresetsTest do
                  |> tl()
 
         assert texts(svg) == texts(component)
-        assert length(centres) == length(Presets.sources(:tree_diagram, a).data)
+        assert length(centers) == length(Presets.sources(:tree_diagram, a).data)
       end
     end
 
@@ -467,7 +467,7 @@ defmodule Visualize.Chart.PresetsTest do
 
     @aa 4.5
 
-    # Ten slices and ten branches, so every colour of `:category10` is under a label.
+    # Ten slices and ten branches, so every color of `:category10` is under a label.
     @slices for i <- 0..9, do: %{name: "slice #{i}", value: 10 + i}
     @branches %{
       name: "root",
@@ -502,8 +502,8 @@ defmodule Visualize.Chart.PresetsTest do
       Frame.generate(frame, sources: sources, resolve: mode)
     end
 
-    # Every labelled mark's {element, its group's style, its label}, in drawing order.
-    defp labelled(%Element{
+    # Every labeled mark's {element, its group's style, its label}, in drawing order.
+    defp labeled(%Element{
            children: [
              %Element{style: %{class: "mark-elements"} = group, children: elements},
              %Element{style: %{class: "mark-labels"}, children: labels}
@@ -514,7 +514,7 @@ defmodule Visualize.Chart.PresetsTest do
       Enum.zip_with(elements, texts, &{&1, group, &2})
     end
 
-    defp labelled(%Element{children: children}), do: Enum.flat_map(children, &labelled/1)
+    defp labeled(%Element{children: children}), do: Enum.flat_map(children, &labeled/1)
 
     # The literal a fill is drawn in: a CSS reference by its fallback.
     defp literal("var(" <> rest) do
@@ -522,7 +522,7 @@ defmodule Visualize.Chart.PresetsTest do
       fallback |> String.trim() |> String.replace_suffix(")", "")
     end
 
-    defp literal(colour) when is_binary(colour), do: colour
+    defp literal(color) when is_binary(color), do: color
 
     test "the presets ink their labels by contrast and fit them as the gallery does" do
       assert Presets.pie_chart(Keyword.fetch!(ink_cases(), :pie_chart)).marks
@@ -551,12 +551,12 @@ defmodule Visualize.Chart.PresetsTest do
       for {name, assigns} <- ink_cases(),
           theme <- [Theme.default(), Theme.dark()],
           mode <- [:css, :literal] do
-        # Every element labelled — `fit: :none` — so no label is excused by being hidden.
-        all = labelled(drawn(name, assigns, theme, mode, :none))
+        # Every element labeled — `fit: :none` — so no label is excused by being hidden.
+        all = labeled(drawn(name, assigns, theme, mode, :none))
         assert length(all) >= 10, "#{name}: #{length(all)} labels"
 
         fills = MapSet.new(all, fn {element, _group, _text} -> literal(element.style.fill) end)
-        assert MapSet.size(fills) == 10, "#{name}: every :category10 colour under a label"
+        assert MapSet.size(fills) == 10, "#{name}: every :category10 color under a label"
 
         for {element, _group, text} <- all do
           under = element.style.fill |> literal() |> Color.parse()

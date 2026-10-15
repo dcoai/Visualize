@@ -75,7 +75,7 @@ defmodule Visualize.Chart.Builder.DefaultsTest do
       refute BuilderFixture.render(s) =~ ~s(name="font.size.unit")
     end
 
-    test "a gradient's centre is a pair, starting from its default", %{socket: s} do
+    test "a gradient's center is a pair, starting from its default", %{socket: s} do
       s = s |> edit("fill.type", "solid") |> edit("fill.type", "radial")
       html = BuilderFixture.render(s)
       assert html =~ ~s(name="fill.center.0" value="0.5")

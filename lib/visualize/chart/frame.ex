@@ -1,9 +1,9 @@
 defmodule Visualize.Chart.Frame do
   @moduledoc """
-  The realised frame of a chart: its scales, built once, and the static furniture —
+  The realized frame of a chart: its scales, built once, and the static furniture —
   grid, axes, legend and labels — rendered from them (spec/14 §4, D-60).
 
-  `new/2` takes a `Visualize.Chart` and the sources its marks are bound to, realises every
+  `new/2` takes a `Visualize.Chart` and the sources its marks are bound to, realizes every
   `:scale` node through the existing scale modules — a `domain: :auto` inferred from the
   whole column of every mark channel that names the scale, a `range: :auto` from the plot
   area by the scale's name — and caches the structs on the frame. `scales/1` reads them,
@@ -115,16 +115,16 @@ defmodule Visualize.Chart.Frame do
           generated: struct() | nil
         }
 
-  # The size a frame is realised at when the caller gives none (spec/14 §4.2): a static
+  # The size a frame is realized at when the caller gives none (spec/14 §4.2): a static
   # render still works, and a design never carries one.
   @default_size {600, 400}
 
-  @doc "The size a frame is realised at when no `size:` is given (spec/14 §4.2)."
+  @doc "The size a frame is realized at when no `size:` is given (spec/14 §4.2)."
   @spec default_size() :: {number(), number()}
   def default_size, do: @default_size
 
   @doc """
-  The frame of a chart, every scale realised and the theme resolved (spec/14 §4.7).
+  The frame of a chart, every scale realized and the theme resolved (spec/14 §4.7).
 
   ## Options
 
@@ -132,7 +132,7 @@ defmodule Visualize.Chart.Frame do
       reads; the columns `:auto` domains are inferred from (default `%{}`)
     * `:theme` - a `%Visualize.Theme{}`; taken for any theme name the design gives, and
       required for one that is neither built-in nor inline
-    * `:size` - the `{width, height}` the frame is realised at (default `{600, 400}`,
+    * `:size` - the `{width, height}` the frame is realized at (default `{600, 400}`,
       spec/14 §4.2); a design records none
     * `:now` - the instant a `:window` step measures its durations back from (spec/14
       §5.4.1); without it each such step takes the newest reading of its own column
@@ -165,7 +165,7 @@ defmodule Visualize.Chart.Frame do
     frame = realize(chart, opts, name, node, size, margin)
 
     # A legend in a margin that cannot hold it is a fault here, not a clipped drawing; a top
-    # or bottom one grows its margin instead, and the frame is realised over the smaller plot
+    # or bottom one grows its margin instead, and the frame is realized over the smaller plot
     # (§4.5, D-169). The rows depend on the plot's width, which that leaves alone.
     case Legend.fit!(frame, margin) do
       ^margin -> frame
@@ -293,11 +293,11 @@ defmodule Visualize.Chart.Frame do
   defp defaults(node) when is_map(node), do: Map.get(node, :defaults)
   defp defaults(_node), do: nil
 
-  @doc "The realised scales by name: the escape hatch (spec/14 §4.3)."
+  @doc "The realized scales by name: the escape hatch (spec/14 §4.3)."
   @spec scales(t()) :: %{atom() => struct()}
   def scales(%__MODULE__{scales: scales}), do: scales
 
-  @doc "One realised scale; `ArgumentError` when the frame declares no such scale."
+  @doc "One realized scale; `ArgumentError` when the frame declares no such scale."
   @spec scale(t(), atom()) :: struct()
   def scale(%__MODULE__{scales: scales}, name) do
     Map.get(scales, name) ||
@@ -305,7 +305,7 @@ defmodule Visualize.Chart.Frame do
             "the frame declares no scale #{inspect(name)}; it has #{inspect(Map.keys(scales))}"
   end
 
-  @doc "The frame with the realised scale replaced: the override of spec/14 §4.3."
+  @doc "The frame with the realized scale replaced: the override of spec/14 §4.3."
   @spec put_scale(t(), atom(), struct()) :: t()
   def put_scale(%__MODULE__{scales: scales} = frame, name, scale)
       when is_atom(name) and is_struct(scale) do
@@ -387,7 +387,7 @@ defmodule Visualize.Chart.Frame do
 
   # The frame's own box painted under its contents, `[]` when it declares no `background`
   # (spec/14 §4.2, #383): the group is translated by the margins, so the rect starts back
-  # at the box's corner, and its colour resolves through the theme as any other does.
+  # at the box's corner, and its color resolves through the theme as any other does.
   defp background(%__MODULE__{background: nil}, _mode), do: []
 
   defp background(%__MODULE__{} = frame, mode) do
@@ -538,10 +538,10 @@ defmodule Visualize.Chart.Frame do
   # -- construction ---------------------------------------------------------------------
 
   @doc false
-  # The point a centred mark is about, in the coordinates its group is drawn in (spec/14
-  # §5.6, #488): the plot's middle, or the origin of a `:polar` frame's centred group,
+  # The point a centered mark is about, in the coordinates its group is drawn in (spec/14
+  # §5.6, #488): the plot's middle, or the origin of a `:polar` frame's centered group,
   # which already sits there. An `:arc` mark is translated to it and a `:chord` step's
-  # paths are drawn about it, so the ring and its ribbons share one centre.
+  # paths are drawn about it, so the ring and its ribbons share one center.
   @spec center(kind(), %{width: number(), height: number()}) :: [number()]
   def center(:polar, _plot), do: [0, 0]
   def center(_kind, plot), do: [plot.width / 2, plot.height / 2]
@@ -569,7 +569,7 @@ defmodule Visualize.Chart.Frame do
         )
   end
 
-  # Which frame `new/2` realises: the one `frame:` names, else the design's only one — a
+  # Which frame `new/2` realizes: the one `frame:` names, else the design's only one — a
   # design with several and no name given is an authoring error, not a default (spec/14
   # §4.1, #383).
   defp frame_node(%Chart{frames: frames}, nil) when map_size(frames) == 1 do
@@ -613,7 +613,7 @@ defmodule Visualize.Chart.Frame do
   A frame node's box as fractions of the render's size (spec/14 §4.2): its `box`, or the
   share of the design's `layout` its `cell` and `span` take (§2.8). This is the one place
   a cell resolves; `new/2` reads it, and so does a tool that must know where a frame is
-  drawn without realising it (§18.16). `size` is `{width, height}` or `%{width, height}`,
+  drawn without realizing it (§18.16). `size` is `{width, height}` or `%{width, height}`,
   which the gap is taken out of. Raises `ArgumentError` for a malformed box or cell, as
   `new/2` does.
 
@@ -641,7 +641,7 @@ defmodule Visualize.Chart.Frame do
     end
   end
 
-  # A cell of the design's grid as a box (spec/14 §2.8, #384): the weights are normalised
+  # A cell of the design's grid as a box (spec/14 §2.8, #384): the weights are normalized
   # over their sum, so `[4, 3, 2, 1]` and `[8, 6, 4, 2]` are one layout, and the `gap`
   # comes out of the cells — half at each edge a cell shares with another — rather than
   # out of the grid's outer edges.
@@ -670,7 +670,7 @@ defmodule Visualize.Chart.Frame do
   end
 
   # The share of the box the cells `at … at + count - 1` take, less half the gap at each
-  # edge they share with a neighbour: `{offset, size}` in fractions.
+  # edge they share with a neighbor: `{offset, size}` in fractions.
   defp share(weights, at, count, gap) do
     total = Enum.sum(weights)
     before = weights |> Enum.take(at) |> Enum.sum()
@@ -719,8 +719,8 @@ defmodule Visualize.Chart.Frame do
   defp projection(:geo, node, plot, sources) do
     spec = Map.get(node, :projection, %{})
     type = Map.get(spec, :type, :mercator)
-    centre = [plot.width / 2, plot.height / 2]
-    [tx, ty] = Map.get(spec, :translate, centre)
+    center = [plot.width / 2, plot.height / 2]
+    [tx, ty] = Map.get(spec, :translate, center)
 
     type
     |> Projection.new()

@@ -340,7 +340,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert Editor.parse({:ref, :scale}, "x") == {:ok, :x}
     end
 
-    test "a colour, a size and a font read loosely: an atom, a number, or the string" do
+    test "a color, a size and a font read loosely: an atom, a number, or the string" do
       assert Editor.parse(:color, "#3b6fa8") == {:ok, "#3b6fa8"}
       assert Editor.parse(:color, ":series_1") == {:ok, :series_1}
       assert Editor.parse(:size, "2") == {:ok, 2}
@@ -459,7 +459,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         |> hd()
 
       # A part's controls are named by their path; a paint with no type shows its type
-      # and what every type reads — a stroke's line — and no colour.
+      # and what every type reads — a stroke's line — and no color.
       assert stroke =~ ~s(phx-value-field="stroke.type")
       assert stroke =~ ~s(phx-value-field="stroke.cap")
       refute stroke =~ ~s(phx-value-field="stroke.color")

@@ -84,8 +84,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           </fieldset>
           <fieldset class="vis-builder-theme-section vis-builder-theme-series">
             <legend>series</legend>
-            <span :for={{colour, i} <- @series} class="vis-builder-theme-swatch">
-              <input type="color" name={"series.#{i}"} value={hex(colour)} title={colour} aria-label={"series #{i + 1}"} />
+            <span :for={{color, i} <- @series} class="vis-builder-theme-swatch">
+              <input type="color" name={"series.#{i}"} value={hex(color)} title={color} aria-label={"series #{i + 1}"} />
               <button
                 :if={length(@series) > 1}
                 type="button"
@@ -97,13 +97,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 phx-target={@target}
               >×</button>
             </span>
-            <button type="button" class="vis-builder-add" title="add a series colour" aria-label="add a series colour" phx-click="theme_series_add" phx-target={@target}>+</button>
+            <button type="button" class="vis-builder-add" title="add a series color" aria-label="add a series color" phx-click="theme_series_add" phx-target={@target}>+</button>
           </fieldset>
           <fieldset class="vis-builder-theme-section">
             <legend>chrome</legend>
-            <label :for={{slot, colour} <- @chrome} class="vis-builder-theme-row">
+            <label :for={{slot, color} <- @chrome} class="vis-builder-theme-row">
               <span class="vis-builder-control-label">{slot}</span>
-              <input type="color" name={to_string(slot)} value={hex(colour)} title={colour} />
+              <input type="color" name={to_string(slot)} value={hex(color)} title={color} />
             </label>
           </fieldset>
           <fieldset class="vis-builder-theme-section">
@@ -129,7 +129,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       """
     end
 
-    # A colour input takes `#rrggbb` and nothing else; a colour stored in another syntax is
+    # A color input takes `#rrggbb` and nothing else; a color stored in another syntax is
     # shown as its hex, and one that does not read as black, its title saying what it is.
     defp hex(value) do
       if readable?(value),
@@ -180,7 +180,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The node with one control's value written (spec/14 §20.2), or `:error` for a value that
-    does not read — a blank, a colour `Visualize.Color.parse/1` cannot read, a size that is
+    does not read — a blank, a color `Visualize.Color.parse/1` cannot read, a size that is
     not a positive number — so the node is left as it was.
 
         iex> Visualize.Chart.Builder.Themes.change(%{}, "axis", "#555555")
@@ -205,8 +205,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       with {i, ""} <- Integer.parse(index),
            true <- i >= 0 and i < length(series),
-           {:ok, colour} <- colour(value) do
-        {:ok, Map.put(node, :series, List.replace_at(series, i, colour))}
+           {:ok, color} <- color(value) do
+        {:ok, Map.put(node, :series, List.replace_at(series, i, color))}
       else
         _ -> :error
       end
@@ -218,19 +218,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
            {i, ""} <- Integer.parse(index),
            anchors = anchors(node, ramp),
            true <- i >= 0 and i < length(anchors),
-           {:ok, colour} <- colour(value) do
-        {:ok, ramp_put(node, ramp, List.replace_at(anchors, i, colour))}
+           {:ok, color} <- color(value) do
+        {:ok, ramp_put(node, ramp, List.replace_at(anchors, i, color))}
       else
         _ -> :error
       end
     end
 
-    # A status role is set by the colour at its fixed position: the anchor that stands there
-    # (spec/14 §20.4); `:warning` has none on an even ramp. `:info` and `:neutral` are colours
+    # A status role is set by the color at its fixed position: the anchor that stands there
+    # (spec/14 §20.4); `:warning` has none on an even ramp. `:info` and `:neutral` are colors
     # of the theme's color table (spec/08 §7.1, #663).
     def change(node, "roles." <> role, value) when role in ["info", "neutral"] do
-      with {:ok, colour} <- colour(value) do
-        colors = node |> Map.get(:colors, %{}) |> Map.put(String.to_existing_atom(role), colour)
+      with {:ok, color} <- color(value) do
+        colors = node |> Map.get(:colors, %{}) |> Map.put(String.to_existing_atom(role), color)
         {:ok, Map.put(node, :colors, colors)}
       end
     end
@@ -247,8 +247,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           "warning" -> nil
         end
 
-      with true <- at != nil, {:ok, colour} <- colour(value) do
-        {:ok, ramp_put(node, :status, List.replace_at(anchors, at, colour))}
+      with true <- at != nil, {:ok, color} <- color(value) do
+        {:ok, ramp_put(node, :status, List.replace_at(anchors, at, color))}
       else
         _ -> :error
       end
@@ -264,7 +264,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def change(node, field, value) do
       cond do
         slot = Enum.find(@chrome, &(Atom.to_string(&1) == field)) ->
-          with {:ok, colour} <- colour(value), do: {:ok, Map.put(node, slot, colour)}
+          with {:ok, color} <- color(value), do: {:ok, Map.put(node, slot, color)}
 
         key = Enum.find(@sizes, &(Atom.to_string(&1) == field)) ->
           with {:ok, size} <- size(value), do: {:ok, Map.put(node, key, size)}
@@ -274,13 +274,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp colour(value) do
+    defp color(value) do
       trimmed = String.trim(value)
       if readable?(trimmed), do: {:ok, trimmed}, else: :error
     end
 
     @doc false
-    # Whether a value is a colour `Visualize.Color.parse/1` reads. A hex with a digit that is
+    # Whether a value is a color `Visualize.Color.parse/1` reads. A hex with a digit that is
     # not one raises there (spec/08 §1.2), so it is refused here first: an editor reads what
     # a person typed, and a typo is a value left unchanged, not a crash.
     @spec readable?(term()) :: boolean()
@@ -299,8 +299,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The node with one more series color: the default palette's colour at the next position,
-    cycling, so a new series is distinct from its neighbours.
+    The node with one more series color: the default palette's color at the next position,
+    cycling, so a new series is distinct from its neighbors.
     """
     @spec series_added(map()) :: map()
     def series_added(node) do
@@ -309,7 +309,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Map.put(node, :series, series ++ [Enum.at(palette, rem(length(series), length(palette)))])
     end
 
-    @doc "The node without the series colour at `i`; the last colour stays (spec/08 §7.2)."
+    @doc "The node without the series color at `i`; the last color stays (spec/08 §7.2)."
     @spec series_removed(map(), non_neg_integer()) :: map()
     def series_removed(node, i) do
       case Map.get(node, :series, Theme.default().series) do
@@ -319,7 +319,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The node with the ramp resampled at one more evenly spaced anchor, each the colour the
+    The node with the ramp resampled at one more evenly spaced anchor, each the color the
     ramp had at its position (spec/14 §20.4): the ramp changes as little as the even spacing
     allows, and the new anchor is there to be moved.
 

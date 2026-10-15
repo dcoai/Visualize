@@ -21,7 +21,7 @@ defmodule Visualize.Feed.Combine do
   into its units, and columns only the later schema describes dropped. The first feed's
   rows are never touched.
 
-  A combination honours `:window`, and pushes when its first feed does: its pushes name
+  A combination honors `:window`, and pushes when its first feed does: its pushes name
   the first's version and pass through unchanged. A budget is passed to every part as a
   request and left to the monitor.
 

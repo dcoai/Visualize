@@ -3,7 +3,7 @@ defmodule Visualize.Chart.Types do
   # The type check of a binding (spec/14 §7.4, D-153): every field a mark reads through a
   # scale, with what the scale's kind needs of it, and the reads a set of known types does
   # not satisfy. Pure and total over any map — an unfinished design, or one with variables
-  # still in it, is checked as far as it says anything; a shape it does not recognise
+  # still in it, is checked as far as it says anything; a shape it does not recognize
   # contributes nothing, and the validator reports it.
 
   alias Visualize.Chart.Frame.Scales
@@ -173,10 +173,10 @@ defmodule Visualize.Chart.Types do
         do: {path ++ [:channels, channel], slot, field, needed}
   end
 
-  # A `{:field, f}` on the style's colour keys reads through the mark's colour scale
+  # A `{:field, f}` on the style's color keys reads through the mark's color scale
   # (spec/14 §4.3, D-143).
   defp style(mark, styles, need, slot, path) do
-    case need.(Scales.colour_scale(mark)) do
+    case need.(Scales.color_scale(mark)) do
       nil ->
         []
 

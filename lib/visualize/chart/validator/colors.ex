@@ -21,7 +21,7 @@ defmodule Visualize.Chart.Validator.Colors do
   end
 
   @doc false
-  # A ramp's anchor is a colour string or a name of the theme's table (spec/08 §7.5, #664).
+  # A ramp's anchor is a color string or a name of the theme's table (spec/08 §7.5, #664).
   @spec anchor?(term()) :: boolean()
   def anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_atom(name), anchor)
 
@@ -44,8 +44,8 @@ defmodule Visualize.Chart.Validator.Colors do
   end
 
   @doc false
-  # A theme's pinned steps (spec/08 §7.1, #667): integer steps to colour strings, whose
-  # meaning — 500 among them, each in 0..1000, each a colour — the theme's contract holds.
+  # A theme's pinned steps (spec/08 §7.1, #667): integer steps to color strings, whose
+  # meaning — 500 among them, each in 0..1000, each a color — the theme's contract holds.
   @spec steps(map(), list()) :: [{list(), term()}]
   def steps(map, path) do
     if Enum.all?(map, fn {n, c} -> is_integer(n) and is_binary(c) end),

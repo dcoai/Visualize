@@ -151,7 +151,7 @@ defmodule Visualize.Chart.StyleListsTest do
       assert stack == [:style_1, {:field, :kind}, {:field, :state}, %{stroke: %{width: 2}}]
 
       node = Style.node(styles, stack, pick(:selected))
-      # The field-chosen style (5) over the named one (4): the bad colour.
+      # The field-chosen style (5) over the named one (4): the bad color.
       assert node.stroke == {:color, :bad}
       # The view state (7) over the data: its opacity.
       assert node.opacity == 0.9

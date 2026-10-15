@@ -6,7 +6,7 @@ defmodule Visualize.Specs.ForceSimulationConformanceTest do
   hand from `Visualize.Specs.ForceSimulation`.
 
   Abstraction: `running` is the state field; `live` is 1 when the current timer is still
-  armed; `stale` counts ticks cancelled too late that are still in the mailbox; `heat` is
+  armed; `stale` counts ticks canceled too late that are still in the mailbox; `heat` is
   `0` below `alpha_min`, `1` at or above it, `2` at 1.0.
   """
   use ExUnit.Case, async: true

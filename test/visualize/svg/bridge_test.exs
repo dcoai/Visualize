@@ -1,6 +1,6 @@
 defmodule Visualize.SVG.BridgeTest do
   @moduledoc """
-  The two SVG serialisers agree (spec/02 §5, spec/09 §2; D-11, D-12, D-34): the IR backend
+  The two SVG serializers agree (spec/02 §5, spec/09 §2; D-11, D-12, D-34): the IR backend
   and the HEEx bridge (`from_ir/1` then `Visualize.SVG.Renderer`) emit one markup for one
   scene, and every `d` string comes from `Visualize.IR.Path.to_string/1`.
   """
@@ -109,7 +109,7 @@ defmodule Visualize.SVG.BridgeTest do
              }
   end
 
-  test "a named root is labelled by its title and described by its desc on both paths (D-56, D-142)" do
+  test "a named root is labeled by its title and described by its desc on both paths (D-56, D-142)" do
     named = Element.root(10, 20, title: "Sales", description: "Monthly sales, 2024 & 2025")
     plain = Element.root(10, 20)
     only_title = Element.root(10, 20, title: "Sales", id: "chart")
@@ -167,7 +167,7 @@ defmodule Visualize.SVG.BridgeTest do
     assert SVG.to_string(element) == ~s(<stop offset="0%"/>)
   end
 
-  describe "one d serialiser (D-12)" do
+  describe "one d serializer (D-12)" do
     @extreme %Path{
       commands: [{:M, 1.0e20, 1.0e-5}, {:L, 0.33333333, -0.00004}, {:A, 1.5, 2, 0.0, 0, 1, 3, 4}]
     }
@@ -185,7 +185,7 @@ defmodule Visualize.SVG.BridgeTest do
     end
   end
 
-  test "the backend serialises a transform as IR.Transform.to_string/1 does" do
+  test "the backend serializes a transform as IR.Transform.to_string/1 does" do
     t = Transform.translate(1, 2) |> Transform.scale(2) |> Transform.rotate(-0.0)
     element = Element.rect(0, 0, 1, 1) |> Element.set_transform(t)
     assert Render.to_svg_string(element) =~ ~s|transform="translate(1,2) scale(2) rotate(0)"|

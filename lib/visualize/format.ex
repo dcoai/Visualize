@@ -235,7 +235,7 @@ defmodule Visualize.Format do
 
       [[fill]align][sign][symbol][0][width][,][.precision][~][type]
 
-  - `fill` is any character, used with `align`: `>` right (default), `<` left, `^` centre,
+  - `fill` is any character, used with `align`: `>` right (default), `<` left, `^` center,
     `=` after the sign and symbol.
   - `sign`: `-` (minus for negatives only, default), `+` (plus or minus), `(` (parentheses
     for negatives), space (space for positives).
@@ -292,13 +292,13 @@ defmodule Visualize.Format do
           trim: trim == "~",
           type: type
         }
-        |> normalise_specifier()
+        |> normalize_specifier()
     end
   end
 
   @types ~w(e f g r s % p d b o x X c)
 
-  defp normalise_specifier(spec) do
+  defp normalize_specifier(spec) do
     spec =
       cond do
         # "n" is an alias for ",g".

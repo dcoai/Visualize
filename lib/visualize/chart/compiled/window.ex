@@ -112,7 +112,7 @@ defmodule Visualize.Chart.Compiled.Window do
   # `x` and `x + width` in plot pixels mapped back through the window — widened by three
   # rows each side in reading order, so a path enters and leaves the strip on its own
   # line. A mark with no channel on the scale draws every row, as `sources/5` has it.
-  @neighbours 3
+  @neighbors 3
   @spec strip(t(), Frame.t(), map(), map(), term(), {number(), number(), number(), number()}) ::
           map()
   def strip(
@@ -133,7 +133,7 @@ defmodule Visualize.Chart.Compiled.Window do
         x1 = lo + (rx + rw) / width * span
 
         # One pass keeps the three rows before the strip, the rows within it and the
-        # three after — the neighbours are the window's too — and nothing else, while
+        # three after — the neighbors are the window's too — and nothing else, while
         # noting whether the readings arrived ordered (spec/14 §12.5, #404, #410). A
         # source that did not arrive ordered is collected and sorted, and answers the
         # same rows.
@@ -155,7 +155,7 @@ defmodule Visualize.Chart.Compiled.Window do
   def strip(_window, _frame, _mark, sources, _hi, _bounds), do: sources
 
   # One pass over a source whose readings arrive in order, keeping only the strip and its
-  # neighbours: `{:ok, rows}`, or `:unordered` the moment a reading goes backwards, which
+  # neighbors: `{:ok, rows}`, or `:unordered` the moment a reading goes backwards, which
   # the caller answers by collecting and sorting the window (#410).
   #
   # The three rows before the strip are held in **three slots, not a list** (#423). Every
@@ -188,7 +188,7 @@ defmodule Visualize.Chart.Compiled.Window do
             reading <= x1 ->
               {:cont, {a, b, c, [row | kept], after_, reading}}
 
-            length(after_) < @neighbours - 1 ->
+            length(after_) < @neighbors - 1 ->
               {:cont, {a, b, c, kept, [row | after_], reading}}
 
             true ->
@@ -232,7 +232,7 @@ defmodule Visualize.Chart.Compiled.Window do
     {Enum.reverse(read), count, ordered?}
   end
 
-  # The rows between two readings, widened by `@neighbours` each side in reading order:
+  # The rows between two readings, widened by `@neighbors` each side in reading order:
   # one pass over the window's rows, taking from the first index kept to the last.
   defp span_rows(read, count, x0, x1) do
     {first, last} =
@@ -245,8 +245,8 @@ defmodule Visualize.Chart.Compiled.Window do
     if first == nil or last == nil do
       []
     else
-      from = max(0, first - @neighbours)
-      to = min(count - 1, last + @neighbours)
+      from = max(0, first - @neighbors)
+      to = min(count - 1, last + @neighbors)
 
       if to < from,
         do: [],

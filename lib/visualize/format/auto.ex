@@ -1,6 +1,6 @@
 defmodule Visualize.Format.Auto do
   @moduledoc """
-  Tick formats derived from what a realised scale already knows: its domain and the tick
+  Tick formats derived from what a realized scale already knows: its domain and the tick
   count (spec/05 §3.1, D-134).
 
   A time domain is formatted by its span and the interval its ticks use — clock times
@@ -69,8 +69,8 @@ defmodule Visualize.Format.Auto do
   ]
 
   @doc """
-  The derived formatter of a realised scale, or `nil` when the default label serves (a
-  band, ordinal or discretising scale).
+  The derived formatter of a realized scale, or `nil` when the default label serves (a
+  band, ordinal or discretizing scale).
 
   ## Options
 
@@ -183,10 +183,10 @@ defmodule Visualize.Format.Auto do
 
   # -- numbers ----------------------------------------------------------------------------
 
-  defp write(:plain, value, locale), do: value |> Axis.default_label() |> localise(locale)
+  defp write(:plain, value, locale), do: value |> Axis.default_label() |> localize(locale)
 
   defp write(:grouped, value, locale),
-    do: value |> Axis.default_label() |> group(locale.group) |> localise(locale)
+    do: value |> Axis.default_label() |> group(locale.group) |> localize(locale)
 
   defp write({:si, _exponent}, value, _locale) when value == 0, do: "0"
 
@@ -207,7 +207,7 @@ defmodule Visualize.Format.Auto do
     do: Enum.find(@prefixes, fn {exponent, _} -> magnitude >= :math.pow(10, exponent) end)
 
   # The integer digits of a default label grouped in threes, sign and fraction untouched.
-  # The `.` is the default label's point; `localise/2` swaps it afterwards.
+  # The `.` is the default label's point; `localize/2` swaps it afterwards.
   defp group(label, separator) do
     {sign, digits} =
       case label do
@@ -242,8 +242,8 @@ defmodule Visualize.Format.Auto do
   defp threes(<<three::binary-size(3), rest::binary>>, separator),
     do: three <> separator <> threes(rest, separator)
 
-  defp localise(label, %{decimal: "."}), do: label
-  defp localise(label, %{decimal: decimal}), do: String.replace(label, ".", decimal)
+  defp localize(label, %{decimal: "."}), do: label
+  defp localize(label, %{decimal: decimal}), do: String.replace(label, ".", decimal)
 
   # -- time --------------------------------------------------------------------------------
 

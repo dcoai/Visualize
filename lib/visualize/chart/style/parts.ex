@@ -63,7 +63,7 @@ defmodule Visualize.Chart.Style.Parts do
   @drawn [:hatch | @gradients]
 
   # The keys a part keeps when a later node changes its `type`: what does not depend on the
-  # type. A paint's colour or stops and a gradient's geometry do, and go; its opacity and a
+  # type. A paint's color or stops and a gradient's geometry do, and go; its opacity and a
   # stroke's line do not, and stay.
   @kept %{
     fill: [:opacity],
@@ -94,7 +94,7 @@ defmodule Visualize.Chart.Style.Parts do
   @doc false
   # Whether a node carries a flat key: none of the current shape's keys share a name with
   # one except `fill`, `stroke`, `curve` and `effect`, which are flat — a shorthand — when
-  # their value is what the flat key took: a colour, or a curve's or an effect's name. Any
+  # their value is what the flat key took: a color, or a curve's or an effect's name. Any
   # other value that is not a part is left for the validator to name where it stands.
   @spec flat?(term()) :: boolean()
   def flat?(node) when is_map(node) and not is_struct(node) do
@@ -103,23 +103,23 @@ defmodule Visualize.Chart.Style.Parts do
 
   def flat?(_node), do: false
 
-  defp flat_key?(key, value) when key in @paints, do: colour?(value)
+  defp flat_key?(key, value) when key in @paints, do: color?(value)
   defp flat_key?(key, value) when key in [:curve, :effect], do: is_atom(value) or var?(value)
   defp flat_key?(key, _value), do: key in @flat_keys
 
   @doc false
-  # Whether a value is one a flat colour key took, and so a paint's shorthand.
-  @spec colour?(term()) :: boolean()
-  def colour?(value) when is_binary(value), do: true
-  def colour?(value) when is_atom(value), do: value not in [nil, true, false]
-  def colour?({:series, _i}), do: true
-  def colour?({:ramp, _name, _t}), do: true
-  def colour?({:field, _f}), do: true
-  def colour?({:paint, _name}), do: true
+  # Whether a value is one a flat color key took, and so a paint's shorthand.
+  @spec color?(term()) :: boolean()
+  def color?(value) when is_binary(value), do: true
+  def color?(value) when is_atom(value), do: value not in [nil, true, false]
+  def color?({:series, _i}), do: true
+  def color?({:ramp, _name, _t}), do: true
+  def color?({:field, _f}), do: true
+  def color?({:paint, _name}), do: true
   # A color generator (spec/14 §3.13): `fill: generate(…)` is a solid paint of it.
-  def colour?({:generate, _name, _args}), do: true
-  def colour?(value) when is_tuple(value), do: Visualize.Color.Typed.tagged?(value)
-  def colour?(value), do: var?(value)
+  def color?({:generate, _name, _args}), do: true
+  def color?(value) when is_tuple(value), do: Visualize.Color.Typed.tagged?(value)
+  def color?(value), do: var?(value)
 
   defp var?(value), do: is_struct(value, Visualize.Chart.Var)
 
@@ -180,7 +180,7 @@ defmodule Visualize.Chart.Style.Parts do
   defp part(key, value) when key in @paints and is_map(value) and not is_struct(value),
     do: paint(value)
 
-  defp part(key, value) when key in @paints, do: if(colour?(value), do: paint(value), else: value)
+  defp part(key, value) when key in @paints, do: if(color?(value), do: paint(value), else: value)
   defp part(:effect, value) when is_map(value) and not is_struct(value), do: typed(value)
   defp part(:curve, value) when is_map(value) and not is_struct(value), do: value
   defp part(_key, value), do: value
@@ -255,10 +255,10 @@ defmodule Visualize.Chart.Style.Parts do
   defp put_at(_other, index, value), do: List.replace_at([0, 0], index, value)
 
   @doc false
-  # A paint in the stored shape (spec/14 §3.2): a shorthand expanded — `:none`, a colour,
+  # A paint in the stored shape (spec/14 §3.2): a shorthand expanded — `:none`, a color,
   # a field binding, a variable or `{:paint, name}` — and a map with its type inferred
-  # where its colour says it (`:solid` for one colour), the keys of a declared gradient of
-  # version 2 renamed (`kind`, `centre`, a stop's `offset` and `colour`), and a gradient's
+  # where its color says it (`:solid` for one color), the keys of a declared gradient of
+  # version 2 renamed (`kind`, `center`, a stop's `offset` and `color`), and a gradient's
   # `color` list written out as evenly spaced stops.
   @spec paint(term()) :: term()
   def paint(:none), do: %{type: :none}
@@ -274,7 +274,7 @@ defmodule Visualize.Chart.Style.Parts do
   end
 
   def paint(nil), do: nil
-  def paint(colour), do: %{type: :solid, color: colour}
+  def paint(color), do: %{type: :solid, color: color}
 
   defp rename(map, old, new) do
     case Map.pop(map, old) do
@@ -284,9 +284,9 @@ defmodule Visualize.Chart.Style.Parts do
   end
 
   # A gradient's `color` list is its stops, evenly spaced; explicit `stops` win.
-  defp stops(%{type: type, color: colours} = map) when type in @gradients and is_list(colours) do
+  defp stops(%{type: type, color: colors} = map) when type in @gradients and is_list(colors) do
     map = Map.delete(map, :color)
-    if Map.has_key?(map, :stops), do: stops(map), else: Map.put(map, :stops, spaced(colours))
+    if Map.has_key?(map, :stops), do: stops(map), else: Map.put(map, :stops, spaced(colors))
   end
 
   defp stops(%{stops: stops} = map) when is_list(stops),
@@ -294,14 +294,14 @@ defmodule Visualize.Chart.Style.Parts do
 
   defp stops(map), do: map
 
-  defp spaced([colour]), do: [%{at: 0, color: colour}]
+  defp spaced([color]), do: [%{at: 0, color: color}]
 
-  defp spaced(colours) do
-    last = length(colours) - 1
+  defp spaced(colors) do
+    last = length(colors) - 1
 
-    colours
+    colors
     |> Enum.with_index()
-    |> Enum.map(fn {colour, i} -> %{at: tidy(i / last), color: colour} end)
+    |> Enum.map(fn {color, i} -> %{at: tidy(i / last), color: color} end)
   end
 
   defp tidy(at) when at == trunc(at), do: trunc(at)
@@ -313,10 +313,10 @@ defmodule Visualize.Chart.Style.Parts do
 
   defp stop(stop), do: stop
 
-  # One colour and no type is a solid paint; anything else keeps what it says.
+  # One color and no type is a solid paint; anything else keeps what it says.
   defp typed(%{type: _} = map), do: map
 
-  defp typed(%{color: colour} = map) when not is_list(colour),
+  defp typed(%{color: color} = map) when not is_list(color),
     do: Map.put(map, :type, :solid)
 
   defp typed(map), do: map
@@ -379,8 +379,8 @@ defmodule Visualize.Chart.Style.Parts do
       {:type, _type}, acc ->
         acc
 
-      {:color, colour}, acc ->
-        if solid?(paint), do: Map.put(acc, key, colour), else: acc
+      {:color, color}, acc ->
+        if solid?(paint), do: Map.put(acc, key, color), else: acc
 
       {:name, name}, acc ->
         if paint[:type] == :paint, do: Map.put(acc, key, {:paint, name}), else: acc

@@ -452,8 +452,8 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     end
   end
 
-  # A colour is parsed by `Visualize.Color.parse/1` (an atom by its name); the supplied
-  # opacity is the alpha unless the colour syntax carried its own (`rgba()`, `#rgba`,
+  # A color is parsed by `Visualize.Color.parse/1` (an atom by its name); the supplied
+  # opacity is the alpha unless the color syntax carried its own (`rgba()`, `#rgba`,
   # `#rrggbbaa`). `"none"` is transparent; anything unparseable is black.
   defp parse_color("none", _opacity), do: {0, 0, 0, 0}
 

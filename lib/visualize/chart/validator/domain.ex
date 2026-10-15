@@ -1,7 +1,7 @@
 defmodule Visualize.Chart.Validator.Domain do
   @moduledoc false
-  # The colour-domain check of the validator (spec/14 §10.1, #487, D-122): a value a mark
-  # sends to its frame's colour scale that the scale's *declared* ordinal domain can be seen
+  # The color-domain check of the validator (spec/14 §10.1, #487, D-122): a value a mark
+  # sends to its frame's color scale that the scale's *declared* ordinal domain can be seen
   # not to hold. Every element it reaches would draw the scale's `unknown`, so the design
   # says something it cannot mean.
   #
@@ -10,7 +10,7 @@ defmodule Visualize.Chart.Validator.Domain do
   # a `:category` column, a source read through transforms, an inferred or variable domain
   # and a style reached through a variable are not decidable here and are passed over. The
   # walk is total over any map, since the validator is handed arbitrary input: a shape it
-  # does not recognise contributes nothing, and the schema walk reports it.
+  # does not recognize contributes nothing, and the schema walk reports it.
   #
   # And the inferred-domain check (#490, D-124): a `:text` mark's position channel that is
   # a literal number naming a scale whose domain is inferred. Inference reads the constant
@@ -20,7 +20,7 @@ defmodule Visualize.Chart.Validator.Domain do
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.Chart.Style.Parts
 
-  @colour_keys [:fill, :stroke]
+  @color_keys [:fill, :stroke]
   @temporal [DateTime, Date, NaiveDateTime]
   # The position scales a channel names before a mark's `scales` renames it (spec/14 §4.3).
   @positions [:x, :y, :angle, :r]
@@ -77,32 +77,32 @@ defmodule Visualize.Chart.Validator.Domain do
 
   # -- channels -------------------------------------------------------------------------
 
-  # `series` names the colour scale in every frame kind, `value` on a `:rect` and in a
+  # `series` names the color scale in every frame kind, `value` on a `:rect` and in a
   # `:geo` frame (spec/14 §4.3); a mark's `scales` node may rename it.
   defp channels(mark, frame, scales, columns, path) do
     channels = map_or_empty(mark[:channels])
-    name = colour_scale(map_or_empty(mark[:scales]))
+    name = color_scale(map_or_empty(mark[:scales]))
 
     case domain(scales[name]) do
       nil ->
         []
 
       domain ->
-        for key <- colour_channels(mark[:type], frame[:kind]),
+        for key <- color_channels(mark[:type], frame[:kind]),
             Map.has_key?(channels, key),
             reason = channel(channels[key], name, domain, columns),
             do: {path ++ [:channels, key], reason}
     end
   end
 
-  defp colour_scale(%{color: name}) when is_atom(name) and name not in [nil, true, false],
+  defp color_scale(%{color: name}) when is_atom(name) and name not in [nil, true, false],
     do: name
 
-  defp colour_scale(_scales), do: :color
+  defp color_scale(_scales), do: :color
 
-  defp colour_channels(:rect, _kind), do: [:series, :value]
-  defp colour_channels(_type, :geo), do: [:series, :value]
-  defp colour_channels(_type, _kind), do: [:series]
+  defp color_channels(:rect, _kind), do: [:series, :value]
+  defp color_channels(_type, :geo), do: [:series, :value]
+  defp color_channels(_type, _kind), do: [:series]
 
   defp channel(value, name, domain, _columns) when is_number(value) do
     if Enum.any?(domain, &(&1 == value)), do: nil, else: {:outside_domain, name, value}
@@ -154,10 +154,10 @@ defmodule Visualize.Chart.Validator.Domain do
 
   # -- the mark's style -----------------------------------------------------------------
 
-  # A `{:field, f}` on a colour key reads through the mark's colour scale, `color` renamed
+  # A `{:field, f}` on a color key reads through the mark's color scale, `color` renamed
   # by its `scales` like any channel (spec/14 §4.3, D-143).
   defp style(mark, scales, styles, columns, path) do
-    name = colour_scale(map_or_empty(mark[:scales]))
+    name = color_scale(map_or_empty(mark[:scales]))
 
     case domain(scales[name]) do
       nil ->
@@ -166,7 +166,7 @@ defmodule Visualize.Chart.Validator.Domain do
       domain ->
         node = cascade(mark[:style], styles)
 
-        @colour_keys
+        @color_keys
         |> Enum.flat_map(fn key ->
           case Map.get(node, key) do
             {:field, field} -> [column(field, name, domain, columns)]

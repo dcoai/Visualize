@@ -74,7 +74,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     An entry as the inline sites a copy of it is (spec/14 §18.17): a composite's sites,
     each holding what its use contributed — the referenced fragment (flattened, when it is
     a composite) stacked under the use's `local`, the use's `mask`, `vars` and `key` kept
-    — labelled with the referenced entry's name, or the composite's own for a site it
+    — labeled with the referenced entry's name, or the composite's own for a site it
     declares in place, with the composite's own vars and signals; any other body as one
     inline site named for the entry. The sites carry no id: the caller issues one each
     among the stack they join.
@@ -118,7 +118,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The name a site of a composite is shown by (spec/14 §18.8, §18.17): a referenced
     site by its entry's name — its id when the store has none — and a site the composite
     declares in place by its kind (#380), or by `own`, the composite's name, when it
-    declares several. A copy's sites are labelled so, and so are a referenced group's rows.
+    declares several. A copy's sites are labeled so, and so are a referenced group's rows.
 
         iex> name_of = fn {:style, 1} -> "Styles::thick"; _id -> nil end
         iex> Visualize.Chart.Builder.Stack.inner_label(%Visualize.Chart.Use{id: {:use, 1}, ref: {:style, 1}}, name_of, "pair")
@@ -148,7 +148,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: name_of.(ref) || "#{kind} #{n}"
 
     @doc """
-    An entry as a stack (spec/14 §19.9): a composite's sites, labelled by the store's
+    An entry as a stack (spec/14 §19.9): a composite's sites, labeled by the store's
     names, with its vars and its signals (§19.10); any other body as one inline site named
     for the entry.
     """
@@ -263,8 +263,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             Chart.stack([body, use.local])
         end
 
-      labelled = if match?(%{kind: :composite}, entry), do: sites, else: []
-      {%{use | ref: nil, origin: ref, local: local}, labelled, signals}
+      labeled = if match?(%{kind: :composite}, entry), do: sites, else: []
+      {%{use | ref: nil, origin: ref, local: local}, labeled, signals}
     end
 
     @doc """

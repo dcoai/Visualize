@@ -1,7 +1,7 @@
 defmodule Visualize.Data.SchemaTest do
   @moduledoc """
   `Visualize.Data.Schema`, its cache and `Visualize.Data.Delivery` (spec/08 §10, #551,
-  D-136): a feed's fields described by meaning, never colour; a version every node agrees
+  D-136): a feed's fields described by meaning, never color; a version every node agrees
   on; a cache that asks a feed once; a delivery that is a source.
   """
   use ExUnit.Case, async: true
@@ -100,7 +100,7 @@ defmodule Visualize.Data.SchemaTest do
                [{[:v, :type], {:enum, Chart.Schema.column_types()}}]
     end
 
-    test "a colour key is refused, whatever its value, and says why" do
+    test "a color key is refused, whatever its value, and says why" do
       # spelling: allow — either spelling is refused.
       for key <- [:color, :colour, :colors, :colours, :palette, :fill, :stroke] do
         assert faults(%{s: %{key => %{"ok" => :good}, :type => :category}}) ==
@@ -114,7 +114,7 @@ defmodule Visualize.Data.SchemaTest do
       assert line =~ "theme"
     end
 
-    test "a colour cannot hide in a status either: a role is an atom" do
+    test "a color cannot hide in a status either: a role is an atom" do
       assert faults(%{s: %{type: :category, status: %{"fail" => {:palette, 5}}}}) ==
                [{[:s, :status], {:type, :status}}]
 
@@ -253,7 +253,7 @@ defmodule Visualize.Data.SchemaTest do
   end
 
   describe "new/1: a measure is checked against the vocabulary (spec/08 §10.1, D-157)" do
-    test "a misspelt unit is refused at the field's unit, in parse/1's words" do
+    test "a misspelled unit is refused at the field's unit, in parse/1's words" do
       assert faults(%{latency: %{type: :number, unit: "mss"}}) ==
                [{[:latency, :unit], {:unit, "mss", {:unknown_atom, "mss"}}}]
 

@@ -196,7 +196,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # validator, so a hole that does not read is a fault under the field, not a refusal.
     defp read(:text, string), do: {:ok, string}
     defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
-    # A reference is a local name, or a library id spelt as the DOM carries one (§19.2).
+    # A reference is a local name, or a library id spelled as the DOM carries one (§19.2).
     defp read({:ref, kind}, string) do
       case Store.decode_id(string) do
         {:ok, {^kind, _n} = id} -> {:ok, id}
@@ -283,7 +283,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp atom(":" <> rest), do: String.to_atom(rest)
     defp atom(string), do: String.to_atom(string)
 
-    # What a person means by a bare word in a colour, a size or a font: a leading `:` is an
+    # What a person means by a bare word in a color, a size or a font: a leading `:` is an
     # atom, a numeral is a number, and everything else is the string itself.
     defp loose(":" <> rest), do: String.to_atom(rest)
 
@@ -360,7 +360,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     `key` is the typed control and reads by `parse/2`; an unchecked checkbox submits
     nothing, which is `false` and not a removal, and every other control's blank removes
-    the key. `key.slot` is a colour's name face (written `color(:name)`), `key.range` a number's slider and
+    the key. `key.slot` is a color's name face (written `color(:name)`), `key.range` a number's slider and
     `key.other` a name the list lacks, each read as the key. A variable reaches a field as
     a chip dropped on it (§19.9), never as a control of the form, so there is no
     `key.mode` or `key.var`. A style's controls are named by their path and read by
@@ -581,7 +581,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def submitted(type, nil), do: if(widget(type) == :checkbox, do: {:ok, false}, else: :error)
     def submitted(type, string), do: parse(type, string)
 
-    # A colour's name face: a name of the theme's color table, typed, or — blank — the key removed.
+    # A color's name face: a name of the theme's color table, typed, or — blank — the key removed.
     defp slot_face(string), do: named(string)
 
     @doc """
@@ -650,7 +650,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:theme, :any,
       default: nil,
       doc:
-        "the `%Visualize.Theme{}` the design names, for what a colour well shows (spec/14 §19.10)"
+        "the `%Visualize.Theme{}` the design names, for what a color well shows (spec/14 §19.10)"
     )
 
     attr(:defs, :map,
@@ -916,8 +916,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp tab(_facet, _open), do: "vis-builder-tab"
 
     @doc """
-    What a colour well shows for a value (spec/14 §19.10): the colour it resolves to — a
-    slot or a typed colour through the theme, a literal as itself — with the value's word
+    What a color well shows for a value (spec/14 §19.10): the color it resolves to — a
+    slot or a typed color through the theme, a literal as itself — with the value's word
     as the title; `:none` as no paint; anything else, or no theme for a slot, as nothing.
 
         iex> Visualize.Chart.Builder.Editor.well("#3b6fa8", Visualize.Theme.default())

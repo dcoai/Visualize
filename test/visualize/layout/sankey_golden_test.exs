@@ -107,7 +107,7 @@ defmodule Visualize.Layout.SankeyGoldenTest do
     assert_in_delta second.y0 + second.width, a.y1, 1.0e-9
   end
 
-  test "link_sort orders the links of every node and is otherwise the neighbour order" do
+  test "link_sort orders the links of every node and is otherwise the neighbor order" do
     by_value = Sankey.new() |> Sankey.link_sort(fn x, y -> x.value < y.value end)
     sorted = Sankey.compute(by_value, nodes(), links())
     a = Enum.find(sorted.nodes, &(&1.id == "a"))

@@ -5,7 +5,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     Each component is a preset design of `Visualize.Chart.Presets` plus an assign mapping
     (spec/14 §15, D-64): its assigns become a design and the rows the design's source binds
-    to, `Visualize.Chart.Frame` realises and draws the design, and the component prints the
+    to, `Visualize.Chart.Frame` realizes and draws the design, and the component prints the
     elements the layer returns — the axes, every path, rectangle, circle and label — in the
     markup spec/10 declares. Its template is the `<svg>` shell and the attribute order of
     each mark, nothing more.
@@ -30,14 +30,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     - Empty `data` renders the frame - the `<svg>` and, where the chart has them, its axes
       over a `[0, 1]` domain - with no marks. A domain whose ends coincide (one datum, or
       every value zero) stays collapsed and maps to the middle of the axis (D-49, D-60).
-    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0`, whose colours are
-      taken by index and cycled, or an explicit list of colours used as given. An unknown
+    - `colors` is a scheme atom of `Visualize.Scale.Color.schemes/0`, whose colors are
+      taken by index and cycled, or an explicit list of colors used as given. An unknown
       scheme or an empty list raises `ArgumentError`.
     - `animate={true}` puts `style="transition: all 0.3s ease-in-out;"` on every mark, so
       LiveView's DOM patches animate through CSS.
-    - `theme` is a `Visualize.Theme` (default `Visualize.Theme.default/0`); every colour,
+    - `theme` is a `Visualize.Theme` (default `Visualize.Theme.default/0`); every color,
       font and size that is not an explicit assign is a slot of it, rendered as a CSS
-      reference with the literal as fallback so a stylesheet overrides it (D-55). A colour
+      reference with the literal as fallback so a stylesheet overrides it (D-55). A color
       assign left `nil` takes the slot its documentation names.
     - `margin` is merged over the component's default, so `%{left: 60}` moves one side.
     - The defaults below are `Visualize.Chart.Presets.defaults/1`.
@@ -74,7 +74,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `margin` - `%{top:, right:, bottom:, left:}`, merged over
       `%{top: 20, right: 20, bottom: 30, left: 40}`
     * `curve` - any curve type of `Visualize.Shape.curve/3` (default `:linear`)
-    * `stroke` - line colour, also the point fill (default `nil`: the theme's `:series_1`)
+    * `stroke` - line color, also the point fill (default `nil`: the theme's `:series_1`)
     * `stroke_width` - (default 2)
     * `show_points` - draw an `r="4"` circle at each datum (default `false`)
     * `x_label`, `y_label` - axis titles as `<text class="axis-label">`
@@ -181,7 +181,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `y` - accessor to a non-negative number; the y domain is `[0, max]` (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `fill` - bar colour (default `nil`: the theme's `:series_1`)
+    * `fill` - bar color (default `nil`: the theme's `:series_1`)
     * `padding` - band padding, 0 to 1 (default 0.1)
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
       conventions
@@ -314,7 +314,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `inner_radius` - greater than 0 makes a donut (default 0)
     * `outer_radius` - `nil` means `min(width, height) / 2 - 10`
     * `pad_angle` - radians between slices (default 0.02)
-    * `colors` - scheme atom or colour list; the i-th slice takes the i-th colour
+    * `colors` - scheme atom or color list; the i-th slice takes the i-th color
       (default `:category10`)
     * `show_labels` - (default `true`)
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
@@ -347,7 +347,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {paths, texts} = Enum.split_with(arcs.children, &(&1.type == :path))
 
       # The labels the layer kept, each in its own contrast ink, follow every slice — the
-      # order the layer draws a labelled mark in, and the only one there is, since a label
+      # order the layer draws a labeled mark in, and the only one there is, since a label
       # its fit hid has no text to pair with its slice (spec/10 §2.5, #494).
       labels =
         for text <- texts, text.content != "" do
@@ -404,7 +404,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `x`, `y` - numeric accessors (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `fill` - point colour (default `nil`: the theme's `:series_1`)
+    * `fill` - point color (default `nil`: the theme's `:series_1`)
     * `size` - the radius, or a one-argument function of the datum returning it
       (default 5)
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module
@@ -560,7 +560,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     * `keys` - the series keys read from each datum (required)
     * `width`, `height` - pixels (default 600 by 400)
     * `margin` - merged over `%{top: 20, right: 20, bottom: 30, left: 40}`
-    * `colors` - scheme atom or colour list, one colour per key in order
+    * `colors` - scheme atom or color list, one color per key in order
       (default `:category10`)
     * `padding` - band padding (default 0.1)
     * `animate`, `class`, `responsive`, `theme`, `title`, `description` - per the module

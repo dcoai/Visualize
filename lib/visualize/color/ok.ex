@@ -1,7 +1,7 @@
 defmodule Visualize.Color.OK do
   @moduledoc false
   # OKLab and OKLCH (Björn Ottosson, 2020; CSS Color 4 §9), and CSS Color 4's gamut mapping
-  # (§13.2), for the typed colors of spec/08 §1.9 (D-173). A colour here is `{r, g, b}` in
+  # (§13.2), for the typed colors of spec/08 §1.9 (D-173). A color here is `{r, g, b}` in
   # linear-light or gamma-encoded sRGB as each function says, channels in `0..1`; the
   # public face is `Visualize.Color`'s `to_oklab/1`, `oklab/4`, `to_oklch/1` and `oklch/4`.
 
@@ -15,7 +15,7 @@ defmodule Visualize.Color.OK do
   def from_srgb({r, g, b}), do: from_linear({linear(r), linear(g), linear(b)})
 
   @doc false
-  # OKLab `{l, a, b}` to gamma-encoded sRGB, unclipped: a channel outside `0..1` is a colour
+  # OKLab `{l, a, b}` to gamma-encoded sRGB, unclipped: a channel outside `0..1` is a color
   # outside the gamut.
   @spec to_srgb({number(), number(), number()}) :: {float(), float(), float()}
   def to_srgb(lab) do
@@ -24,7 +24,7 @@ defmodule Visualize.Color.OK do
   end
 
   @doc false
-  # OKLab to OKLCH `{l, c, h}`, `h` in degrees `[0, 360)`; a grey's hue is 0.
+  # OKLab to OKLCH `{l, c, h}`, `h` in degrees `[0, 360)`; a gray's hue is 0.
   @spec to_lch({number(), number(), number()}) :: {float(), float(), float()}
   def to_lch({l, a, b}) do
     c = :math.sqrt(a * a + b * b)
@@ -40,9 +40,9 @@ defmodule Visualize.Color.OK do
   end
 
   @doc false
-  # An OKLab colour brought into sRGB by CSS Color 4's gamut mapping (§13.2): a colour in
+  # An OKLab color brought into sRGB by CSS Color 4's gamut mapping (§13.2): a color in
   # the gamut as it is; lightness at or past either end white or black; otherwise chroma
-  # reduced in OKLCH by binary search until the clipped colour is within a just-noticeable
+  # reduced in OKLCH by binary search until the clipped color is within a just-noticeable
   # difference of the reduced one. Answers gamma-encoded sRGB channels in `0..1`.
   @spec map_to_srgb({number(), number(), number()}) :: {float(), float(), float()}
   def map_to_srgb({l, _a, _b}) when l >= 1, do: {1.0, 1.0, 1.0}

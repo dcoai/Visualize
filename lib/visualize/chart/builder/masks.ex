@@ -256,7 +256,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     A mask with a path added or removed, as a checkbox says: checked masks it, unchecked
-    does not. A path is spelt as its keys joined by `.`, which is the checkbox's name.
+    does not. A path is spelled as its keys joined by `.`, which is the checkbox's name.
     """
     @spec toggle(Use.t(), String.t(), boolean()) :: Use.t()
     def toggle(%Use{mask: mask} = use, name, checked) when is_list(mask) do

@@ -1,12 +1,12 @@
 defmodule Visualize.Chart.Transform.Force do
   @moduledoc false
   # The `:force` step of a mark's pipeline (spec/14 §5.4.3, D-110, D-132), and the one
-  # run per realisation that the marks of one graph share.
+  # run per realization that the marks of one graph share.
   #
   # A step is laid out by `Visualize.Layout.Force.run/1`. `Visualize.Chart.Frame.new/2`
   # lays out every distinct step of its marks once, before anything else reads the rows
   # (`layouts/4`), and holds the layouts in the frame's `forces`; every pipeline that
-  # reaches a step during that realisation finds its layout there by the step's *run key*
+  # reaches a step during that realization finds its layout there by the step's *run key*
   # (`run/3`) — the node without `output`, and its input. A step that is not there runs
   # cold, as it always did.
   #
@@ -33,11 +33,11 @@ defmodule Visualize.Chart.Transform.Force do
   @typedoc "A compiled chart's warm state: per graph key, each node's motion by id."
   @type warm :: %{term() => %{term() => motion()}}
 
-  @typedoc "A realisation's layouts: per run key, the graph key and the laid-out nodes."
+  @typedoc "A realization's layouts: per run key, the graph key and the laid-out nodes."
   @type layouts :: %{term() => %{key: term(), nodes: [map()]}}
 
   @doc false
-  # The step: the realisation's layout for it when there is one, else a cold run.
+  # The step: the realization's layout for it when there is one, else a cold run.
   @spec run(map(), [map()], map()) :: [map()]
   def run(node, rows, ctx) do
     graph = graph(node, rows, ctx)
@@ -73,7 +73,7 @@ defmodule Visualize.Chart.Transform.Force do
   end
 
   @doc false
-  # The warm state a realisation's layouts leave: each graph's nodes by id, their position
+  # The warm state a realization's layouts leave: each graph's nodes by id, their position
   # and velocity alone. A node the graph no longer has is not in it, so it is forgotten.
   @spec warm(layouts()) :: warm()
   def warm(layouts) do
@@ -107,7 +107,7 @@ defmodule Visualize.Chart.Transform.Force do
   defp identity(source, node),
     do: {source, node.fields, Map.get(node, :nodes), Map.get(node, :id, :id)}
 
-  # One run of a realisation: the step as it is laid out and what it is laid out over.
+  # One run of a realization: the step as it is laid out and what it is laid out over.
   defp run_key(node, graph) do
     {Map.delete(node, :output), graph.size, graph.ids, graph.pairs, graph.seeds}
   end
@@ -173,12 +173,12 @@ defmodule Visualize.Chart.Transform.Force do
 
   # Every node at its start: a carried node where it was, moving as it was; a seeded one
   # at its seed; any other at its spiral position (spec/06 §8.1) about the mean of its
-  # laid-out neighbours — or of every laid-out node, when it has none — as d3 places a
-  # node with no position about the origin (spec/14 §5.4.3). Near its neighbours it
+  # laid-out neighbors — or of every laid-out node, when it has none — as d3 places a
+  # node with no position about the origin (spec/14 §5.4.3). Near its neighbors it
   # neither sits on one nor starts across the graph, where its link would yank it and
-  # the centre force translate every node by its share of the move.
+  # the center force translate every node by its share of the move.
   defp place(graph, known) do
-    centre = mean(Map.values(known))
+    center = mean(Map.values(known))
 
     graph.ids
     |> Enum.with_index()
@@ -191,15 +191,15 @@ defmodule Visualize.Chart.Transform.Force do
           Map.put(seed, :id, id)
 
         {:error, :error} ->
-          laid = for n <- neighbours(graph.pairs, id), m = known[n], m != nil, do: m
-          {cx, cy} = if laid == [], do: centre, else: mean(laid)
+          laid = for n <- neighbors(graph.pairs, id), m = known[n], m != nil, do: m
+          {cx, cy} = if laid == [], do: center, else: mean(laid)
           {dx, dy} = spiral(i)
           %{id: id, x: cx + dx, y: cy + dy}
       end
     end)
   end
 
-  defp neighbours(pairs, id) do
+  defp neighbors(pairs, id) do
     for {s, t} <- pairs, s == id or t == id, do: if(s == id, do: t, else: s)
   end
 

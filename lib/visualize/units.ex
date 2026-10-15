@@ -19,7 +19,7 @@ defmodule Visualize.Units do
       15.0
 
   The world lengths a scene measures its ground in (#620) — `:mm` … `:mi` — are a table of
-  their own, in metres (`to_meters/2`, `convert_length/3`): a world length reaches the
+  their own, in meters (`to_meters/2`, `convert_length/3`): a world length reaches the
   screen only through a scale a scene declares.
   """
 
@@ -142,7 +142,7 @@ defmodule Visualize.Units do
   def length_units, do: Keyword.keys(@lengths)
 
   @doc """
-  A world length in metres.
+  A world length in meters.
 
       iex> Visualize.Units.to_meters(1, :ft)
       0.3048

@@ -2,7 +2,7 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
   @moduledoc """
   An axis shown in another unit than its data's picks its ticks in that unit (spec/05
   §4.3, spec/14 §4.4, #594, D-156): round numbers in the display unit, placed at their
-  values converted back into the data's unit and labelled with the round numbers; and
+  values converted back into the data's unit and labeled with the round numbers; and
   the unit system that chooses the display unit is a render option, carried from
   `apply/2`, `compile/2` and the board's render paths to every axis.
   """
@@ -155,7 +155,7 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
       assert length(Regex.scan(~r/<line /, grid)) == 9
     end
 
-    test "explicit tick values win, labelled in the display unit" do
+    test "explicit tick values win, labeled in the display unit" do
       axis = axis(frame(mass(%{ticks: [0, 10, 20]}), system: :us))
       assert axis.tick_values == [0, 10, 20]
       assert labels(axis) == ["0 lb", "22.046226 lb", "44.092452 lb"]
@@ -192,7 +192,7 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
       assert Enum.all?(tick_labels(svg), &String.ends_with?(&1, " °F"))
     end
 
-    test "a system that is not one of the four is refused when the frame is realised" do
+    test "a system that is not one of the four is refused when the frame is realized" do
       assert_raise ArgumentError, ~r/system: must be one of/, fn ->
         frame(mass(), system: :imperial)
       end
@@ -210,7 +210,7 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
       assert tick_labels(Chart.render(plain)) == ["0 kg", "10 kg", "20 kg", "30 kg", "40 kg"]
     end
 
-    test "compile/2 keeps it for every realisation per tick" do
+    test "compile/2 keeps it for every realization per tick" do
       {:ok, %{main: compiled}} = Chart.compile(mass(), sources: %{primary: @rows}, system: :us)
       assert compiled.system == :us
 

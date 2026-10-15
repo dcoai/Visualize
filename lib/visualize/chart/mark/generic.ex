@@ -90,12 +90,12 @@ defmodule Visualize.Chart.Mark.Generic do
   defp to_content(nil), do: ""
   defp to_content(value), do: to_string(value)
 
-  # A rect's `value` reaches the colour scale as its fill (spec/14 §5.2); the pixel row
+  # A rect's `value` reaches the color scale as its fill (spec/14 §5.2); the pixel row
   # already carries the scale's output when the frame declares `color`.
   defp value_fill(_ctx, nil), do: %{}
 
-  defp value_fill(%{frame: frame, mode: mode}, colour) do
-    if Style.color?(colour), do: %{fill: Style.color(colour, frame.theme, mode)}, else: %{}
+  defp value_fill(%{frame: frame, mode: mode}, color) do
+    if Style.color?(color), do: %{fill: Style.color(color, frame.theme, mode)}, else: %{}
   end
 
   # -- circle --------------------------------------------------------------------------

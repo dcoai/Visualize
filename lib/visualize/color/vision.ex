@@ -1,13 +1,13 @@
 defmodule Visualize.Color.Vision do
   @moduledoc """
-  Colour-vision simulation: how a colour reads to a person with one of the three
+  Color-vision simulation: how a color reads to a person with one of the three
   dichromacies (spec/08 §1.8, D-139).
 
   The model is Machado, Oliveira and Fernandes (2009), "A Physiologically-based Model for
   Simulation of Color Vision Deficiency", *IEEE Transactions on Visualization and Computer
-  Graphics* 15(6), 1291–1298, at severity 1.0. A colour is decoded from sRGB to linear RGB,
+  Graphics* 15(6), 1291–1298, at severity 1.0. A color is decoded from sRGB to linear RGB,
   multiplied by the deficiency's matrix, clamped to `0..1` and encoded back; its opacity is
-  kept. Each matrix's rows sum to 1, so a grey is its own simulation.
+  kept. Each matrix's rows sum to 1, so a gray is its own simulation.
 
   It is a transform for judging a palette by eye — the theme editor draws its ramps and its
   preview through it — and nothing in the library draws through it on its own.
@@ -17,15 +17,15 @@ defmodule Visualize.Color.Vision do
       iex> red = Visualize.Color.parse("#ff0000")
       iex> Visualize.Color.Vision.simulate(red, :protanopia) |> Visualize.Color.to_hex()
       "#6d5f00"
-      iex> grey = Visualize.Color.parse("#808080")
-      iex> Visualize.Color.Vision.simulate(grey, :tritanopia) |> Visualize.Color.to_hex()
+      iex> gray = Visualize.Color.parse("#808080")
+      iex> Visualize.Color.Vision.simulate(gray, :tritanopia) |> Visualize.Color.to_hex()
       "#808080"
 
   """
 
   alias Visualize.Color
 
-  @typedoc "A dichromacy the model simulates, or `:none` for the colour as it is."
+  @typedoc "A dichromacy the model simulates, or `:none` for the color as it is."
   @type deficiency :: :protanopia | :deuteranopia | :tritanopia
 
   # Machado, Oliveira and Fernandes (2009), Table 1 of the supplementary material, the
@@ -65,11 +65,11 @@ defmodule Visualize.Color.Vision do
   def matrix(other), do: unknown!(other)
 
   @doc """
-  The colour as the deficiency sees it, its opacity kept; `:none` is the colour itself.
+  The color as the deficiency sees it, its opacity kept; `:none` is the color itself.
   Any other atom raises `ArgumentError`.
   """
   @spec simulate(Color.t(), deficiency() | :none) :: Color.t()
-  def simulate(%Color{} = colour, :none), do: colour
+  def simulate(%Color{} = color, :none), do: color
 
   def simulate(%Color{r: r, g: g, b: b, opacity: opacity}, deficiency)
       when deficiency in @deficiencies do
@@ -93,9 +93,9 @@ defmodule Visualize.Color.Vision do
   def simulate(%Color{}, other), do: unknown!(other)
 
   @doc """
-  The text with every `#rrggbb` and `#rgb` colour literal replaced by its simulation, as
-  `#rrggbb` — an SVG's fills and strokes, a style's colours. A `#` that is a reference,
-  `url(#id)`, is left alone, and so is everything that is not a colour; `:none` is the text.
+  The text with every `#rrggbb` and `#rgb` color literal replaced by its simulation, as
+  `#rrggbb` — an SVG's fills and strokes, a style's colors. A `#` that is a reference,
+  `url(#id)`, is left alone, and so is everything that is not a color; `:none` is the text.
 
       iex> Visualize.Color.Vision.recolor(~s|<rect fill="#ff0000" mask="url(#bad)"/>|, :protanopia)
       ~s|<rect fill="#6d5f00" mask="url(#bad)"/>|

@@ -73,10 +73,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         <figure class="vis-builder-theme-sample vis-builder-theme-chrome">
           <div class="vis-builder-theme-swatches">
             <span
-              :for={colour <- @drawn.series}
+              :for={color <- @drawn.series}
               class="vis-builder-theme-chip"
-              style={"background: #{@seen.(colour)}"}
-              title={colour}
+              style={"background: #{@seen.(color)}"}
+              title={color}
             ></span>
           </div>
           <div class="vis-builder-theme-swatches">
@@ -176,7 +176,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The theme with every ramp it cannot draw — fewer than two anchors, an anchor that is not
-    a colour — and an empty series replaced by the default theme's, so a sheet always draws
+    a color — and an empty series replaced by the default theme's, so a sheet always draws
     while the editor names the fault (spec/14 §20.3).
 
         iex> theme = %{Visualize.Theme.default() | ramps: %{status: ["#nope"]}, series: []}
@@ -201,7 +201,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         Map.merge(
           default.colors,
           Map.filter(theme.colors || %{}, fn {_name, value} ->
-            colour?(value) or (not is_binary(value) and Visualize.Color.value?(value)) or
+            color?(value) or (not is_binary(value) and Visualize.Color.value?(value)) or
               pinned?(value)
           end)
         )
@@ -209,13 +209,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       chrome =
         for slot <- [:background, :surface, :text, :axis, :grid], into: %{} do
           value = Map.fetch!(theme, slot)
-          {slot, if(colour?(value), do: value, else: Map.fetch!(default, slot))}
+          {slot, if(color?(value), do: value, else: Map.fetch!(default, slot))}
         end
 
       series =
-        case Enum.filter(List.wrap(theme.series), &colour?/1) do
+        case Enum.filter(List.wrap(theme.series), &color?/1) do
           [] -> default.series
-          colours -> colours
+          colors -> colors
         end
 
       theme
@@ -223,23 +223,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.merge(%{ramps: ramps, colors: colors, series: series})
     end
 
-    defp seen(colour, :none), do: colour
+    defp seen(color, :none), do: color
 
-    # The drawn theme's colours all read (`drawable/1`), so each is simulated directly.
-    defp seen(colour, vision),
-      do: colour |> Visualize.Color.parse() |> Vision.simulate(vision) |> Visualize.Color.to_hex()
+    # The drawn theme's colors all read (`drawable/1`), so each is simulated directly.
+    defp seen(color, vision),
+      do: color |> Visualize.Color.parse() |> Vision.simulate(vision) |> Visualize.Color.to_hex()
 
-    defp drawable_ramp?([_, _ | _] = anchors), do: Enum.all?(anchors, &colour?/1)
+    defp drawable_ramp?([_, _ | _] = anchors), do: Enum.all?(anchors, &color?/1)
     defp drawable_ramp?(_anchors), do: false
 
     defp literals(theme, anchors) when is_list(anchors), do: Theme.anchor_literals(theme, anchors)
     defp literals(_theme, other), do: other
 
-    defp colour?(value), do: Themes.readable?(value)
+    defp color?(value), do: Themes.readable?(value)
 
     # A name's pinned steps that all read, step 500 among them (spec/08 §7.1, #667).
     defp pinned?(%{500 => _} = steps) when not is_struct(steps),
-      do: Enum.all?(steps, fn {n, c} -> is_integer(n) and colour?(c) end)
+      do: Enum.all?(steps, fn {n, c} -> is_integer(n) and color?(c) end)
 
     defp pinned?(_value), do: false
 

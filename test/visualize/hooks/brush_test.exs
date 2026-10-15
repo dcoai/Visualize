@@ -134,7 +134,7 @@ defmodule Visualize.Hooks.BrushTest do
       assert length(Regex.scan(~r/removeEventListener/, destroyed)) == 4
     end
 
-    test "the documented default brush colour is the one the hook applies" do
+    test "the documented default brush color is the one the hook applies" do
       assert Brush.js_hook() =~ "this.el.dataset.brushColor || 'rgba(119, 119, 119, 0.2)'"
       {:docs_v1, _, _, _, %{"en" => moduledoc}, _, _} = Code.fetch_docs(Brush)
       assert moduledoc =~ ~s|default: "rgba(119, 119, 119, 0.2)"|

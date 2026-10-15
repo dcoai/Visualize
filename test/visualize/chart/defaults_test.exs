@@ -82,7 +82,7 @@ defmodule Visualize.Chart.DefaultsTest do
 
       assert line.stroke_width == 1.5 and line.stroke_linecap == :round
       assert rect.stroke_width == 2 and rect.stroke_linecap == :round
-      # A partial stroke leaves the paint to the layer under it: the series colour.
+      # A partial stroke leaves the paint to the layer under it: the series color.
       assert line.stroke == Theme.resolve(Theme.default(), {:series, 1}, :literal)
     end
 
@@ -110,7 +110,7 @@ defmodule Visualize.Chart.DefaultsTest do
       assert mark_style(elements, "mark-rect", :rect).stroke_width == 5
     end
 
-    test "a default paint is the colour of every mark that names none; :none turns it off" do
+    test "a default paint is the color of every mark that names none; :none turns it off" do
       elements =
         drawn(design(%{defaults: %{stroke: "#123456", rect: %{stroke: :none, fill: "#abcdef"}}}))
 

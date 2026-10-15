@@ -3,7 +3,7 @@ defmodule Visualize.Chart.Migration.FilledLines do
   # The 2 -> 3 step's second half (spec/14 §5.6, §9, #659, D-172): a version 2 line whose
   # style gave a fill drew the area under it, and a version 3 line draws no fill. So each
   # such line gets an `:area` mark just before it, with its data, frame, scales, channels and
-  # that fill, and every mark of the frame the insertion moves keeps the series colour its
+  # that fill, and every mark of the frame the insertion moves keeps the series color its
   # position gave it. The design's styles are already in their parts (`canonical/1` ran
   # first); a line's style is read by the walk that never raises, so a design the validator
   # will refuse — a cycle, a variable — is rewritten no further and refused as it is.
@@ -69,7 +69,7 @@ defmodule Visualize.Chart.Migration.FilledLines do
   end
 
   # A mark whose style gives no paint draws `{:series, i}` for its position (spec/14
-  # §3.3): moved, it is given that colour, laid last in its stack.
+  # §3.3): moved, it is given that color, laid last in its stack.
   defp pinned(mark, _styles, old, old), do: mark
 
   defp pinned(%{type: type} = mark, styles, old, _new) when type != :tiles do

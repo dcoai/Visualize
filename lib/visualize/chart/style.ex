@@ -7,7 +7,7 @@ defmodule Visualize.Chart.Style do
   fourteen element keys, every theme slot resolved through `Visualize.Theme.resolve/3` —
   a CSS custom-property reference in `:css`, the literal a canvas needs in `:literal` —
   a dash-array list joined, a literal passed through. A `{:field, f}` survives it, and
-  `bind/4` then reads it from a datum, a colour key's reading through the frame's `color`
+  `bind/4` then reads it from a datum, a color key's reading through the frame's `color`
   scale when the frame declares one. The frame's furniture and the marks share this
   resolver.
 
@@ -38,7 +38,7 @@ defmodule Visualize.Chart.Style do
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme, Units}
 
-  @colour_keys [:fill, :stroke, :effect_color]
+  @color_keys [:fill, :stroke, :effect_color]
   @size_keys [:stroke_width, :opacity, :fill_opacity, :stroke_opacity, :font_size, :symbol_size]
   @font_keys [:font_family]
   @unit_keys [:stroke_width, :font_size, :effect_radius]
@@ -98,9 +98,9 @@ defmodule Visualize.Chart.Style do
   @doc """
   The map of `resolve/3` with every `{:field, f}` read from the datum (spec/14 §3.4).
 
-  A colour key's reading passes through the frame's `color` scale when the frame
+  A color key's reading passes through the frame's `color` scale when the frame
   declares one — a category outside its domain is the scale's `unknown` — and is
-  resolved as a theme slot when it is one. A colour is never dropped: a `nil` reading,
+  resolved as a theme slot when it is one. A color is never dropped: a `nil` reading,
   or a scale that yields `nil`, is `:none`, the explicit "no paint" SVG and canvas agree
   on, where an absent fill is black on one and nothing on the other (D-122). Any other
   key's `nil` reading drops the key.
@@ -113,22 +113,22 @@ defmodule Visualize.Chart.Style do
     end)
   end
 
-  defp put_reading(acc, key, nil, _frame, _mode) when key in @colour_keys,
+  defp put_reading(acc, key, nil, _frame, _mode) when key in @color_keys,
     do: Map.put(acc, key, :none)
 
   defp put_reading(acc, _key, nil, _frame, _mode), do: acc
 
-  defp put_reading(acc, key, {:paint, _} = paint, _frame, _mode) when key in @colour_keys,
+  defp put_reading(acc, key, {:paint, _} = paint, _frame, _mode) when key in @color_keys,
     do: Map.put(acc, key, paint)
 
-  defp put_reading(acc, key, reading, frame, mode) when key in @colour_keys do
+  defp put_reading(acc, key, reading, frame, mode) when key in @color_keys do
     case Map.get(frame.scales, :color) do
       nil -> Map.put(acc, key, color(reading, frame.theme, mode))
-      scale -> put_colour(acc, key, Scale.apply(scale, reading), frame.theme, mode)
+      scale -> put_color(acc, key, Scale.apply(scale, reading), frame.theme, mode)
     end
   end
 
-  # A dash bound to a field is the role's dash when the colour scale maps the reading to a
+  # A dash bound to a field is the role's dash when the color scale maps the reading to a
   # role (spec/14 §21.7), solid — no key — for a role without one.
   defp put_reading(acc, :stroke_dasharray, reading, frame, mode) do
     case role(frame, reading) do
@@ -155,14 +155,14 @@ defmodule Visualize.Chart.Style do
         scale -> Scale.apply(scale, reading)
       end
 
-    name = colour_name(mapped)
+    name = color_name(mapped)
     if name in Theme.role_names(), do: name
   end
 
-  defp put_colour(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
+  defp put_color(acc, key, nil, _theme, _mode), do: Map.put(acc, key, :none)
 
-  defp put_colour(acc, key, colour, theme, mode),
-    do: Map.put(acc, key, color(colour, theme, mode))
+  defp put_color(acc, key, color, theme, mode),
+    do: Map.put(acc, key, color(color, theme, mode))
 
   @doc false
   # The built-in style nodes of spec/14 §3.3, as an author would declare them: the theme's
@@ -403,12 +403,12 @@ defmodule Visualize.Chart.Style do
       do: sized(size, theme)
 
   # A paint is the frame's to resolve, once it has its defs (spec/14 §3.2).
-  def value(key, {:paint, _name} = paint, _theme, _mode) when key in @colour_keys, do: paint
+  def value(key, {:paint, _name} = paint, _theme, _mode) when key in @color_keys, do: paint
   # The contrast ink with nothing under the text: the background's, a literal in both modes
   # (§3.2, D-123). A mark's inline label resolves it against its element instead (§5.5).
-  def value(key, :contrast, theme, _mode) when key in @colour_keys, do: Theme.ink(theme, nil)
+  def value(key, :contrast, theme, _mode) when key in @color_keys, do: Theme.ink(theme, nil)
 
-  def value(key, {:contrast, :under}, theme, _mode) when key in @colour_keys,
+  def value(key, {:contrast, :under}, theme, _mode) when key in @color_keys,
     do: Theme.ink(theme, nil)
 
   # A transition is the list of the properties it moves (§3.10, D-176).
@@ -418,7 +418,7 @@ defmodule Visualize.Chart.Style do
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500
-  def value(key, value, theme, mode) when key in @colour_keys, do: slot_or(value, theme, mode)
+  def value(key, value, theme, mode) when key in @color_keys, do: slot_or(value, theme, mode)
   def value(key, value, theme, mode) when key in @size_keys, do: slot_or(value, theme, mode)
   def value(key, value, theme, mode) when key in @font_keys, do: slot_or(value, theme, mode)
   def value(_key, value, _theme, _mode), do: value
@@ -428,12 +428,12 @@ defmodule Visualize.Chart.Style do
   end
 
   @doc false
-  # A colour a scale yields, resolved when it is a theme slot (spec/14 §4.3).
+  # A color a scale yields, resolved when it is a theme slot (spec/14 §4.3).
   @spec color(term(), Theme.t(), Theme.mode()) :: term()
   def color(value, theme, mode), do: slot_or(value, theme, mode)
 
   @doc false
-  # Whether a value is a colour an element can be painted with: a string, `:none`, a typed
+  # Whether a value is a color an element can be painted with: a string, `:none`, a typed
   # color (spec/08 §1.9), or a bare name as a scale or a component may still give one.
   @spec color?(term()) :: boolean()
   def color?(value) when is_binary(value) or value == :none, do: true
@@ -442,17 +442,17 @@ defmodule Visualize.Chart.Style do
   def color?(value), do: is_atom(value) and value not in [nil, true, false]
 
   @doc false
-  # The name a colour reads from the theme's table, when it is one name: `:bad` for
+  # The name a color reads from the theme's table, when it is one name: `:bad` for
   # `{:color, :bad}` and for a bare `:bad`; `nil` for anything else.
-  @spec colour_name(term()) :: atom() | nil
-  def colour_name({:color, name}) when is_atom(name), do: name
-  def colour_name(name) when is_atom(name) and name not in [nil, true, false, :none], do: name
-  def colour_name(_other), do: nil
+  @spec color_name(term()) :: atom() | nil
+  def color_name({:color, name}) when is_atom(name), do: name
+  def color_name(name) when is_atom(name) and name not in [nil, true, false, :none], do: name
+  def color_name(_other), do: nil
 
   defp slot_or(:none, _theme, _mode), do: :none
   # A typed color (spec/08 §1.9, D-173), a name or a transform, through its one door.
-  defp slot_or({:color, _} = colour, theme, mode),
-    do: Visualize.Color.resolve(colour, theme, mode)
+  defp slot_or({:color, _} = color, theme, mode),
+    do: Visualize.Color.resolve(color, theme, mode)
 
   defp slot_or({:contrast, :under}, theme, _mode), do: Theme.ink(theme, nil)
 

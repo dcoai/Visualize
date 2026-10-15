@@ -2,7 +2,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Events.Variables do
     @moduledoc false
     # Variables as chips (spec/14 §19.9, §19.10): found, expanded, bound to a field, a root
-    # or a site, unbound, created, promoted from a value and defaulted; and a colour patch
+    # or a site, unbound, created, promoted from a value and defaulted; and a color patch
     # dropped on a well.
     #
     # Split from `Visualize.Chart.Builder` by area (#568); compiled only with
@@ -112,20 +112,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A patch dropped on a well writes that well's key, selected or not (spec/14 §19.10): a
     # word is a slot, a `#rrggbb` a literal, each through the edit the chooser would make;
-    # the form the well sits in says which edit. A key that is not a colour refuses by name.
-    def handle_event("drop_color", %{"field" => field, "color" => colour} = params, socket) do
+    # the form the well sits in says which edit. A key that is not a color refuses by name.
+    def handle_event("drop_color", %{"field" => field, "color" => color} = params, socket) do
       socket = aimed(socket, params)
       edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
       kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
 
-      # A part's colour by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
+      # A part's color by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
       case Editor.locate(kind, field) do
         %{spec: %{type: :color}} ->
-          control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
-          Builder.handle_event(edit, %{"_target" => [control], control => colour}, socket)
+          control = if String.starts_with?(color, "#"), do: field, else: field <> ".slot"
+          Builder.handle_event(edit, %{"_target" => [control], control => color}, socket)
 
         _other ->
-          {:noreply, assign(socket, :notice, "#{field} is not a colour")}
+          {:noreply, assign(socket, :notice, "#{field} is not a color")}
       end
     end
 

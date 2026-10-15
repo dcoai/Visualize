@@ -1,4 +1,4 @@
-defmodule Visualize.Chart.Builder.ColourTest do
+defmodule Visualize.Chart.Builder.ColorTest do
   @moduledoc """
   The chooser picks a color by name from the theme's table and builds a typed transform as
   a chain, step by step (spec/14 §19.10, D-178 as amended by #683).

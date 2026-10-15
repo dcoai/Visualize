@@ -1,8 +1,8 @@
-defmodule Visualize.Chart.ChordCentreTest do
+defmodule Visualize.Chart.ChordCenterTest do
   @moduledoc """
-  One centre for a chord diagram (spec/14 §5.4.3, #488): a `:chord` step's paths are about
+  One center for a chord diagram (spec/14 §5.4.3, #488): a `:chord` step's paths are about
   the point an `:arc` mark is about — the plot's middle, or the origin of a polar frame's
-  centred group — and its `size` sets the radius only. So the ribbons' ends lie on the
+  centered group — and its `size` sets the radius only. So the ribbons' ends lie on the
   ring's inner edge at their group's angles whether the step is sized or not.
   """
   use ExUnit.Case, async: true
@@ -23,7 +23,7 @@ defmodule Visualize.Chart.ChordCentreTest do
              ],
              do: %{from: from, to: to, value: value}
   @sources %{flows: @flows}
-  # A plot that is not square, so a centre on the wrong axis shows.
+  # A plot that is not square, so a center on the wrong axis shows.
   @size {500, 400}
 
   # The ribbons and the ring of one design; `step` is the ribbons' extra options.
@@ -52,7 +52,7 @@ defmodule Visualize.Chart.ChordCentreTest do
   end
 
   # The point an `:arc` mark's group is about, in plot coordinates.
-  defp ring_centre(frame, ring) do
+  defp ring_center(frame, ring) do
     case Mark.generate(frame, ring, sources: @sources).transform do
       nil -> {0, 0}
       %IR.Transform{operations: [{:translate, x, y}]} -> {x, y}
@@ -73,25 +73,25 @@ defmodule Visualize.Chart.ChordCentreTest do
   defp controls(%IR.Path{commands: commands}),
     do: for({:Q, x, y, _, _} <- commands, do: {x, y})
 
-  # The angle of a point about the centre, clockwise from 12 o'clock in [0, 2π).
+  # The angle of a point about the center, clockwise from 12 o'clock in [0, 2π).
   defp angle({x, y}, {cx, cy}) do
     a = :math.atan2(x - cx, -(y - cy))
     if a < 0, do: a + 2 * :math.pi(), else: a
   end
 
   defp assert_on_ring(frame, ribbons, ring, inner) do
-    centre = ring_centre(frame, ring)
+    center = ring_center(frame, ring)
     groups = Map.new(Mark.rows(frame, ring, @sources), &{&1.id, &1})
     rows = Mark.rows(frame, ribbons, @sources)
     assert rows != []
 
     for %{source: source, target: target, path: path} <- rows do
       for {x, y} = point <- ends(path) do
-        {cx, cy} = centre
+        {cx, cy} = center
         assert_in_delta :math.sqrt((x - cx) ** 2 + (y - cy) ** 2), inner, 1.0e-6
 
         # Each end lies within the arc of the ribbon's own source or target group.
-        a = angle(point, centre)
+        a = angle(point, center)
 
         assert Enum.any?([groups[source], groups[target]], fn g ->
                  a >= g.start_angle - 1.0e-6 and a <= g.end_angle + 1.0e-6
@@ -99,32 +99,32 @@ defmodule Visualize.Chart.ChordCentreTest do
       end
 
       for {x, y} <- controls(path) do
-        {cx, cy} = centre
+        {cx, cy} = center
         assert_in_delta x, cx, 1.0e-6
         assert_in_delta y, cy, 1.0e-6
       end
     end
 
-    centre
+    center
   end
 
   describe "a cartesian frame" do
     @zero %{top: 0, right: 0, bottom: 0, left: 0}
 
-    test "with no size the ribbons meet the ring at 0.9 of the plot's radius, at its centre" do
+    test "with no size the ribbons meet the ring at 0.9 of the plot's radius, at its center" do
       # The plot is 500 × 400, so R is 200 and the ring's inner edge 180.
       {frame, ribbons, ring} = design(cartesian(margin: @zero), [], 180.0)
       assert assert_on_ring(frame, ribbons, ring, 180.0) == {250.0, 200.0}
     end
 
-    test "with a size the ribbons keep the plot's centre and take only their radius" do
+    test "with a size the ribbons keep the plot's center and take only their radius" do
       # A 300 × 340 step: R is 150, the inner edge 135 — and still about (250, 200),
       # never the size's own middle (150, 170).
       {frame, ribbons, ring} = design(cartesian(margin: @zero), [size: [300, 340]], 135.0)
       assert assert_on_ring(frame, ribbons, ring, 135.0) == {250.0, 200.0}
     end
 
-    test "with margins the centre is the plot's, as the arc mark's is" do
+    test "with margins the center is the plot's, as the arc mark's is" do
       margin = %{top: 20, right: 40, bottom: 60, left: 10}
       {frame, ribbons, ring} = design(cartesian(margin: margin), [size: [200, 200]], 90.0)
       # The plot is 450 × 320.
@@ -132,14 +132,14 @@ defmodule Visualize.Chart.ChordCentreTest do
     end
   end
 
-  test "in a polar frame the ribbons are about the centred group's origin, as the arc is" do
+  test "in a polar frame the ribbons are about the centered group's origin, as the arc is" do
     {frame, ribbons, ring} = design(polar(), [size: [300, 300]], 135.0)
     assert Mark.generate(frame, ring, sources: @sources).transform == nil
     assert assert_on_ring(frame, ribbons, ring, 135.0) == {0, 0}
   end
 
   describe "the step alone" do
-    test "is about centre:, with size setting the radius only" do
+    test "is about center:, with size setting the radius only" do
       [%{path: path} | _] =
         Transform.apply(
           [%{op: :chord, fields: [:from, :to], field: :value, output: :chords, size: [100, 60]}],
@@ -153,7 +153,7 @@ defmodule Visualize.Chart.ChordCentreTest do
       assert_in_delta :math.sqrt((x - 250) ** 2 + (y - 200) ** 2), 27.0, 1.0e-6
     end
 
-    test "defaults its centre to the middle of size:" do
+    test "defaults its center to the middle of size:" do
       [%{path: path} | _] =
         Transform.apply(
           [%{op: :chord, fields: [:from, :to], field: :value, output: :chords}],

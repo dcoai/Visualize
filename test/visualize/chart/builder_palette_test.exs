@@ -86,18 +86,18 @@ defmodule Visualize.Chart.BuilderPaletteTest do
   end
 
   describe "previews" do
-    test "an entry is a sample shape, a stroke and a label in the theme's literal colours" do
+    test "an entry is a sample shape, a stroke and a label in the theme's literal colors" do
       theme = Theme.default()
       html = panel(%{})
       warning = row(html, "warning")
-      colour = Theme.resolve(theme, :warning, :literal)
+      color = Theme.resolve(theme, :warning, :literal)
 
       assert warning =~
-               ~s(<rect x="2" y="4" width="20" height="14" rx="2" fill="#{colour}" stroke="#{colour}")
+               ~s(<rect x="2" y="4" width="20" height="14" rx="2" fill="#{color}" stroke="#{color}")
 
-      assert warning =~ ~s(<line x1="26" y1="11" x2="46" y2="11" stroke="#{colour}")
+      assert warning =~ ~s(<line x1="26" y1="11" x2="46" y2="11" stroke="#{color}")
       assert warning =~ ~s(stroke-dasharray="#{Theme.style(theme, :warning).stroke.dash}")
-      assert warning =~ ~s(<text x="50" y="16" fill="#{colour}")
+      assert warning =~ ~s(<text x="50" y="16" fill="#{color}")
       refute warning =~ "var(--vis-"
     end
 
@@ -147,7 +147,7 @@ defmodule Visualize.Chart.BuilderPaletteTest do
       assert {"stroke-width", "2"} in preview.shape
     end
 
-    test "the palette is the design's theme: dark draws on dark, with dark's colours" do
+    test "the palette is the design's theme: dark draws on dark, with dark's colors" do
       dark = Theme.dark()
       html = panel(%{theme: :dark}, %{theme: dark})
 

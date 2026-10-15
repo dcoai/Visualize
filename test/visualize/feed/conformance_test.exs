@@ -118,7 +118,7 @@ defmodule Visualize.Feed.ConformanceTest do
     ticks_as_time: {:deliveries, :window_value},
     no_window_field: {:describe, :no_window_field},
     stamp_as_number: {:deliveries, :not_an_instant},
-    misspelt_unit: {:describe, :measure},
+    misspelled_unit: {:describe, :measure},
     no_identity: {:deliveries, :no_identity},
     keeps_pushing: {:unsubscribe, :pushed_after_unsubscribe}
   ]
@@ -143,7 +143,7 @@ defmodule Visualize.Feed.ConformanceTest do
 
     test "a measure the vocabulary refuses is its own finding, naming the field (D-157)" do
       assert [{:describe, {:measure, :v, {:unit, "mss", {:unknown_atom, "mss"}}}} = finding] =
-               Conformance.check(:describe, Broken.new(:misspelt_unit), @opts)
+               Conformance.check(:describe, Broken.new(:misspelled_unit), @opts)
 
       assert Conformance.format(finding) =~ "field :v"
       assert Conformance.format(finding) =~ ~s("mss" is not a UCUM unit)

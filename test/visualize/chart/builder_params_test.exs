@@ -35,7 +35,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       assert names == ~w(accent ticks unit)
 
       assert names ==
-               Enum.map(Chart.free_vars(BuilderFixture.parameterised()), &to_string(&1.name))
+               Enum.map(Chart.free_vars(BuilderFixture.parameterized()), &to_string(&1.name))
 
       assert html =~ ~s(<span class="vis-builder-param-uses">frames.main.axes[0].ticks</span>)
     end
@@ -183,7 +183,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
       assert {:noreply, %{assigns: %{notice: "design: " <> _}}} = broken
       assert {:noreply, %{assigns: %{notice: "version: is required"}}} = invalid
-      assert BuilderFixture.layers(elem(broken, 1)) == BuilderFixture.parameterised()
+      assert BuilderFixture.layers(elem(broken, 1)) == BuilderFixture.parameterized()
     end
 
     test "without Jason the panel says so rather than raising" do
@@ -202,7 +202,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       ]
 
       html =
-        render_component(&Params.panel/1, %{layers: BuilderFixture.parameterised(), sites: sites})
+        render_component(&Params.panel/1, %{layers: BuilderFixture.parameterized(), sites: sites})
 
       assert html =~
                ~s(<form id="vis-builder-params" class="vis-builder-params" phx-change="set_var")
@@ -223,7 +223,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       html =
         render_component(&Params.panel/1, %{
           id: "host-params",
-          layers: BuilderFixture.parameterised(),
+          layers: BuilderFixture.parameterized(),
           sites: sites
         })
 
@@ -247,7 +247,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
   defp socket(opts \\ []) do
     BuilderFixture.socket(
-      BuilderFixture.parameterised(),
+      BuilderFixture.parameterized(),
       Keyword.merge([on_save: :visualize_chart_saved, vars: %{}, theme: nil], opts)
     )
   end

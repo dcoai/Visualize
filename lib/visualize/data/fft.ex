@@ -82,7 +82,7 @@ defmodule Visualize.Data.FFT do
     * `:samples` - the window length, a power of two; raises `ArgumentError` otherwise
     * `:window` - one of `windows/0` (default `:hann`)
     * `:detrend` - subtract the window's mean before transforming, so an offset does not
-      leak from the DC line into its neighbours (default `false`)
+      leak from the DC line into its neighbors (default `false`)
 
       iex> every = 1 / 64
       iex> values = for i <- 0..63, do: :math.sin(2 * :math.pi() * 8 * i * every)

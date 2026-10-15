@@ -219,7 +219,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc false
-    # Every realised frame as `name x y w h top right bottom left` in pixels, frames joined
+    # Every realized frame as `name x y w h top right bottom left` in pixels, frames joined
     # by `;`, in drawing order — `z`, then name, the last on top (spec/14 §4.7, spec/10
     # §16.2).
     @spec frames_attribute(%{atom() => Frame.t()}) :: String.t()

@@ -4,7 +4,7 @@ defmodule Visualize.Geo.Projection.Cylindrical do
 
   Raw projection maths, reached through `Visualize.Geo.Projection.project/3` and
   `invert/3`. `project/4` takes longitude and latitude in degrees, already rotated and
-  centred, and returns unit-scale planar coordinates; `invert/4` is its inverse. Scale,
+  centered, and returns unit-scale planar coordinates; `invert/4` is its inverse. Scale,
   translation and rotation are applied by the parent module.
   """
 

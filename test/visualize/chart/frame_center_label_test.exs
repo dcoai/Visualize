@@ -1,6 +1,6 @@
-defmodule Visualize.Chart.FrameCentreLabelTest do
+defmodule Visualize.Chart.FrameCenterLabelTest do
   @moduledoc """
-  #489: `{:frame, :center}` anchors a frame label at the plot's centre — the polar origin
+  #489: `{:frame, :center}` anchors a frame label at the plot's center — the polar origin
   in a `:polar` frame, whatever the `r` scale's range, and the plot's middle in a cartesian
   one — anchored at its middle, with no baseline and no outward direction of its own
   (spec/14 §6.3). The validator accepts it and the JSON form carries it (§10, §11).
@@ -32,7 +32,7 @@ defmodule Visualize.Chart.FrameCentreLabelTest do
     |> Enum.filter(&(&1.style[:class] == "label"))
   end
 
-  # The polar group's translate: the origin a centred mark is drawn about.
+  # The polar group's translate: the origin a centered mark is drawn about.
   defp polar_origin(design) do
     design
     |> Chart.from_map!()
@@ -46,7 +46,7 @@ defmodule Visualize.Chart.FrameCentreLabelTest do
   end
 
   # The plot is 260 × 140 inside the margin.
-  @plot_centre {130.0, 70.0}
+  @plot_center {130.0, 70.0}
 
   describe "in a :polar frame" do
     for range <- [[0, 60], [50, 60], [20, 30]] do
@@ -59,8 +59,8 @@ defmodule Visualize.Chart.FrameCentreLabelTest do
         d = design(:polar, scales, [%{anchor: {:frame, :center}, text: "mid"}])
         [text] = texts(d)
 
-        assert {text.attrs.x, text.attrs.y} == @plot_centre
-        assert polar_origin(d) == @plot_centre
+        assert {text.attrs.x, text.attrs.y} == @plot_center
+        assert polar_origin(d) == @plot_center
         assert text.style.text_anchor == :middle
         # No baseline of its own: the point is the text's baseline.
         refute Map.has_key?(text.attrs, :dy)
@@ -73,18 +73,18 @@ defmodule Visualize.Chart.FrameCentreLabelTest do
         r: %{kind: :linear, domain: [0, 100], range: [50, 60]}
       }
 
-      [data, centre] =
+      [data, center] =
         texts(
           design(:polar, scales, [
             %{anchor: {:data, [0, 0]}, text: "data"},
-            %{anchor: {:frame, :center}, text: "centre"}
+            %{anchor: {:frame, :center}, text: "center"}
           ])
         )
 
-      {cx, cy} = @plot_centre
+      {cx, cy} = @plot_center
       # Radius zero maps to 50 up the first spoke.
       assert {data.attrs.x, data.attrs.y} == {cx, cy - 50}
-      assert {centre.attrs.x, centre.attrs.y} == {cx, cy}
+      assert {center.attrs.x, center.attrs.y} == {cx, cy}
     end
   end
 

@@ -18,7 +18,7 @@ defmodule Visualize.Layout.Force.SimulationTest do
     state
   end
 
-  # A timer this process armed is still pending exactly when cancelling it returns a time.
+  # A timer this process armed is still pending exactly when canceling it returns a time.
   defp armed?(nil), do: false
   defp armed?(ref), do: is_integer(Process.read_timer(ref))
 

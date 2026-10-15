@@ -71,7 +71,7 @@ defmodule Visualize.Chart.WarmForceTest do
     compiled
   end
 
-  defp realised(design) do
+  defp realized(design) do
     {:ok, %Chart{} = chart} = Chart.from_map(design)
     Frame.new(chart, sources: @sources, size: {600, 400})
   end
@@ -212,7 +212,7 @@ defmodule Visualize.Chart.WarmForceTest do
 
     assert Map.has_key?(after_growth, "M")
     assert moved(before, after_growth) < @bound
-    # The new node starts near its neighbour, not across the plot.
+    # The new node starts near its neighbor, not across the plot.
     {ax, ay} = after_growth["A"]
     {mx, my} = after_growth["M"]
     assert distance(mx - ax, my - ay) < 150
@@ -246,8 +246,8 @@ defmodule Visualize.Chart.WarmForceTest do
     assert Compiled.carry(warm, other).forces == other.forces
   end
 
-  test "a realised frame lays out each graph once, and the two marks read that one layout" do
-    frame = realised(design(100))
+  test "a realized frame lays out each graph once, and the two marks read that one layout" do
+    frame = realized(design(100))
     assert map_size(frame.forces) == 1
 
     # A third mark over a different step is a second run.
@@ -267,10 +267,10 @@ defmodule Visualize.Chart.WarmForceTest do
         })
       ])
 
-    assert map_size(realised(three).forces) == 2
+    assert map_size(realized(three).forces) == 2
   end
 
-  test "a node source's x and y seed the cold layout, as d3 honours a given position" do
+  test "a node source's x and y seed the cold layout, as d3 honors a given position" do
     seeded = Enum.with_index(@nodes, fn node, i -> Map.merge(node, %{x: 50 * i, y: 20 * i}) end)
     sources = %{@sources | nodes: seeded}
 

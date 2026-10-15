@@ -7,7 +7,7 @@ defmodule Visualize.Data.Schema do
   `status`, `polarity`, `target`, `continuity`, `window`, `metric_kind`, `bounds` and
   `identity` as the feed knows. It says what
   the numbers *are*, whoever draws them, and never how they are drawn: a description has
-  no colour key, since colour is the theme's to choose from the meaning (#533). A `:time`
+  no color key, since color is the theme's to choose from the meaning (#533). A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
   `window: true`, the field its windows are over (D-154). A numeric field may say how it
   was measured, `metric_kind: :gauge | :counter | :rate`, which refines what its
@@ -113,7 +113,7 @@ defmodule Visualize.Data.Schema do
   def attributes, do: @attributes
 
   @doc false
-  # The three polarities, which a colour scale over a ramp reads too (spec/14 §4.3, D-143).
+  # The three polarities, which a color scale over a ramp reads too (spec/14 §4.3, D-143).
   @spec polarities() :: [atom(), ...]
   def polarities, do: @polarities
 
@@ -247,7 +247,7 @@ defmodule Visualize.Data.Schema do
   `schema`, `other` has a field of the same name compared as strings, of the same type,
   and for a `:number` field a unit that converts into `schema`'s — two absent units
   agree, one absent facing a present one does not. `{:error, faults}` lists every fault,
-  `field` spelt as `schema` spells it, ordered by its name as a string. Labels and facts
+  `field` spelled as `schema` spells it, ordered by its name as a string. Labels and facts
   are not compared, and `other`'s extra fields are not faults — except identity (D-167):
   a field one schema declares `identity: true` and the other does not is `{:identity, a,
   b}`, `a` and `b` whether each declares it, even a field only `other` has, since
@@ -567,8 +567,8 @@ defmodule Visualize.Data.Schema do
   end
 
   defp words({:color_key, key}) do
-    "#{inspect(key)} names a colour, which a schema never does: describe the meaning " <>
-      "(status, order, polarity, quantity) and the theme chooses the colour"
+    "#{inspect(key)} names a color, which a schema never does: describe the meaning " <>
+      "(status, order, polarity, quantity) and the theme chooses the color"
   end
 
   defp words({:type, :schema}), do: "must be a map from field names to descriptions"

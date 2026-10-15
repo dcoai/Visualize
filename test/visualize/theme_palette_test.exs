@@ -19,8 +19,8 @@ defmodule Visualize.ThemePaletteTest do
   @modifiers [:bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
 
   # A palette entry holds its colors typed (spec/08 §7.7, #664): a name is `{:color, name}`.
-  defp solid(colour) when is_atom(colour), do: %{type: :solid, color: {:color, colour}}
-  defp solid(colour), do: %{type: :solid, color: colour}
+  defp solid(color) when is_atom(color), do: %{type: :solid, color: {:color, color}}
+  defp solid(color), do: %{type: :solid, color: color}
 
   defp refusal(fields) do
     assert_raise(ArgumentError, fn -> Theme.new([name: :house] ++ fields) end).message
@@ -75,7 +75,7 @@ defmodule Visualize.ThemePaletteTest do
     test "the default :muted is the board's dim and :selected is heavier only (#638)" do
       for theme <- [Theme.default(), Theme.dark(), Theme.color_safe(), Theme.print()] do
         assert Theme.style(theme, :muted) == %{opacity: 0.25}
-        # No colour and no outline of its own, so a stroked mark keeps its paint.
+        # No color and no outline of its own, so a stroked mark keeps its paint.
         assert Theme.style(theme, :selected) == %{stroke: %{width: 2}}
       end
     end
@@ -116,7 +116,7 @@ defmodule Visualize.ThemePaletteTest do
       for theme <- @themes, role <- @roles do
         entry = Theme.style(theme, role)
         cue = Theme.cue(role)
-        # The print theme hatches four role fills, in the role's colour (#673).
+        # The print theme hatches four role fills, in the role's color (#673).
         hatched? = theme.name == :print and role != :neutral
         fill = if hatched?, do: Map.take(entry.fill, [:type, :color]), else: entry.fill
         expected = if hatched?, do: %{type: :hatch, color: {:color, role}}, else: solid(role)
@@ -128,7 +128,7 @@ defmodule Visualize.ThemePaletteTest do
       refute Map.has_key?(Theme.style(Theme.default(), :good).stroke, :dash)
     end
 
-    test "{:style, i} cycles over the style series as {:series, i} cycles over the colours" do
+    test "{:style, i} cycles over the style series as {:series, i} cycles over the colors" do
       theme = Theme.default()
       assert Theme.style(theme, {:style, 1}) == Theme.style(theme, :style_1)
       assert Theme.style(theme, {:style, 11}) == Theme.style(theme, :style_1)
@@ -248,7 +248,7 @@ defmodule Visualize.ThemePaletteTest do
                  "theme's color table"
     end
 
-    test "a state style changes a non-hue key, never only a colour" do
+    test "a state style changes a non-hue key, never only a color" do
       message = refusal(styles: %{hover: %{stroke: :bad}})
       assert message =~ "theme :house: style :hover breaks its contract"
       assert message =~ "a state style must read without hue"

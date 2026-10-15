@@ -46,7 +46,7 @@ defmodule Visualize.UnitsTest do
     refute Units.unit?(12)
   end
 
-  test "the world lengths are the international ones, in metres" do
+  test "the world lengths are the international ones, in meters" do
     assert Units.length_units() == [:mm, :cm, :m, :km, :in, :ft, :yd, :mi]
     assert Units.to_meters(1, :in) == 0.0254
     assert Units.to_meters(1, :mi) == 1609.344

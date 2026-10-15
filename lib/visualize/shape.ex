@@ -139,7 +139,7 @@ defmodule Visualize.Shape do
   def scale(%Rose{} = shape, scale), do: Rose.scale(shape, scale)
   def scale(%Needle{} = shape, scale), do: Needle.scale(shape, scale)
 
-  @doc "Sets the sector-centre accessor (for roses), in the scale's domain units"
+  @doc "Sets the sector-center accessor (for roses), in the scale's domain units"
   def angle(%Rose{} = shape, accessor), do: Rose.angle(shape, accessor)
   def angle(%Needle{} = shape, accessor), do: Needle.angle(shape, accessor)
 

@@ -106,7 +106,7 @@ defmodule Visualize.Data.TableTest do
     test "a Table.Reader source read by columns yields the same rows as by rows" do
       # `table` reads a plain map by columns and Explorer by rows; both come out identical.
       columns = columns(@rows)
-      assert Table.rows(columns) == Table.rows(DataFrame.new(columns)) |> Enum.map(&atomise/1)
+      assert Table.rows(columns) == Table.rows(DataFrame.new(columns)) |> Enum.map(&atomize/1)
     end
   end
 
@@ -243,5 +243,5 @@ defmodule Visualize.Data.TableTest do
     end
   end
 
-  defp atomise(row), do: Map.new(row, fn {k, v} -> {String.to_atom(k), v} end)
+  defp atomize(row), do: Map.new(row, fn {k, v} -> {String.to_atom(k), v} end)
 end

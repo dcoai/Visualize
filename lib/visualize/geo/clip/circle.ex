@@ -3,10 +3,10 @@ defmodule Visualize.Geo.Clip.Circle do
   # d3-geo's src/clip/circle.js (v3.1.1), with the `circleStream` of src/circle.js it
   # interpolates by: the clip of every projection with a `clip_angle` (spec/07 §2.2.1). A
   # line is cut where it crosses the small circle of that angular radius about the
-  # projection's centre — the horizon of the orthographic — and a polygon is closed along
+  # projection's center — the horizon of the orthographic — and a polygon is closed along
   # the circle, every 2°, as d3 closes it.
   #
-  # Points are `{lon, lat}` in degrees in the rotated and centred frame (spec/07 §1.5), as
+  # Points are `{lon, lat}` in degrees in the rotated and centered frame (spec/07 §1.5), as
   # `Visualize.Geo.Clip` says; the spherical arithmetic is d3's, in radians, and an
   # intersection or an interpolated point is d3's radians turned into degrees. A vertex the
   # clip passes through is the float it was given.
@@ -277,7 +277,7 @@ defmodule Visualize.Geo.Clip.Circle do
 
     case bounds do
       {t0, t1} -> walk(t0, t1, step, direction, cos_radius, sin_radius, [])
-      # A point at the circle's centre has no angle: d3 carries NaN and draws nothing.
+      # A point at the circle's center has no angle: d3 carries NaN and draws nothing.
       nil -> []
     end
   end

@@ -1,6 +1,6 @@
 defmodule Visualize.Chart.FrameTest do
   @moduledoc """
-  The realised frame of spec/14 §4 and D-60: inference of `:auto` domains from the whole
+  The realized frame of spec/14 §4 and D-60: inference of `:auto` domains from the whole
   bound column by kind (numeric, time, categorical, collapsed, unbound), the precedence
   of an explicit domain, a half-fixed extent and `put_scale/3`, the ranges by name, the
   errors a frame raises, and the byte identity of a frame's furniture with the same
@@ -90,7 +90,7 @@ defmodule Visualize.Chart.FrameTest do
       assert is_binary(Frame.render(frame))
     end
 
-    test "every channel naming the scale contributes, as does a colour field in a style" do
+    test "every channel naming the scale contributes, as does a color field in a style" do
       marks = [
         %{type: :area, data: :primary, channels: %{x: :n, y: :v, y0: 0}},
         %{type: :rule, data: :primary, channels: %{x: 10}, style: :by_k}
@@ -176,7 +176,7 @@ defmodule Visualize.Chart.FrameTest do
     defp polar_svg(scales, axes),
       do: polar(scales, axes) |> Frame.render(sources: %{primary: @rows}, size: @size)
 
-    test "start and sweep realise the angle range in radians; a list range wins; a full turn is the default" do
+    test "start and sweep realize the angle range in radians; a list range wins; a full turn is the default" do
       quarter = %{
         angle: %{kind: :linear, domain: [0, 100], start: -90, sweep: 90},
         r: %{kind: :linear}
@@ -254,10 +254,10 @@ defmodule Visualize.Chart.FrameTest do
       [a0, a1] = band.range
       assert_in_delta a0, -:math.pi() / 6, 1.0e-9
       assert_in_delta a1, 2 * :math.pi() - :math.pi() / 6, 1.0e-9
-      centres = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
-      assert_in_delta hd(centres), 0, 1.0e-9
-      assert_in_delta Enum.at(centres, 1), :math.pi() / 3, 1.0e-9
-      assert_in_delta List.last(centres), 5 * :math.pi() / 3, 1.0e-9
+      centers = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
+      assert_in_delta hd(centers), 0, 1.0e-9
+      assert_in_delta Enum.at(centers, 1), :math.pi() / 3, 1.0e-9
+      assert_in_delta List.last(centers), 5 * :math.pi() / 3, 1.0e-9
 
       half =
         polar(
@@ -266,10 +266,10 @@ defmodule Visualize.Chart.FrameTest do
         )
 
       band = Frame.scale(half, :angle)
-      centres = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
-      assert_in_delta hd(centres), -:math.pi() / 2, 1.0e-9
-      assert_in_delta List.last(centres), :math.pi() / 2, 1.0e-9
-      assert_in_delta Enum.at(centres, 1) - hd(centres), :math.pi() / 5, 1.0e-9
+      centers = for k <- six, do: Scale.apply(band, k) + Scale.Band.bandwidth(band) / 2
+      assert_in_delta hd(centers), -:math.pi() / 2, 1.0e-9
+      assert_in_delta List.last(centers), :math.pi() / 2, 1.0e-9
+      assert_in_delta Enum.at(centers, 1) - hd(centers), :math.pi() / 5, 1.0e-9
 
       # The axis ticks every category at its center: the first straight up at R.
       svg =
@@ -381,7 +381,7 @@ defmodule Visualize.Chart.FrameTest do
   end
 
   describe "ranges by name" do
-    test "position names take the plot area, a discrete colour the theme's series and a sequential one its ramp" do
+    test "position names take the plot area, a discrete color the theme's series and a sequential one its ramp" do
       scales = %{
         x: %{kind: :linear},
         y: %{kind: :linear},
@@ -773,7 +773,7 @@ defmodule Visualize.Chart.FrameTest do
         |> Frame.generate(sources: %{primary: @rows}, size: @size)
 
       group = Enum.find(tree.children, &(&1.style[:class] == "mark mark-circle"))
-      # A labelled mark: its elements' group, then its labels' group beside it (§5.6).
+      # A labeled mark: its elements' group, then its labels' group beside it (§5.6).
       [%{children: [circle | _]}, %{children: [text | _]}] = group.children
       # 4 up for the anchor's inset, 6 more for the margin, hanging below its point.
       assert text.attrs == %{x: circle.attrs.cx, y: circle.attrs.cy - 4 - 6, dy: "0.71em"}
@@ -1236,7 +1236,7 @@ defmodule Visualize.Chart.FrameTest do
         |> Frame.new(sources: %{primary: @rows}, size: @size)
 
       svg = Frame.render(polar, sources: %{primary: @rows}, paths: true)
-      # The ring and the spoke are drawn inside the centred group, the cartesian axis
+      # The ring and the spoke are drawn inside the centered group, the cartesian axis
       # after it — and each keeps the position the design gave it.
       assert nodes(svg) == [
                "frames.main",
@@ -1329,9 +1329,9 @@ defmodule Visualize.Chart.FrameTest do
       end
     end
 
-    test ":right sits 8 past the plot's right edge, centred, reading swatch then label" do
+    test ":right sits 8 past the plot's right edge, centered, reading swatch then label" do
       {[{:translate, x, y}], group} = legend_at(legend_frame(%{position: :right, inside: false}))
-      # Two entries (c0, c1): 32 high, centred on the 100-high plot.
+      # Two entries (c0, c1): 32 high, centered on the 100-high plot.
       assert {x, y} == {208, 34.0}
       [item | _] = group.children
       [swatch, label] = item.children
@@ -1413,7 +1413,7 @@ defmodule Visualize.Chart.FrameTest do
       applied
     end
 
-    test "every frame is realised by name, its plot its own box less its own margins" do
+    test "every frame is realized by name, its plot its own box less its own margins" do
       applied = applied()
 
       assert applied.frames |> Map.keys() |> Enum.sort() == [:history, :now]

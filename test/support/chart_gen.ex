@@ -15,7 +15,7 @@ defmodule Visualize.ChartGen do
   @names [:a, :b, :c]
   @fields [:t, :v, :w, :z, :count, :sha, :x0, :x1, :y0, :y1]
   @scale_names [:x, :y, :color, :angle, :r]
-  @colours ["#3b6fa8", "#d9730d", "steelblue", "rgb(1, 2, 3)"]
+  @colors ["#3b6fa8", "#d9730d", "steelblue", "rgb(1, 2, 3)"]
   @fonts ["Inter, sans-serif", "monospace"]
   @sides [:top, :right, :bottom, :left]
   @positions [:top_left, :top_right, :bottom_left, :bottom_right, :top, :bottom, :left, :right]
@@ -25,7 +25,7 @@ defmodule Visualize.ChartGen do
 
   @doc "A valid design map."
   def design do
-    # A colour channel and its frame's colour scale are drawn independently, so a constant
+    # A color channel and its frame's color scale are drawn independently, so a constant
     # or a typed column can land outside a declared domain — the validator's
     # `{:outside_domain, …}` (spec/14 §10.1, D-122). Such a design is not valid; drop it.
     filter(designs(), &(Domain.faults(&1) == []), 50)
@@ -129,9 +129,9 @@ defmodule Visualize.ChartGen do
     ])
   end
 
-  # A colour (spec/14 §3.2, #664): a colour slot written bare, as a host's code may, or
-  # typed, or a transform of colours, every one canonicalized to its typed form on read.
-  defp colour_slot(theme) do
+  # A color (spec/14 §3.2, #664): a color slot written bare, as a host's code may, or
+  # typed, or a transform of colors, every one canonicalized to its typed form on read.
+  defp color_slot(theme) do
     name = member_of(Theme.color_slots(theme_struct(theme)) ++ [:red, :steelblue])
     unit = float(min: 0.0, max: 1.0)
     typed = map(name, &{:color, &1})
@@ -142,7 +142,7 @@ defmodule Visualize.ChartGen do
       map(integer(1..12), &{:series, &1}),
       map({member_of([:intensity, :alpha, :lighten, :darken, :saturate]), typed, unit}, & &1),
       map(
-        list_of(one_of([typed, member_of(@colours)]), min_length: 1, max_length: 3),
+        list_of(one_of([typed, member_of(@colors)]), min_length: 1, max_length: 3),
         &{:blend, &1}
       ),
       map(typed, &{:contrast, &1})
@@ -176,13 +176,13 @@ defmodule Visualize.ChartGen do
     optional_map(%{series: style, muted: style, axis: style})
   end
 
-  # The paints (spec/14 §2.7): a gradient in the words a person uses, its stops' colours
-  # any colour a style takes but a paint.
+  # The paints (spec/14 §2.7): a gradient in the words a person uses, its stops' colors
+  # any color a style takes but a paint.
   defp defs(theme, vars) do
     stop =
       fixed_map(%{
         offset: float(min: 0.0, max: 1.0),
-        color: with_var([member_of(@colours), colour_slot(theme)], vars)
+        color: with_var([member_of(@colors), color_slot(theme)], vars)
       })
       |> bind(fn stop ->
         optional_map(%{opacity: float(min: 0.0, max: 1.0)}) |> map(&Map.merge(stop, &1))
@@ -208,9 +208,9 @@ defmodule Visualize.ChartGen do
   defp style(theme, vars, defs) do
     paints = if map_size(defs) == 0, do: [], else: [map(member_of(Map.keys(defs)), &{:paint, &1})]
 
-    colour =
+    color =
       with_var(
-        [member_of(@colours), constant(:none), colour_slot(theme), field_ref(@fields)] ++ paints,
+        [member_of(@colors), constant(:none), color_slot(theme), field_ref(@fields)] ++ paints,
         vars
       )
 
@@ -218,8 +218,8 @@ defmodule Visualize.ChartGen do
     font = with_var([member_of(@fonts), slot(theme)], vars)
 
     optional_map(%{
-      fill: colour,
-      stroke: colour,
+      fill: color,
+      stroke: color,
       stroke_width: size,
       stroke_dasharray: one_of([text_string(), list_of(number(), max_length: 3)]),
       stroke_linecap: member_of([:butt, :round, :square]),

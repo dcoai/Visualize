@@ -5,8 +5,8 @@ defmodule Visualize.Feed.Signals do
   The feed's present tick is fixed (`tick:`, moved with `at/2`) or read from a clock
   (`every:` milliseconds per tick). Its schema describes the first field, the tick, as
   its window field — `:number`, since a tick is a count and not an instant, with
-  `window: true` and labelled `"Tick"` (spec/08 §10.1, D-154) — and every other field
-  `:number`, under whatever `describe:` adds. It honours `:window`: a window is ticks,
+  `window: true` and labeled `"Tick"` (spec/08 §10.1, D-154) — and every other field
+  `:number`, under whatever `describe:` adds. It honors `:window`: a window is ticks,
   served up to the present tick, at most `limit:` rows and `capped` beyond. A budget is
   left to visualize, and it does not push.
 

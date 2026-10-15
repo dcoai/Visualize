@@ -74,7 +74,7 @@ defmodule Visualize.Chart.Transform.Geo do
   # -- hexbin -----------------------------------------------------------------------------
 
   # The cells of `Visualize.Layout.Hexbin` over the placed points (spec/14 §5.4.4, #348):
-  # each with its hexagon, or every input row with its cell's centre and count.
+  # each with its hexagon, or every input row with its cell's center and count.
   defp hexbin(node, rows) do
     radius = Map.get(node, :radius, 20)
     placed = points(node, rows)

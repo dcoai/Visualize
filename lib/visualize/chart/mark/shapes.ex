@@ -380,7 +380,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   defp label_text([text], ctx, datum),
     do: [Element.set_style(text, Label.style(ctx, datum))]
 
-  # The stroke keys of the mark's style and its paint — the series' colour with a `series`
+  # The stroke keys of the mark's style and its paint — the series' color with a `series`
   # channel (spec/14 §5.6, D-126) — bound to the datum, replacing the generator's
   # `current_color`.
   defp stroke_style(ctx, datum) do
@@ -531,7 +531,7 @@ defmodule Visualize.Chart.Mark.Shapes do
     end)
   end
 
-  # A symbol type bound to a field is the role's glyph when the colour scale maps the
+  # A symbol type bound to a field is the role's glyph when the color scale maps the
   # reading to a role (spec/14 §21.7), the reading when it is a symbol type, else a circle.
   defp glyph({:field, field}, datum, frame) do
     reading = Table.get(datum, field)

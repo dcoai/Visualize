@@ -44,7 +44,7 @@ defmodule Visualize.Geo.Circle do
     radius = Keyword.get(opts, :radius, 90)
     precision = Keyword.get(opts, :precision, 6)
 
-    # src/circle.js:47–51: the rotation that takes the frame centred on `center` back.
+    # src/circle.js:47–51: the rotation that takes the frame centered on `center` back.
     rotation = rotation(-center_lon * @radians, -center_lat * @radians)
 
     ring =
@@ -100,7 +100,7 @@ defmodule Visualize.Geo.Circle do
   # rotation.js:30–31: `rotationLambda(δλ).invert` is `forwardRotationLambda(-δλ)`.
   defp invert({:lambda, delta_lambda}, lambda, phi), do: shift(lambda + -delta_lambda, phi)
   defp invert({:phi, trig}, lambda, phi), do: invert_phi(trig, lambda, phi)
-  # rotation.js:4–9: the identity normalises the longitude, and is its own inverse.
+  # rotation.js:4–9: the identity normalizes the longitude, and is its own inverse.
   defp invert(:identity, lambda, phi), do: shift(lambda, phi)
 
   # rotation.js:18–24: beyond ±π, less the nearest whole turn, rounded as `Math.round`.

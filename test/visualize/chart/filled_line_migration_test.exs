@@ -2,7 +2,7 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
   @moduledoc """
   The filled line's migration (spec/14 §5.6, §9, #659, D-172): a version 2 line whose style
   gave a fill drew the area under it; the 2 -> 3 step gives it an `:area` beneath it with
-  the same channels and that fill, and pins the series colour of every mark it moves, so the
+  the same channels and that fill, and pins the series color of every mark it moves, so the
   stored design draws as before. A version 3 line's fill is not drawn.
   """
   use ExUnit.Case, async: true
@@ -31,7 +31,7 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
   defp filled, do: %{type: :line, data: :p, channels: %{x: :t, y: :v, series: :k}, style: :under}
   defp plain, do: %{type: :line, data: :p, channels: %{x: :t, y: :v}}
 
-  test "a filled line gets an area beneath it, and the marks it moves keep their colour" do
+  test "a filled line gets an area beneath it, and the marks it moves keep their color" do
     {:ok, v3} = Migration.migrate(design(2, [filled(), plain()]))
 
     assert [area, line, other] = v3.marks
@@ -52,7 +52,7 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
     assert other.style == [%{stroke: %{type: :solid, color: {:series, 2}}}]
   end
 
-  test "the area draws what the filled line drew under it, and the lines their colours" do
+  test "the area draws what the filled line drew under it, and the lines their colors" do
     one = Map.update!(filled(), :channels, &Map.delete(&1, :series))
     chart = Chart.from_map!(design(2, [one, plain()]))
     frame = Frame.new(chart, sources: %{p: @rows}, size: {300, 200})
@@ -62,7 +62,7 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
     assert area.style.fill == "#cde" and area.style.fill_opacity == 0.4
     [path] = area.children
 
-    # The fill is the line's, not the series' colour an area would take as its paint.
+    # The fill is the line's, not the series' color an area would take as its paint.
     refute Map.has_key?(path.style, :fill)
     # The area from the line down to the y scale's zero (y 150), in the line's step curve.
     assert [{:M, +0.0, 90.0}, {:H, 120.0}, {:V, 15.0} | _] = path.path.commands

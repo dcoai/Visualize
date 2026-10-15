@@ -53,7 +53,7 @@ defmodule Visualize.SVG.Renderer do
   end
 
   @doc """
-  The SVG attribute name for an attribute key, shared by every SVG serialiser (D-11).
+  The SVG attribute name for an attribute key, shared by every SVG serializer (D-11).
 
   A snake_case key hyphenates (`:stroke_width` → `"stroke-width"`) unless it names one of
   the camel-cased SVG attributes (`:view_box` → `"viewBox"`, `:preserve_aspect_ratio`,

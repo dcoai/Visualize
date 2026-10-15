@@ -60,10 +60,10 @@ defmodule Visualize.Chart.Frame.Labels do
 
       %{x: x, y: y} = placement ->
         attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, Map.get(placement, :dy))
-        centre = {frame.plot.width / 2, frame.plot.height / 2}
+        center = {frame.plot.width / 2, frame.plot.height / 2}
 
         {rotation, text_anchor} =
-          Polar.rotation(Map.get(node, :rotate), {x + dx, y + dy}, centre, placement.anchor)
+          Polar.rotation(Map.get(node, :rotate), {x + dx, y + dy}, center, placement.anchor)
 
         base = %{class: "label", text_anchor: text_anchor}
 
@@ -121,8 +121,8 @@ defmodule Visualize.Chart.Frame.Labels do
   defp place(%{plot: p}, {:frame, :bottom_right}),
     do: %{x: p.width - @inset, y: p.height - @inset, anchor: :end}
 
-  # The plot's centre (#489): in a `:polar` frame the origin the centred group is
-  # translated to — `[0, 0]` inside it, where a centred mark is drawn — while the labels
+  # The plot's center (#489): in a `:polar` frame the origin the centered group is
+  # translated to — `[0, 0]` inside it, where a centered mark is drawn — while the labels
   # are drawn in the plot's own coordinates, so it is the plot's middle in every kind,
   # whatever the `r` scale's range.
   defp place(%{plot: p}, {:frame, :center}),
@@ -136,7 +136,7 @@ defmodule Visualize.Chart.Frame.Labels do
   end
 
   # The outward direction of an anchor (spec/14 §6.3): away from the plot for the titles
-  # and the caption, into the plot for a corner, none for a data point or the centre.
+  # and the caption, into the plot for a corner, none for a data point or the center.
   defp outward(_frame, anchor) when anchor in [:title, :subtitle], do: {0, -1}
   defp outward(_frame, :caption), do: {0, 1}
   defp outward(_frame, {:frame, :top_left}), do: {1, 1}

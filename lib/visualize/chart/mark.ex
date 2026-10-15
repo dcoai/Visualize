@@ -14,7 +14,7 @@ defmodule Visualize.Chart.Mark do
   the direct call with the same numbers. The four generic marks (`path`, `rect`, `circle`,
   `arc`) draw what a layout's rows carry. The mark's style resolves through
   `Visualize.Chart.Style` in the mode of the render target, and its paint, when the style
-  gives none, is the theme's series colour for its position (spec/14 §5.6).
+  gives none, is the theme's series color for its position (spec/14 §5.6).
 
   ## Examples
 
@@ -63,14 +63,14 @@ defmodule Visualize.Chart.Mark do
 
   @shapes [:line, :area, :band, :rule, :x_band, :percentile_band, :rose, :symbol, :needle]
   @stroked [:line, :rule]
-  @centred [:rose, :arc, :needle]
+  @centered [:rose, :arc, :needle]
   # Drawn as they are in a polar frame: polar already, or geometry in plot pixels (§5.2).
   @unbent [:rose, :arc, :path, :needle]
 
   @typedoc """
   What the element builders see of a mark: the frame, the mark node, its rows, its
   resolved style split into the static part and the `{:field, f}` bindings, its paint
-  as `{key, colour}`, its options, inline label and tooltip node, the render mode, and
+  as `{key, color}`, its options, inline label and tooltip node, the render mode, and
   its series values by position when it has a `series` channel (spec/14 §5.2, D-126), the
   keys a mark with an event writes on its elements (§5.7, D-170), its one-based position
   among the marks, and the styles a stack's `{:field, f}` entries name by data (§3.6,
@@ -125,12 +125,12 @@ defmodule Visualize.Chart.Mark do
   end
 
   def generate(%Frame{} = frame, %{type: type} = mark, opts) do
-    frame = coloured(frame, mark)
+    frame = colored(frame, mark)
     sources = Keyword.get(opts, :sources, %{})
     mode = Keyword.get(opts, :resolve, :css)
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
-    realised = rows(frame, mark, sources)
-    rows = panel(realised, frame, Keyword.fetch(opts, :panel))
+    realized = rows(frame, mark, sources)
+    rows = panel(realized, frame, Keyword.fetch(opts, :panel))
     # The defaults the mark's containers lay under its style (spec/14 §3.8, D-174).
     base = Defaults.at(frame, Map.get(mark, :defaults), type)
     style_node = base |> Style.over(frame.styles, Map.get(mark, :style)) |> Style.drawn(type)
@@ -151,7 +151,7 @@ defmodule Visualize.Chart.Mark do
       |> Map.merge(Styled.parts(style_node, type, index, frame.theme, mode))
       |> Styled.prepare()
 
-    ctx = Map.merge(ctx, %{series: Series.index(ctx), keys: keys(ctx, realised)})
+    ctx = Map.merge(ctx, %{series: Series.index(ctx), keys: keys(ctx, realized)})
 
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
     # Every element and label a series draws names it (spec/14 §5.6, D-126).
@@ -160,11 +160,11 @@ defmodule Visualize.Chart.Mark do
     bound = children |> Enum.map(&bind(&1, ctx)) |> Identity.stamp(children, ctx)
     elements = strokes(children, bound, ctx)
     # A label inked by contrast reads its element's bound fill (spec/14 §5.5, D-123).
-    labelled = Label.under(children, bound, ctx)
+    labeled = Label.under(children, bound, ctx)
 
     ctx
-    |> group(elements, Label.elements(labelled, ctx))
-    |> centre(ctx)
+    |> group(elements, Label.elements(labeled, ctx))
+    |> center(ctx)
   end
 
   @doc """
@@ -212,12 +212,12 @@ defmodule Visualize.Chart.Mark do
     end
   end
 
-  # A mark's colour scale is `color` renamed by its `scales` node (spec/14 §4.3, D-143), so
-  # within the mark that scale stands under `color`: its series' paint, its style's colour
+  # A mark's color scale is `color` renamed by its `scales` node (spec/14 §4.3, D-143), so
+  # within the mark that scale stands under `color`: its series' paint, its style's color
   # bindings and its labels' ink all read the one scale, and an overlay that renames it
-  # leaves the series' colours to the marks that keep `color`.
-  defp coloured(frame, mark) do
-    case Scales.colour_scale(mark) do
+  # leaves the series' colors to the marks that keep `color`.
+  defp colored(frame, mark) do
+    case Scales.color_scale(mark) do
       :color ->
         frame
 
@@ -253,7 +253,7 @@ defmodule Visualize.Chart.Mark do
 
   # The mark's group (spec/14 §5.6). Without an inline label it is one group carrying the
   # mark's style. With one it is a wrapper — the class, the tooltip's attributes, and later
-  # `data-node` and the centring transform, everything the hooks read (D-75) — holding the
+  # `data-node` and the centering transform, everything the hooks read (D-75) — holding the
   # styled elements' group and, beside it, the labels' group with no style, so a label is
   # drawn in its own style and never outlined by the mark's stroke (#485). A `:text` mark
   # is its label and keeps its own style.
@@ -293,7 +293,7 @@ defmodule Visualize.Chart.Mark do
     do: %{"data-frame" => to_string(frame), "data-mark" => Integer.to_string(position)}
 
   # What a mark with an event keys its elements by (spec/14 §5.7, D-170): its frame's name,
-  # its position among the frame's marks, and each datum's ordinal in the mark's realised
+  # its position among the frame's marks, and each datum's ordinal in the mark's realized
   # rows — all of them, before a facet's panel is taken, as `rows/3` gives them. Equal rows
   # are one row to a click, so the first ordinal names them. `nil` for a mark without an
   # event, or one drawn outside its frame's marks, which cannot be resolved.
@@ -324,7 +324,7 @@ defmodule Visualize.Chart.Mark do
     element |> Element.datum(fields) |> row_key(datum, ctx.keys)
   end
 
-  # The datum's ordinal in the mark's realised rows, as `data-row` (D-170).
+  # The datum's ordinal in the mark's realized rows, as `data-row` (D-170).
   defp row_key(element, _datum, nil), do: element
 
   defp row_key(element, datum, %{ordinals: ordinals}) do
@@ -336,9 +336,9 @@ defmodule Visualize.Chart.Mark do
 
   # The group's style: the static part, the paint (a bound one stays per element), and
   # `fill: :none` for a stroked type the style leaves unfilled.
-  defp group_style(%{type: type, static: static, paint: {key, colour}} = ctx) do
+  defp group_style(%{type: type, static: static, paint: {key, color}} = ctx) do
     static
-    |> then(&if(match?({:field, _}, colour), do: &1, else: Map.put(&1, key, colour)))
+    |> then(&if(match?({:field, _}, color), do: &1, else: Map.put(&1, key, color)))
     |> then(
       &if(type in @stroked and not Map.has_key?(&1, :fill),
         do: Map.put(&1, :fill, :none),
@@ -432,14 +432,14 @@ defmodule Visualize.Chart.Mark do
 
   defp bent(children, _ctx), do: children
 
-  # A centred mark's group about the frame's center: the point a `:chord` step's paths are
+  # A centered mark's group about the frame's center: the point a `:chord` step's paths are
   # drawn about too (spec/14 §5.6, #488). A polar frame's group is already there.
-  defp centre(group, %{type: type, frame: %{kind: kind, plot: plot}}) when type in @centred do
+  defp center(group, %{type: type, frame: %{kind: kind, plot: plot}}) when type in @centered do
     case Frame.center(kind, plot) do
       [0, 0] -> group
       [x, y] -> Element.set_transform(group, Transform.translate(x, y))
     end
   end
 
-  defp centre(group, _ctx), do: group
+  defp center(group, _ctx), do: group
 end

@@ -6,9 +6,9 @@ defmodule Visualize.Board.State do
   chart, a crash or a host's spinner. `of/3` decides the state of a cell's slots at the
   board's now; `render/3` draws it as the whole cell, where there is no chart, and
   `banner/3` as one line across the top of a chart, where the last data stays readable.
-  Each state has a **role** (spec/08 §7.5, D-135): its colour is the drawing's accent and
+  Each state has a **role** (spec/08 §7.5, D-135): its color is the drawing's accent and
   its cue's glyph (spec/14 §21.7, D-142) stands beside the words, so a state reads in
-  greyscale as well. Both drawings are in `:css` mode, so a stylesheet themes them as it
+  grayscale as well. Both drawings are in `:css` mode, so a stylesheet themes them as it
   themes the charts.
 
   | State | Role | Words |
@@ -128,7 +128,7 @@ defmodule Visualize.Board.State do
 
   # -- naming -------------------------------------------------------------------------------
 
-  @doc "A state's role (spec/08 §7.5), whose colour and glyph draw it; `nil` for `:live`."
+  @doc "A state's role (spec/08 §7.5), whose color and glyph draw it; `nil` for `:live`."
   @spec role(t()) :: Theme.slot() | nil
   def role({:crashed, _reason}), do: :bad
   def role({:down, _reason}), do: :bad
@@ -164,7 +164,7 @@ defmodule Visualize.Board.State do
   @doc """
   A state drawn as the whole cell (spec/15 §8.4): an accessible SVG root of `{w, h}`
   titled with the words, the theme's `surface` filling it inside a frame of the role's
-  colour, and the role's glyph and the words centred in the theme's `text`. `:live` is
+  color, and the role's glyph and the words centered in the theme's `text`. `:live` is
   drawn as the empty surface.
   """
   @spec render(t(), Theme.t(), {number(), number()}) :: String.t()
@@ -211,7 +211,7 @@ defmodule Visualize.Board.State do
 
   @doc """
   A state drawn as a banner across the top of a chart `width` wide (spec/15 §8.4): an SVG
-  root one line high, the role's colour behind the role's glyph and the words in the
+  root one line high, the role's color behind the role's glyph and the words in the
   contrast ink of `Visualize.Theme.ink/2`. `nil` for `:live`, which needs none.
   """
   @spec banner(t(), Theme.t(), number()) :: String.t() | nil
@@ -219,8 +219,8 @@ defmodule Visualize.Board.State do
 
   def banner(state, %Theme{} = theme, width) do
     role = role(state)
-    colour = Theme.resolve(theme, role, :literal)
-    ink = Theme.ink(theme, colour)
+    color = Theme.resolve(theme, role, :literal)
+    ink = Theme.ink(theme, color)
     h = @banner_height
 
     children = [
@@ -252,13 +252,13 @@ defmodule Visualize.Board.State do
   defp title(:live), do: "Live"
   defp title(state), do: words(state)
 
-  # The role's cue glyph (spec/14 §21.7) at a point, in the role's colour.
-  defp glyph(role, colour, x, y, area) do
+  # The role's cue glyph (spec/14 §21.7) at a point, in the role's color.
+  defp glyph(role, color, x, y, area) do
     %{glyph: glyph} = Theme.cue(role)
     path = Symbol.new() |> Symbol.type(glyph) |> Symbol.size(area) |> Symbol.generate_path(nil)
 
     path
-    |> Element.path(%{class: "vis-cell-state-glyph", fill: colour, stroke: :none})
+    |> Element.path(%{class: "vis-cell-state-glyph", fill: color, stroke: :none})
     |> Element.translate(x, y)
   end
 end

@@ -1,6 +1,6 @@
 defmodule Visualize.Geo.ProjectionGoldenTest do
   @moduledoc """
-  Behaviour-preservation golden for every projection type.
+  Behavior-preservation golden for every projection type.
 
   `test/support/projection_golden.txt` records `project/3` and, where the forward
   projection succeeds, `invert/3` over a fixed lon/lat grid. It was generated before

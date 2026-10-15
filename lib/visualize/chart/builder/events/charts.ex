@@ -73,7 +73,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, socket |> park() |> load(String.to_integer(id)) |> select(position(index))}
     end
 
-    # Closing a chart removes it and selects its neighbour; the last chart stays.
+    # Closing a chart removes it and selects its neighbor; the last chart stays.
     def handle_event("close_chart", %{"chart" => id}, socket) do
       id = String.to_integer(id)
       %{charts: charts} = socket.assigns
@@ -87,11 +87,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
           socket = park(socket)
           index = Enum.find_index(charts, &(&1.id == id))
           remaining = Enum.reject(socket.assigns.charts, &(&1.id == id))
-          neighbour = Enum.at(remaining, min(index, length(remaining) - 1))
+          neighbor = Enum.at(remaining, min(index, length(remaining) - 1))
 
           socket
           |> assign(:charts, remaining)
-          |> then(&if(socket.assigns.chart == id, do: load(&1, neighbour.id), else: &1))
+          |> then(&if(socket.assigns.chart == id, do: load(&1, neighbor.id), else: &1))
           |> then(&{:noreply, &1})
       end
     end

@@ -106,8 +106,8 @@ defmodule Visualize.Chart.AxisMeasureTest do
           render(design(%{}, side: side, labels: [%{anchor: {:axis, :y}, text: "count"}]))
 
         [measured] = Regex.run(~r/<text class="label"[^>]*>count<\/text>/, via_measure)
-        [labelled] = Regex.run(~r/<text class="label"[^>]*>count<\/text>/, via_label)
-        assert measured == labelled, "#{side}"
+        [labeled] = Regex.run(~r/<text class="label"[^>]*>count<\/text>/, via_label)
+        assert measured == labeled, "#{side}"
       end
     end
 

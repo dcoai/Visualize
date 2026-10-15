@@ -1,7 +1,7 @@
 defmodule Visualize.Chart.StyleTest do
   @moduledoc """
   Style resolution of spec/14 §3.4 and D-63: one node, two outputs by mode, a `{:field, f}`
-  bound per datum through the frame's colour scale, and the `extends` chain flattened at
+  bound per datum through the frame's color scale, and the `extends` chain flattened at
   the lookup (§3.5, D-80).
   """
   use ExUnit.Case, async: true
@@ -106,7 +106,7 @@ defmodule Visualize.Chart.StyleTest do
       )
     end
 
-    test "a colour key reads through the colour scale and resolves the slot" do
+    test "a color key reads through the color scale and resolves the slot" do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a", "b"]}})
       style = %{fill: {:field, :k}, stroke_width: {:field, :w}, opacity: 0.5}
 
@@ -117,7 +117,7 @@ defmodule Visualize.Chart.StyleTest do
                %{fill: "#d9730d", stroke_width: 3, opacity: 0.5}
     end
 
-    test "without a colour scale the reading is the colour, a slot resolved" do
+    test "without a color scale the reading is the color, a slot resolved" do
       frame = frame(%{})
       assert Style.bind(%{fill: {:field, :k}}, %{k: "#abc"}, frame, :css) == %{fill: "#abc"}
 
@@ -125,9 +125,9 @@ defmodule Visualize.Chart.StyleTest do
                %{fill: "#666666"}
     end
 
-    # #487, D-122: a colour is never dropped. A category outside the domain is the colour
+    # #487, D-122: a color is never dropped. A category outside the domain is the color
     # scale's `unknown`, the theme's `:axis` by default; a missing reading is `:none`.
-    test "a category the colour scale does not hold is its unknown, the theme's :axis" do
+    test "a category the color scale does not hold is its unknown, the theme's :axis" do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})
 
       assert Style.bind(%{fill: {:field, :k}}, %{k: "zzz"}, frame, :css) ==
@@ -148,12 +148,12 @@ defmodule Visualize.Chart.StyleTest do
       assert Style.bind(%{fill: {:field, :k}}, %{k: "z"}, frame, :css) == %{fill: :none}
     end
 
-    test "only the colour scale takes the default: another ordinal keeps nil" do
+    test "only the color scale takes the default: another ordinal keeps nil" do
       frame = frame(%{shade: %{kind: :ordinal, domain: ["a"], range: ["#000"]}})
       assert Visualize.Scale.apply(Frame.scales(frame).shade, "z") == nil
     end
 
-    test "a missing colour reading is :none; any other key's nil is dropped" do
+    test "a missing color reading is :none; any other key's nil is dropped" do
       frame = frame(%{color: %{kind: :ordinal, domain: ["a"]}})
 
       assert Style.bind(
@@ -167,7 +167,7 @@ defmodule Visualize.Chart.StyleTest do
       assert Style.bind(%{stroke: {:field, :k}}, %{}, frame(%{}), :literal) == %{stroke: :none}
     end
 
-    test "a colour scale that yields nothing is :none" do
+    test "a color scale that yields nothing is :none" do
       frame = frame(%{color: %{kind: :band, domain: ["a"], range: [0, 1]}})
       assert Style.bind(%{fill: {:field, :k}}, %{k: "z"}, frame, :css) == %{fill: :none}
     end

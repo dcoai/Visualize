@@ -343,7 +343,7 @@ defmodule Visualize.Feed.Monitor do
         monitor
 
       held ->
-        # The holding is trimmed whatever the feed honours, so pushes never grow it past
+        # The holding is trimmed whatever the feed honors, so pushes never grow it past
         # the window; the delivery handed out is reduced for the budget.
         window = request(monitor.window, entry.schema)
         held = held |> ordered(entry.schema) |> Feed.finish(entry.schema, window: window)

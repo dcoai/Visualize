@@ -262,7 +262,7 @@ defmodule Visualize.EventTest do
   end
 
   describe "Compiled.rows/3" do
-    test "is the mark's realised rows as a tick draws them, [] past the frame's marks" do
+    test "is the mark's realized rows as a tick draws them, [] past the frame's marks" do
       applied = apply!(design())
       {:ok, %{main: compiled}} = Chart.compile(applied)
       sources = applied.sources

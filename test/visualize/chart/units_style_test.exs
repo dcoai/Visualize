@@ -112,7 +112,7 @@ defmodule Visualize.Chart.UnitsStyleTest do
   end
 
   describe "pct where a size has a box" do
-    test "a text offset in pct is of the labelled element's box" do
+    test "a text offset in pct is of the labeled element's box" do
       rect = %{
         type: :rect,
         data: :s,

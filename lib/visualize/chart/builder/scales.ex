@@ -29,7 +29,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The scales the design's bound channels name and the frame does not declare, as
     `%{name => node}`, each `%{kind: kind, domain: :auto}` with the kind from the channel's
     evidence: time → `:time`, number → `:linear`, a category or text → `:band` (the layer's
-    one categorical position scale, spec/03); on the colour scale a category → `:ordinal`,
+    one categorical position scale, spec/03); on the color scale a category → `:ordinal`,
     a number → `:sequential`. A channel with no evidence derives nothing; a scale already
     declared is never in the result.
 

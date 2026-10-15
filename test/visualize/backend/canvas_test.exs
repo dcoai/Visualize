@@ -59,7 +59,7 @@ defmodule Visualize.Backend.CanvasTest do
   end
 
   describe "arcs" do
-    test "a half circle becomes one ellipse call about its centre" do
+    test "a half circle becomes one ellipse call about its center" do
       path = %Path{commands: [{:M, 0, 0}, {:A, 10, 10, 0, 0, 1, 20, 0}]}
 
       [_, {:ellipse, [cx, cy, rx, ry, rot, start, finish, anticlockwise]}] =

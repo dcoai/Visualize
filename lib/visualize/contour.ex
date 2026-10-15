@@ -344,7 +344,7 @@ defmodule Visualize.Contour do
     ring = [current_point | ring]
     count = count + 1
 
-    # A ring closes on its exact start point, never on a near neighbour (D-112).
+    # A ring closes on its exact start point, never on a near neighbor (D-112).
     if count > 2 and current_point == start_point do
       # Ring is closed
       {Enum.reverse(ring), start_map, used}

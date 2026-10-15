@@ -75,7 +75,7 @@ defmodule Visualize.Test.Feeds do
     @moduledoc """
     A feed that is honest unless given a flaw: the conformance kit's negatives (spec/08
     §12.4). Its rows are `%{t: 0..19, v: …}`, one series a tick apart, `t` its numeric
-    window field (`window: true`, D-154); it honours a numeric window, a budget (every `k`-th row, `reduced_by: :feed`, the resolution `k`)
+    window field (`window: true`, D-154); it honors a numeric window, a budget (every `k`-th row, `reduced_by: :feed`, the resolution `k`)
     and push, and `emit/1` pushes one new row under a new version of its schema, the
     schema first. Each flaw breaks one rule of the contract and nothing else.
     """
@@ -108,7 +108,7 @@ defmodule Visualize.Test.Feeds do
       :ticks_as_time,
       :no_window_field,
       :stamp_as_number,
-      :misspelt_unit,
+      :misspelled_unit,
       :identified,
       :no_identity
     ]
@@ -236,15 +236,15 @@ defmodule Visualize.Test.Feeds do
           do: Map.put(fields, :unit, %{type: :category, identity: true}),
           else: fields
 
-      misspelt(Schema.new!(fields), flaw)
+      misspelled(Schema.new!(fields), flaw)
     end
 
     # A schema assembled around `Schema.new/1`, its value field in a unit visualize does
     # not read (D-157): the struct a provider could build by hand.
-    defp misspelt(%Schema{fields: fields} = schema, :misspelt_unit),
+    defp misspelled(%Schema{fields: fields} = schema, :misspelled_unit),
       do: %{schema | fields: put_in(fields, [:v, :unit], "mss")}
 
-    defp misspelt(schema, _flaw), do: schema
+    defp misspelled(schema, _flaw), do: schema
 
     defp row(t, v, :stamp_as_number), do: %{t: t, v: v, at: t}
     defp row(t, v, :identified), do: %{t: t, v: v, unit: if(rem(t, 2) == 0, do: "a", else: "b")}
@@ -299,25 +299,25 @@ defmodule Visualize.Test.Feeds do
     @moduledoc """
     A fleet of cars as a feed, for the box window (spec/08 §11.1, D-168): rows
     `%{t, car, x, y}` over ticks `0..11`, three cars a tick, `t` its numeric window field
-    and `car` its declared identity. Honouring (`honours: true`, the default), it names
+    and `car` its declared identity. Honoring (`honors: true`, the default), it names
     `[:window, :region, :latest]` and answers a box itself, by its own code rather than
     `Visualize.Feed.Window`'s, so the two can be held to the same rows; otherwise it names
     `[:window]` and leaves the region and `latest` to `Visualize.Feed.finish/3`. A flaw
-    breaks one rule of an honouring feed: `:region_overrun` ignores the region,
+    breaks one rule of an honoring feed: `:region_overrun` ignores the region,
     `:latest_twice` ignores `latest`, `:stale_latest` serves each car's first row.
     """
     @behaviour Visualize.Feed
 
     alias Visualize.Data.{Delivery, Schema}
 
-    defstruct honours: true, flaw: nil
+    defstruct honors: true, flaw: nil
 
     @last 11
     @cars ["a", "b", "c"]
 
-    @doc "The fleet's feed: `honours:` (`true`) and `flaw:` (`nil`)."
+    @doc "The fleet's feed: `honors:` (`true`) and `flaw:` (`nil`)."
     def new(opts \\ []) do
-      opts = Keyword.validate!(opts, honours: true, flaw: nil)
+      opts = Keyword.validate!(opts, honors: true, flaw: nil)
       true = opts[:flaw] in [nil, :region_overrun, :latest_twice, :stale_latest]
       struct!(__MODULE__, opts)
     end
@@ -340,8 +340,8 @@ defmodule Visualize.Test.Feeds do
     end
 
     @impl true
-    def describe(%__MODULE__{honours: honours}) do
-      supports = if honours, do: [:window, :region, :latest], else: [:window]
+    def describe(%__MODULE__{honors: honors}) do
+      supports = if honors, do: [:window, :region, :latest], else: [:window]
       {Schema.version(schema()), schema(), supports}
     end
 
@@ -352,7 +352,7 @@ defmodule Visualize.Test.Feeds do
           lo = max(from || 0, 0)
           hi = min(to || @last, @last)
           rows = Enum.filter(rows(), &(&1.t >= lo and &1.t <= hi))
-          rows = if feed.honours, do: honoured(rows, window, feed.flaw), else: rows
+          rows = if feed.honors, do: honored(rows, window, feed.flaw), else: rows
           {:ok, Delivery.new(rows, window: [lo, hi], schema: Schema.version(schema()))}
 
         :error ->
@@ -375,7 +375,7 @@ defmodule Visualize.Test.Feeds do
 
     defp span(_window), do: :error
 
-    defp honoured(rows, %{} = box, flaw) do
+    defp honored(rows, %{} = box, flaw) do
       # A range over a field the fleet does not have keeps nothing.
       ranges =
         for {f, r} <- Map.get(box, :ranges, %{}), to_string(f) != "t", do: {to_string(f), r}
@@ -388,7 +388,7 @@ defmodule Visualize.Test.Feeds do
         else: rows
     end
 
-    defp honoured(rows, _window, _flaw), do: rows
+    defp honored(rows, _window, _flaw), do: rows
 
     defp in_ranges?(row, ranges) do
       Enum.all?(ranges, fn {field, [from, to]} ->

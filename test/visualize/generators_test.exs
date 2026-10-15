@@ -443,7 +443,7 @@ defmodule Visualize.GeneratorsTest do
   end
 
   describe "a board" do
-    test "realises its cells with the generators and the assigns" do
+    test "realizes its cells with the generators and the assigns" do
       store = %{{:composite, 1} => design(generate(:tenant_style, [{:field, :tenant}]))}
 
       board =

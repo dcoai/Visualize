@@ -4,12 +4,12 @@ defmodule Visualize.Feed do
   D-140).
 
   A feed is a struct whose module implements this behaviour. `describe/1` answers the
-  feed's schema, its version and `supports`, the capabilities it honours among
+  feed's schema, its version and `supports`, the capabilities it honors among
   `[:window, :region, :latest, :budget, :push]`; `fetch/3` answers a
   `Visualize.Data.Delivery` for a window and a budget; `subscribe/2` and `unsubscribe/2`
   are for a feed that pushes. **Only rows are required.** A window — `nil`, `[from, to]`
   or a box of ranges that may ask for each identity's latest row (spec/08 §11.1, D-168) —
-  and a budget are requests: where a feed does not honour one, `finish/3` trims and
+  and a budget are requests: where a feed does not honor one, `finish/3` trims and
   reduces for it, and a budget reduction records `reduced_by: :visualize`.
   Every callback answers `{:error, reason}` rather than raising, so a feed that is down is
   a value a cell shows.
@@ -39,7 +39,7 @@ defmodule Visualize.Feed do
   @typedoc "A feed: a struct whose module implements `Visualize.Feed`."
   @type t :: struct()
 
-  @typedoc "What a feed honours (spec/08 §11.1)."
+  @typedoc "What a feed honors (spec/08 §11.1)."
   @type capability :: :window | :region | :latest | :budget | :push
 
   @typedoc """
@@ -51,7 +51,7 @@ defmodule Visualize.Feed do
   @typedoc "`nil`, or the most rows a cell wants."
   @type budget :: pos_integer() | nil
 
-  @doc "The feed's present schema, its version and the capabilities it honours."
+  @doc "The feed's present schema, its version and the capabilities it honors."
   @callback describe(feed :: t()) ::
               {String.t(), Schema.t(), [capability()]} | {:error, term()}
 
@@ -66,7 +66,7 @@ defmodule Visualize.Feed do
 
   @optional_callbacks subscribe: 2, unsubscribe: 2
 
-  @doc "The five capabilities a feed may honour, in the order of spec/08 §11.1."
+  @doc "The five capabilities a feed may honor, in the order of spec/08 §11.1."
   @spec capabilities() :: [capability(), ...]
   def capabilities, do: @capabilities
 
@@ -193,7 +193,7 @@ defmodule Visualize.Feed do
     end
   end
 
-  defp trim(delivery, _schema, nil, _honoured), do: delivery
+  defp trim(delivery, _schema, nil, _honored), do: delivery
   defp trim(delivery, _schema, _box, true), do: delivery
 
   # The window field's range; a schema with none cannot be trimmed by one (spec/08 §11.2).
@@ -211,7 +211,7 @@ defmodule Visualize.Feed do
   end
 
   # Every range but the window field's (spec/08 §11.2).
-  defp region(delivery, _schema, nil, _honoured), do: delivery
+  defp region(delivery, _schema, nil, _honored), do: delivery
   defp region(delivery, _schema, _box, true), do: delivery
 
   defp region(delivery, schema, %{ranges: ranges}, false) do
@@ -235,8 +235,8 @@ defmodule Visualize.Feed do
   end
 
   # Each identity's last row by the window field (spec/08 §11.1).
-  defp latest(delivery, _schema, nil, _honoured), do: delivery
-  defp latest(delivery, _schema, %{latest: false}, _honoured), do: delivery
+  defp latest(delivery, _schema, nil, _honored), do: delivery
+  defp latest(delivery, _schema, %{latest: false}, _honored), do: delivery
   defp latest(delivery, _schema, _box, true), do: delivery
 
   defp latest(delivery, schema, %{latest: true}, false) do
@@ -255,7 +255,7 @@ defmodule Visualize.Feed do
     if Window.time?(value), do: Window.position(value)
   end
 
-  defp reduce(delivery, _schema, nil, _method, _honoured), do: delivery
+  defp reduce(delivery, _schema, nil, _method, _honored), do: delivery
   defp reduce(delivery, _schema, _budget, _method, true), do: delivery
 
   defp reduce(delivery, schema, budget, method, false)

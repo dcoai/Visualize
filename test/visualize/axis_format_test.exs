@@ -34,14 +34,14 @@ defmodule Visualize.AxisFormatTest do
     end
   end
 
-  describe "Axis band centring (spec/05 §1.5, D-23)" do
-    test "ticks sit at the band centre" do
+  describe "Axis band centering (spec/05 §1.5, D-23)" do
+    test "ticks sit at the band center" do
       scale = Scale.band() |> Scale.domain([:a, :b]) |> Scale.range([0, 100])
       positions = Axis.bottom(scale) |> tick_texts() |> Enum.map(fn {t, _} -> t.operations end)
       assert positions == [[{:translate, 25.0, 0}], [{:translate, 75.0, 0}]]
     end
 
-    test "the centring offset shrinks by the pixel offset and is rounded for a rounded band" do
+    test "the centering offset shrinks by the pixel offset and is rounded for a rounded band" do
       scale =
         Scale.band()
         |> Scale.domain([:a, :b, :c])
@@ -49,7 +49,7 @@ defmodule Visualize.AxisFormatTest do
         |> Scale.padding(0.1)
         |> Band.round(true)
 
-      # step 32, bandwidth 29, start 4; centre = round(max(0, 29 − 1) / 2) = 14
+      # step 32, bandwidth 29, start 4; center = round(max(0, 29 − 1) / 2) = 14
       positions =
         Axis.left(scale)
         |> Axis.offset(0.5)

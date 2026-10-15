@@ -88,7 +88,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert html =~
                ~s(<g class="vis-builder-frame-overlay" data-builder-frame-box="now"><rect class="vis-builder-frame-outline" x="400" y="0" width="400" height="400">)
 
-      # Each handle centred on its corner, kept on the chart at its edges.
+      # Each handle centered on its corner, kept on the chart at its edges.
       for {at, x, y} <- [{"nw", 395, 0}, {"ne", 790, 0}, {"sw", 395, 390}, {"se", 790, 390}] do
         assert html =~ ~s(data-builder-frame-handle="#{at}" x="#{x}" y="#{y}" width="10")
       end
@@ -242,7 +242,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert s.assigns.node_label == "frames.now.axes[0]"
     end
 
-    test "a legend dropped in a frame takes that frame's colour scale" do
+    test "a legend dropped in a frame takes that frame's color scale" do
       [{name, layer}] = two()
       layer = put_in(layer, [:frames, :now, :scales, :c], %{kind: :ordinal, domain: ["a"]})
       s = measured([{name, layer}]) |> place("legend", 790, 20)
@@ -371,7 +371,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       assert {:ok, _} = Visualize.Chart.from_map(design)
     end
 
-    test "+ frame, and the keyboard twin, place one at the centre under a fresh name" do
+    test "+ frame, and the keyboard twin, place one at the center under a fresh name" do
       s = sized(BuilderFixture.layers())
       {:noreply, s} = Builder.handle_event("add_frame", %{}, s)
 

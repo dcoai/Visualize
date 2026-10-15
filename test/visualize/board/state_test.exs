@@ -59,7 +59,7 @@ defmodule Visualize.Board.StateTest do
       {:capped, :info, "Capped: part of the window"}
     ]
 
-    test "every state renders as the whole cell, in its role's colour, glyph and words" do
+    test "every state renders as the whole cell, in its role's color, glyph and words" do
       theme = Theme.default()
 
       for {state, role, words} <- @states do

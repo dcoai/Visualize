@@ -16,7 +16,7 @@ defmodule Visualize.Components.TreeTest do
   component drew them itself, `:background` with a CSS text shadow at the cell's top-left
   corner, white on a pale cell. The goldens record the labels its preset now carries,
   fitted (`:truncate`, the cell's width and height) and inked `:contrast` at the cell's
-  centre, after the cells, with no shadow. Every cell and the shell are still the old
+  center, after the cells, with no shadow. Every cell and the shell are still the old
   component's, which the same test holds for each treemap golden, the root-only one too.
 
       mix run -e 'Visualize.Components.TreeTest.write!()'
@@ -94,23 +94,23 @@ defmodule Visualize.Components.TreeTest do
   def render_case({component, assigns}), do: render_component(component, assigns)
 
   # The lines of an SVG that are neither blank nor a label.
-  defp unlabelled(svg) do
+  defp unlabeled(svg) do
     svg
     |> String.split("\n")
     |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "<text")))
   end
 
   test "each sunburst and treemap golden, labels aside, is the component's with every label empty (#494, #497)" do
-    labelled =
+    labeled =
       Enum.map(~w(sunburst_chart sunburst_chart_colors treemap_chart treemap_chart_slice)a, fn
         name -> {"#{name}.svg", Keyword.fetch!(cases(), name)}
       end) ++ [{"treemap_chart_empty.svg", Keyword.fetch!(empty(), :treemap_chart)}]
 
-    for {file, {component, assigns}} <- labelled do
+    for {file, {component, assigns}} <- labeled do
       golden = File.read!(Path.join(@dir, file))
       assert golden =~ "<text"
       blank = render_component(component, Map.put(assigns, :label, fn _node -> "" end))
-      assert unlabelled(golden) == unlabelled(blank), file
+      assert unlabeled(golden) == unlabeled(blank), file
     end
   end
 
@@ -140,7 +140,7 @@ defmodule Visualize.Components.TreeTest do
   end
 
   # Every component prints its paths through `Visualize.IR.Path.to_string/1`, the one `d`
-  # serialiser (spec/02 §2.2, D-34), whose coordinates are comma-separated; a space inside a
+  # serializer (spec/02 §2.2, D-34), whose coordinates are comma-separated; a space inside a
   # `d` is a hand format of the component's own (D-71). Every golden of the chart and the
   # hierarchy components is held, so the guard is one place for all ten.
   test "no component golden's d contains a space" do
@@ -174,14 +174,14 @@ defmodule Visualize.Components.TreeTest do
   end
 
   describe "treemap_chart/1" do
-    test "one cell per leaf, coloured by the child of the root above it" do
+    test "one cell per leaf, colored by the child of the root above it" do
       svg = render_component(&Tree.treemap_chart/1, %{data: @hierarchy})
       [c0, c1, c2 | _] = Visualize.Scale.Color.scheme(:category10)
       fills = Regex.scan(~r/<rect[^>]* fill="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
       assert fills == [c0, c0, c1, c2, c2]
     end
 
-    test "a colour list is used as given and cycled" do
+    test "a color list is used as given and cycled" do
       svg = render_component(&Tree.treemap_chart/1, %{data: @hierarchy, colors: ["#111", "#222"]})
       fills = Regex.scan(~r/<rect[^>]* fill="([^"]+)"/, svg) |> Enum.map(&Enum.at(&1, 1))
       assert fills == ["#111", "#111", "#222", "#111", "#111"]
@@ -211,7 +211,7 @@ defmodule Visualize.Components.TreeTest do
       refute svg =~ ">c2</text>"
     end
 
-    test "a label accessor is honoured" do
+    test "a label accessor is honored" do
       svg =
         render_component(&Tree.sunburst_chart/1, %{
           data: @hierarchy,
@@ -222,7 +222,7 @@ defmodule Visualize.Components.TreeTest do
       refute svg =~ ">a</text>"
     end
 
-    test "colours follow the child of the root" do
+    test "colors follow the child of the root" do
       svg =
         render_component(&Tree.sunburst_chart/1, %{
           data: @hierarchy,

@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Validator.Held do
   @moduledoc false
   # What a node's keys owe each other, beside each key's own type (spec/14 §10): a source's
   # names, a theme's contracts, a layout's weights, a frame's place, a scale's sweep, zone,
-  # colour map and polarity, a basemap's provider, an axis's measure, a motion part's times.
+  # color map and polarity, a basemap's provider, an axis's measure, a motion part's times.
 
   alias Visualize.Chart.{Fact, Schema, Urls, Var}
   alias Visualize.Chart.Validator.{Colors, Frames, Types}
@@ -118,7 +118,7 @@ defmodule Visualize.Chart.Validator.Held do
   end
 
   def held(:scale, map, path, _ctx) do
-    sweep(map, path) ++ zone(map, path) ++ colour_map(map, path) ++ polarity(map, path)
+    sweep(map, path) ++ zone(map, path) ++ color_map(map, path) ++ polarity(map, path)
   end
 
   def held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
@@ -172,17 +172,17 @@ defmodule Visualize.Chart.Validator.Held do
 
   defp zone(_scale, _path), do: []
 
-  # A map of colours is an ordinal scale's range (spec/14 §4.3, D-143): it pins categories,
+  # A map of colors is an ordinal scale's range (spec/14 §4.3, D-143): it pins categories,
   # and a continuous scale has none.
-  defp colour_map(%{kind: kind, range: %{} = range}, path)
+  defp color_map(%{kind: kind, range: %{} = range}, path)
        when is_atom(kind) and kind != :ordinal and not is_struct(range),
        do: [{path ++ [:range], {:color_map, kind}}]
 
-  defp colour_map(_scale, _path), do: []
+  defp color_map(_scale, _path), do: []
 
   # Polarity orders a ramp (spec/14 §4.3, D-143) — a `{:ramp, name}` range, or the `:auto`
   # range of a sequential or a diverging scale, which is its theme ramp; a list or a map
-  # already says each colour.
+  # already says each color.
   defp polarity(%{polarity: polarity} = scale, path) when is_atom(polarity) and polarity != nil do
     case {Map.get(scale, :kind), Map.get(scale, :range, :auto)} do
       {_kind, {:ramp, _name}} -> []

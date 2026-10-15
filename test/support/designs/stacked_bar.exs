@@ -1,4 +1,4 @@
-# metresis `stacked_bar`: the stack transform under one rect mark, coloured by key.
+# metresis `stacked_bar`: the stack transform under one rect mark, colored by key.
 %{
   version: 2,
   meta: %{name: "stacked_bar"},

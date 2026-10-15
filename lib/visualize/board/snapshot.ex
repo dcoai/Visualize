@@ -84,7 +84,7 @@ defmodule Visualize.Board.Snapshot do
   @doc false
   # A snapshot of what a board holds (spec/15 §12.2): the runtime's and `realize/4`'s one
   # constructor. `cells` maps a name to its `chart`, `vars`, `slots` and `crashed` reason
-  # as the holder has them; each slot is normalised here — rows as a list, a status as one
+  # as the holder has them; each slot is normalized here — rows as a list, a status as one
   # of the four a snapshot keeps, a down reason and a crash as their words — so a snapshot
   # holds only what its codecs write.
   @spec new(keyword()) :: t()
@@ -136,7 +136,7 @@ defmodule Visualize.Board.Snapshot do
   def realize(board, store, pools), do: realize(board, store, pools, [])
 
   @doc """
-  A snapshot of a board realised purely (spec/15 §6, §12.2): `Visualize.Board.realize/4`
+  A snapshot of a board realized purely (spec/15 §6, §12.2): `Visualize.Board.realize/4`
   over the same arguments, every fault of it as it reports them, and on success each
   cell's prepared component, its variables and its pool's sources as deliveries, with the
   schema application found for each slot.
@@ -344,7 +344,7 @@ defmodule Visualize.Board.Snapshot do
   The snapshot as a JSON document stamped `"$version"` (spec/15 §12.3), or
   `{:error, {:missing_dependency, :jason}}`. `from_json(to_json(s))` is `{:ok, s}`.
 
-  A row's field names are kept as they were spelt, an atom or a string, by writing the
+  A row's field names are kept as they were spelled, an atom or a string, by writing the
   rows column by column; every value is a tagged term of spec/14 §11.2.
   """
   @spec to_json(t()) :: {:ok, String.t()} | {:error, {:missing_dependency, :jason}}

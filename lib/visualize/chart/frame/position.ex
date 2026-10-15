@@ -15,7 +15,7 @@ defmodule Visualize.Chart.Frame.Position do
 
   @doc false
   # `box` is `{width, height}` of what the text labels, which an offset in `pct` is of
-  # (spec/14 §3.9): the labelled element's bounds, or the plot.
+  # (spec/14 §3.9): the labeled element's bounds, or the plot.
   @spec apply(Element.t(), map(), outward(), {number(), number()}) :: Element.t()
   def apply(text, node, outward, box)
 

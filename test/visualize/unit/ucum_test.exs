@@ -206,7 +206,7 @@ defmodule Visualize.Unit.UcumTest do
 
   # Every atom of the table and common prefixed codes, but those whose symbol a person
   # writes for something else: the bel's `B` is a person's byte, the are's `a` and the
-  # metre of mercury's `mHg` are not typed, and `B(SPL)` is UCUM's print form.
+  # meter of mercury's `mHg` are not typed, and `B(SPL)` is UCUM's print form.
   defp readable_codes do
     ~w(s min h d Hz By bit % [ppm] [ppb] mol Cel [degF] K m [in_i] [ft_i] [yd_i] [mi_i]
        [nmi_i] har [acr_us] l L [gal_us] [pt_us] [foz_us] [gal_br] [pt_br] [foz_br] g t

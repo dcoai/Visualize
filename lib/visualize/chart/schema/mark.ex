@@ -100,7 +100,7 @@ defmodule Visualize.Chart.Schema.Mark do
   @tiles [:squarify, :binary, :slice, :dice, :slice_dice]
   @outputs [:nodes, :links, :groups, :chords, :triangles, :hull, :cells, :edges, :points]
   # The four edge anchors are the rectangular types' (spec/14 §5.5, #134).
-  # The two polar anchors displace along the ray from the centre (spec/14 §5.5, #137).
+  # The two polar anchors displace along the ray from the center (spec/14 §5.5, #137).
   @anchors [
     :top,
     :bottom,

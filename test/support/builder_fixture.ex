@@ -255,9 +255,9 @@ defmodule Visualize.BuilderFixture do
         {&Layers.panel/1, %{id: "b-layers", rows: rows(), selected: 2, disabled: MapSet.new([0])}},
       inspector: {&Inspector.panel/1, %{id: "b-inspector", layers: layers()}},
       inspector_overrides: {&Inspector.panel/1, %{id: "b-inspector", layers: overriding()}},
-      params: {&Params.panel/1, %{layers: parameterised()}},
+      params: {&Params.panel/1, %{layers: parameterized()}},
       params_bound:
-        {&Params.panel/1, %{layers: parameterised(), vars: %{unit: "mg/hr", ticks: 6}}},
+        {&Params.panel/1, %{layers: parameterized(), vars: %{unit: "mg/hr", ticks: 6}}},
       document: {&Document.panel/1, %{design: Chart.stack(layers())}},
       document_errors: {&Document.panel/1, %{design: %{marks: [%{type: :line}]}}},
       editor_mark:
@@ -301,7 +301,7 @@ defmodule Visualize.BuilderFixture do
   # The three layers with a fourth that opens two more variables of different expectations:
   # a `{:ref, :style}` where a mark's style stands and an `:integer` where an axis's tick
   # count does, so the parameters form has three widgets to choose between.
-  def parameterised do
+  def parameterized do
     layers() ++
       [
         {:params,
@@ -448,13 +448,13 @@ defmodule Visualize.BuilderFixture do
   @doc "The resolved layers as `{name, fragment}`, the name an atom where one exists."
   def layers(%Socket{assigns: assigns}) do
     {resolved, _missing} = Stack.resolve(assigns.uses, assigns.labels, Stack.fetch(assigns.store))
-    for {label, fragment} <- resolved, do: {atomised(label), fragment}
+    for {label, fragment} <- resolved, do: {atomized(label), fragment}
   end
 
   # The fixture's own layers are named by atoms; a label that is one of them reads back as
   # the atom, so a test compares against `layers/0` unchanged. Any other label is its string.
   @named ~w(house shared panel imported only params)a
-  defp atomised(label) do
+  defp atomized(label) do
     Enum.find(@named, label, &(Atom.to_string(&1) == label))
   end
 
@@ -492,7 +492,7 @@ defmodule Visualize.BuilderFixture do
   @doc "The layer names, as strings, in stack order."
   # The names of every row of the tree, in flat order (spec/14 §18.8, #380).
   def names(%Socket{assigns: assigns}) do
-    for %{use: use} <- Stack.all(assigns.uses), do: atomised(Stack.label(assigns.labels, use))
+    for %{use: use} <- Stack.all(assigns.uses), do: atomized(Stack.label(assigns.labels, use))
   end
 
   @doc """

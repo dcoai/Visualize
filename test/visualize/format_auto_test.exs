@@ -101,7 +101,7 @@ defmodule Visualize.Format.AutoTest do
     end
   end
 
-  describe "formatter/2: one realised scale" do
+  describe "formatter/2: one realized scale" do
     test "a time scale formats in its zone with the span's format" do
       scale =
         Scale.time()

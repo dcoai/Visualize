@@ -7,10 +7,10 @@ defmodule Visualize.Chart.Transform do
   `apply/3` runs the steps of a mark's `data.transforms` in order over its source's rows,
   each a pure function of the rows before it and its node, and yields the rows the mark
   draws. Its only context is the plot area (`size:`, the extent every layout defaults
-  to), the point a centred mark is about (`centre:`), in a `:geo` frame the projection
+  to), the point a centered mark is about (`center:`), in a `:geo` frame the projection
   (`projection:`), the instant a `:window` step measures back from (`now:`), the schema
   of the rows' slot, whose declared identity a `:window` step's `latest` groups by
-  (`schema:`, D-168), and the realisation's laid-out `:force` steps (`forces:`, spec/14
+  (`schema:`, D-168), and the realization's laid-out `:force` steps (`forces:`, spec/14
   §5.4.3, D-132) — never a
   scale, which is what lets `Visualize.Chart.Frame.new/2` run the pipeline before its
   scales exist and infer their domains from the transformed columns. A layout's rows carry
@@ -29,7 +29,7 @@ defmodule Visualize.Chart.Transform do
   alias Visualize.Data.Table
   alias Visualize.Geo.Projection
 
-  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, the instant a `:window` measures back from, the rows' slot's schema, and the realisation's force layouts."
+  @typedoc "What a step sees of the frame: the plot area, in a `:geo` frame its projection, the bound sources for a graph's node table, the instant a `:window` measures back from, the rows' slot's schema, and the realization's force layouts."
   @type context :: %{
           size: [number()],
           center: [number()],
@@ -54,7 +54,7 @@ defmodule Visualize.Chart.Transform do
       (default `[1, 1]`)
     * `:center` - the `[x, y]` a `:chord` step's paths are about: the point an `:arc`
       mark is about, which the frame passes (spec/14 §5.4.3, #488); `size` sets the
-      chord's radius, never its centre (default the middle of `:size`)
+      chord's radius, never its center (default the middle of `:size`)
     * `:projection` - the `%Visualize.Geo.Projection{}` a `:projection` step maps through
       (default `nil`)
     * `:sources` - the bound sources by name, for a graph step's `nodes` (default `%{}`)
@@ -63,7 +63,7 @@ defmodule Visualize.Chart.Transform do
     * `:schema` - the `%Visualize.Data.Schema{}` of the rows' slot, whose declared
       identity a `:window` step's `latest` groups by (spec/14 §5.4.1, D-168); a `latest`
       step without one, or over a schema that declares none, raises
-    * `:forces` - the `:force` steps a realisation has laid out, by run (spec/14 §5.4.3,
+    * `:forces` - the `:force` steps a realization has laid out, by run (spec/14 §5.4.3,
       D-132): what `Visualize.Chart.Frame.new/2` passes, so the marks of one graph read
       one layout; a step not among them runs cold (default `%{}`)
 

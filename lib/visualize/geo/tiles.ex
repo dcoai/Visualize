@@ -39,7 +39,7 @@ defmodule Visualize.Geo.Tiles do
         }
 
   @doc """
-  `:ok` when the projection is tile-aligned — `:mercator`, a zero centre latitude, no
+  `:ok` when the projection is tile-aligned — `:mercator`, a zero center latitude, no
   tilt or roll — else `{:error, reason}` (spec/07 §8.1).
 
       iex> Visualize.Geo.Tiles.aligned(Visualize.Geo.Projection.new(:mercator))
@@ -138,7 +138,7 @@ defmodule Visualize.Geo.Tiles do
 
   # The plot pixel of the world's top-left corner, longitude −180° and the latitude whose
   # Mercator ordinate is π (spec/07 §8.3): the central meridian is the rotation's lambda
-  # plus the centre's longitude.
+  # plus the center's longitude.
   defp origin(%Projection{translate: {tx, ty}, center: {lon, _}, rotate: {lambda, _, _}}, w) do
     m = lambda + lon
     {tx - w * (m + 180) / 360, ty - w / 2}

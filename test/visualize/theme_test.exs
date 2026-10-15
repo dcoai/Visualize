@@ -73,7 +73,7 @@ defmodule Visualize.ThemeTest do
   describe ":surface (#422)" do
     @builtin [Theme.default(), Theme.dark()]
 
-    test "every built-in theme answers it, and lists it among its slots and colour slots" do
+    test "every built-in theme answers it, and lists it among its slots and color slots" do
       for theme <- @builtin do
         assert is_binary(Theme.resolve(theme, :surface, :literal))
         assert :surface in Theme.slots(theme)
@@ -170,12 +170,12 @@ defmodule Visualize.ThemeTest do
     test "nothing under the text is the theme's background, whose ink is its text" do
       assert Theme.ink(Theme.default(), nil) == "#333333"
       assert Theme.ink(Theme.dark(), nil) == "#e6e6e6"
-      assert Theme.ink(Theme.default(), "not a colour") == "#333333"
+      assert Theme.ink(Theme.default(), "not a color") == "#333333"
       assert Theme.ink(Theme.default(), Color.parse("#000000")) == "#ffffff"
     end
 
     test "black or white when neither slot reaches 4.5:1, and the ink always does" do
-      # A mid grey fails both #333333 and white; black holds 4.6:1 against it.
+      # A mid gray fails both #333333 and white; black holds 4.6:1 against it.
       assert Theme.ink(Theme.default(), "#777777") == "#000000"
 
       for r <- 0..255//15, g <- 0..255//15, b <- 0..255//15 do

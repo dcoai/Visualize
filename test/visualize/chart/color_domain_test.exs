@@ -1,7 +1,7 @@
-defmodule Visualize.Chart.ColourDomainTest do
+defmodule Visualize.Chart.ColorDomainTest do
   @moduledoc """
-  #487, D-122: a colour outside its ordinal domain is the colour scale's `unknown` — the
-  theme's `:axis` by default — on SVG and canvas alike; a missing colour is `:none`, which
+  #487, D-122: a color outside its ordinal domain is the color scale's `unknown` — the
+  theme's `:axis` by default — on SVG and canvas alike; a missing color is `:none`, which
   both backends draw as no paint; and the validator reports the mismatch a design makes
   visible (spec/14 §3.4, §4.3, §10.1).
   """
@@ -12,7 +12,7 @@ defmodule Visualize.Chart.ColourDomainTest do
   alias Visualize.Chart
   alias Visualize.Chart.Validator
 
-  # Three cells, filled by `k` through a colour scale that holds "a" and "b".
+  # Three cells, filled by `k` through a color scale that holds "a" and "b".
   defp design(overrides \\ %{}) do
     Map.merge(
       %{
@@ -64,7 +64,7 @@ defmodule Visualize.Chart.ColourDomainTest do
     |> Chart.generate(resolve: :literal)
     |> Canvas.render_element(format: :commands)
     |> Enum.reduce({nil, []}, fn
-      {:set_fillStyle, [colour]}, {_style, rects} -> {colour, rects}
+      {:set_fillStyle, [color]}, {_style, rects} -> {color, rects}
       # A rect's path is drawn by the fill() that follows it, or by none.
       {:rect, _}, {style, rects} -> {style, [nil | rects]}
       {:fill, []}, {style, [nil | rects]} -> {style, [style | rects]}
@@ -74,7 +74,7 @@ defmodule Visualize.Chart.ColourDomainTest do
     |> Enum.reverse()
   end
 
-  describe "a value outside the colour domain" do
+  describe "a value outside the color domain" do
     test "draws the theme's :axis on SVG and on canvas" do
       applied =
         applied([
@@ -100,7 +100,7 @@ defmodule Visualize.Chart.ColourDomainTest do
       assert canvas_fills(applied) == ["#0000ff"]
     end
 
-    test "on the binary stream too: the style record carries the unknown colour" do
+    test "on the binary stream too: the style record carries the unknown color" do
       applied = applied([%{x0: 0, x1: 1, k: "zzz"}])
       records = Decoder.decode(Chart.render(applied, backend: :canvas, format: :binary))
 
@@ -129,7 +129,7 @@ defmodule Visualize.Chart.ColourDomainTest do
   end
 
   describe "the validator (spec/14 §10.1)" do
-    test "a constant colour channel outside a declared domain" do
+    test "a constant color channel outside a declared domain" do
       design =
         design(%{
           marks: [

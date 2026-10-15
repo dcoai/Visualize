@@ -502,7 +502,7 @@ defmodule Visualize.Chart.TransformTest do
       %{from: "b", to: "c", n: 2}
     ]
 
-    test ":chord groups and chords are Layout.Chord over the flow matrix, about the centre" do
+    test ":chord groups and chords are Layout.Chord over the flow matrix, about the center" do
       groups = run(%{op: :chord, fields: [:from, :to], field: :n, padding: 0.1}, @flows)
       matrix = [[0, 5, 3], [0, 0, 2], [0, 0, 0]]
 
@@ -552,7 +552,7 @@ defmodule Visualize.Chart.TransformTest do
                Enum.map(expected.links, &Sankey.generate_link_path/1)
     end
 
-    test ":force is the synchronous run with the centre force at the plot centre" do
+    test ":force is the synchronous run with the center force at the plot center" do
       nodes = run(%{op: :force, fields: [:from, :to]}, @flows)
 
       expected =

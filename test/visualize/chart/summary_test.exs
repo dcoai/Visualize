@@ -34,7 +34,7 @@ defmodule Visualize.Chart.SummaryTest do
   @rows [%{name: "a", x: 1, y: 4}, %{name: "b", x: 2, y: 9}, %{name: "c", x: 3, y: 2}]
 
   describe "the name and the kind (§21.1)" do
-    test "the design's name, else the kind, capitalised" do
+    test "the design's name, else the kind, capitalized" do
       line =
         cartesian(%{x: %{kind: :linear}, y: %{kind: :linear}}, [], [
           %{type: :line, data: :s, channels: %{x: :x, y: :y}}

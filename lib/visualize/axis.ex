@@ -2,7 +2,7 @@ defmodule Visualize.Axis do
   @moduledoc """
   Axis generator for creating reference marks and labels.
 
-  Creates element groups containing tick marks, labels, and axis lines. Colours, font and
+  Creates element groups containing tick marks, labels, and axis lines. Colors, font and
   size come from a `Visualize.Theme` (`theme/2`, default `Visualize.Theme.default/0`),
   resolved as CSS references for SVG and as literals for a canvas (spec/05 §1.4, D-55).
 
@@ -112,7 +112,7 @@ defmodule Visualize.Axis do
     %{axis | offset: offset}
   end
 
-  @doc "Sets the theme the axis's colours, font and size resolve from"
+  @doc "Sets the theme the axis's colors, font and size resolve from"
   @spec theme(t(), Theme.t()) :: t()
   def theme(%__MODULE__{} = axis, %Theme{} = theme) do
     %{axis | theme: theme}
@@ -308,11 +308,11 @@ defmodule Visualize.Axis do
 
   @doc false
   # The position of a tick value along the axis: the scale's value plus the pixel offset
-  # and the band centring of spec/05 §1.3. The frame's grid lines are drawn at these
+  # and the band centering of spec/05 §1.3. The frame's grid lines are drawn at these
   # positions, so the arithmetic lives here once.
   @spec tick_position(t(), any()) :: number()
   def tick_position(%__MODULE__{scale: scale, offset: offset} = axis, value) do
-    Scale.apply(scale, value) + offset + band_centre(axis)
+    Scale.apply(scale, value) + offset + band_center(axis)
   end
 
   @doc false
@@ -330,13 +330,13 @@ defmodule Visualize.Axis do
 
   def default_label(value), do: to_string(value)
 
-  # d3-axis's `center`: a tick on a band scale sits at the middle of its band. The centring
+  # d3-axis's `center`: a tick on a band scale sits at the middle of its band. The centering
   # offset shrinks by the pixel offset on each side (so `offset` still lands the tick on a
-  # pixel centre) and is rounded when the band scale rounds, as d3 does; on every other
+  # pixel center) and is rounded when the band scale rounds, as d3 does; on every other
   # scale the bandwidth is 0 and this adds nothing.
-  defp band_centre(%__MODULE__{scale: scale, offset: offset}) do
-    centre = max(0, Scale.bandwidth(scale) - 2 * offset) / 2
-    if match?(%{round?: true}, scale), do: round(centre), else: centre
+  defp band_center(%__MODULE__{scale: scale, offset: offset}) do
+    center = max(0, Scale.bandwidth(scale) - 2 * offset) / 2
+    if match?(%{round?: true}, scale), do: round(center), else: center
   end
 
   defp format_tick(%__MODULE__{tick_format: nil}, value), do: default_label(value)

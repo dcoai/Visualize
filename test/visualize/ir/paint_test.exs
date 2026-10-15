@@ -14,7 +14,7 @@ defmodule Visualize.IR.PaintTest do
     do: %Paint{id: "p", type: :linear, geometry: %{x1: x1, y1: y1, x2: x2, y2: y2}, stops: []}
 
   describe "bounds/1 is the tight box SVG's objectBoundingBox is measured over" do
-    test "the shapes by their attributes, a rect of negative size normalised" do
+    test "the shapes by their attributes, a rect of negative size normalized" do
       assert Paint.bounds(Element.rect(10, 20, -4, 6)) == {6, 20, 4, 6}
       assert Paint.bounds(Element.ellipse(0, 0, 3, 2)) == {-3, -2, 6, 4}
       assert Paint.bounds(Element.line(5, 1, 1, 9)) == {1, 1, 4, 8}
@@ -88,7 +88,7 @@ defmodule Visualize.IR.PaintTest do
 
   test "rgba/1 multiplies the stop's opacity into the alpha; canvas_stops/1 writes rgba()" do
     assert Paint.rgba({0, "#ff000080", 0.5}) == {255, 0, 0, 64}
-    assert Paint.rgba({0, "not a colour", 1}) == {0, 0, 0, 255}
+    assert Paint.rgba({0, "not a color", 1}) == {0, 0, 0, 255}
 
     paint = %{linear(0, 0, 1, 0) | stops: [{0.0, "#3b6fa8", 1}, {1.0, "#ffffff", 0.5}]}
 

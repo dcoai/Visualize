@@ -23,7 +23,7 @@ defmodule Visualize.Hooks.ExecutedLegendHookTest do
   end
 
   # The /interaction page's legend chart: a line and its points, both by `series`, the
-  # line labelled with its series at its end.
+  # line labeled with its series at its end.
   defp svg do
     design = %{
       version: 2,

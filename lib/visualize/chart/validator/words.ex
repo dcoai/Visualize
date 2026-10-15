@@ -39,7 +39,7 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   def words({:color_map, kind}) do
-    "is a map of colours on a #{inspect(kind)} scale; a map pins categories, which an " <>
+    "is a map of colors on a #{inspect(kind)} scale; a map pins categories, which an " <>
       ":ordinal scale has (spec/14 §4.3)"
   end
 
@@ -50,7 +50,7 @@ defmodule Visualize.Chart.Validator.Words do
 
   def words({:tiles, :projection, what}) do
     "draws tiles over #{inspect(what)}: tiles lie only under a :geo frame's :mercator " <>
-      "projection with a zero centre latitude and no tilt or roll (spec/07 §8.1)"
+      "projection with a zero center latitude and no tilt or roll (spec/07 §8.1)"
   end
 
   def words({:tiles, :attribution}), do: "must say something: the attribution is drawn"
@@ -98,12 +98,12 @@ defmodule Visualize.Chart.Validator.Words do
 
   def words({:outside_domain, scale, {:column, field, type}}) do
     "field #{inspect(field)} is a #{inspect(type)} column and scale #{inspect(scale)}'s " <>
-      "declared domain holds no such value: every element would draw its unknown colour"
+      "declared domain holds no such value: every element would draw its unknown color"
   end
 
   def words({:outside_domain, scale, value}) do
     "#{inspect(value)} is not in scale #{inspect(scale)}'s declared domain: " <>
-      "it would draw the scale's unknown colour"
+      "it would draw the scale's unknown color"
   end
 
   def words({:feeds_domain, scale, n}) do
@@ -328,7 +328,7 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   defp type_words(:color) do
-    "a colour string, :none, a typed color — color(name), ramp(name, t) with t in 0..1, " <>
+    "a color string, :none, a typed color — color(name), ramp(name, t) with t in 0..1, " <>
       "contrast() — a transform of colors with every number in 0..1, or a paint"
   end
 
@@ -337,7 +337,7 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:theme_color),
     do:
       type_words(:color) <>
-        ", or a map of pinned steps, an integer in 0..1000 to a colour string"
+        ", or a map of pinned steps, an integer in 0..1000 to a color string"
 
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
   defp type_words(:size), do: "a number, a theme slot or a unit value such as pt(12)"

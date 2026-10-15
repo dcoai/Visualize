@@ -52,13 +52,13 @@ defmodule Visualize.Chart.LegendWrapTest do
   end
 
   describe "wrapping (D-169)" do
-    test "entries flow onto rows 16 apart, each row centred on the widest" do
+    test "entries flow onto rows 16 apart, each row centered on the widest" do
       {{x, y}, group} = legend(legend_frame(%{position: :top}))
       # Rows of two, two and one: the last, 88 wide, sits (184 − 88) / 2 in.
       assert Enum.map(items(group), &at/1) ==
                [{0, 0}, {96.0, 0}, {0, 16}, {96.0, 16}, {48.0, 32}]
 
-      # The group is centred on the widest row: 100 − 184 / 2.
+      # The group is centered on the widest row: 100 − 184 / 2.
       assert {x, y} == {8.0, 8}
     end
 

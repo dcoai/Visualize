@@ -1,16 +1,16 @@
 defmodule Visualize.Chart.Label.Polar do
   @moduledoc false
   # A label's polar placement and rotation (spec/14 §5.5, §6.1, #137): the point moved
-  # along the ray from a centre, and the text turned about its own position — by degrees,
+  # along the ray from a center, and the text turned about its own position — by degrees,
   # or along (`:radial`) or across (`:tangent`) the ray with the flip that keeps it upright.
 
   alias Visualize.IR.{Element, Transform}
 
   @doc false
-  # The label's point along the ray from `centre` through the anchor point: `by` beyond a
+  # The label's point along the ray from `center` through the anchor point: `by` beyond a
   # sector's rim — its outer radius outward, its inner inward, `radii` — or beyond any
   # other mark's own point; with the baseline and the text anchor of its side: `:start`
-  # right of the centre, `:end` left, `:middle` on the vertical. A point at the centre has
+  # right of the center, `:end` left, `:middle` on the vertical. A point at the center has
   # no ray and stays, anchored `:middle`.
   @spec place(
           :outward | :inward,
@@ -40,15 +40,15 @@ defmodule Visualize.Chart.Label.Polar do
   end
 
   @doc false
-  # The rotation of a text at `point` about `centre`, and the text anchor it leaves:
+  # The rotation of a text at `point` about `center`, and the text anchor it leaves:
   # `nil` for none; a number as it is; `:radial` the ray's angle, anchored `:start`, or
   # flipped a half turn on the left and anchored `:end`, so the text runs toward the
-  # centre and ends at the point; `:tangent` a quarter turn from the ray, flipped on the
+  # center and ends at the point; `:tangent` a quarter turn from the ray, flipped on the
   # lower half, anchored `:middle`.
   @spec rotation(term(), {number(), number()}, {number(), number()}, atom()) ::
           {number() | nil, atom()}
-  def rotation(nil, _point, _centre, anchor), do: {nil, anchor}
-  def rotation(degrees, _point, _centre, anchor) when is_number(degrees), do: {degrees, anchor}
+  def rotation(nil, _point, _center, anchor), do: {nil, anchor}
+  def rotation(degrees, _point, _center, anchor) when is_number(degrees), do: {degrees, anchor}
 
   def rotation(kind, {px, py}, {cx, cy}, anchor) when kind in [:radial, :tangent] do
     case unit({px - cx, py - cy}) do
@@ -59,8 +59,8 @@ defmodule Visualize.Chart.Label.Polar do
         theta = :math.atan2(uy, ux) * 180 / :math.pi()
 
         # A radial label runs outward from the point on the right (:start) and, flipped,
-        # toward the centre on the left, ending at the point (:end); a tangent label is
-        # centred on its point.
+        # toward the center on the left, ending at the point (:end); a tangent label is
+        # centered on its point.
         case kind do
           :radial when ux < 0 -> {normal(theta + 180), :end}
           :radial -> {normal(theta), :start}

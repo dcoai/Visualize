@@ -673,7 +673,7 @@ defmodule Visualize.Chart.ValidatorTest do
                "marks[0].options.radius: is not read by :line"
 
       assert Validator.format({[:styles, :s, :fill], {:type, :color}}) ==
-               "styles.s.fill: must be a colour string, :none, a typed color — color(name), " <>
+               "styles.s.fill: must be a color string, :none, a typed color — color(name), " <>
                  "ramp(name, t) with t in 0..1, contrast() — a transform of colors with every " <>
                  "number in 0..1, or a paint"
 

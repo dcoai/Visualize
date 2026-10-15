@@ -106,7 +106,7 @@ defmodule Visualize.Scale.TimeTest do
   end
 
   describe "interval choice" do
-    test "picks the neighbour closer to span / count in ratio, as d3 does" do
+    test "picks the neighbor closer to span / count in ratio, as d3 does" do
       # 58 days / 10 = 5.0 days: between 2 days (2.5×) and a week (1.4×) — the week.
       assert Time.interval(58 * 86_400, 10) == {:week, 1}
       # 1 year / 10 = 36.5 days: between a month (1.2×) and a quarter (2.5×) — the month.
@@ -174,7 +174,7 @@ defmodule Visualize.Scale.TimeTest do
         assert list == Enum.uniq(list)
         assert Enum.all?(list, &(DateTime.compare(&1, d0) != :lt))
         assert Enum.all?(list, &(DateTime.compare(&1, d1) != :gt))
-        # The ratio between neighbouring intervals is at most 4.3, so the closer neighbour
+        # The ratio between neighboring intervals is at most 4.3, so the closer neighbor
         # is within 2.1× of the target; the nice-step years within 1.5×.
         assert length(list) <= 2.2 * count + 2
         assert length(list) >= count / 2.2 - 2

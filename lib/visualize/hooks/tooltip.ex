@@ -54,7 +54,7 @@ defmodule Visualize.Hooks.Tooltip do
   alias Visualize.Hooks.States
 
   @doc """
-  The hook element's `data-vis-hover` for a realised frame (spec/10 §12.1, §4.4): the
+  The hook element's `data-vis-hover` for a realized frame (spec/10 §12.1, §4.4): the
   palette's `:hover` as the frame's design and theme resolve it, in `:literal` mode, as a
   JSON object of SVG attributes the hook outlines the datum element it shows with.
 
@@ -225,7 +225,7 @@ defmodule Visualize.Hooks.Tooltip do
         this.publishing = false;
       },
 
-      // Another member's hover (spec/10 §12.4): the datum element whose centre is nearest
+      // Another member's hover (spec/10 §12.4): the datum element whose center is nearest
       // the value's x through this chart's own mapping; hidden for a clear, a value outside
       // the domain, or a chart with no datum element.
       handleSync(e) {

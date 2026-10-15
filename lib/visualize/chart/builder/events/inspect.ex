@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def events, do: @events
 
     # The context's panels, one open at a time (spec/14 §19.10): inspect by every selection,
-    # colour by its toggle and variables by its tab at the end of the node row (§18.13).
+    # color by its toggle and variables by its tab at the end of the node row (§18.13).
     @panels [:inspect, :color, :variables]
 
     # -- the strip -----------------------------------------------------------------------
@@ -86,7 +86,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The colour toggle and the variables tab: which of the context's panels is open
+    # The color toggle and the variables tab: which of the context's panels is open
     # (spec/14 §19.10, §18.13).
     def handle_event("context", %{"panel" => panel}, socket) do
       case Enum.find(@panels, &(to_string(&1) == panel)) do
@@ -134,7 +134,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, socket |> select(position(layer)) |> opened(path)}
     end
 
-    # A colour field opens the colour panel; any other field leaves the panel where it is —
+    # A color field opens the color panel; any other field leaves the panel where it is —
     # a font key is a style's, and the font panel is under the styles root the form is in.
     defp context_for(socket, key) do
       %{entry: entry} = editing(socket.assigns)

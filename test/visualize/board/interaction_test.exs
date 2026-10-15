@@ -389,7 +389,7 @@ defmodule Visualize.Board.InteractionTest do
       assert Server.select(board, {:name, "p"}) == :ok
       assert Server.info(board).selection == {:k, "p"}
       d = Map.fetch!(seen, :d)
-      # A synchronising call on d: the selections reached it before the pick did.
+      # A synchronizing call on d: the selections reached it before the pick did.
       {:ok, _row} = Server.pick(board, :d, 0, 0)
 
       for {:visualize_board, _, {:cell, :d, %View{svg: svg}}} <- drained(),
@@ -407,7 +407,7 @@ defmodule Visualize.Board.InteractionTest do
       assert Server.select(board, {:k, "p"}) == :ok
       drawn = views_until([:a, :c], &(&1.svg != nil and dims(&1.svg) > 0))
 
-      # The line p is heavier in its own colour; q is :muted, its own colour faded.
+      # The line p is heavier in its own color; q is :muted, its own color faded.
       [p] = Regex.run(~r/<path[^>]*data-series="p"[^>]*>/, drawn.a.svg)
       assert p =~ ~s(stroke-width="2")
       assert p =~ ~s{stroke="var(--vis-series-1, }
@@ -415,7 +415,7 @@ defmodule Visualize.Board.InteractionTest do
       [q] = Regex.run(~r/<path[^>]*data-series="q"[^>]*>/, drawn.a.svg)
       assert q =~ ~s(opacity="0.25")
 
-      # No outline anywhere: :selected has no colour or stroke style of its own, so the
+      # No outline anywhere: :selected has no color or stroke style of its own, so the
       # points and the bar with no stroke draw as they are (#638).
       refute drawn.a.svg =~ "vis-mask-" or drawn.a.svg =~ "--vis-text"
       refute drawn.c.svg =~ "vis-mask-"

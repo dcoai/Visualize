@@ -88,17 +88,17 @@ defmodule Visualize.Chart.TilesTest do
                "marks[1].type: draws tiles over :equirectangular"
     end
 
-    test "a frame that is not :geo, a centre latitude and a tilt are refused" do
+    test "a frame that is not :geo, a center latitude and a tilt are refused" do
       cartesian = put_in(design(), [:frames, :main], %{kind: :cartesian})
       assert errors(cartesian) == [{[:marks, 1, :type], {:tiles, :projection, :cartesian}}]
 
-      centred = design(nil, %{type: :mercator, center: [0, 51]})
-      assert errors(centred) == [{[:marks, 1, :type], {:tiles, :projection, :center}}]
+      centered = design(nil, %{type: :mercator, center: [0, 51]})
+      assert errors(centered) == [{[:marks, 1, :type], {:tiles, :projection, :center}}]
 
       tilted = design(nil, %{type: :mercator, rotate: [0, 0, 10]})
       assert errors(tilted) == [{[:marks, 1, :type], {:tiles, :projection, :rotate}}]
 
-      # A centre longitude and a rotation's lambda shift the map: tiles still lie under it.
+      # A center longitude and a rotation's lambda shift the map: tiles still lie under it.
       assert Validator.validate(design(nil, %{type: :mercator, center: [10, 0], rotate: [5]})) ==
                :ok
     end

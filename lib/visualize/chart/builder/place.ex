@@ -289,8 +289,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     A new frame dropped on the graph at a point (spec/14 §18.16, #616): a fresh name —
     `main` in a design with none, else the first free `frame_<n>` from 2 — and a box a
-    quarter of the graph, half its width and half its height, centred on the point and
-    kept inside, as fractions rounded to four places. `:center` is the graph's centre,
+    quarter of the graph, half its width and half its height, centered on the point and
+    kept inside, as fractions rounded to four places. `:center` is the graph's center,
     where the keyboard twin and *+ frame* place one.
 
         iex> design = %{frames: %{main: %{}, frame_2: %{}}}

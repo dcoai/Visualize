@@ -14,7 +14,7 @@ defmodule Visualize.Backend.SVG do
   # Backend Callbacks
   # ============================================================
 
-  # The one `d` serialisation is `Visualize.IR.Path.to_string/1` (D-12).
+  # The one `d` serialization is `Visualize.IR.Path.to_string/1` (D-12).
   @impl true
   @spec path_data(Path.t()) :: String.t()
   def path_data(%Path{} = path), do: Path.to_string(path)
@@ -395,7 +395,7 @@ defmodule Visualize.Backend.SVG do
 
   @doc false
   # The id of the filter an effect shares (spec/14 §2.7): its type and radius, and for a
-  # shadow with an offset or a colour a hash of the two (#674), so a shadow with neither
+  # shadow with an offset or a color a hash of the two (#674), so a shadow with neither
   # keeps the id it always had.
   @spec effect_id(atom(), number() | nil, [number()] | nil, String.t() | nil) :: String.t()
   def effect_id(effect, radius, offset \\ nil, color \\ nil)
@@ -410,7 +410,7 @@ defmodule Visualize.Backend.SVG do
   defp maybe_add_transform(attrs, nil), do: attrs
   defp maybe_add_transform(attrs, %Transform{operations: []}), do: attrs
 
-  # The one transform serialisation is `Visualize.IR.Transform.to_string/1`.
+  # The one transform serialization is `Visualize.IR.Transform.to_string/1`.
   defp maybe_add_transform(attrs, %Transform{} = transform),
     do: Map.put(attrs, :transform, Transform.to_string(transform))
 

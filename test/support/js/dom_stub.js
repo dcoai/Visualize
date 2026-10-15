@@ -57,11 +57,11 @@ const Stub = (() => {
         name in props ? props[name] :
         // A gradient is an object the scenario reads back (#652): its constructor and
         // arguments, and every stop added, in order. Assigned as a fill or a stroke, it is
-        // logged as that object and serialised with its stops when the log is printed.
+        // logged as that object and serialized with its stops when the log is printed.
         (name === 'createLinearGradient' || name === 'createRadialGradient') ? (...args) => {
           log.push({on: canvas.id, kind: 'call', name, args});
           const gradient = {gradient: name, args, stops: []};
-          Object.defineProperty(gradient, 'addColorStop', {value: (at, colour) => gradient.stops.push([at, colour])});
+          Object.defineProperty(gradient, 'addColorStop', {value: (at, color) => gradient.stops.push([at, color])});
           return gradient;
         } :
         // A pattern likewise (#673): its tile canvas and the transform it is given.

@@ -3,7 +3,7 @@ defmodule Visualize.ThemeRampsTest do
   A theme's meaning-bearing ramps and roles (spec/08 §7.5, D-135): the shipped themes hold
   their contracts, a theme that breaks one is refused naming the ramp, roles are fixed
   points on the status ramp, scales range over ramps, and the fallback is the default
-  theme's, never a series colour.
+  theme's, never a series color.
   """
   use ExUnit.Case, async: true
 
@@ -40,8 +40,8 @@ defmodule Visualize.ThemeRampsTest do
 
     test "the status roles hold 3:1 on the light themes' white" do
       for theme <- [Theme.default(), Theme.color_safe()], role <- [:good, :warning, :bad] do
-        colour = Color.parse(Theme.resolve(theme, role, :literal))
-        assert Color.contrast(colour, Color.parse(theme.background)) >= 3, "#{theme.name} #{role}"
+        color = Color.parse(Theme.resolve(theme, role, :literal))
+        assert Color.contrast(color, Color.parse(theme.background)) >= 3, "#{theme.name} #{role}"
       end
     end
 
@@ -127,13 +127,13 @@ defmodule Visualize.ThemeRampsTest do
                Theme.check(Theme.build(Theme.default(), roles: %{info: "#c23238"}))
     end
 
-    test "what is not a ramp, a role or a colour" do
+    test "what is not a ramp, a role or a color" do
       assert_raise ArgumentError, ~r/ramp :heat breaks its contract: is not a ramp/, fn ->
         Theme.new(ramps: %{heat: ~w(#fff #000)})
       end
 
       assert_raise ArgumentError,
-                   ~r/color :good breaks its contract: "nope" is not a colour/,
+                   ~r/color :good breaks its contract: "nope" is not a color/,
                    fn ->
                      Theme.new(colors: %{good: "nope"})
                    end
@@ -150,7 +150,7 @@ defmodule Visualize.ThemeRampsTest do
         Theme.new(ramps: %{sequential: ["#004580"]})
       end
 
-      assert_raise ArgumentError, ~r/anchor 2 "nope" is not a colour/, fn ->
+      assert_raise ArgumentError, ~r/anchor 2 "nope" is not a color/, fn ->
         Theme.new(ramps: %{sequential: ["#e9f2fc", "nope"]})
       end
     end
@@ -212,7 +212,7 @@ defmodule Visualize.ThemeRampsTest do
     end
   end
 
-  describe "fallback is the default theme's, never a series colour" do
+  describe "fallback is the default theme's, never a series color" do
     test "a struct that lacks a ramp or a role" do
       bare = %{Theme.dark() | ramps: %{}, colors: %{}}
       assert Theme.ramp(bare, :status, 0) == Theme.ramp(Theme.default(), :status, 0)
@@ -251,7 +251,7 @@ defmodule Visualize.ThemeRampsTest do
     )
   end
 
-  describe "a colour scale over a ramp" do
+  describe "a color scale over a ramp" do
     test "an ordinal scale spreads its domain end to end" do
       color = %{kind: :ordinal, domain: ["ok", "degraded", "down"], range: {:ramp, :status}}
       frame = Frame.new(chart(%{color: color}), size: @size)
@@ -350,7 +350,7 @@ defmodule Visualize.ThemeRampsTest do
     ~r/<rect[^>]* fill="(#[0-9a-f]{6})"/ |> Regex.scan(svg) |> Enum.map(&List.last/1)
   end
 
-  test "the same design keeps good → warning → bad under the light, dark and colour-safe themes" do
+  test "the same design keeps good → warning → bad under the light, dark and color-safe themes" do
     for range <- [{:ramp, :status}, [:good, :warning, :bad]], theme <- @themes do
       {:ok, applied} =
         Chart.apply(status_design(range), sources: %{states: @rows}, theme: theme, size: @size)
@@ -372,7 +372,7 @@ defmodule Visualize.ThemeRampsTest do
   # -- the validator and the codec --------------------------------------------------------
 
   describe "the validator" do
-    test "a ramp position and a role are colours; a ramp out of range is not" do
+    test "a ramp position and a role are colors; a ramp out of range is not" do
       design = status_design({:ramp, :status})
       assert Validator.validate(design) == :ok
 
@@ -443,7 +443,7 @@ defmodule Visualize.ThemeRampsTest do
       end
     end
 
-    test "a grey is neutral" do
+    test "a gray is neutral" do
       for hex <- ~w(#808080 #f7f7f7 #333333) do
         %{a: a, b: b} = hex |> Color.parse() |> Color.to_lab()
         assert abs(a) < 2 and abs(b) < 4

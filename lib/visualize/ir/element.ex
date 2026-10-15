@@ -306,8 +306,8 @@ defmodule Visualize.IR.Element do
 
   @doc """
   A drop shadow primitive of the offset, the blur radius and a color: `flood-color` the
-  colour at `flood-opacity` 1, so the colour's own alpha is the shadow's (#674); a `nil`
-  colour is `drop_shadow/3`.
+  color at `flood-opacity` 1, so the color's own alpha is the shadow's (#674); a `nil`
+  color is `drop_shadow/3`.
   """
   @spec drop_shadow(number(), number(), number(), String.t() | nil) :: t()
   def drop_shadow(dx, dy, radius, nil), do: drop_shadow(dx, dy, radius)

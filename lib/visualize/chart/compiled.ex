@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Compiled do
   `Visualize.Chart.compile/2` is the only constructor. The frame's drawing order is a list
   of *regions* — the grid, each mark, each axis, the legend, the labels, or a facet's
   panels — and each is static, drawn once here in `:css` mode and byte for byte the same
-  on every tick, or dynamic, drawn per tick by its closure over the frame realised for the
+  on every tick, or dynamic, drawn per tick by its closure over the frame realized for the
   tick's sources: a mark is always dynamic, a facet's panels are, and anything else is
   dynamic exactly when it reads a scale whose domain moves — inferred (`:auto`) or
   windowed by a `viewport`. `regions/1` and `dynamic_regions/1` report the split and why.
@@ -102,7 +102,7 @@ defmodule Visualize.Chart.Compiled do
   @typedoc "Why a region is dynamic (spec/14 §12.2)."
   @type reason :: :data | :facet | {:inferred, [atom()]}
 
-  @typedoc "The frame's drawing order: regions, and a centred group of regions in a polar frame."
+  @typedoc "The frame's drawing order: regions, and a centered group of regions in a polar frame."
   @type layout :: [region() | {:centered, [region()]}]
 
   @typedoc """
@@ -228,17 +228,17 @@ defmodule Visualize.Chart.Compiled do
   defp static_backdrop(compiled, drawn),
     do: fragment(compiled, layer(compiled, drawn, :static_backdrop, false))
 
-  # The realised frame of this name; an `%Applied{}` assembled by hand carries one frame
+  # The realized frame of this name; an `%Applied{}` assembled by hand carries one frame
   # and no `frames`, as `Visualize.Chart.generate/2` reads it.
   defp frame!(%Applied{frames: frames, frame: frame}, name) do
     case frames do
-      %{^name => realised} -> realised
+      %{^name => realized} -> realized
       _absent -> frame
     end
   end
 
   # The design this plot draws: the one frame, and the marks and labels that say it — which
-  # the realised frame already holds, filtered (spec/14 §4.7, §5.1).
+  # the realized frame already holds, filtered (spec/14 §4.7, §5.1).
   defp restrict(%Chart{} = chart, %Frame{name: name} = frame) do
     node = Map.get(chart.frames, name) || chart.frames |> Map.values() |> hd()
 
@@ -425,8 +425,8 @@ defmodule Visualize.Chart.Compiled do
   end
 
   @doc """
-  The realised rows of the frame's mark at `index` as a tick over the sources draws it
-  (spec/14 §5.7, D-170): the frame realised as `step/3` realises it and a viewport's
+  The realized rows of the frame's mark at `index` as a tick over the sources draws it
+  (spec/14 §5.7, D-170): the frame realized as `step/3` realizes it and a viewport's
   window taken, so a `data-row` ordinal the mark wrote counts in these rows. `[]` for an
   index the frame has no mark at. A mark that eases keeps its rows' positions (§12.5), so
   the rows here are the ones the eased elements stand for, at their own values.
@@ -535,7 +535,7 @@ defmodule Visualize.Chart.Compiled do
     * `:at` - the clock in milliseconds a scale's transition eases by (spec/14 §12.5);
       by default `System.monotonic_time(:millisecond)`
     * `:frame` - the tick's own frame node (spec/14 §12.5, #424): when it differs from the
-      one the chart was compiled with, the frame is re-realised at it and the static
+      one the chart was compiled with, the frame is re-realized at it and the static
       regions re-rendered, which is what a design animating through its frame needs
     * `:motion` - `:full` or `:reduce` for this tick, by default the compiled chart's
       (spec/14 §21.6, D-142): under `:reduce` every transition and mark motion steps to
@@ -559,7 +559,7 @@ defmodule Visualize.Chart.Compiled do
     svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
     backdrop = fragment(compiled, layer(compiled, drawn, :dynamic_backdrop, false))
 
-    # A scroll strip is built over the strip's rows and their neighbours (§12.5, D-108).
+    # A scroll strip is built over the strip's rows and their neighbors (§12.5, D-108).
     strip = fn bounds ->
       layer(compiled, drawn_strip(compiled, frame, sources, hi, bounds), :canvas, false)
     end
@@ -629,7 +629,7 @@ defmodule Visualize.Chart.Compiled do
     end
   end
 
-  # The frame of a tick: realised over the sources, its viewport scale windowed. With the
+  # The frame of a tick: realized over the sources, its viewport scale windowed. With the
   # window's upper end given — what a run passes every tick — the scale's domain is known
   # before the frame is built, so it is given rather than inferred over the window's rows
   # and then replaced (spec/14 §4.3, #409).
@@ -649,8 +649,8 @@ defmodule Visualize.Chart.Compiled do
   end
 
   # The frame the tick gives, when it is not the one the chart was compiled with (spec/14
-  # §12.5, #424): the frame is re-realised at it and every static region re-rendered from
-  # that realisation, which is what a design animating through its *frame* — a `:geo`
+  # §12.5, #424): the frame is re-realized at it and every static region re-rendered from
+  # that realization, which is what a design animating through its *frame* — a `:geo`
   # projection's rotation, a scale whose range follows the tick — needs in order to move
   # on the canvas backends as it does on SVG.
   #
@@ -698,7 +698,7 @@ defmodule Visualize.Chart.Compiled do
     end
   end
 
-  # A tick re-realises the frame, and must do it at the size the chart was compiled at
+  # A tick re-realizes the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.
   # Its force layouts start from the ones the chart carries (§12.5, D-132).
   defp realize_opts(%{theme: theme, system: system, size: size, forces: forces} = c, sources) do
@@ -774,7 +774,7 @@ defmodule Visualize.Chart.Compiled do
     end
   end
 
-  # The canvas marks over the rows under a strip and three neighbours each side (§12.5,
+  # The canvas marks over the rows under a strip and three neighbors each side (§12.5,
   # D-108): what an exposed region of the incremental canvas is drawn from. Every other
   # region draws nothing into a strip.
   defp drawn_strip(%{regions: regions, viewport: window} = compiled, frame, sources, hi, bounds) do
@@ -833,10 +833,10 @@ defmodule Visualize.Chart.Compiled do
   # regions by status, `:svg` takes them all (the one-string form), `:canvas` the canvas
   # elements; `:backdrop` the layer beneath the canvas, split by status as
   # `:static_backdrop` and `:dynamic_backdrop` (#476). The SVG layers hold a basemap's
-  # group without its images, which are the backdrop's. A polar frame's centred group
+  # group without its images, which are the backdrop's. A polar frame's centered group
   # wraps its inner regions, always in the one-string form and when it has anything
   # otherwise.
-  defp layer(%{layout: layout, regions: regions, plot: plot}, drawn, which, always_centred?) do
+  defp layer(%{layout: layout, regions: regions, plot: plot}, drawn, which, always_centered?) do
     status = Map.new(regions, &{&1.region, &1.status})
 
     pick = fn region ->
@@ -857,8 +857,8 @@ defmodule Visualize.Chart.Compiled do
     Enum.flat_map(layout, fn
       {:centered, inner} ->
         case Enum.flat_map(inner, pick) do
-          [] when not always_centred? -> []
-          elements -> [Furniture.centred(%{plot: plot}, elements)]
+          [] when not always_centered? -> []
+          elements -> [Furniture.centered(%{plot: plot}, elements)]
         end
 
       region ->
@@ -993,7 +993,7 @@ defmodule Visualize.Chart.Compiled do
 
   # -- text and the canvas --------------------------------------------------------------
 
-  # The canvas layer drops a labelled mark's labels group with its text (spec/14 §12.3,
+  # The canvas layer drops a labeled mark's labels group with its text (spec/14 §12.3,
   # #485), so the canvas draws the wrapper and the elements' group alone.
   defp strip_text(%Element{children: children} = element) do
     %{
