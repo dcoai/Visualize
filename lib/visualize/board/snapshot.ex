@@ -41,6 +41,7 @@ defmodule Visualize.Board.Snapshot do
   alias Visualize.Board.{Draw, State, View}
   alias Visualize.Board.Snapshot.{Codec, Reader}
   alias Visualize.Chart
+  alias Visualize.Chart.Codec.Tags
   alias Visualize.Chart.{Limits, Migration}
   alias Visualize.Chart.Theme, as: ChartTheme
   alias Visualize.Data.{Delivery, Table}
@@ -373,7 +374,8 @@ defmodule Visualize.Board.Snapshot do
           {stamp, term} = Map.pop(term, Codec.stamp())
 
           with :ok <- readable(stamp, [Codec.stamp()]),
-               :ok <- Reader.done(Limits.structure(term, limits)) do
+               :ok <- Reader.done(Limits.structure(term, limits)),
+               {:ok, term} <- Tags.read(term, stamp) do
             map = Codec.decode(term)
             Reader.read(if(stamp == nil, do: map, else: Map.put(map, :version, stamp)), limits)
           end

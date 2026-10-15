@@ -141,6 +141,7 @@ defmodule Visualize.Chart.Theme do
       {:ok, fragment, version} -> from_map(Map.put(fragment, :version, version), opts)
       {:error, {:newer_schema, _, _} = reason} -> {:error, [{[:version], reason}]}
       {:error, {:limits, errors}} -> {:error, errors}
+      {:error, {:tags, errors}} -> {:error, errors}
       {:error, reason} -> {:error, [{[], reason}]}
     end
   end

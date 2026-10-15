@@ -449,7 +449,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
              ]
     end
 
-    test "the JSON tags are not read" do
+    test "the JSON tags are refused" do
       design = put_in(design(%{}), [:frames, :main, :scales, :health], %{kind: :ordinal})
       {:ok, json} = Chart.to_json(Chart.from_map!(design))
 
@@ -460,9 +460,12 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
           ~s("kind":"ordinal","range":{"$styles":"roles"})
         )
 
-      # Read as the plain object it is, never as a range of styles.
-      {:ok, chart} = Chart.from_json(styles)
-      refute match?({:styles, _}, chart.frames.main.scales.health.range)
+      # Refused as the retired tag it is, never read as data (D-182).
+      assert {:error, [{["frames", "main", "scales", "health", "range"], reason}]} =
+               Chart.from_json(styles)
+
+      assert {:retired_tag, "$styles", why} = reason
+      assert why =~ "#644"
 
       mark = put_in(design, [:marks, Access.at(0), :style], [:muted])
       {:ok, json} = Chart.to_json(Chart.from_map!(mark))

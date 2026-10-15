@@ -19,10 +19,12 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   alias Visualize.Board.Codec, as: BoardCodec
   alias Visualize.Chart.Codec
+  alias Visualize.Chart.Codec.Tags
+  require Tags
   alias Visualize.Data.Schema
 
   @stamp "$version"
-  @absent %{"$absent" => true}
+  @absent Tags.tag("$absent", true)
 
   @keys [:board, :now, :window, :width, :theme, :cells]
   @cell_keys [:chart, :vars, :slots, :crashed]
@@ -52,21 +54,21 @@ defmodule Visualize.Board.Snapshot.Codec do
       "window" => Codec.encode_term(map.window),
       "width" => map.width,
       "theme" => Map.fetch!(Codec.encode(%{theme: map.theme}), "theme"),
-      "cells" => Map.new(map.cells, fn {name, cell} -> {Atom.to_string(name), cell(cell)} end)
+      "cells" => Map.new(map.cells, fn {name, cell} -> {name(name), cell(cell)} end)
     }
   end
 
   defp cell(cell) do
     %{
       "chart" => Codec.encode(cell.chart),
-      "vars" => Map.new(cell.vars, fn {k, v} -> {Atom.to_string(k), Codec.encode_term(v)} end),
+      "vars" => Map.new(cell.vars, fn {k, v} -> {name(k), Codec.encode_term(v)} end),
       "slots" => slots(cell.slots),
       "crashed" => cell.crashed
     }
   end
 
   defp slots(nil), do: nil
-  defp slots(slots), do: Map.new(slots, fn {name, slot} -> {Atom.to_string(name), slot(slot)} end)
+  defp slots(slots), do: Map.new(slots, fn {name, slot} -> {name(name), slot(slot)} end)
 
   defp slot(slot) do
     %{
@@ -241,6 +243,9 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp known(key, _keys), do: key
 
-  defp atom(key) when is_binary(key), do: String.to_atom(key)
+  # A name that starts with `$` is written with one more and read with one fewer (D-182).
+  defp name(key), do: key |> Atom.to_string() |> Tags.escape()
+
+  defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
   defp atom(key), do: key
 end

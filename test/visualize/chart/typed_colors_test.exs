@@ -202,12 +202,22 @@ defmodule Visualize.Chart.TypedColorsTest do
     test "an unknown tag in a color position is refused, and a name that is not plain words is no atom" do
       {:ok, json} = Chart.to_json(Chart.from_map!(design(%{fill: "#000"})))
 
-      for tag <- [~s({"$colr":"red"}), ~s({"$alpha":[{"$bogus":1},0.5]}), ~s({"$color":"a b"})] do
-        bad = String.replace(json, ~s("color":"#000"), ~s("color":) <> tag)
+      # An unknown tag is the reader's to refuse, at its path in the document (D-182).
+      at = ["styles", "s", "fill", "color"]
 
-        assert {:error, [{[:styles, :s, :fill, :color], {:type, :colour}}]} =
-                 Chart.from_json(bad)
+      for {tag, error} <- [
+            {~s({"$colr":"red"}), {at, {:unknown_tag, "$colr"}}},
+            {~s({"$alpha":[{"$bogus":1},0.5]}), {at ++ ["$alpha", 0], {:unknown_tag, "$bogus"}}}
+          ] do
+        bad = String.replace(json, ~s("color":"#000"), ~s("color":) <> tag)
+        assert Chart.from_json(bad) == {:error, [error]}
       end
+
+      # A known tag whose name is not plain words is no atom, and no color.
+      bad = String.replace(json, ~s("color":"#000"), ~s("color":{"$color":"a b"}))
+
+      assert {:error, [{[:styles, :s, :fill, :color], {:type, :colour}}]} =
+               Chart.from_json(bad)
     end
   end
 

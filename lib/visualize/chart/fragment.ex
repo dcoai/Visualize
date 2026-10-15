@@ -43,6 +43,7 @@ defmodule Visualize.Chart.Fragment do
 
   alias Visualize.Board.Codec, as: BoardCodec
   alias Visualize.Chart.{Codec, Limits, Migration, Schema, Use}
+  alias Visualize.Chart.Codec.Tags
 
   # Jason is optional (spec/14 §11.1, D-50): as in `Visualize.Chart`, the calls in
   # `to_json/1` and `from_json/1` stay direct and a missing Jason is answered at runtime.
@@ -332,7 +333,8 @@ defmodule Visualize.Chart.Fragment do
   and a document over the `depth` or `items` limit is `{:error, {:limits, errors}}`, with
   `limits:` as `Visualize.Chart.from_map/2` takes them. A document with no stamp — written
   before the stamp existed — is read as the current version. `{:error, {:json, message}}`
-  for text that is not JSON.
+  for text that is not JSON. A document holding a tag the one table of spec/14 §11.2 does
+  not read, unknown or retired, is `{:error, {:tags, errors}}`, each at its path (D-182).
   """
   @spec from_json(String.t(), keyword()) ::
           {:ok, map()}
@@ -340,6 +342,7 @@ defmodule Visualize.Chart.Fragment do
              {:json, String.t()}
              | {:newer_schema, pos_integer(), pos_integer()}
              | {:limits, [Visualize.Chart.Validator.error(), ...]}
+             | {:tags, [Visualize.Chart.Validator.error(), ...]}
              | {:missing_dependency, :jason}}
   def from_json(json, opts \\ []) when is_binary(json) do
     with {:ok, fragment, _version} <- read_json(json, opts), do: {:ok, fragment}
@@ -361,6 +364,7 @@ defmodule Visualize.Chart.Fragment do
              {:json, String.t()}
              | {:newer_schema, pos_integer(), pos_integer()}
              | {:limits, [Visualize.Chart.Validator.error(), ...]}
+             | {:tags, [Visualize.Chart.Validator.error(), ...]}
              | {:missing_dependency, :jason}}
   def read_json(json, opts \\ []) when is_binary(json) do
     if Code.ensure_loaded?(Jason) do
@@ -382,8 +386,11 @@ defmodule Visualize.Chart.Fragment do
     with :ok <- Migration.readable(stamp),
          :ok <- Migration.readable(Map.get(term, "version")),
          :ok <- Migration.readable(board_stamp(term)) do
-      case Limits.structure(term, limits) do
-        [] -> {:ok, decoded(term), stamp || Migration.current()}
+      with [] <- Limits.structure(term, limits),
+           {:ok, term} <- Tags.read(term, stamp || Map.get(term, "version") || board_stamp(term)) do
+        {:ok, decoded(term), stamp || Migration.current()}
+      else
+        {:error, errors} -> {:error, {:tags, errors}}
         errors -> {:error, {:limits, errors}}
       end
     end

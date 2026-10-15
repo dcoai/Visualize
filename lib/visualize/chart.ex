@@ -61,6 +61,7 @@ defmodule Visualize.Chart do
     Var
   }
 
+  alias Visualize.Chart.Codec.Tags
   alias Visualize.Chart.Frame.Scales
   alias Visualize.Chart.Style.Generated
   alias Visualize.Data.Schema.Cache
@@ -207,6 +208,9 @@ defmodule Visualize.Chart do
   defp within([]), do: :ok
   defp within(errors), do: {:error, errors}
 
+  defp version(%{"version" => v}), do: v
+  defp version(_term), do: nil
+
   @doc "As `from_map/2`, raising `ArgumentError` with the formatted errors."
   @spec from_map!(term(), keyword()) :: t()
   def from_map!(map, opts \\ []) do
@@ -236,7 +240,9 @@ defmodule Visualize.Chart do
   The parsed document's `"version"` is checked, and its nesting and the size of its lists
   and maps held to the limits, **before** the codec decodes a key (spec/14 §9.1, §9.2): a
   newer or an oversized document is refused without an atom made from it, and a path in
-  such an error holds the document's own key strings. A document that does not parse is
+  such an error holds the document's own key strings. Then its tags are held to the one
+  table (spec/14 §11.2, D-182): an unknown tag is `{:unknown_tag, tag}` and a retired one
+  `{:retired_tag, tag, why}`, at the path of its object. A document that does not parse is
   `{:error, [{[], {:json, message}}]}`; without `Jason` the result is
   `{:error, {:missing_dependency, :jason}}`.
   """
@@ -249,7 +255,8 @@ defmodule Visualize.Chart do
       case Jason.decode(json) do
         {:ok, term} ->
           with :ok <- readable(term),
-               :ok <- within(Limits.structure(term, limits)) do
+               :ok <- within(Limits.structure(term, limits)),
+               {:ok, term} <- Tags.read(term, version(term)) do
             read(Codec.decode(term), limits, Keyword.take(opts, [:urls, :generators]))
           end
 
