@@ -17,6 +17,14 @@ release it merely follows.
 
 ### Added
 
+- **Color transforms follow a stylesheet's theme switch** (#665, D-173). On the SVG backend
+  (`:css` mode), a transform is written as the CSS that computes it rather than a fixed literal:
+  `intensity` and `blend` as `color-mix(in oklab, …)`, and `alpha`, `lighten`, `darken` and
+  `saturate` as relative `oklch(from … )` colors over the theme's custom properties. Switching
+  the theme class recolors derived colors too. Canvas and PNG output still get the computed
+  literal, which is the same color. These CSS features need a 2023-or-later browser.
+  `Visualize.Theme.stylesheet/1` now ends with an `@media (forced-colors: active)` block that
+  maps the furniture colors to the user's system colors in high-contrast mode.
 - **A color table on every theme** (#663, D-173). `color(:red)` is the theme's red: names are
   looked up in the theme's own `colors`, then the default theme's, then the CSS named colors, and
   the furniture (`:text`, `:axis`, …) and `:series_k` are names too. The built-in themes name

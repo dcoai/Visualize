@@ -108,8 +108,12 @@ defmodule Visualize.Color.Typed do
   def resolve({:contrast, :under}, theme, _mode), do: Theme.ink(theme, nil)
   def resolve({:contrast, c}, theme, _mode), do: ink(c, theme)
 
-  def resolve(value, theme, _mode) when is_tuple(value) do
-    if transform?(value), do: value |> compute(theme) |> literal(), else: invalid!(value)
+  def resolve(value, theme, mode) when is_tuple(value) do
+    cond do
+      not transform?(value) -> invalid!(value)
+      mode == :css -> css(value, theme)
+      true -> value |> compute(theme) |> literal()
+    end
   end
 
   def resolve(slot, theme, mode) when is_atom(slot) and slot not in @not_names,
@@ -211,6 +215,76 @@ defmodule Visualize.Color.Typed do
     # An alpha that rounds to the opaque byte is opaque: no `ff` written after the colour.
     alpha = if round(alpha * 255) >= 255, do: 1.0, else: alpha
     Color.to_hex(Color.rgb(r * 255, g * 255, b * 255, alpha))
+  end
+
+  # -- :css (spec/08 §1.9, #665) ------------------------------------------------------------
+
+  # A transform as the CSS that computes it, its operands each in their own `:css` form, so
+  # a stylesheet's theme switch carries through it.
+  defp css(v, _theme) when is_binary(v), do: v
+  defp css({:contrast, _} = ink, theme), do: resolve(ink, theme, :css)
+
+  defp css({:intensity, c, t}, theme),
+    do: "color-mix(in oklab, #{css(c, theme)} #{pct(t)}, transparent)"
+
+  defp css({:alpha, c, a}, theme), do: "oklch(from #{css(c, theme)} l c h / #{num(a)})"
+
+  defp css({:lighten, c, t}, theme),
+    do: "oklch(from #{css(c, theme)} calc(l + (1 - l) * #{num(t)}) c h / alpha)"
+
+  defp css({:darken, c, t}, theme),
+    do: "oklch(from #{css(c, theme)} calc(l * #{num(1 - t)}) c h / alpha)"
+
+  defp css({:saturate, c, t}, theme),
+    do: "oklch(from #{css(c, theme)} l calc(c + (#{@full_chroma} - c) * #{num(t)}) h / alpha)"
+
+  defp css({:blend, list}, theme) do
+    weighted =
+      list
+      |> Enum.map(fn
+        {:intensity, c, w} -> {c, w}
+        c -> {c, 1}
+      end)
+      |> Enum.reject(fn {_c, w} -> w == 0 end)
+
+    total = weighted |> Enum.map(&elem(&1, 1)) |> Enum.sum()
+
+    case weighted do
+      [] -> "transparent"
+      [{c, 1}] -> css(c, theme)
+      [{c, w}] -> css({:intensity, c, w}, theme)
+      # Above 1 the weights are scaled to sum to 1, which CSS would do too, but a
+      # percentage above 100% is not CSS.
+      _many when total > 1 -> mix(Enum.map(weighted, fn {c, w} -> {c, w / total} end), theme)
+      _many -> mix(weighted, theme)
+    end
+  end
+
+  defp css(value, theme), do: resolve(value, theme, :css)
+
+  # `color-mix` of two, or of the first n − 1 normalized and mixed at their sum with the
+  # last: premultiplied averaging is associative, so the nesting is exact.
+  defp mix([{c1, w1}, {c2, w2}], theme),
+    do: "color-mix(in oklab, #{css(c1, theme)} #{pct(w1)}, #{css(c2, theme)} #{pct(w2)})"
+
+  defp mix(weighted, theme) do
+    {init, [{last, w}]} = Enum.split(weighted, -1)
+    sum = init |> Enum.map(&elem(&1, 1)) |> Enum.sum()
+    inner = mix(Enum.map(init, fn {c, v} -> {c, v / sum} end), theme)
+    "color-mix(in oklab, #{inner} #{pct(sum)}, #{css(last, theme)} #{pct(w)})"
+  end
+
+  defp pct(t), do: num(t * 100) <> "%"
+
+  # At most four decimals, no trailing zeros: `65`, `0.3`, `33.3333`.
+  defp num(x) when is_integer(x), do: Integer.to_string(x)
+
+  defp num(x) do
+    rounded = Float.round(x * 1.0, 4)
+
+    if rounded == trunc(rounded),
+      do: Integer.to_string(trunc(rounded)),
+      else: :erlang.float_to_binary(rounded, [:compact, decimals: 4])
   end
 
   defp invalid!(value) do
