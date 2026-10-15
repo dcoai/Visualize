@@ -45,25 +45,40 @@ defmodule Visualize.Chart.Frame.Defs do
     Enum.reduce(children, own, &MapSet.union(drawn(&1), &2))
   end
 
-  # One filter per {effect, radius} pair any style in the tree carries (spec/14 §2.7).
+  # One filter per distinct effect any style in the tree carries: its type and radius, and a
+  # shadow's offset and colour (spec/14 §2.7, #674).
   defp filters(tree) do
     tree
     |> effects()
     |> Enum.uniq()
     |> Enum.sort()
-    |> Enum.map(fn {effect, radius} ->
-      Element.filter(Visualize.Backend.SVG.effect_id(effect, radius), [primitive(effect, radius)])
+    |> Enum.map(fn {effect, radius, offset, color} ->
+      Element.filter(Visualize.Backend.SVG.effect_id(effect, radius, offset, color), [
+        primitive(effect, radius, offset, color)
+      ])
     end)
   end
 
-  defp primitive(:shadow, radius), do: Element.drop_shadow(radius / 2, radius / 2, radius)
-  defp primitive(:blur, radius), do: Element.gaussian_blur(radius)
+  defp primitive(:shadow, radius, nil, color),
+    do: primitive(:shadow, radius, [radius / 2, radius / 2], color)
+
+  defp primitive(:shadow, radius, [dx, dy], color), do: Element.drop_shadow(dx, dy, radius, color)
+  defp primitive(:blur, radius, _offset, _color), do: Element.gaussian_blur(radius)
 
   defp effects(%Element{style: style, children: children}) do
     own =
       case Map.get(style, :effect) do
-        effect when effect in [:shadow, :blur] -> [{effect, Map.get(style, :effect_radius) || 3}]
-        _none -> []
+        :shadow ->
+          [
+            {:shadow, Map.get(style, :effect_radius) || 3, style[:effect_offset],
+             style[:effect_color]}
+          ]
+
+        :blur ->
+          [{:blur, Map.get(style, :effect_radius) || 3, nil, nil}]
+
+        _none ->
+          []
       end
 
     own ++ Enum.flat_map(children, &effects/1)

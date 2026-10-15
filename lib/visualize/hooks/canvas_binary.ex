@@ -535,7 +535,26 @@ defmodule Visualize.Hooks.CanvasBinary do
               break;
             }
 
-            case 0x51: // box: what the next draw's paint is built over (§4.3.13)
+            case 0x52: { // effect: a shadow or a blur, context state (§4.3.14, #674)
+            const kind = bytes[offset];
+            const radius = view.getFloat32(offset + 1, true);
+            if (kind === 0x01) {
+              const o = offset + 13;
+              ctx.shadowColor = `rgba(${bytes[o]},${bytes[o + 1]},${bytes[o + 2]},${bytes[o + 3] / 255})`;
+              ctx.shadowBlur = radius;
+              ctx.shadowOffsetX = view.getFloat32(offset + 5, true);
+              ctx.shadowOffsetY = view.getFloat32(offset + 9, true);
+              offset += 17;
+            } else if (kind === 0x02) {
+              ctx.filter = `blur(${radius}px)`;
+              offset += 5;
+            } else {
+              throw new Error('Unknown canvas binary effect kind 0x' + kind.toString(16) + ' at offset ' + offset);
+            }
+            break;
+          }
+
+          case 0x51: // box: what the next draw's paint is built over (§4.3.13)
               box = [view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
                      view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true)];
               offset += 16;

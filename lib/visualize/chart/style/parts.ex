@@ -417,6 +417,8 @@ defmodule Visualize.Chart.Style.Parts do
     Enum.reduce(effect, acc, fn
       {:type, v}, acc -> Map.put(acc, :effect, v)
       {:radius, v}, acc -> Map.put(acc, :effect_radius, v)
+      {:offset, v}, acc -> Map.put(acc, :effect_offset, v)
+      {:color, v}, acc -> Map.put(acc, :effect_color, v)
       {_other, _v}, acc -> acc
     end)
   end

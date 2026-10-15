@@ -38,7 +38,7 @@ defmodule Visualize.Chart.Style do
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme, Units}
 
-  @colour_keys [:fill, :stroke]
+  @colour_keys [:fill, :stroke, :effect_color]
   @size_keys [:stroke_width, :opacity, :fill_opacity, :stroke_opacity, :font_size, :symbol_size]
   @font_keys [:font_family]
   @unit_keys [:stroke_width, :font_size, :effect_radius]
@@ -64,6 +64,8 @@ defmodule Visualize.Chart.Style do
     :blend,
     :effect,
     :effect_radius,
+    :effect_offset,
+    :effect_color,
     :vector_effect
   ]
 

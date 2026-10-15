@@ -17,6 +17,15 @@ release it merely follows.
 
 ### Added
 
+- **A shadow's offset and color** (#674, D-175). `effect: %{type: :shadow, radius: 4,
+  offset: [pt(2), pt(3)], color: color(:text) |> alpha(0.4)}` moves and colours a shadow;
+  the offset takes #671's units (a `pct` is refused, there is no box), and a colour given
+  carries its own opacity. Without them a shadow is what it was, byte for byte: offset half
+  its radius, black at 0.35. SVG gets a filter per distinct shadow, the canvas commands set
+  the shadow properties, and **the binary canvas now draws effects at all** — a shadow or a
+  blur was dropped from the binary stream before — through a version 2 `effect` record
+  (`0x52`). `Visualize.IR.Element.drop_shadow/4` takes the colour.
+
 - **A hatch paint** (#673, D-175). `fill: %{type: :hatch, color: color(:bad), pattern:
   :crosshatch, angle: 45, spacing: pt(4), width: pt(1)}` fills an area with lines,
   crossed lines or dots of one colour over an optional `background`, so a category or a

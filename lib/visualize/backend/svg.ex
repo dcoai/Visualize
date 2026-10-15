@@ -377,6 +377,8 @@ defmodule Visualize.Backend.SVG do
     {blend, style} = Map.pop(style, :blend)
     {effect, style} = Map.pop(style, :effect)
     {radius, style} = Map.pop(style, :effect_radius)
+    {offset, style} = Map.pop(style, :effect_offset)
+    {color, style} = Map.pop(style, :effect_color)
 
     style
     |> then(
@@ -385,15 +387,24 @@ defmodule Visualize.Backend.SVG do
     |> then(
       &if(effect in [nil, :none],
         do: &1,
-        else: Map.put(&1, :filter, "url(##{effect_id(effect, radius)})")
+        else: Map.put(&1, :filter, "url(##{effect_id(effect, radius, offset, color)})")
       )
     )
   end
 
   @doc false
-  # The id of the filter an effect and a radius share (spec/14 §2.7).
-  @spec effect_id(atom(), number() | nil) :: String.t()
-  def effect_id(effect, radius), do: "vis-effect-#{effect}-#{radius || 3}"
+  # The id of the filter an effect shares (spec/14 §2.7): its type and radius, and for a
+  # shadow with an offset or a colour a hash of the two (#674), so a shadow with neither
+  # keeps the id it always had.
+  @spec effect_id(atom(), number() | nil, [number()] | nil, String.t() | nil) :: String.t()
+  def effect_id(effect, radius, offset \\ nil, color \\ nil)
+
+  def effect_id(:shadow, radius, offset, color) when offset != nil or color != nil do
+    h = {offset, color} |> :erlang.phash2() |> Integer.to_string(36) |> String.downcase()
+    "vis-effect-shadow-#{radius || 3}-#{h}"
+  end
+
+  def effect_id(effect, radius, _offset, _color), do: "vis-effect-#{effect}-#{radius || 3}"
 
   defp maybe_add_transform(attrs, nil), do: attrs
   defp maybe_add_transform(attrs, %Transform{operations: []}), do: attrs
