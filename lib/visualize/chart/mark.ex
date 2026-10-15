@@ -42,7 +42,19 @@ defmodule Visualize.Chart.Mark do
 
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.Mark.{Bend, Generic, Label, Series, Shapes, Strokes, Styled, Tiles}
+
+  alias Visualize.Chart.Mark.{
+    Bend,
+    Generic,
+    Identity,
+    Label,
+    Series,
+    Shapes,
+    Strokes,
+    Styled,
+    Tiles
+  }
+
   alias Visualize.Chart.{Style, Var}
   alias Visualize.Chart.Style.Defaults
   alias Visualize.Data.Table
@@ -142,7 +154,8 @@ defmodule Visualize.Chart.Mark do
     children = if type in @shapes, do: Shapes.elements(ctx), else: Generic.elements(ctx)
     # Every element and label a series draws names it (spec/14 §5.6, D-126).
     children = children |> Series.annotate(ctx) |> bent(ctx)
-    bound = Enum.map(children, &bind(&1, ctx))
+    # A moving mark's elements say which thing each draws (spec/14 §3.10, D-176).
+    bound = children |> Enum.map(&bind(&1, ctx)) |> Identity.stamp(children, ctx)
     elements = strokes(children, bound, ctx)
     # A label inked by contrast reads its element's bound fill (spec/14 §5.5, D-123).
     labelled = Label.under(children, bound, ctx)

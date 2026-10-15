@@ -40,4 +40,8 @@ defmodule Visualize.Backend.CanvasBinary.Opcodes do
   defmacro box, do: 0x51
   @doc false
   defmacro effect, do: 0x52
+  @doc false
+  defmacro motion, do: 0x53
+  @doc false
+  defmacro motion_end, do: 0x54
 end

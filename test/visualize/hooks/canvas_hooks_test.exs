@@ -55,7 +55,9 @@ defmodule Visualize.Hooks.CanvasHooksTest do
             Opcodes.save(),
             Opcodes.restore(),
             Opcodes.fill(),
-            Opcodes.stroke()
+            Opcodes.stroke(),
+            Opcodes.motion(),
+            Opcodes.motion_end()
           ] do
         assert decoder =~ case_literal(byte), "no case for opcode #{byte}"
       end
@@ -168,7 +170,7 @@ defmodule Visualize.Hooks.CanvasHooksTest do
     hook = Hooks.Canvas.js_hook()
     assert hook =~ "this.handleEvent(\"canvas_commands\""
     assert hook =~ "cmd.startsWith('set_')"
-    assert hook =~ "new Function('ctx', script)(ctx)"
+    assert hook =~ "new Function('ctx', this.el.dataset.script)(ctx)"
   end
 
   test "CanvasBinaryChart acknowledges canvas_update frames when asked, as the incremental hook does (#322)" do
@@ -240,6 +242,7 @@ defmodule Visualize.Hooks.CanvasHooksTest do
   test "CanvasBinaryChart reads data-binary and canvas_update events" do
     hook = Hooks.CanvasBinary.js_hook()
     assert hook =~ "this.handleEvent(\"canvas_update\""
-    assert hook =~ "executeVisualizeBinary(ctx, decodeBase64(base64Data))"
+    assert hook =~ "this.bytes = decodeBase64(base64Data);"
+    assert hook =~ "executeVisualizeBinary(ctx, this.bytes, 0, this.bytes.length, this.motion)"
   end
 end

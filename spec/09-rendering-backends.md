@@ -109,6 +109,7 @@ A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
 | `:vector_effect` | `:non_scaling_stroke` | `vector-effect="non-scaling-stroke"` (spec/14 §3.9, #651). The property does not inherit, so on a `:group` it is not written on the group: each child takes it, a child group passing it on the same way, unless the child sets its own |
 | `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
+| `:transition` | a list (spec/14 §3.10) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterised for a PNG — draws the element's end state |
 | `:effect` with `:effect_radius`, `:effect_offset`, `:effect_color` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent, and `url(#vis-effect-shadow-<radius>-<h>)` for a shadow with an offset or a colour, `<h>` the base-36 `:erlang.phash2/1` of `{offset, color}` (spec/14 §2.7, #674); `:none` and the three keys alone are dropped |
 
 Every other `{key, value}` pair passes through unchanged and is serialised per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
@@ -257,9 +258,19 @@ A `nil` transform or one with no operations emits nothing. Otherwise one command
 | `{:skew_y, deg}` | `{:transform, [1, tan(deg·π/180), 0, 1, 0, 0]}` |
 | `{:matrix, a, b, c, d, e, f}` | `{:transform, [a, b, c, d, e, f]}` |
 
+#### 3.3.5 Motion commands
+
+**Implemented** (#653, work item #676, D-176). An element that carries a `"data-vis-id"` attribute — which only an element of a moving mark does (spec/14 §3.10) — is drawn inside a **motion span**: `{:motion, [id, box, transitions]}` before the element's commands and `{:motionEnd, []}` after them, the span holding exactly that element's own commands.
+
+- `id` is the attribute's value, the identity the hook keys the element's shown values by.
+- `box` is `[x, y, w, h]`, `Visualize.IR.Paint.bounds/1` of the element, its tight box in its user units, `null` for an element without one.
+- `transitions` is the resolved transition of the element's effective style — its own `:transition`, else the one a group above it carries — as a list of `[property, duration, samples]`, `property` `"fill"`, `"stroke"` or `"opacity"`, `duration` in milliseconds, and `samples` the easing's 21 values at `t = 0, 0.05, …, 1` (`Visualize.IR.Motion.samples/1`) — the curve CSS's `linear()` is written from, so both backends ease alike. It is empty for an element whose style moves nothing, and the span is still written: a mark whose data choose a moving style for some rows draws every row in a span, so the hook knows what each identity shows before a later stream moves it.
+
+A span does not change what is drawn: a reader that ignores it draws the element at its target, which is what the `:js` serialisation does (3.4). `Visualize.IR.Motion` holds the conversions both canvas encoders share. No span is written for an element without the attribute, so a chart without motion is the commands it always was.
+
 ### 3.4 JavaScript serialisation
 
-Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `hatchPattern` becomes `ctx.fillStyle = (function(){…})();`, a function that draws the tile on a `document.createElement('canvas')` and returns `ctx.createPattern(tile, 'repeat')` with its transform set — `strokeStyle` for a `"stroke"` target (3.3.3, #673). `linearGradient` becomes `ctx.fillStyle = (function(g){g.addColorStop(at, 'colour'); …; return g;})(ctx.createLinearGradient(x0, y0, x1, y1));` — `strokeStyle` for a `"stroke"` target, one `addColorStop` per stop — and `radialGradient` the same around `ctx.createRadialGradient(cx, cy, 0, cx, cy, r)` (3.3.3, #652). `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
+Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `hatchPattern` becomes `ctx.fillStyle = (function(){…})();`, a function that draws the tile on a `document.createElement('canvas')` and returns `ctx.createPattern(tile, 'repeat')` with its transform set — `strokeStyle` for a `"stroke"` target (3.3.3, #673). `linearGradient` becomes `ctx.fillStyle = (function(g){g.addColorStop(at, 'colour'); …; return g;})(ctx.createLinearGradient(x0, y0, x1, y1));` — `strokeStyle` for a `"stroke"` target, one `addColorStop` per stop — and `radialGradient` the same around `ctx.createRadialGradient(cx, cy, 0, cx, cy, r)` (3.3.3, #652). `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `motion` and `motionEnd` write nothing: a script runs with no library beside it to move the element, so it draws the element's end state (3.3.5). `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
 
 ### 3.5 JSON serialisation
 
@@ -313,8 +324,10 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `paint` | `0x50` | A paint defined for the stream, version 2 (4.3.12) |
 | `box` | `0x51` | The box the next draw's paint is built over, version 2 (4.3.13) |
 | `effect` | `0x52` | The shadow or the blur the following draws are made with, version 2 (4.3.14) |
+| `motion` | `0x53` | A motion span begins: an element's identity and its transition, version 2 (4.3.15) |
+| `motion_end` | `0x54` | The motion span ends, version 2 (4.3.16) |
 
-**Stream versions** (#652, D-175). The records above `version` are **version 1**, the stream as it was before paints. **Version 2** adds `version`, `paint`, `box` and `effect` (#674), and bits 5 and 6 of the style record. A stream that uses none of them is a version 1 stream, byte for byte the same as before, and the encoder writes it so: only a stream that draws a paint or an effect carries the version 2 records, and it begins with the record `0x00 0x02`. So a version 1 decoder — a page still running an older hook — reads every stream it could read before, and on a version 2 stream it throws at the first byte, an unknown opcode `0x00`, rather than drawing a gradient as black; a version 2 decoder reads both. A stream is still a concatenation of records with no header: two streams concatenated, as `render_scene/2` does (3.2), are one stream, each part declaring its own version and defining its own paints before it uses them. A `version` record may stand anywhere and states the version of the records after it; a decoder MUST refuse a version it does not know.
+**Stream versions** (#652, D-175). The records above `version` are **version 1**, the stream as it was before paints. **Version 2** adds `version`, `paint`, `box`, `effect` (#674), `motion` and `motion_end` (#653), and bits 5 and 6 of the style record. A stream that uses none of them is a version 1 stream, byte for byte the same as before, and the encoder writes it so: only a stream that draws a paint, an effect or a motion span carries the version 2 records, and it begins with the record `0x00 0x02`. So a version 1 decoder — a page still running an older hook — reads every stream it could read before, and on a version 2 stream it throws at the first byte, an unknown opcode `0x00`, rather than drawing a gradient as black; a version 2 decoder reads both. A stream is still a concatenation of records with no header: two streams concatenated, as `render_scene/2` does (3.2), are one stream, each part declaring its own version and defining its own paints before it uses them. A `version` record may stand anywhere and states the version of the records after it; a decoder MUST refuse a version it does not know.
 
 No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's doc comment carries the same table, and `test/visualize/backend/canvas_binary_test.exs` holds it to `Opcodes`. `test/support/canvas_binary_decoder.ex` is a decoder written from this section, not from the encoder, and the same test file proves `decode(encode(path))` over random paths (D-36).
 
@@ -485,6 +498,22 @@ The bounding box, in the element's user units, of the element whose draw records
 ```
 
 The effect of a style (#674): kind `0x01` a shadow — its blur radius, its offset and its colour, the bracketed fields, 17 bytes after the opcode — or `0x02` a blur, its radius alone, 5 bytes. A reader sets the context's `shadowColor`, `shadowBlur`, `shadowOffsetX` and `shadowOffsetY`, or its `filter` to `blur(<radius>px)`, as 3.3.3 does; it is context state, so `save` and `restore` scope it. The encoder writes it after the style record of a style whose `:effect` is `:shadow` or `:blur`, the offset and the colour the defaults of 3.3.3 when absent. Before #674 the binary stream had no record for an effect and dropped it, so a shadow drew on SVG and on the `:json` canvas and not on the binary one.
+
+#### 4.3.15 `motion` (0x53)
+
+```
+0x53  length:u16  json:u8[length]
+```
+
+A motion span begins (3.3.5, #653): `json` is the UTF-8 text of the JSON array the `:json` output writes as the `motion` command's arguments, `[id, box, transitions]`, so the two formats carry one contract and a reader decodes one shape. The encoder writes it before the records of an element that carries a `"data-vis-id"`, and `motion_end` after them. A reader that moves nothing skips `length` bytes and draws on: the span changes no record inside it.
+
+#### 4.3.16 `motion_end` (0x54)
+
+```
+0x54
+```
+
+The span the last `motion` record began ends. One byte.
 
 ### 4.4 Encoding IR elements
 

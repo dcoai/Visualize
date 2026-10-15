@@ -32,6 +32,8 @@ defmodule Visualize.Backend.CanvasBinary do
   | `paint` | `0x50` | `index:u16 kind:u8`, the geometry in box units (f32), `count:u8` stops `at:f32 r g b a` |
   | `box` | `0x51` | `x y w h` (f32): the box the next draw's paint is built over |
   | `effect` | `0x52` | `kind:u8 radius:f32`, and for a shadow `dx dy:f32` and its RGBA colour |
+  | `motion` | `0x53` | `length:u16` then the UTF-8 JSON of a motion span's arguments, `[id, box, transitions]` |
+  | `motion_end` | `0x54` | the motion span ends |
 
   The point-list record is used only for a path that is one `M` followed by `L`
   commands, and the cubic run only for one `M` followed by `C` commands — the shapes
@@ -61,7 +63,7 @@ defmodule Visualize.Backend.CanvasBinary do
 
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder, SVG}
   alias Visualize.Color
-  alias Visualize.IR.{Element, Paint, Path, Transform}
+  alias Visualize.IR.{Element, Motion, Paint, Path, Transform}
   require Opcodes
 
   # Nx is optional: the calls below stay direct (so a missing Nx raises
@@ -235,6 +237,26 @@ defmodule Visualize.Backend.CanvasBinary do
   end
 
   defp encode_simple_path(points, :f32), do: PathEncoder.encode_polyline(points, :f32)
+
+  # An element that names its identity is drawn inside a motion span carrying its style's
+  # transition, or a group's above it (spec/09 §4.3.15, D-176): the span's arguments as the
+  # `:json` command carries them.
+  defp do_encode_element(
+         %Element{attrs: %{"data-vis-id" => id} = attrs} = element,
+         ctx,
+         inherited
+       ) do
+    bare = do_encode_element(%{element | attrs: Map.delete(attrs, "data-vis-id")}, ctx, inherited)
+
+    json = Motion.json(Motion.span(id, element, Map.merge(inherited, element.style)))
+
+    IO.iodata_to_binary([
+      <<Opcodes.motion()::8, byte_size(json)::little-16>>,
+      json,
+      bare,
+      <<Opcodes.motion_end()::8>>
+    ])
+  end
 
   defp do_encode_element(
          %Element{type: :path, path: path, style: style, transform: transform} = element,
@@ -556,7 +578,7 @@ defmodule Visualize.Backend.CanvasBinary do
     ctx = %{precision: precision, paints: Map.new(paints)}
     body = do_encode_element(element, ctx, %{})
 
-    case {paints, effects?(element)} do
+    case {paints, effects?(element) or spans?(element)} do
       {[], false} ->
         body
 
@@ -571,6 +593,10 @@ defmodule Visualize.Backend.CanvasBinary do
 
   defp effects?(%Element{style: style, children: children}),
     do: style[:effect] in [:shadow, :blur] or Enum.any?(children, &effects?/1)
+
+  # Whether the tree draws a motion span (spec/09 §4.3.15): an element naming its identity.
+  defp spans?(%Element{attrs: attrs, children: children}),
+    do: Map.has_key?(attrs, "data-vis-id") or Enum.any?(children, &spans?/1)
 
   defp paints(%Element{style: style, children: children}) do
     Enum.filter([style[:fill], style[:stroke]], &is_struct(&1, Paint)) ++

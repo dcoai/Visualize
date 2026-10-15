@@ -153,6 +153,7 @@ defmodule Visualize.Hooks do
     Crosshair,
     Keyboard,
     Legend,
+    Motion,
     Resize,
     Sync,
     Tooltip,
@@ -174,6 +175,8 @@ defmodule Visualize.Hooks do
     #{Sync.js_bus()}
 
     #{Brush.js_hook()}
+
+    #{Motion.js_motion()}
 
     #{CanvasBinary.js_decoder()}
 

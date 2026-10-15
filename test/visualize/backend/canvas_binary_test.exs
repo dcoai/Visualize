@@ -385,7 +385,9 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              version: Opcodes.version(),
              paint: Opcodes.paint(),
              box: Opcodes.box(),
-             effect: Opcodes.effect()
+             effect: Opcodes.effect(),
+             motion: Opcodes.motion(),
+             motion_end: Opcodes.motion_end()
            ]
   end
 

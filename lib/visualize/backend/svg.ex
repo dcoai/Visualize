@@ -372,8 +372,9 @@ defmodule Visualize.Backend.SVG do
   # A blend is an inline style (spec/09 §2.5), an effect a filter reference to the filter
   # the frame declared for its pair (spec/14 §2.7); the radius alone says nothing.
   defp effects(style) do
-    # A line height is the frame's to apply (spec/14 §7.1), never an attribute.
-    style = Map.delete(style, :line_height)
+    # A line height is the frame's to apply (spec/14 §7.1), never an attribute; a motion is
+    # a class the frame wrote in `:css`, and in any other SVG the end state (spec/09 §2.5).
+    style = Map.drop(style, [:line_height, :transition])
     {blend, style} = Map.pop(style, :blend)
     {effect, style} = Map.pop(style, :effect)
     {radius, style} = Map.pop(style, :effect_radius)

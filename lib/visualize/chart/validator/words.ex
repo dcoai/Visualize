@@ -155,6 +155,7 @@ defmodule Visualize.Chart.Validator.Words do
     do: "field #{inspect(field)} is not among slot #{inspect(source)}'s fields"
 
   def words(:required), do: "is required"
+  def words(:negative), do: "must not be negative"
   def words(:unknown_key), do: "is not a key of this node"
   def words({:type, type}), do: "must be #{type_words(type)}"
 

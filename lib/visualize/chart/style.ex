@@ -33,7 +33,7 @@ defmodule Visualize.Chart.Style do
 
   """
 
-  alias Visualize.Chart.Style.{Inherited, Parts, Sizes}
+  alias Visualize.Chart.Style.{Inherited, Motion, Parts, Sizes}
   alias Visualize.Chart.Var
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme, Units}
@@ -66,7 +66,9 @@ defmodule Visualize.Chart.Style do
     :effect_radius,
     :effect_offset,
     :effect_color,
-    :vector_effect
+    :vector_effect,
+    # A style's motion, resolved (spec/14 §3.10, #653).
+    :transition
   ]
 
   @doc """
@@ -84,6 +86,8 @@ defmodule Visualize.Chart.Style do
     |> Parts.project()
     |> Map.take(@element_keys)
     |> Map.new(fn {key, value} -> {key, value(key, value, theme, mode)} end)
+    # A motion part that moves nothing is no key, so a style without one resolves as before.
+    |> Map.reject(fn {key, value} -> key == :transition and value == [] end)
   end
 
   @doc """
@@ -385,6 +389,8 @@ defmodule Visualize.Chart.Style do
   def value(key, {:contrast, :under}, theme, _mode) when key in @colour_keys,
     do: Theme.ink(theme, nil)
 
+  # A transition is the list of the properties it moves (§3.10, D-176).
+  def value(:transition, node, _theme, _mode), do: Motion.transition(node)
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500
