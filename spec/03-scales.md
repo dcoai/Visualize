@@ -12,8 +12,8 @@ Scales map values from a data *domain* to a visual *range*. `Visualize.Scale` is
 |---|---|---|---|---|
 | Continuous | `Linear`, `Log`, `Power`, `Symlog`, `Time`, `Radial` | two numbers (or two time values) | two numbers (`Radial`: radians) | float, interpolated |
 | Discrete | `Ordinal`, `Band` | list of categories | list of values / two numbers | range element / band start |
-| Discretising | `Quantile`, `Quantize`, `Threshold` | samples / two numbers / thresholds | list of values | range element |
-| Colour | `Color` | two or three numbers | scheme, colour list, or function | `"#rrggbb"` string |
+| Discretizing | `Quantile`, `Quantize`, `Threshold` | samples / two numbers / thresholds | list of values | range element |
+| Color | `Color` | two or three numbers | scheme, color list, or function | `"#rrggbb"` string |
 
 ### 1.2 Domain and Range Representation
 
@@ -23,7 +23,7 @@ Domains MAY be descending (`d0 > d1`) and ranges MAY be descending (`r0 > r1`); 
 
 ### 1.3 The Facade Protocol
 
-`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. The protocol is the behaviour `Visualize.Scale.Behaviour`, whose nine callbacks are `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Every scale module MUST declare `@behaviour Visualize.Scale.Behaviour` and implement all nine (the module also provides the shared fraction, table below), so a missing operation is a compile error under `--warnings-as-errors` rather than an `UndefinedFunctionError` at dispatch (D-15). Operations that do not apply to a scale kind MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`); the discretising scales return their thresholds from `ticks/2`.
+`Visualize.Scale.<op>(scale, …)` calls `scale.__struct__.<op>(scale, …)`. The protocol is the behaviour `Visualize.Scale.Behaviour`, whose nine callbacks are `domain/2`, `range/2`, `apply/2`, `invert/2`, `ticks/2`, `nice/1`, `padding/2`, `bandwidth/1`, `clamp/2`. Every scale module MUST declare `@behaviour Visualize.Scale.Behaviour` and implement all nine (the module also provides the shared fraction, table below), so a missing operation is a compile error under `--warnings-as-errors` rather than an `UndefinedFunctionError` at dispatch (D-15). Operations that do not apply to a scale kind MUST behave as identity (`nice/1`, `padding/2`, `clamp/2`), return `nil` (`invert/2`), or return `0` (`bandwidth/1`); the discretizing scales return their thresholds from `ticks/2`.
 
 The table records what each module defines.
 
@@ -50,7 +50,7 @@ The table records what each module defines.
 
 ### 1.4 Clamping
 
-`clamp/2` takes a boolean. The default is `false` for every scale except `Color`, whose default is `true`. When enabled, `Linear`, `Log`, `Time`, `Radial`, and `Color` clamp the normalised parameter `t` to `[0, 1]` before interpolating; `Power` and `Symlog` clamp the *output* to `[min(r0, r1), max(r0, r1)]`. The two formulations are equivalent for linear interpolation. `invert/2` never clamps.
+`clamp/2` takes a boolean. The default is `false` for every scale except `Color`, whose default is `true`. When enabled, `Linear`, `Log`, `Time`, `Radial`, and `Color` clamp the normalized parameter `t` to `[0, 1]` before interpolating; `Power` and `Symlog` clamp the *output* to `[min(r0, r1), max(r0, r1)]`. The two formulations are equivalent for linear interpolation. `invert/2` never clamps.
 
 ## 2. `Visualize.Scale` Facade
 
@@ -76,7 +76,7 @@ The table records what each module defines.
 | `Visualize.Scale.apply/2` | Dispatches to the scale module's `apply/2`; maps a domain value to a range value. Total over every scale this module constructs (1.3). |
 | `Visualize.Scale.invert/2` | Dispatches to the scale module's `invert/2`; maps a range value back to the domain. Continuous scales only; every other scale returns `nil`. |
 | `Visualize.Scale.ticks/1` | As `ticks/2` with count 10. |
-| `Visualize.Scale.ticks/2` | Dispatches to the scale module's `ticks/2`; returns representative domain values, ascending for continuous scales, the domain itself for discrete scales, the thresholds for discretising scales. `count` is a hint, not a guarantee. |
+| `Visualize.Scale.ticks/2` | Dispatches to the scale module's `ticks/2`; returns representative domain values, ascending for continuous scales, the domain itself for discrete scales, the thresholds for discretizing scales. `count` is a hint, not a guarantee. |
 | `Visualize.Scale.nice/1` | Dispatches to the scale module's `nice/1`; extends the domain outward to round values. |
 | `Visualize.Scale.padding/2` | Dispatches to the scale module's `padding/2`; meaningful only for `Band`. |
 | `Visualize.Scale.bandwidth/1` | Dispatches to the scale module's `bandwidth/1`; `0` for every scale but `Band`. |
@@ -235,7 +235,7 @@ Domain bounds and `apply/2` arguments MAY be any of `DateTime`, `Date`, `NaiveDa
 - `nice/1`: chooses the interval for count 10 and sets the domain to `[floor(d0), ceil(d1)]` (or `[ceil(d0), floor(d1)]` when descending). A domain already on boundaries is unchanged.
 - `interval/2` (`span_seconds, count`) exposes the choice for callers that format ticks by their interval; it is not part of the scale protocol.
 
-This is d3-time's model (D-16); the interval selection and the snapping are the reference behaviour of `d3.timeTicks` and `interval.range`, with Monday-based weeks.
+This is d3-time's model (D-16); the interval selection and the snapping are the reference behavior of `d3.timeTicks` and `interval.range`, with Monday-based weeks.
 
 #### 7.3.1 Interval Table
 
@@ -254,7 +254,7 @@ An interval is `{unit, n}`: `n` units per step. The candidates, with the nominal
 
 Selection, with `target = span_seconds / max(n, 1)`: of the two table rows whose seconds bracket `target`, the one closer in ratio (`target / below < above / target` picks the row below); a `target` below one second picks `{:second, 1}`. When `target` exceeds one year the interval is `{:year, k}` with `k = max(1, round(f · 10^⌊log10 raw⌋))` for `raw = span_years / n` and `f` from the d3 nice-step thresholds (`10` if `raw / 10^⌊log10 raw⌋ ≥ √50`, `5` if `≥ √10`, `2` if `≥ √2`, else `1`), so 24 years at count 10 step by 2 and three centuries by 20.
 
-Because neighbouring rows differ by at most `4.3×`, the number of ticks is within about `2.2×` of `n` either way.
+Because neighboring rows differ by at most `4.3×`, the number of ticks is within about `2.2×` of `n` either way.
 
 #### 7.3.2 Snapping
 
@@ -308,7 +308,7 @@ The table and the steps above describe a scale without a zone. A zoned scale rea
 
 - `apply/2`: `unknown` when the range is empty. Otherwise the index `i` of the first domain element equal (`==`) to the value; when not found the `unknown` value is returned, else `Enum.at(range, rem(i, length(range)))`: the range **cycles** when the domain is longer. The domain is never extended implicitly.
 - `invert/2` returns `nil`; `ticks/2` returns the domain (count ignored); `nice/1`, `clamp/2`, `padding/2` identity; `bandwidth/1` `0`.
-- **`unknown` is d3's `scaleOrdinal.unknown`** without d3's implicit default: the struct's `nil` means "no value", and the caller decides what that draws. A scale used for **colour** gives it a colour, so that a value outside the domain is still drawn, and drawn as *not one of the categories*: the declarative layer's `color` scale does so by default, with the theme's `:axis` slot, a neutral every theme makes visible on its background ([14-declarative-chart](14-declarative-chart.md) §4.3, D-122). A `nil` value is outside every domain inference builds, since inference drops `nil`s, so at this level it maps to `unknown` like any other stranger; the declarative layer reads a `nil` as no value at all and paints nothing (spec/14 §3.4).
+- **`unknown` is d3's `scaleOrdinal.unknown`** without d3's implicit default: the struct's `nil` means "no value", and the caller decides what that draws. A scale used for **color** gives it a color, so that a value outside the domain is still drawn, and drawn as *not one of the categories*: the declarative layer's `color` scale does so by default, with the theme's `:axis` slot, a neutral every theme makes visible on its background ([14-declarative-chart](14-declarative-chart.md) §4.3, D-122). A `nil` value is outside every domain inference builds, since inference drops `nil`s, so at this level it maps to `unknown` like any other stranger; the declarative layer reads a `nil` as no value at all and paints nothing (spec/14 §3.4).
 
 ### 8.3 Functions
 
@@ -365,7 +365,7 @@ This is d3-scale's `rescale` (D-17). With `n = length(domain)`, `pi = padding_in
 | `Visualize.Scale.Band.padding/2` | Sets inner and outer padding together (`0 ≤ p < 1`). |
 | `Visualize.Scale.Band.padding_inner/2` | Sets inner padding (`0 ≤ p < 1`). |
 | `Visualize.Scale.Band.padding_outer/2` | Sets outer padding (`p ≥ 0`). |
-| `Visualize.Scale.Band.align/2` | Sets the distribution of outer space (`0` = all at end, `0.5` = centred, `1` = all at start). |
+| `Visualize.Scale.Band.align/2` | Sets the distribution of outer space (`0` = all at end, `0.5` = centered, `1` = all at start). |
 | `Visualize.Scale.Band.round/2` | Enables rounding: the step is floored, the start and bandwidth rounded. |
 | `Visualize.Scale.Band.apply/2` | Returns the band start for a category, or `nil` if absent. |
 | `Visualize.Scale.Band.invert/2` | Returns `nil`. |
@@ -490,10 +490,10 @@ With `n = length(range)` and `step = (d1 − d0) / n`:
 | Input | Resolution |
 |---|---|
 | atom | a scheme name from 13.4; an unknown atom raises `ArgumentError` naming `schemes/0` (D-17) |
-| list of colour strings | used as evenly spaced stops; each MUST be `"#rgb"` or `"#rrggbb"` |
-| 1-arity function | called with `t ∈ [0, 1]`, MUST return a colour string |
+| list of color strings | used as evenly spaced stops; each MUST be `"#rgb"` or `"#rrggbb"` |
+| 1-arity function | called with `t ∈ [0, 1]`, MUST return a color string |
 
-Stop-list interpolation: `n = length − 1`, `i = t · n`, `i0 = clamp(⌊i⌋, 0, n − 1)`, `i1 = min(i0 + 1, n)`, `local = i − i0`; each RGB channel is `round(c0 + (c1 − c0) · local)` clamped to `0…255`; output is lowercase `"#rrggbb"`. With `clamp?` false and `t` outside `[0, 1]`, `local` leaves `[0, 1]` and the end stops are extrapolated along their last segment; the channel clamp keeps the result a well-formed colour.
+Stop-list interpolation: `n = length − 1`, `i = t · n`, `i0 = clamp(⌊i⌋, 0, n − 1)`, `i1 = min(i0 + 1, n)`, `local = i − i0`; each RGB channel is `round(c0 + (c1 − c0) · local)` clamped to `0…255`; output is lowercase `"#rrggbb"`. With `clamp?` false and `t` outside `[0, 1]`, `local` leaves `[0, 1]` and the end stops are extrapolated along their last segment; the channel clamp keeps the result a well-formed color.
 
 ### 13.3 Semantics
 
@@ -515,7 +515,7 @@ Diverging: `:brbg` (9), `:piyg` (9), `:prgn` (9), `:rdbu` (9), `:rdgy` (9), `:rd
 
 Categorical: `:category10` (10), `:accent` (8), `:dark2` (8), `:paired` (10), `:set1` (9), `:set2` (8), `:set3` (10).
 
-Categorical schemes are stop lists like any other; used with `sequential/1` they are interpolated, not indexed. To pick categorical colours discretely, pass `Color.scheme(name)` as the range of a `Visualize.Scale.Ordinal`.
+Categorical schemes are stop lists like any other; used with `sequential/1` they are interpolated, not indexed. To pick categorical colors discretely, pass `Color.scheme(name)` as the range of a `Visualize.Scale.Ordinal`.
 
 ### 13.5 Functions
 
@@ -525,7 +525,7 @@ Categorical schemes are stop lists like any other; used with `sequential/1` they
 | `Visualize.Scale.Color.diverging/1` | Creates a diverging scale with domain `[0, 0.5, 1]` from an interpolator (13.2). |
 | `Visualize.Scale.Color.domain/2` | Sets a two-element (sequential) or three-element (diverging) domain. |
 | `Visualize.Scale.Color.range/2` | Replaces the interpolator; accepts a scheme atom, a stop list, or a 1-arity function. |
-| `Visualize.Scale.Color.apply/2` | Returns the colour string for a value as in 13.3. |
+| `Visualize.Scale.Color.apply/2` | Returns the color string for a value as in 13.3. |
 | `Visualize.Scale.Color.clamp/2` | Sets `clamp?` (default `true`). |
 | `Visualize.Scale.Color.schemes/0` | Returns the list of 25 scheme atoms. |
 | `Visualize.Scale.Color.scheme/1` | Returns the stop list for a scheme atom, or `nil`. |

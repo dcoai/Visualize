@@ -48,7 +48,7 @@ PNG output MUST NOT add a dependency, required or optional: `Visualize.Render.to
 
 ### 3.1 Elixir
 
-The library requires Elixir `~> 1.19` as declared in `mix.exs`. It uses no compiler-version-specific behaviour beyond what that constraint implies.
+The library requires Elixir `~> 1.19` as declared in `mix.exs`. It uses no compiler-version-specific behavior beyond what that constraint implies.
 
 ### 3.2 Versioning
 

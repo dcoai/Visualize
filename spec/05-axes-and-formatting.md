@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-`Visualize.Axis` builds a reference axis — domain line, tick marks, and labels — for any scale that implements `ticks/2` and `apply/2`, returning a backend-neutral `Visualize.IR.Element` group that `Visualize.Render` serialises. `Visualize.Format` supplies the label formatters an axis (or any chart text) uses: grouped numbers, SI prefixes, percentages, currency, exponential and fixed notation, a D3-style specifier parser, and a strftime-like date formatter. `Visualize.Unit` and `Visualize.Quantity` name units by their UCUM codes and scale a value into the unit that fits it (§4). Sizes are in user units (pixels under SVG).
+`Visualize.Axis` builds a reference axis — domain line, tick marks, and labels — for any scale that implements `ticks/2` and `apply/2`, returning a backend-neutral `Visualize.IR.Element` group that `Visualize.Render` serializes. `Visualize.Format` supplies the label formatters an axis (or any chart text) uses: grouped numbers, SI prefixes, percentages, currency, exponential and fixed notation, a D3-style specifier parser, and a strftime-like date formatter. `Visualize.Unit` and `Visualize.Quantity` name units by their UCUM codes and scale a value into the unit that fits it (§4). Sizes are in user units (pixels under SVG).
 
 ## 1. `Visualize.Axis`
 
@@ -17,7 +17,7 @@
 }
 ```
 
-`theme` is a `Visualize.Theme` ([08-utilities](08-utilities.md) §7) or `nil`, which stands for `Visualize.Theme.default/0`. `orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `Visualize.Scale.Behaviour` (spec/03 §1.3) and its `apply/2` MUST return a number: every continuous scale (`Linear`, `Log`, `Power`, `Symlog`, `Time`) and the two discrete position scales (`Band`, `Ordinal` with a numeric range) qualify. The discretising scales and `Color` map values to range *elements*, not positions, so an axis on them is a caller error (`ArithmeticError` at the tick offset).
+`theme` is a `Visualize.Theme` ([08-utilities](08-utilities.md) §7) or `nil`, which stands for `Visualize.Theme.default/0`. `orient` is one of `:top`, `:right`, `:bottom`, `:left`. The four constructors each take a scale struct and set the orientation. The scale MUST implement `Visualize.Scale.Behaviour` (spec/03 §1.3) and its `apply/2` MUST return a number: every continuous scale (`Linear`, `Log`, `Power`, `Symlog`, `Time`) and the two discrete position scales (`Band`, `Ordinal` with a numeric range) qualify. The discretizing scales and `Color` map values to range *elements*, not positions, so an axis on them is a caller error (`ArithmeticError` at the tick offset).
 
 ### 1.2 Setters
 
@@ -31,7 +31,7 @@
 | `tick_size/2` | number | sets inner and outer together |
 | `tick_padding/2` | number | gap between tick line end and label |
 | `offset/2` | number | added to every tick position (for crisp half-pixel alignment) |
-| `theme/2` | `%Visualize.Theme{}` | the theme the axis's colours, font and size resolve from (1.4) |
+| `theme/2` | `%Visualize.Theme{}` | the theme the axis's colors, font and size resolve from (1.4) |
 
 ### 1.3 Orientation Parameters
 
@@ -42,7 +42,7 @@
 | `:left` | `−1` | y | `translate(0, pos)` | `:end` |
 | `:right` | `+1` | y | `translate(0, pos)` | `:start` |
 
-`k` is the direction multiplier: ticks extend away from the plot area. `pos = Scale.apply(scale, value) + offset + c`, where `c = max(0, bandwidth − 2·offset) / 2` is d3-axis's band centring — `bandwidth` from `Visualize.Scale.bandwidth/1`, so `0` on every scale but `Band` — rounded when the band scale rounds (D-23).
+`k` is the direction multiplier: ticks extend away from the plot area. `pos = Scale.apply(scale, value) + offset + c`, where `c = max(0, bandwidth − 2·offset) / 2` is d3-axis's band centering — `bandwidth` from `Visualize.Scale.bandwidth/1`, so `0` on every scale but `Band` — rounded when the band scale rounds (D-23).
 
 ### 1.4 Element Structure
 
@@ -80,7 +80,7 @@ Every label therefore sits `i + p` beyond the tick, away from the plot, as in d3
 
 ### 1.5 Tick Values and Labels
 
-Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain. On a `Band` scale each tick is centred in its band by the `c` term of 1.3, so `offset/2` is only the pixel offset; on every other scale the tick sits at `apply/2` (D-23).
+Tick values are `tick_values` when set, else `Scale.ticks(scale, ticks || 10)`. For a `Band` or `Ordinal` scale that is the domain. On a `Band` scale each tick is centered in its band by the `c` term of 1.3, so `offset/2` is only the pixel offset; on every other scale the tick sits at `apply/2` (D-23).
 
 Default label (no `tick_format`): floats are rounded to 6 decimal places and printed in plain decimal notation with trailing zeros and a trailing `.` removed (`2.0 → "2"`, `0.1 + 0.2 → "0.3"`, `1000.0 → "1000"`, `0.00001 → "0.00001"`) — never in exponent form, and never `-0` (#354; the rule of `Visualize.IR.Path.format_number/1`, D-12, at six decimals); any other value is `to_string/1` (`DateTime` therefore prints ISO 8601). A custom formatter receives the raw tick value. These are the hand-built axis's defaults; the declarative layer's axis derives both, as follows.
 
@@ -182,7 +182,7 @@ matched by d3's regular expression `^(?:(.)?([<>=^]))?([+\-( ])?([$#])?(0)?(\d+)
 | Part | Values | Default |
 |---|---|---|
 | `fill` | any one character, only with `align` | space |
-| `align` | `>` right, `<` left, `^` centre, `=` after sign and symbol | `>` |
+| `align` | `>` right, `<` left, `^` center, `=` after sign and symbol | `>` |
 | `sign` | `-` minus for negatives, `+` plus or minus, `(` parentheses for negatives, space for positives | `-` |
 | `symbol` | `$` currency prefix `"$"`; `#` prefix `0b`/`0o`/`0x` for types `b`/`o`/`x`/`X` | none |
 | `0` | zero padding: `fill = "0"`, `align = "="` | off |
@@ -192,7 +192,7 @@ matched by d3's regular expression `^(?:(.)?([<>=^]))?([+\-( ])?([$#])?(0)?(\d+)
 | `~` | trim insignificant trailing zeros (and a bare point), stopping at an exponent | off |
 | `type` | below | none |
 
-`n` is `,g`. No type (or an unrecognised letter) is `~g` with default precision `12`, so `formatter("").(1234.5)` is `"1234.5"` and `formatter("").(0.1 + 0.2)` is `"0.3"`. Significant precision is clamped to `[1, 21]`, fixed precision to `[0, 20]`.
+`n` is `,g`. No type (or an unrecognized letter) is `~g` with default precision `12`, so `formatter("").(1234.5)` is `"1234.5"` and `formatter("").(0.1 + 0.2)` is `"0.3"`. Significant precision is clamped to `[1, 21]`, fixed precision to `[0, 20]`.
 
 Types, applied to the magnitude `|v|` (JavaScript's number methods are named where the output must match them):
 
@@ -215,7 +215,7 @@ Then, as d3's `format`: a negative whose formatted magnitude is all zeros shows 
 
 ### 2.8 `time/1,2`
 
-`time(value, format \\ "%Y-%m-%d")` accepts `DateTime`, `Date`, or `NaiveDateTime`. The format is tokenised in one pass: `%` followed by one character is a directive, everything else is literal, so a directive's output is never re-scanned (`"%%Y"` is the text `%Y`). A `%` at the end of the format is literal. An unknown directive passes through verbatim (`"%Q" → "%Q"`) (D-25).
+`time(value, format \\ "%Y-%m-%d")` accepts `DateTime`, `Date`, or `NaiveDateTime`. The format is tokenized in one pass: `%` followed by one character is a directive, everything else is literal, so a directive's output is never re-scanned (`"%%Y"` is the text `%Y`). A `%` at the end of the format is literal. An unknown directive passes through verbatim (`"%Q" → "%Q"`) (D-25).
 
 | Directive | Value |
 |---|---|
@@ -274,7 +274,7 @@ A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as st
 
 ### 3.1 Derived formats
 
-`Visualize.Format.Auto` derives a tick format from what a realised scale already knows — its domain and the tick count — so no host computes it (#532, D-134). Each function takes `locale:`, a locale name, `"en"` by default; `"en"` is the only one that ships, and any other raises `ArgumentError` naming it, so adding a locale later changes no signature. A locale holds the grouping separator, the decimal point and the time formats below; English month and weekday names are `time/2`'s (2.8).
+`Visualize.Format.Auto` derives a tick format from what a realized scale already knows — its domain and the tick count — so no host computes it (#532, D-134). Each function takes `locale:`, a locale name, `"en"` by default; `"en"` is the only one that ships, and any other raises `ArgumentError` naming it, so adding a locale later changes no signature. A locale holds the grouping separator, the decimal point and the time formats below; English month and weekday names are `time/2`'s (2.8).
 
 **Time: from the span and the interval.** `time_format(domain, opts)` is the `time/2` specifier for a time domain `[t0, t1]` (`DateTime`, `NaiveDateTime` or `Date`, in either order), with `count:` the tick count (default `10`). The span is `|t1 − t0|` in seconds; the interval is the one the time scale's ticks use for that span and count (`Visualize.Scale.Time.interval/2`, spec/03 §7.3.1), *sub-day* when its unit is `:second`, `:minute` or `:hour`. The format names the units a reader needs to tell two ticks apart and no more:
 
@@ -297,21 +297,21 @@ So clock times within a day, days within a week, dates within a season and month
 
 `e` is the exponent of the largest SI prefix from `M` (`6`) to `Y` (`24`) not above `m`, so **one prefix serves every tick**, as d3's `tickFormat` with an `s` specifier does: `0.5M, 1M, 1.5M`, never `500k, 1M, 1.5M`. `number(notation, opts)` is the formatter of a notation; it also takes `:si`, each value with its own prefix from `k` up (`1`, `100`, `1k`, `1M`) and plain below a thousand, which is what a log scale's ticks — orders of magnitude apart — want. A non-number formats as `to_string/1`.
 
-**One scale.** `formatter(scale, opts)` is the derived formatter of a realised scale, with `count:` and `locale:`:
+**One scale.** `formatter(scale, opts)` is the derived formatter of a realized scale, with `count:` and `locale:`:
 
 - `Visualize.Scale.Time`: `time/2` with `time_format/2` of the domain, each tick shifted into the scale's zone by `Visualize.Scale.Time.local/2` first (2.8), so a zoned axis reads local time; a non-time value formats as `to_string/1`;
 - `Linear`, `Power` and `Radial`: `number/2` of `notation/1` of the domain;
 - `Log` and `Symlog`: `number/2` of `:si` when the notation is `{:si, e}`, else of the notation;
-- any other scale (`Band`, `Ordinal`, the discretising scales): `nil`, the default label.
+- any other scale (`Band`, `Ordinal`, the discretizing scales): `nil`, the default label.
 
-The functions are pure: the same domain, count and locale give the same formatter, so a compiled chart re-derives them on every realisation and an axis on a moving domain follows it (spec/14 §12.5). Units and quantities (§4, #536) build their display scaling on `notation/1` and `number/2`.
+The functions are pure: the same domain, count and locale give the same formatter, so a compiled chart re-derives them on every realization and an axis on a moving domain follows it (spec/14 §12.5). Units and quantities (§4, #536) build their display scaling on `notation/1` and `number/2`.
 
 ### 3.2 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Format.Auto.formatter/1` | As `formatter/2` with `[]` options. |
-| `Visualize.Format.Auto.formatter/2` | The derived formatter of a realised scale, or `nil` (3.1). |
+| `Visualize.Format.Auto.formatter/2` | The derived formatter of a realized scale, or `nil` (3.1). |
 | `Visualize.Format.Auto.time_format/1` | As `time_format/2` with `[]` options. |
 | `Visualize.Format.Auto.time_format/2` | The `time/2` specifier for a time domain's span and interval (3.1). |
 | `Visualize.Format.Auto.notation/1` | As `notation/2` with `[]` options. |
@@ -361,7 +361,7 @@ The atoms, each with UCUM's definition (the *Factor* column is to the base of it
 | `Cel` | degree Celsius | yes | temperature | — (affine) | `cel(1 K)` | `°C` |
 | `[degF]` | degree Fahrenheit | no | temperature | — (affine) | `degf(5 K/9)` | `°F` |
 | `K` | kelvin | yes | temperature | 1 | base | `K` |
-| `m` | metre | yes | length | 1 | base | `m` |
+| `m` | meter | yes | length | 1 | base | `m` |
 | `[in_i]` | inch | no | length | 127/5,000 | 2.54 `cm` | `in` |
 | `[ft_i]` | foot | no | length | 381/1,250 | 12 `[in_i]` | `ft` |
 | `[yd_i]` | yard | no | length | 1,143/1,250 | 3 `[ft_i]` | `yd` |
@@ -369,7 +369,7 @@ The atoms, each with UCUM's definition (the *Factor* column is to the base of it
 | `[nmi_i]` | nautical mile | no | length | 1,852 | 1,852 `m` | `nmi` |
 | `ar` | are | yes | length² | 100 | 100 `m2` | `a` |
 | `[acr_us]` | acre (US survey) | no | length² | 62,726,400,000/15,499,969 | 160 `[rd_us]2`, the rod 16.5 survey feet of 1,200/3,937 `m` | `ac` |
-| `l`, `L` | litre | yes | length³ | 1/1,000 | `dm3` | `l`, `L` |
+| `l`, `L` | liter | yes | length³ | 1/1,000 | `dm3` | `l`, `L` |
 | `[foz_us]` | US fluid ounce | no | length³ | 473,176,473/16 × 10⁻¹² | `[gal_us]`/128 | `fl oz` |
 | `[pt_us]` | US pint | no | length³ | 473,176,473 × 10⁻¹² | `[gal_us]`/8 | `pt` |
 | `[gal_us]` | US gallon | no | length³ | 473,176,473/125 × 10⁻⁹ | 231 `[in_i]3` | `gal` |
@@ -390,7 +390,7 @@ The atoms, each with UCUM's definition (the *Factor* column is to the base of it
 | `Pa` | pascal | yes | mass·length⁻¹·time⁻² | 1,000 | `N/m2` | `Pa` |
 | `bar` | bar | yes | mass·length⁻¹·time⁻² | 10⁸ | 10⁵ `Pa` | `bar` |
 | `[psi]` | pound per square inch | no | mass·length⁻¹·time⁻² | 8,896,443,230,521/1,290,320 | `[lbf_av]/[in_i]2` | `psi` |
-| `m[Hg]` | metre of mercury | yes | mass·length⁻¹·time⁻² | 133,322,000 | 133.3220 `kPa` | `mHg` |
+| `m[Hg]` | meter of mercury | yes | mass·length⁻¹·time⁻² | 133,322,000 | 133.3220 `kPa` | `mHg` |
 | `[in_i'Hg]` | inch of mercury | no | mass·length⁻¹·time⁻² | 16,931,894/5 | `m[Hg].[in_i]/m` | `inHg` |
 | `rad` | radian | yes | angle | 1 | base | `rad` |
 | `deg` | degree | no | angle | π/180 | `[pi].rad/360` × 2 | `°` |
@@ -401,7 +401,7 @@ The atoms, each with UCUM's definition (the *Factor* column is to the base of it
 | `B` | bel | yes | level | 1 (logarithmic) | `lg(1 1)` | `B` |
 | `B[SPL]` | bel sound pressure | yes | sound pressure level | 1 (logarithmic) | `2lg(2 10*-5.Pa)` | `B(SPL)` |
 
-The bases are the second, the byte, the metre, the gram, the kelvin, the radian and the coulomb, so a watt is 1,000 g·m²·s⁻³, and the pound-force of `[HP]` and `[psi]` is `[lb_av]` times the standard acceleration of free fall, 9.80665 `m/s2`. A **symbol is matched whole before it is split**: `min` is the minute and `m` the metre, never a milli-`in` or a milli-nothing; `h` is the hour, `d` the day, `t` the tonne, `cal` the calorie and `bar` the bar, and only a symbol that is not an atom is read as a prefix and a metric atom, longest prefix first (`MiBy` is `Mi`·`By`, `dam` is `da`·`m`, `ms` is `m`·`s`, `kW` is `k`·`W`, `hPa` is `h`·`Pa`, `har` is `h`·`ar`, the hectare, `mm[Hg]` is `m`·`m[Hg]`, `dB` is `d`·`B`). So `s`, `ms`, `us`, `ns`, `min`, `h`, `d`, `By`, `kBy`, `MBy`, `GBy`, `TBy`, `KiBy`, `MiBy`, `GiBy`, `TiBy`, `bit`, `kbit`, `Mbit`, `%`, `[ppm]`, `Hz`, `kHz`, `Cel`, `[degF]`, `K`, `m`, `mm`, `cm`, `km`, `[in_i]`, `[ft_i]2`, `[mi_i]/h`, `[kn_i]`, `m2`, `har`, `[acr_us]`, `ml`, `dl`, `l`, `L`, `m3`, `[gal_us]`, `[pt_br]`, `g`, `kg`, `t`, `[lb_av]`, `[stone_av]`, `m/s`, `km/h`, `min/km`, `s-1`, `W`, `kW`, `[HP]`, `J`, `kJ`, `kW.h`, `cal`, `kcal`, `[Cal]`, `Pa`, `hPa`, `kPa`, `bar`, `mbar`, `[psi]`, `mm[Hg]`, `[in_i'Hg]`, `deg`, `rad`, `V`, `mA`, `mA.h`, `lx`, `ug/m3`, `mg/dl`, `mmol/l`, `B`, `dB`, `dB[SPL]`, `1`, `{request}`, `{request}/s`, `{beat}/min`, `/s` and `By{heap}` are codes; `sec`, `kmin` (the minute is not metric), `k[in_i]` (nor is the inch), `ft` (the foot is `[ft_i]`), `{x` (an unclosed annotation), `[in_i` (an unclosed bracket), `m//s`, `.s`, `s^2` and `""` are not. `B`, `kB` and `MB` are codes, but they are the bel, the kilobel and the megabel: a person's `MB` is read by `parse_alias/1` (below), never by `parse/1`. An annotation means the unity (UCUM §2.1.5): `{request}/s` is the dimension of `/s`, named. Parentheses, `10*`-style powers of ten, arcminutes and arcseconds, and the rest of UCUM's atoms are not read; the table grows by proposal.
+The bases are the second, the byte, the meter, the gram, the kelvin, the radian and the coulomb, so a watt is 1,000 g·m²·s⁻³, and the pound-force of `[HP]` and `[psi]` is `[lb_av]` times the standard acceleration of free fall, 9.80665 `m/s2`. A **symbol is matched whole before it is split**: `min` is the minute and `m` the meter, never a milli-`in` or a milli-nothing; `h` is the hour, `d` the day, `t` the tonne, `cal` the calorie and `bar` the bar, and only a symbol that is not an atom is read as a prefix and a metric atom, longest prefix first (`MiBy` is `Mi`·`By`, `dam` is `da`·`m`, `ms` is `m`·`s`, `kW` is `k`·`W`, `hPa` is `h`·`Pa`, `har` is `h`·`ar`, the hectare, `mm[Hg]` is `m`·`m[Hg]`, `dB` is `d`·`B`). So `s`, `ms`, `us`, `ns`, `min`, `h`, `d`, `By`, `kBy`, `MBy`, `GBy`, `TBy`, `KiBy`, `MiBy`, `GiBy`, `TiBy`, `bit`, `kbit`, `Mbit`, `%`, `[ppm]`, `Hz`, `kHz`, `Cel`, `[degF]`, `K`, `m`, `mm`, `cm`, `km`, `[in_i]`, `[ft_i]2`, `[mi_i]/h`, `[kn_i]`, `m2`, `har`, `[acr_us]`, `ml`, `dl`, `l`, `L`, `m3`, `[gal_us]`, `[pt_br]`, `g`, `kg`, `t`, `[lb_av]`, `[stone_av]`, `m/s`, `km/h`, `min/km`, `s-1`, `W`, `kW`, `[HP]`, `J`, `kJ`, `kW.h`, `cal`, `kcal`, `[Cal]`, `Pa`, `hPa`, `kPa`, `bar`, `mbar`, `[psi]`, `mm[Hg]`, `[in_i'Hg]`, `deg`, `rad`, `V`, `mA`, `mA.h`, `lx`, `ug/m3`, `mg/dl`, `mmol/l`, `B`, `dB`, `dB[SPL]`, `1`, `{request}`, `{request}/s`, `{beat}/min`, `/s` and `By{heap}` are codes; `sec`, `kmin` (the minute is not metric), `k[in_i]` (nor is the inch), `ft` (the foot is `[ft_i]`), `{x` (an unclosed annotation), `[in_i` (an unclosed bracket), `m//s`, `.s`, `s^2` and `""` are not. `B`, `kB` and `MB` are codes, but they are the bel, the kilobel and the megabel: a person's `MB` is read by `parse_alias/1` (below), never by `parse/1`. An annotation means the unity (UCUM §2.1.5): `{request}/s` is the dimension of `/s`, named. Parentheses, `10*`-style powers of ten, arcminutes and arcseconds, and the rest of UCUM's atoms are not read; the table grows by proposal.
 
 A code has a **dimension** — the sum of its components' dimensions, each times its exponent, a quotient's negated — and a **factor**, the product of each component's factor (its prefix's times its atom's, or the integer) raised to its exponent, kept exact: a rational, times an integer power of π when the code holds `deg` (`factor/1` answers `{n, d}`, or `{n, d, k}` for n/d·πᵏ with k ≠ 0). The dimensions are `:time`, `:information`, `:length`, `:mass`, `:temperature`, `:angle`, `:charge` and `:luminous_intensity`, as UCUM's base units are, two **level** dimensions, and one `{:currency, code}` per currency (below). The mole is UCUM's number, so `mol` is dimensionless and `mmol/l` has the dimension of `/l`.
 
@@ -426,7 +426,7 @@ A code of the ISO 4217 table typed alone, in capitals (`USD`, `CHF`), is its cur
 
 The alias table is read first, so an alias wins over a UCUM reading of the same spelling — a person who types `B` means a byte, and gets `By`. A string the table does not hold is read by `parse/1`: a valid code is its own alias (`{:ok, "kPa"}`), and any other is `{:error, {:unknown_alias, string}}`. Surrounding whitespace is ignored. `Visualize.Unit.format_error/1` words a refusal for a person: `"KB" is ambiguous: kBy (1,000 bytes) or KiBy (1,024 bytes)`.
 
-**Currency: visualize's extension, beyond UCUM** (D-155). UCUM has no currency, and a plain annotation (`{USD}`) is UCUM's unity, so `{USD}` and `{EUR}` would read as one unit and as a count. visualize recognises one namespaced annotation, **`{iso4217:XXX}`**, `XXX` a code of the ISO 4217 table (list one, published 2026-09-17: 178 codes, each with its **minor units**, the decimals an amount is written to — `USD` 2, `JPY` 0, `BHD` 3, `CLF` 4, none for `XAU`), and gives **each code a dimension of its own**, `{:currency, "USD"}`:
+**Currency: visualize's extension, beyond UCUM** (D-155). UCUM has no currency, and a plain annotation (`{USD}`) is UCUM's unity, so `{USD}` and `{EUR}` would read as one unit and as a count. visualize recognizes one namespaced annotation, **`{iso4217:XXX}`**, `XXX` a code of the ISO 4217 table (list one, published 2026-09-17: 178 codes, each with its **minor units**, the decimals an amount is written to — `USD` 2, `JPY` 0, `BHD` 3, `CLF` 4, none for `XAU`), and gives **each code a dimension of its own**, `{:currency, "USD"}`:
 
 - `{iso4217:USD}` and `{iso4217:EUR}` are different dimensions, so they never convert and never pair (`{:currency, from, to}` from `conversion/2`, below), as `kg` and `Cel` do not;
 - a code composes like any unit: `{iso4217:USD}/h` is an hourly rate, `{iso4217:EUR}/kW/h` an energy price (UCUM's `/` is left-associative, so a price per kilowatt-hour divides twice: `{iso4217:EUR}/kW.h` would be euro-hours per kilowatt), `{iso4217:EUR}/{iso4217:USD}` an exchange rate, which is data like any other;
@@ -475,17 +475,17 @@ A code that does not read is `{:error, reason}` of `parse/1`. `Visualize.Unit.co
 | `:celsius` | `Cel` |
 | `:fahrenheit` | `[degF]` |
 | `:kelvin` | `K` |
-| `:meter`, `:metre` | `m` |
+| `:meter`, `:metre` <!-- spelling: allow --> | `m` |
 | `:watt` | `W` |
 | `:kilowatt` | `kW` |
 | `:joule` | `J` |
 | `:pascal` | `Pa` |
 
-It returns `{:ok, code}`, `{:error, :native}` for `:native` — a measurement in the VM's native time unit has no fixed size, and a definition converts it first (`unit: {:native, :millisecond}`) — and `{:error, {:unknown, atom}}` for any other atom, so a misspelt unit is refused rather than turned into an annotation. `:unit` is `Telemetry.Metrics`' own default, the dimensionless `1`. (`Telemetry.Metrics` converts `:kilobyte` by 1,000, which is UCUM's `kBy`.)
+It returns `{:ok, code}`, `{:error, :native}` for `:native` — a measurement in the VM's native time unit has no fixed size, and a definition converts it first (`unit: {:native, :millisecond}`) — and `{:error, {:unknown, atom}}` for any other atom, so a misspelled unit is refused rather than turned into an annotation. `:unit` is `Telemetry.Metrics`' own default, the dimensionless `1`. (`Telemetry.Metrics` converts `:kilobyte` by 1,000, which is UCUM's `kBy`.)
 
 ### 4.2 A fixed list of quantities
 
-A quantity is what a unit measures. It chooses how a value is displayed — later a colour ramp and physical anchors too (#531 §3) — and carries the facts a host needs to aggregate and draw it (D-155). The list is fixed: it grows by proposal, never by a source naming a new one. `Visualize.Quantity.all/0` is the list in this order:
+A quantity is what a unit measures. It chooses how a value is displayed — later a color ramp and physical anchors too (#531 §3) — and carries the facts a host needs to aggregate and draw it (D-155). The list is fixed: it grows by proposal, never by a source naming a new one. `Visualize.Quantity.all/0` is the list in this order:
 
 | Quantity | Base unit | Dimension | Kind | Bounds (in the base unit) | Additive across | Additive over time |
 |---|---|---|---|---|---|---|
@@ -581,11 +581,11 @@ Within its convention, a unit **belongs to** the family that holds a member of i
 
 - on `Linear`, `Power` and `Radial`: the domain converted to the display unit, its `Visualize.Format.Auto.notation/2` — `{:si, 3}` in place of `:grouped` for a `:count`, whose family is SI from a thousand (`1.2k`, `90k`), one prefix for the axis as ever — and each tick converted, written by `Visualize.Format.Auto.number/2` of that notation, then the display unit's symbol: `0 s`, `0.5 s`, `1 s`, `1.5 s` for 0–1,500 `ms`;
 - on `Log` and `Symlog`, whose ticks are powers of ten in the scale's unit: each tick in its **own** display unit, the largest in which it is at least 1 among the family members a power of ten from the unit — so a tick lands on a round number, `1 ms`, `10 ms`, `100 ms`, `1 s`, `10 s`, `100 s`, `1k s`, never `1.67 min` — written by `Visualize.Format.Auto.number(:si)` as #532's log axis is; `0` and a quantity with no family keep the unit;
-- on any other scale (`Time`, `Band`, `Ordinal`, the discretising scales): `Visualize.Format.Auto.formatter/2`, the measure unused.
+- on any other scale (`Time`, `Band`, `Ordinal`, the discretizing scales): `Visualize.Format.Auto.formatter/2`, the measure unused.
 
 **Ticks in the display unit** (#594, D-156). When the display unit differs from the scale's unit — a family scaled (0–100 `s` shown in `min`) or a system switched (0–40 `kg` shown in `[lb_av]` under `:us`) — the round numbers of the axis are chosen **in the display unit**: `Visualize.Quantity.ticks(scale, measure, opts)` (`count:` default `10`, and `system:` as `display_unit/3`) is `Visualize.Scale.ticks/2` at that count over the scale's domain converted into the display unit (d3's ticks of the converted domain; the scale's own domain is not niced again, because it is the data's), each tick converted back into the scale's unit by `Visualize.Unit.convert/3` for placement. 0–40 `kg` under `:us` ticks at `0 lb`, `20 lb`, `40 lb`, `60 lb`, `80 lb`, placed at 0, 9.0718474, 18.1436948, … `kg`; 0–100 `s` ticks at `0 min`, `0.2 min` … `1.6 min`, placed at 0, 12, … 96 `s`; never `88.184905 lb` or `1.6667 min`. The formatter of the same scale, measure, `count:` and `system:` labels each of those placed values with the round number it was converted from, not with the value converted back again, so a label never carries the round trip's last bit (`19.999999999999996 lb`). `ticks/3` is `nil` — the scale's own ticks, as before — when the display unit is the unit, when the measure has no unit or quantity, for a `:currency`, which never converts, and on any scale but `Linear`, `Power` and `Radial`: a `Log` or `Symlog` scale keeps its powers of ten and gives each its own unit as above.
 
-The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), except `%`, the degree `°` and a symbol that begins with `/`, which follow it directly (`45%`, `350°`, `12/s`); an empty symbol (`1`, `{request}`) adds nothing. A **`:currency`** measure in one code is written as money (#593, D-155): the domain's notation, `{:si, 3}` in place of `:grouped` as for a `:count`, then the code's symbol in the locale before the number and after its sign (`$0`, `$0.5k`, `$1.5k`, `-€2M`), or the code after it for a code the locale has no symbol for (`1.5k CHF`). A non-number is `to_string/1`. The function is pure, so an axis on a moving domain re-derives its display unit with its format on every realisation (spec/14 §12.5).
+The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), except `%`, the degree `°` and a symbol that begins with `/`, which follow it directly (`45%`, `350°`, `12/s`); an empty symbol (`1`, `{request}`) adds nothing. A **`:currency`** measure in one code is written as money (#593, D-155): the domain's notation, `{:si, 3}` in place of `:grouped` as for a `:count`, then the code's symbol in the locale before the number and after its sign (`$0`, `$0.5k`, `$1.5k`, `-€2M`), or the code after it for a code the locale has no symbol for (`1.5k CHF`). A non-number is `to_string/1`. The function is pure, so an axis on a moving domain re-derives its display unit with its format on every realization (spec/14 §12.5).
 
 **One value: a label or a tooltip.** `Visualize.Quantity.format(value, measure, opts)` writes one value of a measure for a label or a tooltip, not an axis (#593, D-155; the formats metresis's views wrote, moved into the library): with `precision:` (default `2`), `locale:` (default `"en"`) and `system:` (default `:as_posted`; under another, the value is first converted into its `display_unit/3`), it is
 
@@ -629,7 +629,7 @@ The symbol follows the number after a space (`1.5 s`, `20 °C`, `2.5 MB`), excep
 | `Visualize.Quantity.display_unit/2` | As `display_unit/3` with `[]` options. |
 | `Visualize.Quantity.display_unit/3` | `display_unit(domain, measure, system: system)`: the member of the system's family that fits the domain (4.3). |
 | `Visualize.Quantity.formatter/2` | As `formatter/3` with `[]` options. |
-| `Visualize.Quantity.formatter/3` | `formatter(scale, measure, opts)`: the tick formatter in the display unit, with its symbol, labelling the placed values of `ticks/3` with their round numbers (4.3); `count:`, `locale:`, `system:`; raises `ArgumentError` for a measure `resolve/1` refuses. |
+| `Visualize.Quantity.formatter/3` | `formatter(scale, measure, opts)`: the tick formatter in the display unit, with its symbol, labeling the placed values of `ticks/3` with their round numbers (4.3); `count:`, `locale:`, `system:`; raises `ArgumentError` for a measure `resolve/1` refuses. |
 | `Visualize.Quantity.ticks/2` | As `ticks/3` with `[]` options. |
 | `Visualize.Quantity.ticks/3` | `ticks(scale, measure, opts)`: the tick values, in the scale's unit, of round numbers in the display unit when it differs from the unit on a `Linear`, `Power` or `Radial` scale, else `nil` (4.3); `count:`, `system:`. |
 | `Visualize.Quantity.suffix/1` | The tick suffix of a display unit: `""`, or its symbol with its separator (4.3). |

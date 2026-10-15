@@ -12,7 +12,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 |---|---|
 | `Visualize.Backend.SVG` | `Visualize.Backend` implementation producing SVG markup |
 | `Visualize.Backend.Canvas` | `Visualize.Backend` implementation producing Canvas 2D commands |
-| `Visualize.Backend.Canvas.Arc` | Internal: SVG arc to Canvas `ellipse` (endpoint-to-centre conversion) |
+| `Visualize.Backend.Canvas.Arc` | Internal: SVG arc to Canvas `ellipse` (endpoint-to-center conversion) |
 | `Visualize.Backend.CanvasBinary` | Binary encoder for Canvas commands (IR and `Visualize.SVG.Element` input) |
 | `Visualize.Backend.CanvasBinary.Opcodes` | Internal: opcode byte constants |
 | `Visualize.Backend.CanvasBinary.PathEncoder` | Internal: the `path_cubic` command stream |
@@ -47,7 +47,7 @@ The hidden two-argument forms accept a keyword list. `render_element/2` ignores 
 
 | Function | Key | Default | Meaning |
 |---|---|---|---|
-| `render_path/2` | `:style` | `%{}` | Style map serialised per 2.5 onto the `<path>` |
+| `render_path/2` | `:style` | `%{}` | Style map serialized per 2.5 onto the `<path>` |
 | `render_scene/2` | `:wrap` | `true` | When true, wrap the rendered elements with `wrap_root/2`; when false return the bare list of iolists |
 | `wrap_root/2` | `:width` | `800` | `width` attribute of the `<svg>` root |
 | `wrap_root/2` | `:height` | `600` | `height` attribute of the `<svg>` root |
@@ -57,7 +57,7 @@ The hidden two-argument forms accept a keyword list. `render_element/2` ignores 
 
 ### 2.3 Element rendering
 
-Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "style" is `style_to_attrs(element.style)` (2.5), "transform" is the serialised `element.transform` (2.5) added as a `transform` attribute when the transform is non-nil and has at least one operation.
+Each `IR.Element` type maps to exactly one tag. "attrs" is `element.attrs`, "style" is `style_to_attrs(element.style)` (2.5), "transform" is the serialized `element.transform` (2.5) added as a `transform` attribute when the transform is non-nil and has at least one operation.
 
 | IR type | Tag | Attributes emitted | Children / content |
 |---|---|---|---|
@@ -83,7 +83,7 @@ An element with a `clip` (spec/02 §2.1) renders as its definition followed by t
 
 A path's attrs are the data attributes of spec/10 §12.2 and §14.2 — the datum a per-series path carries and the `data-series` every element of a series carries (D-75, D-77, D-126); before those a path had no attrs to print. Any other type raises `FunctionClauseError`. Tags in `circle ellipse line path polygon polyline rect image use stop feDropShadow feGaussianBlur` are emitted self-closing (`<rect …/>`) when they have neither children nor content; all other tags are emitted as `<tag …>content children</tag>`.
 
-### 2.4 Attribute serialisation
+### 2.4 Attribute serialization
 
 Tags, attributes and text are rendered by the functions of `Visualize.SVG.Renderer` (spec/02 §5.4), so this backend and the HEEx bridge emit one markup for one IR (D-34):
 
@@ -93,9 +93,9 @@ Tags, attributes and text are rendered by the functions of `Visualize.SVG.Render
 - Binary values are escaped: `&` → `&amp;`, `"` → `&quot;`, `<` → `&lt;`, `>` → `&gt;`. Numbers and atoms are printed with `to_string/1` and `Atom.to_string/1` and are not escaped.
 - Text content is escaped for `&`, `<`, `>` only.
 
-### 2.5 Style and transform serialisation
+### 2.5 Style and transform serialization
 
-A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.9, §7.3). A theme name arrives as `var(--vis-…, literal)`, and a typed color's transform as the CSS that computes it, `color-mix(in oklab, …)` or a relative `oklch(from …)` (#665). The backend writes either as it writes any string. A canvas backend is given `:literal` colours, where a transform is the literal it computes.
+A color value reaches the SVG backend already resolved for `:css` (spec/08 §1.9, §7.3). A theme name arrives as `var(--vis-…, literal)`, and a typed color's transform as the CSS that computes it, `color-mix(in oklab, …)` or a relative `oklch(from …)` (#665). The backend writes either as it writes any string. A canvas backend is given `:literal` colors, where a transform is the literal it computes.
 
 `style_to_attrs/1` drops `nil` values and converts atoms that have SVG spellings:
 
@@ -108,13 +108,13 @@ A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
 | `:vector_effect` | `:non_scaling_stroke` | `vector-effect="non-scaling-stroke"` (spec/14 §3.9, #651). The property does not inherit, so on a `:group` it is not written on the group: each child takes it, a child group passing it on the same way, unless the child sets its own |
-| `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
-| `:transition`, `:animation`, `:enter`, `:exit` | a list, maps (spec/14 §3.10–§3.12) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterised for a PNG — draws the element's end state |
-| `:effect` with `:effect_radius`, `:effect_offset`, `:effect_color` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent, and `url(#vis-effect-shadow-<radius>-<h>)` for a shadow with an offset or a colour, `<h>` the base-36 `:erlang.phash2/1` of `{offset, color}` (spec/14 §2.7, #674); `:none` and the three keys alone are dropped |
+| `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honors |
+| `:transition`, `:animation`, `:enter`, `:exit` | a list, maps (spec/14 §3.10–§3.12) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterized for a PNG — draws the element's end state |
+| `:effect` with `:effect_radius`, `:effect_offset`, `:effect_color` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent, and `url(#vis-effect-shadow-<radius>-<h>)` for a shadow with an offset or a color, `<h>` the base-36 `:erlang.phash2/1` of `{offset, color}` (spec/14 §2.7, #674); `:none` and the three keys alone are dropped |
 
-Every other `{key, value}` pair passes through unchanged and is serialised per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
+Every other `{key, value}` pair passes through unchanged and is serialized per 2.4, so `stroke_width: 2` becomes `stroke-width="2"` and `font_size: 12` becomes `font-size="12"`.
 
-A transform is serialised by `Visualize.IR.Transform.to_string/1` (spec/02 §2.3): its operations joined by a single space, each formatted per 1.3:
+A transform is serialized by `Visualize.IR.Transform.to_string/1` (spec/02 §2.3): its operations joined by a single space, each formatted per 1.3:
 
 | Operation | String |
 |---|---|
@@ -172,7 +172,7 @@ Output per format:
 
 Each element produces, in order, its *setup* (transform commands per 3.3.4, then style setup per 3.3.3), its *geometry*, and its *apply* commands (3.3.3). "T" is `transform_commands(element.transform)`, "S" is `style_setup_commands(element.style)`, "A" is `style_apply_commands(element.style)`.
 
-**A leaf's setup is its own** (#679, D-179). Every element below other than `:group` and `:root` is a *leaf*. A leaf whose setup — T and S, or T and the text style for a `:text` — is not empty is drawn inside a `{:save, []}` … `{:restore, []}` pair: `{:save, []}`, the setup, the geometry and the apply commands, `{:restore, []}`. So its transform, its colours, its alpha, its blend, its effect and its font are never the state its next sibling draws in, and the sibling draws where and how SVG draws it — in its own transform and the state of the groups above it. A leaf whose setup is empty writes neither command, so a chart's unstyled, untransformed leaves (the paths of a mark whose style is its group's) cost nothing. The rows of the table give the commands inside the pair.
+**A leaf's setup is its own** (#679, D-179). Every element below other than `:group` and `:root` is a *leaf*. A leaf whose setup — T and S, or T and the text style for a `:text` — is not empty is drawn inside a `{:save, []}` … `{:restore, []}` pair: `{:save, []}`, the setup, the geometry and the apply commands, `{:restore, []}`. So its transform, its colors, its alpha, its blend, its effect and its font are never the state its next sibling draws in, and the sibling draws where and how SVG draws it — in its own transform and the state of the groups above it. A leaf whose setup is empty writes neither command, so a chart's unstyled, untransformed leaves (the paths of a mark whose style is its group's) cost nothing. The rows of the table give the commands inside the pair.
 
 | IR type | Commands |
 |---|---|
@@ -194,15 +194,15 @@ A `:group`'s style setup is emitted after its transform, inside the `save`/`rest
 
 #### 3.3.2 Path commands
 
-`path_data/1` first normalises the path with `Visualize.IR.Path.absolute/1` (spec/02 §2.2) — relative commands resolved against the current point, `H`/`V` as `L`, `S`/`T` expanded — and then maps each absolute command to one Canvas call, tracking the current point and the subpath start (D-37):
+`path_data/1` first normalizes the path with `Visualize.IR.Path.absolute/1` (spec/02 §2.2) — relative commands resolved against the current point, `H`/`V` as `L`, `S`/`T` expanded — and then maps each absolute command to one Canvas call, tracking the current point and the subpath start (D-37):
 
-| Normalised command | Tuple |
+| Normalized command | Tuple |
 |---|---|
 | `{:M, x, y}` | `{:moveTo, [x, y]}` |
 | `{:L, x, y}` | `{:lineTo, [x, y]}` |
 | `{:C, x1, y1, x2, y2, x, y}` | `{:bezierCurveTo, [x1, y1, x2, y2, x, y]}` |
 | `{:Q, x1, y1, x, y}` | `{:quadraticCurveTo, [x1, y1, x, y]}` |
-| `{:A, rx, ry, rot, large, sweep, x, y}` | `{:ellipse, [cx, cy, rx', ry', rot·π/180, θ₁, θ₁ + Δθ, sweep == 0]}` by the SVG endpoint-to-centre conversion (`Visualize.Backend.Canvas.Arc`): radii too small for the chord scale up to fit, `large` and `sweep` choose the centre and the direction, `Δθ` is adjusted by a full turn to match `sweep`; nothing when the arc's end point equals the current point; `{:lineTo, [x, y]}` when a radius is `0` |
+| `{:A, rx, ry, rot, large, sweep, x, y}` | `{:ellipse, [cx, cy, rx', ry', rot·π/180, θ₁, θ₁ + Δθ, sweep == 0]}` by the SVG endpoint-to-center conversion (`Visualize.Backend.Canvas.Arc`): radii too small for the chord scale up to fit, `large` and `sweep` choose the center and the direction, `Δθ` is adjusted by a full turn to match `sweep`; nothing when the arc's end point equals the current point; `{:lineTo, [x, y]}` when a radius is `0` |
 | `:Z` | `{:closePath, []}`; the current point returns to the subpath start |
 
 Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outputs are all directly executable.
@@ -235,14 +235,14 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 | `:radial` `cx cy r` | `{:transform, [w, 0, 0, h, x, y]}`, `{:radialGradient, ["fill", cx, cy, r, stops]}`, `{:fill, []}` | `{:radialGradient, ["stroke", x + cx·w, y + cy·h, r·√(w·h), stops]}`, `{:stroke, []}` |
 
 - **A linear gradient is mapped exactly.** In box units the gradient's value at a point `u` is `t = ((u − u₁)·d) / (d·d)` with `d = u₂ − u₁`; the box maps `u` to the user point `p = (x + uₓ·w, y + u_y·h)`, an affine map, so `t` is affine in `p` too and its isolines stay parallel — SVG's skew on a box that is not square included. Its gradient in user units is `g = (dₓ/w, d_y/h) / (d·d)`, so the canvas gradient runs from `P₀ = (x + x1·w, y + y1·h)`, where `t = 0`, to `P₁ = P₀ + g / |g|²`, where `t = 1`: `x0 y0 x1' y1'` above.
-- **A radial fill is drawn in box units.** A radial gradient in `objectBoundingBox` units is an ellipse on a box that is not square, which no `createRadialGradient` is; but the fill takes its paint in the transform current when `fill()` runs, and the path was fixed in user units when it was built, so the box transform set between the two draws the ellipse exactly. **A radial stroke is the one approximation:** the same transform would scale the line's width unevenly, so a stroke is drawn with the circle of the same area, centred where the ellipse is — exact on a square box.
+- **A radial fill is drawn in box units.** A radial gradient in `objectBoundingBox` units is an ellipse on a box that is not square, which no `createRadialGradient` is; but the fill takes its paint in the transform current when `fill()` runs, and the path was fixed in user units when it was built, so the box transform set between the two draws the ellipse exactly. **A radial stroke is the one approximation:** the same transform would scale the line's width unevenly, so a stroke is drawn with the circle of the same area, centered where the ellipse is — exact on a square box.
 - **A box without area draws nothing.** SVG renders no `objectBoundingBox` paint on an element whose box has no width or no height — an axis-aligned line, a flat path — so neither does a canvas: the fill or stroke is left out.
-- `stops` is a list `[[at, colour], …]` in `at` order, each colour the stop's resolved through `Visualize.Color.parse/1` with the stop's opacity multiplied into its alpha, written `rgba(r,g,b,a)`; a colour it cannot read is opaque black, as a binary colour is (4.6).
-- `linearGradient` and `radialGradient` are, with `nonScalingLineWidth`, the commands that name no Canvas 2D method: each sets `<target>Style` to the gradient `createLinearGradient(x0, y0, x1, y1)` or `createRadialGradient(cx, cy, 0, cx, cy, r)` builds, its focus its centre, with `addColorStop(at, colour)` for each stop.
-- **A hatch is drawn whatever the box** (#673): its tile is laid in user units from the origin, as SVG's `userSpaceOnUse` pattern is, so it needs no box and an element without area is still drawn. Its draw is `{:hatchPattern, [target, pattern, angle, spacing, width, colour, background]}` then the `fill` or `stroke`, in the same `save`/`restore` — `pattern` the word `lines`, `crosshatch` or `dots`, `background` `nil` for none, the colours `rgba()` as stops are. The command sets `<target>Style` to a `CanvasPattern` made from an offscreen tile: a canvas `n = ⌈4·spacing⌉` pixels square — four times the period, so a period that is not a whole pixel is not rounded — scaled by `n / spacing`, holding the background and, centred, the horizontal line (and for `crosshatch` the vertical one) of `width`, or the dot of radius `width`, exactly the SVG tile; the pattern's transform is `rotate(angle)` then `scale(spacing / n)`, so one tile is one period of user units, turned as `patternTransform` turns the SVG one.
-- **A text filled with a paint takes its first stop's colour** (`set_fillStyle`), the one fallback left: the server cannot measure a text's box, and a canvas text is rare — a compiled chart draws its texts as SVG (spec/14 §12.3).
+- `stops` is a list `[[at, color], …]` in `at` order, each color the stop's resolved through `Visualize.Color.parse/1` with the stop's opacity multiplied into its alpha, written `rgba(r,g,b,a)`; a color it cannot read is opaque black, as a binary color is (4.6).
+- `linearGradient` and `radialGradient` are, with `nonScalingLineWidth`, the commands that name no Canvas 2D method: each sets `<target>Style` to the gradient `createLinearGradient(x0, y0, x1, y1)` or `createRadialGradient(cx, cy, 0, cx, cy, r)` builds, its focus its center, with `addColorStop(at, color)` for each stop.
+- **A hatch is drawn whatever the box** (#673): its tile is laid in user units from the origin, as SVG's `userSpaceOnUse` pattern is, so it needs no box and an element without area is still drawn. Its draw is `{:hatchPattern, [target, pattern, angle, spacing, width, color, background]}` then the `fill` or `stroke`, in the same `save`/`restore` — `pattern` the word `lines`, `crosshatch` or `dots`, `background` `nil` for none, the colors `rgba()` as stops are. The command sets `<target>Style` to a `CanvasPattern` made from an offscreen tile: a canvas `n = ⌈4·spacing⌉` pixels square — four times the period, so a period that is not a whole pixel is not rounded — scaled by `n / spacing`, holding the background and, centered, the horizontal line (and for `crosshatch` the vertical one) of `width`, or the dot of radius `width`, exactly the SVG tile; the pattern's transform is `rotate(angle)` then `scale(spacing / n)`, so one tile is one period of user units, turned as `patternTransform` turns the SVG one.
+- **A text filled with a paint takes its first stop's color** (`set_fillStyle`), the one fallback left: the server cannot measure a text's box, and a canvas text is rare — a compiled chart draws its texts as SVG (spec/14 §12.3).
 
-**An absent fill is not `:none`** (#487, D-122). An element with no `:fill` in its own style or any group's above it fills nothing here, while the SVG backend writes no `fill` attribute and the SVG initial value, black, paints it: the two backends agree on `:none` and disagree on absence. Neither backend papers over it — the IR is the caller's, and a hand-built SVG path relies on the initial value — so a producer that must draw the same on both says `:none`. The declarative layer does: a mark element whose colour reading is missing carries `fill: :none` (spec/14 §3.4).
+**An absent fill is not `:none`** (#487, D-122). An element with no `:fill` in its own style or any group's above it fills nothing here, while the SVG backend writes no `fill` attribute and the SVG initial value, black, paints it: the two backends agree on `:none` and disagree on absence. Neither backend papers over it — the IR is the caller's, and a hand-built SVG path relies on the initial value — so a producer that must draw the same on both says `:none`. The declarative layer does: a mark element whose color reading is missing carries `fill: :none` (spec/14 §3.4).
 
 
 A `:text` with `:tspan` children (its lines, spec/14 §7.1) emits its style commands once, then one `fillText` per line at the text's `x` and at `y` plus the sum of the lines' `dy` so far, a `dy` in `em` read as that many times the style's `font_size` (`10` when absent).
@@ -275,13 +275,13 @@ A `nil` transform or one with no operations emits nothing. Otherwise one command
 
 - `enter` and `exit` (#678, spec/14 §3.12), the fifth and sixth arguments, present when the element's style has either, an absent animation then `null`: `[name, duration, samples, keyframes]`, `keyframes` a built-in's rows as an animation's, `null` for `:explode` and for a host's.
 
-A reader that runs spans saves the context at `motion` and restores it at `motionEnd`, so the element's own transform and what its animation adds stay the element's (#677). A span does not change what is drawn: a reader that ignores it draws the element at its target, which is what the `:js` serialisation does (3.4). `Visualize.IR.Motion` holds the conversions both canvas encoders share. No span is written for an element without the attribute, so a chart without motion is the commands it always was.
+A reader that runs spans saves the context at `motion` and restores it at `motionEnd`, so the element's own transform and what its animation adds stay the element's (#677). A span does not change what is drawn: a reader that ignores it draws the element at its target, which is what the `:js` serialization does (3.4). `Visualize.IR.Motion` holds the conversions both canvas encoders share. No span is written for an element without the attribute, so a chart without motion is the commands it always was.
 
-### 3.4 JavaScript serialisation
+### 3.4 JavaScript serialization
 
-Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `hatchPattern` becomes `ctx.fillStyle = (function(){…})();`, a function that draws the tile on a `document.createElement('canvas')` and returns `ctx.createPattern(tile, 'repeat')` with its transform set — `strokeStyle` for a `"stroke"` target (3.3.3, #673). `linearGradient` becomes `ctx.fillStyle = (function(g){g.addColorStop(at, 'color'); …; return g;})(ctx.createLinearGradient(x0, y0, x1, y1));` — `strokeStyle` for a `"stroke"` target, one `addColorStop` per stop — and `radialGradient` the same around `ctx.createRadialGradient(cx, cy, 0, cx, cy, r)` (3.3.3, #652). `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `motion` and `motionEnd` write nothing: a script runs with no library beside it to move the element, so it draws the element's end state (3.3.5). `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
+Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `hatchPattern` becomes `ctx.fillStyle = (function(){…})();`, a function that draws the tile on a `document.createElement('canvas')` and returns `ctx.createPattern(tile, 'repeat')` with its transform set — `strokeStyle` for a `"stroke"` target (3.3.3, #673). `linearGradient` becomes `ctx.fillStyle = (function(g){g.addColorStop(at, 'color'); …; return g;})(ctx.createLinearGradient(x0, y0, x1, y1));` — `strokeStyle` for a `"stroke"` target, one `addColorStop` per stop — and `radialGradient` the same around `ctx.createRadialGradient(cx, cy, 0, cx, cy, r)` (3.3.3, #652). `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `motion` and `motionEnd` write nothing: a script runs with no library beside it to move the element, so it draws the element's end state (3.3.5). `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serializer does not know raises `FunctionClauseError`.
 
-### 3.5 JSON serialisation
+### 3.5 JSON serialization
 
 The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<name>","args":[<values>]}` with the command atom's name as the string. Values: binaries are quoted with `\`, `"`, newline, carriage return and tab escaped; numbers are formatted per 1.3; `true`/`false` are the JSON literals; a list is a JSON array of its values (a gradient's stops, 3.3.3); other atoms are quoted names; anything else is quoted `to_string/1`. No whitespace is emitted.
 
@@ -310,7 +310,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 
 ### 4.2 Stream model and opcodes
 
-A stream is a concatenation of records. Every record begins with a one-byte opcode; the opcode fixes the record's layout, so the stream is self-delimiting and carries no length prefix or header. All multi-byte integers are little-endian unsigned 32-bit (`u32`); all coordinates are little-endian IEEE-754 binary64 (`f64`) except where a record states `f32`, which is little-endian binary32. The two path records exist in an f64 and an f32 form under different opcodes — `path`/`path32`, `path_cubic`/`path_cubic32` — with the same layout apart from the width of every coordinate (D-73); 4.5 says which the encoder writes. Colour components are single unsigned bytes.
+A stream is a concatenation of records. Every record begins with a one-byte opcode; the opcode fixes the record's layout, so the stream is self-delimiting and carries no length prefix or header. All multi-byte integers are little-endian unsigned 32-bit (`u32`); all coordinates are little-endian IEEE-754 binary64 (`f64`) except where a record states `f32`, which is little-endian binary32. The two path records exist in an f64 and an f32 form under different opcodes — `path`/`path32`, `path_cubic`/`path_cubic32` — with the same layout apart from the width of every coordinate (D-73); 4.5 says which the encoder writes. Color components are single unsigned bytes.
 
 Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can appear in binary patterns):
 
@@ -407,15 +407,15 @@ The encoders always write `count = 1`; the decoder begins one path holding every
 
 | Bit | Mask | Field | Bytes |
 |---|---|---|---|
-| 0 | `0x01` | fill colour RGBA | 4 |
-| 1 | `0x02` | stroke colour RGBA | 4 |
+| 0 | `0x01` | fill color RGBA | 4 |
+| 1 | `0x02` | stroke color RGBA | 4 |
 | 2 | `0x04` | stroke width, little-endian f32 | 4 |
 | 3 | `0x08` | global alpha 0–1, little-endian f32 | 4 |
 | 4 | `0x10` | the stroke width does not scale: set only with bit 2 (spec/14 §3.9, #651); the reader divides the width by `√|a·d − b·c|` of the transform current when it reads the record | 0 |
 | 5 | `0x20` | version 2: the fill is the paint of this index, `index:u16` (4.3.12); never set with bit 0 | 2 |
 | 6 | `0x40` | version 2: the stroke is the paint of this index, `index:u16`; never set with bit 1 | 2 |
 
-The two paint fields follow the four of version 1, so a version 1 record reads exactly as it did. A reader keeps the fill and the stroke as state that `save` and `restore` scope as they scope the context: a fill colour (bit 0) replaces a fill paint and a fill paint (bit 5) a fill colour, and likewise for the stroke. A `fill` or `stroke` record drawn while a paint is the fill or the stroke draws that paint over the box of the last `box` record (4.3.13), as 3.3.3 draws it.
+The two paint fields follow the four of version 1, so a version 1 record reads exactly as it did. A reader keeps the fill and the stroke as state that `save` and `restore` scope as they scope the context: a fill color (bit 0) replaces a fill paint and a fill paint (bit 5) a fill color, and likewise for the stroke. A `fill` or `stroke` record drawn while a paint is the fill or the stroke draws that paint over the box of the last `box` record (4.3.13), as 3.3.3 draws it.
 
 Alpha `a` is 0–255. The IR encoder emits a style record whenever `element.style` is non-empty, even if it sets no flags; the SVG encoder (4.7) omits the record when `flags` would be `0`. The SVG encoder never sets bit 3.
 
@@ -490,10 +490,10 @@ Defines the paint `index` for the rest of the stream, replacing any earlier pain
 | `kind` | Paint | Geometry | Bytes |
 |---|---|---|---|
 | `0x01` | linear gradient | `x1 y1 x2 y2` | 16 |
-| `0x02` | radial gradient, focus at the centre | `cx cy r` | 12 |
-| `0x03` | hatch (#673) | `pattern:u8 angle spacing width`, then `colour` and `background` as RGBA bytes, a background of alpha 0 being none; **no stops follow** | 21 |
+| `0x02` | radial gradient, focus at the center | `cx cy r` | 12 |
+| `0x03` | hatch (#673) | `pattern:u8 angle spacing width`, then `color` and `background` as RGBA bytes, a background of alpha 0 being none; **no stops follow** | 21 |
 
-A stop is its offset `at` from 0 to 1 and its colour as RGBA bytes, the stop's opacity multiplied into the alpha (4.6), in `at` order: `5 + 1 + geometry + 1 + 8·count` bytes in all. A hatch's `pattern` byte is `0x01` lines, `0x02` crosshatch, `0x03` dots, and its record is `4 + 21` bytes; a reader draws it as 3.3.3 does, needing no box. The encoder writes each distinct paint of the tree once, after the `version` record and before every other record, indexed from `0` in the order the tree first uses them (D-175) — so a hundred bars of one gradient carry it once and refer to it by two bytes each — and a paint the stream draws is always defined before the record that refers to it.
+A stop is its offset `at` from 0 to 1 and its color as RGBA bytes, the stop's opacity multiplied into the alpha (4.6), in `at` order: `5 + 1 + geometry + 1 + 8·count` bytes in all. A hatch's `pattern` byte is `0x01` lines, `0x02` crosshatch, `0x03` dots, and its record is `4 + 21` bytes; a reader draws it as 3.3.3 does, needing no box. The encoder writes each distinct paint of the tree once, after the `version` record and before every other record, indexed from `0` in the order the tree first uses them (D-175) — so a hundred bars of one gradient carry it once and refer to it by two bytes each — and a paint the stream draws is always defined before the record that refers to it.
 
 #### 4.3.13 `box` (0x51)
 
@@ -509,7 +509,7 @@ The bounding box, in the element's user units, of the element whose draw records
 0x52  kind:u8  radius:f32  [dx:f32  dy:f32  r:u8 g:u8 b:u8 a:u8]
 ```
 
-The effect of a style (#674): kind `0x01` a shadow — its blur radius, its offset and its colour, the bracketed fields, 17 bytes after the opcode — or `0x02` a blur, its radius alone, 5 bytes. A reader sets the context's `shadowColor`, `shadowBlur`, `shadowOffsetX` and `shadowOffsetY`, or its `filter` to `blur(<radius>px)`, as 3.3.3 does; it is context state, so `save` and `restore` scope it. The encoder writes it after the style record of a style whose `:effect` is `:shadow` or `:blur`, the offset and the colour the defaults of 3.3.3 when absent. Before #674 the binary stream had no record for an effect and dropped it, so a shadow drew on SVG and on the `:json` canvas and not on the binary one.
+The effect of a style (#674): kind `0x01` a shadow — its blur radius, its offset and its color, the bracketed fields, 17 bytes after the opcode — or `0x02` a blur, its radius alone, 5 bytes. A reader sets the context's `shadowColor`, `shadowBlur`, `shadowOffsetX` and `shadowOffsetY`, or its `filter` to `blur(<radius>px)`, as 3.3.3 does; it is context state, so `save` and `restore` scope it. The encoder writes it after the style record of a style whose `:effect` is `:shadow` or `:blur`, the offset and the color the defaults of 3.3.3 when absent. Before #674 the binary stream had no record for an effect and dropped it, so a shadow drew on SVG and on the `:json` canvas and not on the binary one.
 
 #### 4.3.15 `motion` (0x53)
 
@@ -533,7 +533,7 @@ The span the last `motion` record began ends. One byte.
 0x55  flags:u8  [fill_alpha:f32]  [stroke_alpha:f32]  [cap:u8]  [join:u8]  [count:u8 length:f32 × count]
 ```
 
-Version 3 (#675, D-180). What a fill or a stroke paints with that the style record has no field for, each field present when its bit is set, in this order: `0x01` the fill's own opacity (`fill_opacity`), `0x02` the stroke's (`stroke_opacity`), `0x04` the cap (`0` butt, `1` round, `2` square), `0x08` the join (`0` miter, `1` round, `2` bevel), `0x10` the dash, its lengths as `setLineDash` takes them (3.3.3), at most 255. The IR encoder writes it directly after an element's or a group's style record (and its `effect` record) when the style sets any of the five. A reader sets the cap, the join and the dash on the context, and keeps the two alphas as state that `save` and `restore` scope as they scope the paints (4.3.5), each `1` at the start of a stream: a `fill` drawn while the fill's alpha is not `1` is drawn at `globalAlpha` times it, and the context's alpha is set back after the draw; likewise a `stroke`. The SVG encoder (4.7) never writes it: it folds the two opacities into its colours' alpha.
+Version 3 (#675, D-180). What a fill or a stroke paints with that the style record has no field for, each field present when its bit is set, in this order: `0x01` the fill's own opacity (`fill_opacity`), `0x02` the stroke's (`stroke_opacity`), `0x04` the cap (`0` butt, `1` round, `2` square), `0x08` the join (`0` miter, `1` round, `2` bevel), `0x10` the dash, its lengths as `setLineDash` takes them (3.3.3), at most 255. The IR encoder writes it directly after an element's or a group's style record (and its `effect` record) when the style sets any of the five. A reader sets the cap, the join and the dash on the context, and keeps the two alphas as state that `save` and `restore` scope as they scope the paints (4.3.5), each `1` at the start of a stream: a `fill` drawn while the fill's alpha is not `1` is drawn at `globalAlpha` times it, and the context's alpha is set back after the draw; likewise a `stroke`. The SVG encoder (4.7) never writes it: it folds the two opacities into its colors' alpha.
 
 ### 4.4 Encoding IR elements
 
@@ -548,13 +548,13 @@ Version 3 (#675, D-180). What a fill or a stroke paints with that the style reco
 | `:root` | each child's records, nothing else |
 | any other type | nothing (zero bytes) |
 
-**A leaf's records are its own** (#679, D-179), as a leaf's commands are (3.3.1): a `:path`, `:circle` or `:rect` — and a type encoded as the path it is — that writes a `transform` or a `style` record is written between a `save` and a `restore`, so neither the transform nor the state the style record sets (the colours, the width, the alpha, a paint, an effect) reaches the element after it; one that writes neither has no `save`. A reader needs nothing new: it scopes the fill and stroke paints with `save` and `restore` already (4.3.5).
+**A leaf's records are its own** (#679, D-179), as a leaf's commands are (3.3.1): a `:path`, `:circle` or `:rect` — and a type encoded as the path it is — that writes a `transform` or a `style` record is written between a `save` and a `restore`, so neither the transform nor the state the style record sets (the colors, the width, the alpha, a paint, an effect) reaches the element after it; one that writes neither has no `save`. A reader needs nothing new: it scopes the fill and stroke paints with `save` and `restore` already (4.3.5).
 
 **A paint's state** (#675, D-180). When any style in the tree sets `:fill_opacity`, `:stroke_opacity`, `:stroke_linecap`, `:stroke_linejoin` or a readable `:stroke_dasharray`, the stream begins with `version` 3 and each such style record is followed by its `paint_state` record (4.3.17), so a translucent paint draws at the element's alpha times its own on a binary canvas as on SVG.
 
 **Paints** (#652, D-175). When any `:fill` or `:stroke` in the tree's styles is a `Visualize.IR.Paint`, or any `:effect` a shadow or a blur (#674), the stream begins with `version` 2 and one `paint` record per distinct paint (4.3.11, 4.3.12); a style that holds a paint sets bit 5 or 6 with the paint's index in place of the RGBA field; and every element whose effective fill or stroke is a paint gets a `box` record between its geometry and its draw records (4.3.13). An element drawn as the path it is — a `:line`, `:ellipse`, `:polyline`, `:polygon` — takes the box of the shape it was.
 
-An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. An `:effect` is the `effect` record after the style record (4.3.14, #674). The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its centre with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, `:pattern`, filters and `:stop` are dropped from the binary stream, and a `:blend` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
+An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. An `:effect` is the `effect` record after the style record (4.3.14, #674). The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its center with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, `:pattern`, filters and `:stop` are dropped from the binary stream, and a `:blend` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
 
 ### 4.5 Path form selection
 
@@ -566,11 +566,11 @@ An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it 
 
 The three tests are on the command list after `Visualize.IR.Path.expand_smooth/1`, so a run written with `S` after its first `C` is a run too; a `Z`, a second subpath, a relative command or a mixed run of `L` and `C` falls to the command stream, which holds it exactly.
 
-The default is f32 because the stream carries canvas coordinates, which are pixel positions: an f32 stores a value below 2¹⁴ = 16,384 in magnitude to within 2⁻¹¹ (≈ 0.0005 px) and one below 2¹¹ = 2,048 to within 2⁻¹³ (≈ 0.0001 px) — the rounding error is at most half an ULP, and the ULP of a value in `[2ⁿ, 2ⁿ⁺¹)` is 2ⁿ⁻²³ — which is far under the half pixel a rasteriser resolves, while every f64 path record is twice the size for precision the canvas cannot show. That bound is the contract of the f32 records: `test/visualize/backend/canvas_binary_test.exs` holds it over random coordinates, and holds `decode(encode(path))` to the path with every argument rounded to its nearest f32. `precision: :f64` writes the records of 4.3.1 and 4.3.2 — byte for byte the stream before D-73 — for a consumer whose values are not pixels or exceed 2²⁴, where an f32 no longer holds every integer. The option governs the path records alone: `circles`, `rects` and `transform` keep their f64 layouts, and `Visualize.Shape.LineNx.to_binary/6,7` (spec/04 §10.2) writes the f64 `path` record as it always has.
+The default is f32 because the stream carries canvas coordinates, which are pixel positions: an f32 stores a value below 2¹⁴ = 16,384 in magnitude to within 2⁻¹¹ (≈ 0.0005 px) and one below 2¹¹ = 2,048 to within 2⁻¹³ (≈ 0.0001 px) — the rounding error is at most half an ULP, and the ULP of a value in `[2ⁿ, 2ⁿ⁺¹)` is 2ⁿ⁻²³ — which is far under the half pixel a rasterizer resolves, while every f64 path record is twice the size for precision the canvas cannot show. That bound is the contract of the f32 records: `test/visualize/backend/canvas_binary_test.exs` holds it over random coordinates, and holds `decode(encode(path))` to the path with every argument rounded to its nearest f32. `precision: :f64` writes the records of 4.3.1 and 4.3.2 — byte for byte the stream before D-73 — for a consumer whose values are not pixels or exceed 2²⁴, where an f32 no longer holds every integer. The option governs the path records alone: `circles`, `rects` and `transform` keep their f64 layouts, and `Visualize.Shape.LineNx.to_binary/6,7` (spec/04 §10.2) writes the f64 `path` record as it always has.
 
-### 4.6 Colour parsing (IR encoder)
+### 4.6 Color parsing (IR encoder)
 
-A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and written as `Visualize.Color.to_rgba/1` gives it, the opacity scaled to 0–255 and rounded: every syntax that function accepts — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` with any decimal alpha, `hsl()`, `hsla()` and the CSS colour names — resolves; a binary it cannot parse and any non-binary value (`:current_color` included) yields opaque black `{0, 0, 0, 255}` (D-36). A `Visualize.IR.Paint` is not a color: it is written as a reference to its `paint` record (4.4), and each of its stops is parsed by this rule with the stop's opacity multiplied into the alpha.
+A binary style color is parsed by `Visualize.Color.parse/1` (spec/08) and written as `Visualize.Color.to_rgba/1` gives it, the opacity scaled to 0–255 and rounded: every syntax that function accepts — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()`, `rgba()` with any decimal alpha, `hsl()`, `hsla()` and the CSS color names — resolves; a binary it cannot parse and any non-binary value (`:current_color` included) yields opaque black `{0, 0, 0, 255}` (D-36). A `Visualize.IR.Paint` is not a color: it is written as a reference to its `paint` record (4.4), and each of its stops is parsed by this rule with the stop's opacity multiplied into the alpha.
 
 ### 4.7 Encoding SVG elements (`Visualize.Backend.CanvasBinary.SVG`)
 
@@ -587,11 +587,11 @@ A binary style colour is parsed by `Visualize.Color.parse/1` (spec/08) and writt
 | `:text` | nothing — text is not representable |
 | any other tag | nothing |
 
-Style attributes read: `fill`, `stroke`, `stroke_width` or `"stroke-width"`, `opacity` or `fill_opacity` or `"fill-opacity"` (fill alpha), `stroke_opacity` or `"stroke-opacity"` (stroke alpha, default `1.0`). A colour is "present" unless it is `nil`, `:none` or `"none"`. Draw records: `fill` if fill is present, `stroke` if stroke is present; if neither is present and fill is not explicitly none, a single `fill` (SVG's default black fill). A colour — a binary, or an atom taken by its name — is parsed by `Visualize.Color.parse/1` as in 4.6, so every hex, `rgb()`, `hsl()` and named form resolves and an unparseable value is black; `"none"` is transparent black. The supplied opacity becomes the alpha byte (`trunc(opacity · 255)`), except that a syntax carrying its own alpha below 1 (`rgba()`, `hsla()`, `#rgba`, `#rrggbbaa`) uses that alpha.
+Style attributes read: `fill`, `stroke`, `stroke_width` or `"stroke-width"`, `opacity` or `fill_opacity` or `"fill-opacity"` (fill alpha), `stroke_opacity` or `"stroke-opacity"` (stroke alpha, default `1.0`). A color is "present" unless it is `nil`, `:none` or `"none"`. Draw records: `fill` if fill is present, `stroke` if stroke is present; if neither is present and fill is not explicitly none, a single `fill` (SVG's default black fill). A color — a binary, or an atom taken by its name — is parsed by `Visualize.Color.parse/1` as in 4.6, so every hex, `rgb()`, `hsl()` and named form resolves and an unparseable value is black; `"none"` is transparent black. The supplied opacity becomes the alpha byte (`trunc(opacity · 255)`), except that a syntax carrying its own alpha below 1 (`rgba()`, `hsla()`, `#rgba`, `#rrggbbaa`) uses that alpha.
 
 The `transform` attribute is parsed only when it begins with `translate(` (one or two numbers → kind `0x01`, missing `y` = `0`) or `scale(` (one or two numbers → kind `0x03` with zero translation); any other string, or a compound string, emits no transform record.
 
-The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, numbers with optional sign, decimal point and exponent, comma or whitespace separators, and implicit `L` for bare coordinate pairs following a command. `S s T t` are not recognised and end the parse at that point.
+The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, numbers with optional sign, decimal point and exponent, comma or whitespace separators, and implicit `L` for bare coordinate pairs following a command. `S s T t` are not recognized and end the parse at that point.
 
 ## 5. Visualize.Backend.CanvasIncremental
 
@@ -623,9 +623,9 @@ The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, nu
 
 Regions with zero or negative width or height are removed. The function does not consult `copy_beneficial?/2`; a caller MUST classify with `scroll_mode/2` first, because an offset beyond the canvas produces nonsensical strips. The result has 0, 1 or 2 entries, never 3.
 
-**The scroll contract** (#292). A copy-shift is exact: the hook copies the previous frame's pixels by `{dx, dy}` and draws only the exposed strips over what it copied, so it is correct only when the picture of the new frame *is* the picture of the old one translated by exactly `{dx, dy}` — every mark that stays on the canvas keeps its shape and moves by that offset, and a strip's marks are the same function of the same data as the full render's, evaluated over the strip's columns. A caller whose marks change in any other way between frames — a phase that animates, a series that slides by a fraction of a pixel — MUST NOT use the scroll modes for it: the copied pixels are then a different picture from the one the strips join, and every strip draws a fresh segment against stale neighbours. The High-Performance page sat like that (spec/14 §12.6). The same contract binds the windowed scale itself: a uniform `dx` moves every reading by the same number of pixels only when the scale is a translation of its units, so a compiled chart scrolls a viewport on a `:linear` or `:time` scale and redraws one on any other kind in full ([14-declarative-chart](14-declarative-chart.md) §12.5, #416).
+**The scroll contract** (#292). A copy-shift is exact: the hook copies the previous frame's pixels by `{dx, dy}` and draws only the exposed strips over what it copied, so it is correct only when the picture of the new frame *is* the picture of the old one translated by exactly `{dx, dy}` — every mark that stays on the canvas keeps its shape and moves by that offset, and a strip's marks are the same function of the same data as the full render's, evaluated over the strip's columns. A caller whose marks change in any other way between frames — a phase that animates, a series that slides by a fraction of a pixel — MUST NOT use the scroll modes for it: the copied pixels are then a different picture from the one the strips join, and every strip draws a fresh segment against stale neighbors. The High-Performance page sat like that (spec/14 §12.6). The same contract binds the windowed scale itself: a uniform `dx` moves every reading by the same number of pixels only when the scale is a translation of its units, so a compiled chart scrolls a viewport on a `:linear` or `:time` scale and redraws one on any other kind in full ([14-declarative-chart](14-declarative-chart.md) §12.5, #416).
 
-**A canvas is one plot** (#432). A design of several frames draws one canvas per frame ([14-declarative-chart](14-declarative-chart.md) §12.1), and the contract above is *per canvas*: the copy-shift moves pixels within one plot, whose size is that frame's plot area and whose offset on the page is its box. Two canvases of one design scroll independently — different windows, different `dx`, one at a full redraw while its neighbour scrolls — and neither reads or writes the other's pixels. What they share is the tick that produced them: one sequence number across the canvases of a frame, so the page's flow control counts a frame and not a plot.
+**A canvas is one plot** (#432). A design of several frames draws one canvas per frame ([14-declarative-chart](14-declarative-chart.md) §12.1), and the contract above is *per canvas*: the copy-shift moves pixels within one plot, whose size is that frame's plot area and whose offset on the page is its box. Two canvases of one design scroll independently — different windows, different `dx`, one at a full redraw while its neighbor scrolls — and neither reads or writes the other's pixels. What they share is the tick that produced them: one sequence number across the canvases of a frame, so the page's flow control counts a frame and not a plot.
 
 ### 5.4 Filtering
 
@@ -719,7 +719,7 @@ The struct `%Visualize.Incremental{}` has fields `canvas_width`, `canvas_height`
 | `:viewport_y` | `0` | initial vertical viewport offset |
 | `:margin` | `%{top: 0, right: 0, bottom: 0, left: 0}` | stored on the struct and handed to `build_element` as `margin` |
 
-`build_element` receives an options map with keys `viewport_x`, `viewport_y`, `canvas_width`, `canvas_height`, `margin`, plus `clip_region: {x, y, w, h}` when called for one exposed region. `render_viewport/1` passes the entire `state.data` to `build_element`: what a full frame shows is the callback's decision, made from the viewport and margin it is given, since only it knows whether a mark needs its neighbours outside the viewport (a line does, a scatter does not) (D-38). Region builds receive `state.data` filtered with `CanvasIncremental.filter_to_regions/3` using the two accessors, so the accessors MUST return canvas-space coordinates.
+`build_element` receives an options map with keys `viewport_x`, `viewport_y`, `canvas_width`, `canvas_height`, `margin`, plus `clip_region: {x, y, w, h}` when called for one exposed region. `render_viewport/1` passes the entire `state.data` to `build_element`: what a full frame shows is the callback's decision, made from the viewport and margin it is given, since only it knows whether a mark needs its neighbors outside the viewport (a line does, a scatter does not) (D-38). Region builds receive `state.data` filtered with `CanvasIncremental.filter_to_regions/3` using the two accessors, so the accessors MUST return canvas-space coordinates.
 
 ### 7.3 Payloads
 
@@ -779,16 +779,16 @@ Result map: `config: %{duration_ms, data_points, chart_type}`; the same five bac
 
 ## 9. Raster output: `Visualize.Render.Raster`
 
-`Visualize.Render.to_png/2` and `to_png!/2` (spec/02 §4) rasterise the library's SVG through the resvg command-line tool, run as an Erlang port (spec/01 §1.7, D-121). `Visualize.Render.Raster` is the only module in `lib/` that runs it, so the backend can be replaced in one place. Its functions are `@doc false` ([11-public-api](11-public-api.md) §2.2), and the contract below is the one `to_png/2` exposes.
+`Visualize.Render.to_png/2` and `to_png!/2` (spec/02 §4) rasterize the library's SVG through the resvg command-line tool, run as an Erlang port (spec/01 §1.7, D-121). `Visualize.Render.Raster` is the only module in `lib/` that runs it, so the backend can be replaced in one place. Its functions are `@doc false` ([11-public-api](11-public-api.md) §2.2), and the contract below is the one `to_png/2` exposes.
 
 ### 9.1 Input
 
 - **A root `Visualize.IR.Element`** (`type: :root`) is rendered with `Visualize.Render.to_svg_string/2` first. The options `to_png/2` does not read (9.2) pass through to the SVG backend, as every `Visualize.Render` function passes them.
-- **A binary** is an SVG document, as `Visualize.Chart.render/2` returns with `root: true`, and is rasterised as given. An option `to_png/2` does not read is an `ArgumentError`, since there is no backend for it to reach.
+- **A binary** is an SVG document, as `Visualize.Chart.render/2` returns with `root: true`, and is rasterized as given. An option `to_png/2` does not read is an `ArgumentError`, since there is no backend for it to reach.
 
 Any other input — a group, a path, a list — is a `FunctionClauseError`: a PNG is a whole document and has no size without its root.
 
-**The SVG must carry literal colours.** The SVG backend resolves a theme slot to a custom-property reference with the literal as its fallback (`var(--vis-axis, #333)`, [08-utilities](08-utilities.md) §7.3), which a browser reads and resvg does not: resvg paints such a value black. A chart meant for a PNG is generated with `resolve: :literal` (`Visualize.Chart.generate(applied, root: true, resolve: :literal)`). An SVG containing `var(--` returns `{:error, :css_references}` rather than a picture in the wrong colours.
+**The SVG must carry literal colors.** The SVG backend resolves a theme slot to a custom-property reference with the literal as its fallback (`var(--vis-axis, #333)`, [08-utilities](08-utilities.md) §7.3), which a browser reads and resvg does not: resvg paints such a value black. A chart meant for a PNG is generated with `resolve: :literal` (`Visualize.Chart.generate(applied, root: true, resolve: :literal)`). An SVG containing `var(--` returns `{:error, :css_references}` rather than a picture in the wrong colors.
 
 ### 9.2 Options
 
@@ -797,7 +797,7 @@ Each option becomes a resvg flag (9.5):
 | Option | Default | Meaning | Flag |
 |---|---|---|---|
 | `:scale` | `1` | Device pixel ratio, a positive number. The PNG's width and height are the root's `width` and `height` times the scale, so `scale: 2` doubles both exactly. | `--zoom`, the scale as a float (`2.0`, `1.5`) |
-| `:background` | `nil` | A CSS colour string painted under the document. `nil` leaves the transparent pixels transparent. A colour resvg cannot parse returns `{:error, {:rasterizer, message}}`. | `--background`, omitted for `nil` |
+| `:background` | `nil` | A CSS color string painted under the document. `nil` leaves the transparent pixels transparent. A color resvg cannot parse returns `{:error, {:rasterizer, message}}`. | `--background`, omitted for `nil` |
 | `:font_dirs` | `[]` | Directories whose fonts are loaded (9.6), a list of strings. Each MUST exist and be a directory; each is expanded to an absolute path (`Path.expand/1`) and passed once. | `--use-fonts-dir`, once per directory |
 | `:system_fonts` | `true` | Whether the system fonts are loaded as well. The conformance suite passes `false` (D-121). | `--skip-system-fonts` when `false` |
 | `:generic_families` | resvg's | The family each CSS generic keyword names, a keyword list over `:serif`, `:sans_serif`, `:monospace`, `:cursive` and `:fantasy` with string values. A key not given keeps resvg's own default: `serif` → `Times New Roman`, `sans-serif` → `Arial`, `monospace` → `Courier New`, `cursive` → `Comic Sans MS`, `fantasy` → `Impact`. | `--serif-family`, `--sans-serif-family`, `--monospace-family`, `--cursive-family`, `--fantasy-family`, for each key given |
@@ -865,7 +865,7 @@ resvg never substitutes a family: a font-family list resolves to its first membe
 
 The text before the PNG (9.5) is split into lines; each is trimmed, blank lines dropped, and a line repeated (resvg reports a list once per text element) is kept once, in first-seen order. Each line becomes a warning:
 
-- **`{:missing_family, list}`** for a line `Warning (in <module>): No match for '<printed>' font-family.`, the form resvg 0.45 to 0.48 print. resvg prints the list it failed to resolve normalised: each family name in double quotes, each generic keyword bare, joined by `, ` — `font-family="Other, 'Gone', sans-serif"` is printed `"Other", "Gone", sans-serif`, and a run of whitespace inside an unquoted name is collapsed. `list` is that printed list with the double quotes around each member removed: `{:missing_family, "Other, Gone, sans-serif"}`. The members are split on commas outside double quotes, so a name holding a comma stays one member. A quoted name that equals a generic keyword (`"serif"`) reads the same as the keyword; the warning names the list, it does not re-resolve it.
+- **`{:missing_family, list}`** for a line `Warning (in <module>): No match for '<printed>' font-family.`, the form resvg 0.45 to 0.48 print. resvg prints the list it failed to resolve normalized: each family name in double quotes, each generic keyword bare, joined by `, ` — `font-family="Other, 'Gone', sans-serif"` is printed `"Other", "Gone", sans-serif`, and a run of whitespace inside an unquoted name is collapsed. `list` is that printed list with the double quotes around each member removed: `{:missing_family, "Other, Gone, sans-serif"}`. The members are split on commas outside double quotes, so a name holding a comma stays one member. A quoted name that equals a generic keyword (`"serif"`) reads the same as the keyword; the warning names the list, it does not re-resolve it.
 - **`{:rasterizer, line}`** for any other line, so nothing resvg reports is dropped.
 
 resvg's text is not a stable interface. Its parsing is the one function `Raster.warnings/1` (`@doc false`), and a test pins it to the output of the CI's resvg (12 §4) by rendering a missing family through the binary, not only a string.

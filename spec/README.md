@@ -26,15 +26,15 @@ Every document carries a `**Status:**` line immediately after its title.
 
 | # | Document | What it settles | Status |
 |---|---|---|---|
-| 00 | [Prior art](00-prior-art.md) | The D3.js lineage, what was deliberately not ported, the LiveView constraints, Elixir neighbours | Implemented |
+| 00 | [Prior art](00-prior-art.md) | The D3.js lineage, what was deliberately not ported, the LiveView constraints, Elixir neighbors | Implemented |
 | 01 | [Goals and scope](01-goals-and-scope.md) | What Visualize is for, what it will not do, optional dependencies, compatibility | Implemented |
 | 02 | [Architecture](02-architecture.md) | The data → scale → shape → IR → backend → render pipeline; the IR; the backend behaviour; the SVG element layer | Implemented |
-| 03 | [Scales](03-scales.md) | Every scale type, its domain/range semantics, ticks, nice, invert, colour schemes | Implemented |
+| 03 | [Scales](03-scales.md) | Every scale type, its domain/range semantics, ticks, nice, invert, color schemes | Implemented |
 | 04 | [Shapes and curves](04-shapes-and-curves.md) | Line, area, arc, pie, stack, symbol generators and every curve type | Implemented |
 | 05 | [Axes and formatting](05-axes-and-formatting.md) | Axis generation, tick placement, number and time formatting | Implemented |
 | 06 | [Layouts](06-layouts.md) | Hierarchy, tree, cluster, pack, partition, treemap, chord, sankey, force simulation | Implemented |
 | 07 | [Geo](07-geo.md) | Projections and their families, GeoJSON paths, Delaunay, Voronoi | Implemented |
-| 08 | [Utilities](08-utilities.md) | Data, colour, interpolate, ease, random, polygon, contour, themes | Implemented |
+| 08 | [Utilities](08-utilities.md) | Data, color, interpolate, ease, random, polygon, contour, themes | Implemented |
 | 09 | [Rendering backends](09-rendering-backends.md) | SVG and Canvas backends, binary encoding, hybrid and incremental rendering | Implemented |
 | 10 | [LiveView integration](10-liveview-integration.md) | Components, hooks, HEEx-safe elements, the JS hook contract | Implemented |
 | 11 | [Public API](11-public-api.md) | The facade module, what is public, naming and error conventions | Implemented |

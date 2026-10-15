@@ -98,11 +98,11 @@ The root is the first datum (in list order) whose parent identifier is `nil` or 
 
 `new/0` sets only the default separation. `size/2` and `node_size/2` accept a two-element list or a 2-tuple, store a tuple, and each clears the other field: the two modes are mutually exclusive and the last one set wins. `separation/2` requires an arity-2 function.
 
-With neither `size` nor `node_size`, coordinates are raw: `x` in separation units with the root at 0 (children spread to either side, so `x` may be negative) and `y` in depth levels. With `size`, `x` is normalised so the leftmost node is at 0 and the rightmost at `width`, and `y` so the root is at 0 and the deepest level at `height`; a zero extent maps to 0. With `node_size`, `x` and `y` are multiplied by `dx` and `dy` respectively without normalisation.
+With neither `size` nor `node_size`, coordinates are raw: `x` in separation units with the root at 0 (children spread to either side, so `x` may be negative) and `y` in depth levels. With `size`, `x` is normalized so the leftmost node is at 0 and the rightmost at `width`, and `y` so the root is at 0 and the deepest level at `height`; a zero extent maps to 0. With `node_size`, `x` and `y` are multiplied by `dx` and `dy` respectively without normalization.
 
 ### 2.2 Tree.generate/2
 
-`generate/2` sets `x` and `y` on every node and returns the new root. `y` is the node's depth (before scaling). `x` is assigned by the Reingold–Tilford tidy-tree algorithm in the linear-time form of Buchheim, Jünger and Leipert, ported from d3-hierarchy's `tree` (D-41): a post-order walk computes preliminary positions and modifiers, comparing the contours of each subtree with those to its left through threads and pushing the subtree right by the greatest violation of `separation` (the shift is spread evenly over the intermediate siblings); a pre-order walk then accumulates the modifiers. Children of one parent are placed left to right with the gap given by `separation`, each parent is centred over its first and last child, and no two nodes at the same depth are closer than `separation` allows: for `root -> [A -> [A1, A2], B -> [B1, B2]]` the leaves are at `-2, -1, 1, 2`. `test/support/tree_golden.txt` records the layout of two fixed trees in every scaling mode.
+`generate/2` sets `x` and `y` on every node and returns the new root. `y` is the node's depth (before scaling). `x` is assigned by the Reingold–Tilford tidy-tree algorithm in the linear-time form of Buchheim, Jünger and Leipert, ported from d3-hierarchy's `tree` (D-41): a post-order walk computes preliminary positions and modifiers, comparing the contours of each subtree with those to its left through threads and pushing the subtree right by the greatest violation of `separation` (the shift is spread evenly over the intermediate siblings); a pre-order walk then accumulates the modifiers. Children of one parent are placed left to right with the gap given by `separation`, each parent is centered over its first and last child, and no two nodes at the same depth are closer than `separation` allows: for `root -> [A -> [A1, A2], B -> [B1, B2]]` the leaves are at `-2, -1, 1, 2`. `test/support/tree_golden.txt` records the layout of two fixed trees in every scaling mode.
 
 ### 2.3 Cluster.generate/2
 
@@ -141,11 +141,11 @@ With neither `size` nor `node_size`, coordinates are raw: `x` in separation unit
 
 `generate/2` expects `value` to have been set (by `sum/2` or `count/1`) unless `radius` is given; a leaf radius below 0 is clamped to 0. Siblings are packed bottom-up by d3-hierarchy's `packSiblings` (D-42), in child order (no sorting): the first circle sits at the origin, the second tangent to its right, the third tangent to both, and every further circle is placed tangent to the current pair `(a, b)` of the front chain — the circular list of circles still exposed on the outside — then tested against the chain, walking forward from `b` and backward from `a` along whichever side has accumulated the smaller radius so far; when the candidate intersects a chain circle, the chain is shortened to that circle and the placement retried. After a placement the pair whose weighted midpoint is nearest the origin becomes the next `(a, b)`. The layout is a pure function of the input: every tie is broken by order and nothing is drawn from `:rand`.
 
-The enclosing circle of a set of siblings is the minimal enclosing circle of the front chain by Welzl's algorithm (d3's `packEnclose`), over a Fisher–Yates shuffle of the chain driven by d3's linear congruential generator (`a = 1664525`, `c = 1013904223`, `m = 2^32`, seed 1), so the shuffle — and therefore the result — is fixed. The siblings are translated so that this circle is centred on the origin, and children are stored relative to the parent's centre until the final pass.
+The enclosing circle of a set of siblings is the minimal enclosing circle of the front chain by Welzl's algorithm (d3's `packEnclose`), over a Fisher–Yates shuffle of the chain driven by d3's linear congruential generator (`a = 1664525`, `c = 1013904223`, `m = 2^32`, seed 1), so the shuffle — and therefore the result — is fixed. The siblings are translated so that this circle is centered on the origin, and children are stored relative to the parent's center until the final pass.
 
 Padding is in output units and is applied as d3 does: a first, unpadded, pass finds the root radius `r0`; a second pass inflates every child of a node by `padding(node) * r0 / min(width, height)` before packing, deflates it afterwards and adds the inflation to the parent's radius, so the parent's boundary also keeps that distance from its children. With `r1` the padded root radius, the gap between tangent siblings after scaling is `padding * r0 / r1` output units — the padding, less the amount by which the padding itself enlarged the layout.
 
-Finally the root is scaled by `k = min(width, height) / (2 * r1)` and centred at `{width / 2, height / 2}`; every `x`, `y` and `r` is multiplied by `k` and positions are made absolute. A root with radius 0 (or `nil`) is returned without scaling and with leaf positions unset. `test/support/pack_golden.txt` records a five-leaf hierarchy with and without padding.
+Finally the root is scaled by `k = min(width, height) / (2 * r1)` and centered at `{width / 2, height / 2}`; every `x`, `y` and `r` is multiplied by `k` and positions are made absolute. A root with radius 0 (or `nil`) is returned without scaling and with leaf positions unset. `test/support/pack_golden.txt` records a five-leaf hierarchy with and without padding.
 
 ### 3.3 Functions
 
@@ -155,7 +155,7 @@ Finally the root is scaled by `k = min(width, height) / (2 * r1)` and centred at
 | `Visualize.Layout.Pack.size/2` | Sets `size` from a list or tuple. |
 | `Visualize.Layout.Pack.padding/2` | Sets a numeric or per-node padding. |
 | `Visualize.Layout.Pack.radius/2` | Sets the arity-1 leaf radius function. |
-| `Visualize.Layout.Pack.generate/2` | Sets `x`, `y` (centre) and `r` on every node (3.2). |
+| `Visualize.Layout.Pack.generate/2` | Sets `x`, `y` (center) and `r` on every node (3.2). |
 
 ## 4. Partition
 
@@ -202,7 +202,7 @@ The root occupies `x0 = 0`, `x1 = width`, `y0 = 0`, `y1 = dy`. Each child of a n
 
 ### 5.2 Algorithm
 
-The root receives `x0 = 0`, `y0 = 0`, `x1 = width`, `y1 = height`. For every node with children the inner rectangle is the node's rectangle shrunk by the four paddings; a side the paddings have inverted collapses to its midpoint, as d3's `positionNode` does. Every child is tiled into the inner rectangle by the selected algorithm and then laid out recursively (D-41). A child's weight is its `value` when that is a number greater than 0 and 0 otherwise; a child of weight 0 receives a zero-area rectangle at the position it would occupy — it joins the row, prefix or slice its neighbours form and takes no extent along the direction the algorithm shares out. When the children have no weight at all, or the inner rectangle has no area, every child sits at the inner rectangle's top-left corner with a zero-area rectangle. After tiling, any rectangle that `padding_inner` has inverted collapses to its midpoint on that axis, so a tile narrower than the gap becomes a point rather than a negative extent. Every descendant of the root therefore carries `x0`, `y0`, `x1`, `y1`. `test/support/treemap_golden.txt` records every algorithm and the partition over a six-node hierarchy with a zero-valued child.
+The root receives `x0 = 0`, `y0 = 0`, `x1 = width`, `y1 = height`. For every node with children the inner rectangle is the node's rectangle shrunk by the four paddings; a side the paddings have inverted collapses to its midpoint, as d3's `positionNode` does. Every child is tiled into the inner rectangle by the selected algorithm and then laid out recursively (D-41). A child's weight is its `value` when that is a number greater than 0 and 0 otherwise; a child of weight 0 receives a zero-area rectangle at the position it would occupy — it joins the row, prefix or slice its neighbors form and takes no extent along the direction the algorithm shares out. When the children have no weight at all, or the inner rectangle has no area, every child sits at the inner rectangle's top-left corner with a zero-area rectangle. After tiling, any rectangle that `padding_inner` has inverted collapses to its midpoint on that axis, so a tile narrower than the gap becomes a point rather than a negative extent. Every descendant of the root therefore carries `x0`, `y0`, `x1`, `y1`. `test/support/treemap_golden.txt` records every algorithm and the partition over a six-node hierarchy with a zero-valued child.
 
 Tiling algorithms, with `children` in input order and areas scaled so the total equals the inner rectangle's area:
 
@@ -253,11 +253,11 @@ One chord is produced for every pair `i <= j` with `matrix[i][j] > 0` or `matrix
 
 ### 6.3 Path generators
 
-`arc_path/3` returns an SVG path for a group between `inner_radius` and `outer_radius`, centred on the origin: an inner arc from start to end angle (sweep 1), a line to the outer end point, the outer arc back (sweep 0), then `Z`. The large-arc flag is set when the span exceeds π.
+`arc_path/3` returns an SVG path for a group between `inner_radius` and `outer_radius`, centered on the origin: an inner arc from start to end angle (sweep 1), a line to the outer end point, the outer arc back (sweep 0), then `Z`. The large-arc flag is set when the span exceeds π.
 
 `ribbon_path/2` returns an SVG path for a chord at `radius`: the source arc, a quadratic curve through the origin to the target arc's start, the target arc, a quadratic curve through the origin back to the source start, then `Z`. A self-loop draws the source arc and a single quadratic return.
 
-Both generators are about the origin, so where the circle sits is the caller's. The chart layer's `:chord` step (spec/14 §5.4.3) places them at the point an `:arc` mark is about — the plot's middle — and its `size` sets the radius only, never the centre (#488), so the ring and the ribbons of one design share one centre.
+Both generators are about the origin, so where the circle sits is the caller's. The chart layer's `:chord` step (spec/14 §5.4.3) places them at the point an `:arc` mark is about — the plot's middle — and its `size` sets the radius only, never the center (#488), so the ring and the ribbons of one design share one center.
 
 ### 6.4 Functions
 
@@ -298,7 +298,7 @@ The layout is a port of d3-sankey (D-42). Links naming a node that is not in `no
 
 Horizontal position: with `L` the greatest depth and `xs = (width - node_width) / L` (0 when `L` is 0), every node is assigned a column in `0..L` by the alignment function, clamped to that range, and `layer` is that column; `x0 = layer * xs`, `x1 = x0 + node_width`. The alignment functions are d3-sankey's: `:left` is `depth`; `:right` is `L - height`, so every sink shares the last column; `:justify` is `L` for a node without outgoing links and `depth` otherwise; `:center` is `depth` for a node with incoming links, one less than the least `depth` among its targets for a node with only outgoing links, and 0 for an isolated node.
 
-Vertical position: with `n` the size of the largest column, the effective padding is `py = min(node_padding, height / (n - 1))` (`node_padding` when `n` is 1), and one scale `ky` — the least over the columns of `(height - (count - 1) * py) / column_total`, columns of total 0 ignored — sizes both nodes and links: a node's height is `value * ky` and a link's `width` is `value * ky`, so the links leaving a node tile its height exactly and no minimum width applies. Each column is stacked in input order from the top and then centred by spreading the remaining height evenly above, between and below its nodes. Then `iterations` relaxation passes, `i` from 0, with `alpha = 0.99^i` and `beta = max(1 - alpha, (i + 1) / iterations)`, sweep the columns right to left and then left to right; each sweep moves every node by `alpha` times the distance from its `y0` to the value-weighted mean of the `y0` each of its links would want for a straight ribbon (weights are `value * (target.layer - source.layer)`), re-sorts the column by `y0`, and resolves collisions with strength `beta`: outward from the middle node, then back in from the bottom and the top of the diagram. When `link_sort` is `nil`, the links of every node are ordered by the `y0` of the node at their other end (ties by input index) and re-ordered whenever a neighbour moves; otherwise they are sorted once by `link_sort` and kept.
+Vertical position: with `n` the size of the largest column, the effective padding is `py = min(node_padding, height / (n - 1))` (`node_padding` when `n` is 1), and one scale `ky` — the least over the columns of `(height - (count - 1) * py) / column_total`, columns of total 0 ignored — sizes both nodes and links: a node's height is `value * ky` and a link's `width` is `value * ky`, so the links leaving a node tile its height exactly and no minimum width applies. Each column is stacked in input order from the top and then centered by spreading the remaining height evenly above, between and below its nodes. Then `iterations` relaxation passes, `i` from 0, with `alpha = 0.99^i` and `beta = max(1 - alpha, (i + 1) / iterations)`, sweep the columns right to left and then left to right; each sweep moves every node by `alpha` times the distance from its `y0` to the value-weighted mean of the `y0` each of its links would want for a straight ribbon (weights are `value * (target.layer - source.layer)`), re-sorts the column by `y0`, and resolves collisions with strength `beta`: outward from the middle node, then back in from the bottom and the top of the diagram. When `link_sort` is `nil`, the links of every node are ordered by the `y0` of the node at their other end (ties by input index) and re-ordered whenever a neighbor moves; otherwise they are sorted once by `link_sort` and kept.
 
 Links: `y0` is the running offset from the top of the source node and `y1` the running offset from the top of the target node, in the settled link order, so a link's ribbon occupies `[y0, y0 + width]` at the source and `[y1, y1 + width]` at the target. Each link receives `source_node`, `target_node` (position snapshots), `source_index`, `target_index`, `y0`, `y1`, `width` and `path`, in input order. A link naming an unknown node keeps `width` 0, `path` `nil` and `nil` endpoints.
 
@@ -358,8 +358,8 @@ Integration: after all forces have been applied, each free coordinate is updated
 | `:x` | `:strength` | `0.1` | |
 | `:y` | `:y` | `0` | Number or function; `vy += (target - y) * strength * alpha`. |
 | `:y` | `:strength` | `0.1` | |
-| `:radial` | `:radius` | `100` | Number or function; `v += (node - centre) * (radius - d) / d * strength * alpha`. |
-| `:radial` | `:x`, `:y` | `0`, `0` | Circle centre. |
+| `:radial` | `:radius` | `100` | Number or function; `v += (node - center) * (radius - d) / d * strength * alpha`. |
+| `:radial` | `:x`, `:y` | `0`, `0` | Circle center. |
 | `:radial` | `:strength` | `0.1` | |
 
 
@@ -401,7 +401,7 @@ It fixes `alpha_min = 0.001` and `velocity_decay = 0.4`. Each tick first sets `a
 
 The tick interval is 16 ms. A tick computes `alpha = alpha + (alpha_target - alpha) * alpha_decay`, applies the forces, integrates, and sends every subscriber `{:force_tick, %{nodes: nodes, links: links}}` where `nodes` carry the updated positions and `links` are the stored (unresolved) link maps. After a timer-driven tick the server re-arms the timer if `alpha >= alpha_min`, otherwise it clears `running`.
 
-Client functions: `start/1`, `stop/1`, `restart/1`, `tick/1`, `set_nodes/2`, `set_links/2`, `set_alpha/2`, `set_alpha_target/2`, `fix_node/4`, `unfix_node/2`, `subscribe/2` and `unsubscribe/2` are casts returning `:ok`; `nodes/1`, `links/1` and `alpha/1` are calls. `links/1` returns the links with `:source` and `:target` replaced by the matching node maps (unmatched ids are left as they are). `set_nodes/2` re-runs node initialisation. `tick/1` advances one step regardless of whether the simulation is running and does not touch the timer. `subscribe/2` monitors the subscriber and removes it when it exits; a pid given in `:subscribers` is held the same way. `restart/1` resets `alpha` to 1.0.
+Client functions: `start/1`, `stop/1`, `restart/1`, `tick/1`, `set_nodes/2`, `set_links/2`, `set_alpha/2`, `set_alpha_target/2`, `fix_node/4`, `unfix_node/2`, `subscribe/2` and `unsubscribe/2` are casts returning `:ok`; `nodes/1`, `links/1` and `alpha/1` are calls. `links/1` returns the links with `:source` and `:target` replaced by the matching node maps (unmatched ids are left as they are). `set_nodes/2` re-runs node initialization. `tick/1` advances one step regardless of whether the simulation is running and does not touch the timer. `subscribe/2` monitors the subscriber and removes it when it exits; a pid given in `:subscribers` is held the same way. `restart/1` resets `alpha` to 1.0.
 
 **A subscriber that must see every tick is given at start** (#483). `subscribe/2` is a cast the caller sends after `start_link/1` has returned, and by then the first tick is already armed: a caller descheduled between the two for longer than the simulation runs — 16 ms a tick, four ticks for `alpha: 0.01, alpha_decay: 0.5` — finds every tick sent to an empty subscriber set and the simulation stopped. Making `subscribe/2` a call would not close that window, since the delay falls before the caller sends anything. `:subscribers` closes it: `init/1` registers them before `start_link/1` returns, so no tick precedes them. `subscribe/2` stays for a process that joins a running simulation, which receives the ticks after its cast is handled.
 
@@ -440,7 +440,7 @@ Tick messages are `{:tick, tag}` where `tag` is the reference the server generat
 | `Visualize.Layout.Force.subscribe/2` | Delegates to `Simulation.subscribe/2`. |
 | `Visualize.Layout.Force.unsubscribe/2` | Delegates to `Simulation.unsubscribe/2`. |
 | `Visualize.Layout.Force.Forces.apply/5` | `apply(type, nodes, links, alpha, opts)`; dispatches to the force named by `type` (8.2). |
-| `Visualize.Layout.Force.Forces.apply_center/3` | `apply_center(nodes, alpha, opts)`: recentres positions. |
+| `Visualize.Layout.Force.Forces.apply_center/3` | `apply_center(nodes, alpha, opts)`: recenters positions. |
 | `Visualize.Layout.Force.Forces.apply_many_body/3` | `apply_many_body(nodes, alpha, opts)`: pairwise charge, O(n²). |
 | `Visualize.Layout.Force.Forces.apply_link/4` | `apply_link(nodes, links, alpha, opts)`: spring constraints. |
 | `Visualize.Layout.Force.Forces.apply_collision/3` | `apply_collision(nodes, alpha, opts)`: separates overlapping circles. |
@@ -455,7 +455,7 @@ Tick messages are `{:tick, tag}` where `tag` is the reference the server generat
 | `Visualize.Layout.Force.Simulation.tick/1` | Advances one tick immediately, independent of the timer. |
 | `Visualize.Layout.Force.Simulation.nodes/1` | Returns the current node maps. |
 | `Visualize.Layout.Force.Simulation.links/1` | Returns links with `source`/`target` resolved to node maps. |
-| `Visualize.Layout.Force.Simulation.set_nodes/2` | Replaces and re-initialises the nodes. |
+| `Visualize.Layout.Force.Simulation.set_nodes/2` | Replaces and re-initializes the nodes. |
 | `Visualize.Layout.Force.Simulation.set_links/2` | Replaces the links. |
 | `Visualize.Layout.Force.Simulation.alpha/1` | Returns the current `alpha`. |
 | `Visualize.Layout.Force.Simulation.set_alpha/2` | Sets `alpha`, clamped into `[0, 1]`. |
@@ -469,11 +469,11 @@ Tick messages are `{:tick, tag}` where `tag` is the reference the server generat
 
 **Status:** Implemented (#348)
 
-`Visualize.Layout.Hexbin` bins points in the plane into a lattice of flat-topped hexagons, d3-hexbin's: for a circumradius `r`, the columns are `dx = 2 r sin(π/3)` apart and the rows `dy = 1.5 r`, every odd row offset by half a column. A point `{x, y}` belongs to the cell whose centre is nearest: with `row = round(y / dy)` and `col = round(x / dx − offset)` where `offset` is `0.5` for an odd row and `0` otherwise, the centre is `{(col + offset) dx, row dy}`. The lattice is in the coordinates of the points, so a chart bins pixels.
+`Visualize.Layout.Hexbin` bins points in the plane into a lattice of flat-topped hexagons, d3-hexbin's: for a circumradius `r`, the columns are `dx = 2 r sin(π/3)` apart and the rows `dy = 1.5 r`, every odd row offset by half a column. A point `{x, y}` belongs to the cell whose center is nearest: with `row = round(y / dy)` and `col = round(x / dx − offset)` where `offset` is `0.5` for an odd row and `0` otherwise, the center is `{(col + offset) dx, row dy}`. The lattice is in the coordinates of the points, so a chart bins pixels.
 
 ### 9.1 Functions
 
 | Function | Contract |
 |---|---|
-| `Visualize.Layout.Hexbin.bin/2` | `bin(points, radius)`: `[{x, y}]` to one map per non-empty cell — `x`, `y` (the centre), `count`, `points` (the cell's points in input order) — in lattice order (row, then column). |
-| `Visualize.Layout.Hexbin.hexagon/3` | `hexagon(cx, cy, radius)`: the closed flat-topped hexagon at the centre as a `Visualize.IR.Path`, its first vertex at bearing −30° (upper right), then clockwise on screen. |
+| `Visualize.Layout.Hexbin.bin/2` | `bin(points, radius)`: `[{x, y}]` to one map per non-empty cell — `x`, `y` (the center), `count`, `points` (the cell's points in input order) — in lattice order (row, then column). |
+| `Visualize.Layout.Hexbin.hexagon/3` | `hexagon(cx, cy, radius)`: the closed flat-topped hexagon at the center as a `Visualize.IR.Path`, its first vertex at bearing −30° (upper right), then clockwise on screen. |

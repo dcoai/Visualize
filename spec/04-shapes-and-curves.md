@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), the composed mark `Shape.PercentileBand` (section 14), and the polar marks `Shape.Rose` (section 15) and `Shape.Needle` (section 16); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialised as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
+Shape generators turn data into geometry. `Visualize.Shape` is a facade over `Shape.Line`, `Shape.Area`, `Shape.Arc`, `Shape.Pie`, `Shape.Stack`, `Shape.Symbol`, the element-producing marks `Shape.Band`, `Shape.Rule`, and `Shape.XBand` (sections 11–13), the composed mark `Shape.PercentileBand` (section 14), and the polar marks `Shape.Rose` (section 15) and `Shape.Needle` (section 16); `Shape.Curve` supplies the point interpolators used by lines and areas; `Shape.LineNx` is an optional Nx-accelerated line path builder. Path-producing generators offer `generate_path/2`, returning a backend-neutral `Visualize.IR.Path`, and `generate/2`, returning that path serialized as an SVG `d` string. Layout generators (`Pie`, `Stack`) return data, not paths. All coordinates are in user units with the SVG convention (x right, y down); all angles are radians.
 
 ## 1. Common Model
 
@@ -172,7 +172,7 @@ Effective accessors are `x0 || x`, `x1 || x`, `y0 || y`, `y1 || y`. `x/2` sets `
 | `:step_after` | — | — | step at the end (`t = 1`) |
 | `:basis` | — | — | uniform B-spline approximation |
 | `:cardinal` | `:tension` | `0` | cardinal spline; `tension = 1` collapses to linear |
-| `:catmull_rom` | `:alpha` | `0.5` | parameterised Catmull-Rom (`0` uniform, `0.5` centripetal, `1` chordal) |
+| `:catmull_rom` | `:alpha` | `0.5` | parameterized Catmull-Rom (`0` uniform, `0.5` centripetal, `1` chordal) |
 | `:monotone_x` | — | — | Fritsch-Carlson monotone cubic in x |
 | `:monotone_y` | — | — | as `:monotone_x` with axes swapped |
 | `:natural` | — | — | natural cubic spline (see 5.6) |
@@ -197,7 +197,7 @@ Both prepend a copy of the first point and append a copy of the last (phantom po
 
 Cardinal with `k = (1 − tension) / 6`: control points `p1 + k·(p2 − p0)` and `p2 + k·(p1 − p3)`.
 
-Catmull-Rom: segment lengths `d1 = |p1 − p0|`, `d2 = |p2 − p1|`, `d3 = |p3 − p2|`, each floored at `0.0001`; `t_i = d_i^alpha`; control points per the standard parameterised formula (`cp1 = (t1²·p2 − t2²·p0 + (2t1² + 3t1·t2 + t2²)·p1) / (3·t1·(t1 + t2))`, symmetrically for `cp2`).
+Catmull-Rom: segment lengths `d1 = |p1 − p0|`, `d2 = |p2 − p1|`, `d3 = |p3 − p2|`, each floored at `0.0001`; `t_i = d_i^alpha`; control points per the standard parameterized formula (`cp1 = (t1²·p2 − t2²·p0 + (2t1² + 3t1·t2 + t2²)·p1) / (3·t1·(t1 + t2))`, symmetrically for `cp2`).
 
 ### 5.5 Monotone
 
@@ -240,7 +240,7 @@ by the Thomas algorithm (forward elimination, back substitution). The second con
 
 ### 6.2 Geometry
 
-All parameters are accessors (1.1) evaluated against the datum. Radii are in user units; angles are **radians measured clockwise from 12 o'clock** (the generator subtracts `π/2` before taking `cos`/`sin`). The path is centred on the origin; callers translate it. The construction is d3-shape's `arc` (D-21).
+All parameters are accessors (1.1) evaluated against the datum. Radii are in user units; angles are **radians measured clockwise from 12 o'clock** (the generator subtracts `π/2` before taking `cos`/`sin`). The path is centered on the origin; callers translate it. The construction is d3-shape's `arc` (D-21).
 
 With `r0` inner and `r1` outer (swapped when `r1 < r0`, so the outer radius is always the larger), `a0`/`a1` the shifted angles, `da = |a1 − a0|`, `cw = a1 > a0`, `ε = 1e−12`:
 
@@ -253,7 +253,7 @@ With `r0` inner and `r1` outer (swapped when `r1 < r0`, so the outer radius is a
   4. **Inner edge.** If `r0 ≤ ε` or the inner ring's padded extent is `≤ ε`: `L` to the inner end (the origin for a circular sector). Else if its corner radius is `> ε`: `L` to the first inner corner's tangent point on the end edge, then the mirror of step 3 with `A r0` in the reverse sweep. Else `L` to the inner end and `A r0` (`sweep = 1 − cw`) back to the inner start.
   5. `Z`.
 
-Every `A` is emitted as d3-path emits it: an implicit `L` to the arc's start when the pen is not already there (within `1e−6`), `large_arc = 1` when the arc spans at least `π`, `sweep = 0` for a counter-clockwise arc. The corner construction is d3-shape's `cornerTangents`: the centre of the circle of the corner radius tangent to both the ring and the straight edge (the nearer of the two candidates), with the tangent points on the edge and on the ring. Reference strings are in `test/visualize/shape/arc_stack_test.exs`.
+Every `A` is emitted as d3-path emits it: an implicit `L` to the arc's start when the pen is not already there (within `1e−6`), `large_arc = 1` when the arc spans at least `π`, `sweep = 0` for a counter-clockwise arc. The corner construction is d3-shape's `cornerTangents`: the center of the circle of the corner radius tangent to both the ring and the straight edge (the nearer of the two candidates), with the tangent points on the edge and on the ring. Reference strings are in `test/visualize/shape/arc_stack_test.exs`.
 
 `centroid/2` returns `{r·cos a, r·sin a}` with `r = (r0 + r1) / 2` and `a` the mean of the shifted angles; padding and corners do not move it.
 
@@ -376,7 +376,7 @@ The offsets are d3-shape's (D-22), applied in stacking order (8.4). Every series
 
 ### 9.2 Types and Geometry
 
-Every path is centred on the origin. With `s` the size:
+Every path is centered on the origin. With `s` the size:
 
 | Type | Construction |
 |---|---|
@@ -410,10 +410,10 @@ Every path is centred on the origin. With `s` the size:
 
 ### 10.2 Semantics
 
-- `generate_path/2,3`: options `:x_domain`, `:x_range`, `:y_domain`, `:y_range`, each a `{min, max}` tuple defaulting to `{0, 1}`; `:curve` (a type from section 5, default `:linear`) and `:curve_opts` (its keyword list, default `[]`). Coordinates are scaled by `(v − d0) / (d1 − d0) · (r1 − r0) + r0` in one vectorised operation. With `:linear` they are emitted directly as `{:M, x, y}` followed by `{:L, x, y}` per point; any other curve passes the scaled points through `Visualize.Shape.Curve.generate/3` (D-20).
+- `generate_path/2,3`: options `:x_domain`, `:x_range`, `:y_domain`, `:y_range`, each a `{min, max}` tuple defaulting to `{0, 1}`; `:curve` (a type from section 5, default `:linear`) and `:curve_opts` (its keyword list, default `[]`). Coordinates are scaled by `(v − d0) / (d1 − d0) · (r1 − r0) + r0` in one vectorized operation. With `:linear` they are emitted directly as `{:M, x, y}` followed by `{:L, x, y}` per point; any other curve passes the scaled points through `Visualize.Shape.Curve.generate/3` (D-20).
 - `generate_path_raw/2`: the same `M`/`L` path from already-scaled lists.
 - `batch_transform/6`: returns `{scaled_xs, scaled_ys}` as lists of floats.
-- `to_binary/6,7`: scales, adds `:translate_x`/`:translate_y` (default `0`), and encodes the `Visualize.Backend.CanvasBinary` opcode stream: an optional style block `<<0x10, flags>>` followed by fill RGBA (`flag 0x01`), stroke RGBA (`flag 0x02`), stroke width as little-endian `f32` (`flag 0x04`), present only when any of `:fill`, `:stroke`, `:stroke_width` is given; then `<<0x01, count::little-32>>` and `2·count` native-endian `f64` coordinates interleaved x, y — the f64 `path` record of spec/09 §4.3.1, which stays defined beside the f32 records of D-73; then `0x40` (fill) and/or `0x41` (stroke) draw ops. Colours MUST be `"#rrggbb"`; any other value encodes as opaque black; `:none` suppresses that operation.
+- `to_binary/6,7`: scales, adds `:translate_x`/`:translate_y` (default `0`), and encodes the `Visualize.Backend.CanvasBinary` opcode stream: an optional style block `<<0x10, flags>>` followed by fill RGBA (`flag 0x01`), stroke RGBA (`flag 0x02`), stroke width as little-endian `f32` (`flag 0x04`), present only when any of `:fill`, `:stroke`, `:stroke_width` is given; then `<<0x01, count::little-32>>` and `2·count` native-endian `f64` coordinates interleaved x, y — the f64 `path` record of spec/09 §4.3.1, which stays defined beside the f32 records of D-73; then `0x40` (fill) and/or `0x41` (stroke) draw ops. Colors MUST be `"#rrggbb"`; any other value encodes as opaque black; `:none` suppresses that operation.
 - `to_base64/6,7`: `Base.encode64/1` of `to_binary`.
 
 ### 10.3 Functions
@@ -423,7 +423,7 @@ Every path is centred on the origin. With `s` the size:
 | `Visualize.Shape.LineNx.generate_path/2` | As `generate_path/3` with `[]` options (identity domains and ranges). |
 | `Visualize.Shape.LineNx.generate_path/3` | Batch-scales `xs`, `ys` by the domain/range options and returns an `IR.Path` through the `:curve` option. |
 | `Visualize.Shape.LineNx.generate_path_raw/2` | Returns a linear `IR.Path` from pre-scaled coordinate lists. |
-| `Visualize.Shape.LineNx.batch_transform/6` | Vectorised linear scaling; returns `{xs, ys}` float lists. |
+| `Visualize.Shape.LineNx.batch_transform/6` | Vectorized linear scaling; returns `{xs, ys}` float lists. |
 | `Visualize.Shape.LineNx.to_binary/6` | As `to_binary/7` with `[]` options. |
 | `Visualize.Shape.LineNx.to_binary/7` | Scales and encodes directly to the CanvasBinary byte format (10.2). |
 | `Visualize.Shape.LineNx.to_base64/6` | As `to_base64/7` with `[]` options. |
@@ -533,7 +533,7 @@ A percentile band is the standard reading of a distribution over time: a median 
 - `outer` is `Area.generate_path/2` for the area with `x`, `y0 = lo`, `y1 = hi` of the outer pair, the same `defined`, `curve`, and `curve_opts` — or `nil` when `outer` is unset; `inner` likewise for the inner pair;
 - `median` is `Line.generate_path/2` for the line with `x`, `y = median`, the same `defined`, `curve`, and `curve_opts` — or `nil` when `median` is unset.
 
-`generate/2` returns the same map with each path serialised by `Visualize.Backend.SVG.path_data/1`; `nil` stays `nil`. The three paths are drawn outer, inner, median — the caller fills the bands and strokes the median; a generator with no band and no median returns a map of three `nil`.
+`generate/2` returns the same map with each path serialized by `Visualize.Backend.SVG.path_data/1`; `nil` stays `nil`. The three paths are drawn outer, inner, median — the caller fills the bands and strokes the median; a generator with no band and no median returns a map of three `nil`.
 
 ### 14.3 Functions
 
@@ -558,16 +558,16 @@ A percentile band is the standard reading of a distribution over time: a median 
 
 ### 15.2 Semantics
 
-A rose — a wind rose, a compass rose, an hour-of-day clock — is one sector per datum, centred on the datum's angle, with its length from a value (D-31). `angle/2` and `width/2` are accessors (1.1) in *domain* units of the radial scale (spec/03 §14) given to `scale/2`: the sector runs from `apply(scale, angle − width / 2)` to `apply(scale, angle + width / 2)`; with no scale the values are radians. `outer_radius/2` and `inner_radius/2` are pixel accessors — the caller maps the count through a linear or square-root scale, as for any radius. `pad_angle/2` is `Arc.pad_angle/2`'s, in radians.
+A rose — a wind rose, a compass rose, an hour-of-day clock — is one sector per datum, centered on the datum's angle, with its length from a value (D-31). `angle/2` and `width/2` are accessors (1.1) in *domain* units of the radial scale (spec/03 §14) given to `scale/2`: the sector runs from `apply(scale, angle − width / 2)` to `apply(scale, angle + width / 2)`; with no scale the values are radians. `outer_radius/2` and `inner_radius/2` are pixel accessors — the caller maps the count through a linear or square-root scale, as for any radius. `pad_angle/2` is `Arc.pad_angle/2`'s, in radians.
 
-`generate_path/2` returns one `IR.Path` per datum, in data order: `Visualize.Shape.Arc.generate_path/2` with that datum's inner and outer radii, start and end angles, and pad angle, so the geometry — angles clockwise from 12 o'clock, the padding shift, the empty path for a zero radius — is exactly section 6's. `generate/2` returns the same list serialised as SVG path-data strings. An empty data list yields `[]`.
+`generate_path/2` returns one `IR.Path` per datum, in data order: `Visualize.Shape.Arc.generate_path/2` with that datum's inner and outer radii, start and end angles, and pad angle, so the geometry — angles clockwise from 12 o'clock, the padding shift, the empty path for a zero radius — is exactly section 6's. `generate/2` returns the same list serialized as SVG path-data strings. An empty data list yields `[]`.
 
 ### 15.3 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Shape.Rose.new/0` | Returns a rose generator reading tuple elements 0 and 1 as angle and outer radius, with `width` 1. |
-| `Visualize.Shape.Rose.angle/2` | Sets the sector-centre accessor, in the scale's domain units (radians without a scale). |
+| `Visualize.Shape.Rose.angle/2` | Sets the sector-center accessor, in the scale's domain units (radians without a scale). |
 | `Visualize.Shape.Rose.width/2` | Sets the sector-width accessor, in the same units. |
 | `Visualize.Shape.Rose.scale/2` | Sets the radial scale the angles map through; `nil` means radians. |
 | `Visualize.Shape.Rose.inner_radius/2` | Sets the inner radius accessor, in pixels (default `0`). |
@@ -586,7 +586,7 @@ A rose — a wind rose, a compass rose, an hour-of-day clock — is one sector p
 
 A needle — a gauge's pointer, a compass needle — is one filled pointer per datum from the hub to its angle (#392). `angle/2` is an accessor (1.1) in the *domain* units of the radial scale given to `scale/2`, radians without one; `length/2`, `inner_radius/2`, `width/2` and `tail/2` are pixel accessors; `hub/2` is the hub circle's radius, `width` when `nil`; `cap/2` is `:point`, `:round` or `:flat`.
 
-`generate_path/2` returns one `IR.Path` per datum, in data order: with `a` the angle clockwise from 12 o'clock (6.2's convention), `u = (sin a, −cos a)` the ray and `p = (cos a, sin a)` across it, the path runs from the base corner `inner_radius · u − tail · u + (width / 2) · p`, round the tail end, to the base's other corner `… − (width / 2) · p`, then to the tip: a `:point` cap meets at `length · u`; a `:flat` cap draws the base's width across at `length`; a `:round` cap draws a half circle of `width / 2` about `length · u`. The path closes. `hub_path/2` is the hub circle's path about the origin, radius `hub`. `generate/2` returns the pointer paths serialised as SVG path-data strings. An empty data list yields `[]`.
+`generate_path/2` returns one `IR.Path` per datum, in data order: with `a` the angle clockwise from 12 o'clock (6.2's convention), `u = (sin a, −cos a)` the ray and `p = (cos a, sin a)` across it, the path runs from the base corner `inner_radius · u − tail · u + (width / 2) · p`, round the tail end, to the base's other corner `… − (width / 2) · p`, then to the tip: a `:point` cap meets at `length · u`; a `:flat` cap draws the base's width across at `length`; a `:round` cap draws a half circle of `width / 2` about `length · u`. The path closes. `hub_path/2` is the hub circle's path about the origin, radius `hub`. `generate/2` returns the pointer paths serialized as SVG path-data strings. An empty data list yields `[]`.
 
 ### 16.3 Functions
 
