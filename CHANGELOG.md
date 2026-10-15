@@ -108,6 +108,12 @@ release it merely follows.
   other scheme or a relative URL is `{:url, reason}`, and `urls: [hosts: [...]]` (config, or
   `from_map/2`/`from_json/2`'s `urls:` option, which can only be stricter) limits the hosts.
   **A design with an `http:` tiles URL now needs the config.**
+- **`Visualize.Chart.explain/2` traces an element's look** (#661, D-172):
+  `explain(applied, at: [:marks, 0], datum: row, state: :selected)` answers, for each part of
+  that element's style, its resolved value, whether the mark kind draws it, and the chain of
+  layers that set it — the palette or a declared style (with the names it was reached
+  through by `extends` or a list), the style a field's value chose, a view state, the
+  site's local edit, or the mark's own series colour.
 - **New in `Visualize.Chart.Style`**: `drawn/2`, `normalize/1` (any spelling to the stored parts),
   `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
   `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and

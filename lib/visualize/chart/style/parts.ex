@@ -455,10 +455,13 @@ defmodule Visualize.Chart.Style.Parts do
   def drawn(node, type),
     do: Map.drop(node, Enum.flat_map(undrawn(type), &Map.fetch!(@projected, &1)))
 
-  defp undrawn(type) when type in @stroked, do: [:fill, :marker, :font, :text]
-  defp undrawn(:symbol), do: [:font, :text]
-  defp undrawn(:text), do: [:marker]
-  defp undrawn(_closed), do: [:marker, :font, :text]
+  @doc false
+  # The parts a mark of `type` does not draw (spec/14 §5.6).
+  @spec undrawn(atom()) :: [atom()]
+  def undrawn(type) when type in @stroked, do: [:fill, :marker, :font, :text]
+  def undrawn(:symbol), do: [:font, :text]
+  def undrawn(:text), do: [:marker]
+  def undrawn(_closed), do: [:marker, :font, :text]
 
   # -- gradients written inline ---------------------------------------------------------
 

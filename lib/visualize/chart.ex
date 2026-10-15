@@ -639,6 +639,86 @@ defmodule Visualize.Chart do
     layers |> Enum.with_index() |> Enum.map(&tag/1) |> Stack.explain()
   end
 
+  @doc """
+  Where each part of one element's style came from (spec/14 §17.3, D-172).
+
+  `applied` is a `%Visualize.Chart.Applied{}`; `at:` the path of the node whose style is
+  explained — `[:marks, i]`, `[:marks, i, :label]`, `[:labels, i]`,
+  `[:frames, f, :axes, i]` or `[:frames, f, :legend]`; `datum:` the element's datum, which
+  a `{:field, f}` entry reads; `state:` a view state laid at its layer (§3.7). The answer is
+  `%{at, kind, state, parts}`, `parts` each part's `value`, whether the kind draws it
+  (`drawn`), and its `chain` of contributions, lowest first: each
+  `%{layer, style, via, field, value, set}`.
+
+      iex> design = %{version: 3, sources: %{s: %{fields: [:x, :y, :k]}},
+      ...>   styles: %{base: %{extends: :bad, stroke: %{width: 3}}},
+      ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
+      ...>   marks: [%{type: :line, data: :s, channels: %{x: :x, y: :y}, style: [:base, %{opacity: 0.5}]}]}
+      iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{s: [%{x: 0, y: 1, k: "a"}]})
+      iex> %{parts: %{stroke: stroke, fill: fill}} = Visualize.Chart.explain(applied, at: [:marks, 0])
+      iex> Enum.map(stroke.chain, &{&1.layer, &1.style, &1.via})
+      [{:style, :base, [:bad]}]
+      iex> stroke.value.width
+      3
+      iex> fill.drawn
+      false
+  """
+  @spec explain(Applied.t(), keyword()) :: map()
+  def explain(%Applied{} = applied, opts) do
+    at = Keyword.fetch!(opts, :at)
+    state = Keyword.get(opts, :state)
+    {stack, kind, frame, series} = explained(applied, at)
+    stack = if state, do: Visualize.Chart.Style.with_state(stack, state), else: stack
+    declared = Map.keys(applied.chart.styles || %{})
+
+    parts =
+      Visualize.Chart.Style.Explain.parts(
+        frame.styles,
+        declared,
+        stack,
+        kind,
+        Keyword.get(opts, :datum),
+        series
+      )
+
+    %{at: at, kind: kind, state: state, parts: parts}
+  end
+
+  # The stack, the kind, the frame and the mark's own paint of the node at a path.
+  defp explained(applied, [:marks, i]) do
+    mark = Enum.at(applied.chart.marks, i)
+    frame = mark_frame(applied, mark)
+    position = Enum.find_index(frame.marks, &(&1 == mark)) || 0
+    {Map.get(mark, :style), mark.type, frame, {:series, position + 1}}
+  end
+
+  defp explained(applied, [:marks, i, :label]) do
+    mark = Enum.at(applied.chart.marks, i)
+    label = Map.get(mark, :label) || %{}
+    stack = Map.get(label, :style, Schema.default(:mark_label, :style))
+    {stack, :text, mark_frame(applied, mark), nil}
+  end
+
+  defp explained(applied, [:labels, i]) do
+    label = Enum.at(applied.chart.labels, i)
+    default = if label.anchor == :title, do: :title, else: Schema.default(:label, :style)
+    frame = Map.get(applied.frames, Map.get(label, :frame)) || applied.frame
+    {Map.get(label, :style, default), :text, frame, nil}
+  end
+
+  defp explained(applied, [:frames, name, :axes, i]) do
+    axis = applied.chart.frames |> Map.fetch!(name) |> Map.get(:axes, []) |> Enum.at(i)
+    {Map.get(axis, :style, Schema.default(:axis, :style)), :axis, applied.frames[name], nil}
+  end
+
+  defp explained(applied, [:frames, name, :legend]) do
+    legend = applied.chart.frames |> Map.fetch!(name) |> Map.get(:legend) || %{}
+    {Map.get(legend, :style, Schema.default(:legend, :style)), :legend, applied.frames[name], nil}
+  end
+
+  defp mark_frame(applied, mark),
+    do: Map.get(applied.frames, Map.get(mark, :frame)) || applied.frame
+
   defp tag({{name, layer}, _index}), do: {name, layer(layer)}
   defp tag({layer, index}), do: {index, layer(layer)}
 
