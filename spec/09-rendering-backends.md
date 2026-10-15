@@ -105,6 +105,7 @@ A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.
 | `:text_anchor` | `:start`, `:middle`, `:end` | `"start"`, `"middle"`, `"end"` |
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
+| `:vector_effect` | `:non_scaling_stroke` | `vector-effect="non-scaling-stroke"` (spec/14 §3.9, #651). The property does not inherit, so on a `:group` it is not written on the group: each child takes it, a child group passing it on the same way, unless the child sets its own |
 | `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honours |
 | `:effect` with `:effect_radius` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent; `:none` and `:effect_radius` alone are dropped |
 
@@ -209,7 +210,7 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 |---|---|---|
 | `:fill` | `{:set_fillStyle, [css]}` | omitted for `:none`; `:current_color` → `"currentColor"`; any other value via `to_string/1` |
 | `:stroke` | `{:set_strokeStyle, [css]}` | same rules |
-| `:stroke_width` | `{:set_lineWidth, [w]}` | |
+| `:stroke_width` | `{:set_lineWidth, [w]}`; with `vector_effect: :non_scaling_stroke`, `{:nonScalingLineWidth, [w]}` | the second sets `lineWidth` to `w` divided by the scale of the transform current when it runs, `√|a·d − b·c|` of `getTransform()`, so the stroke keeps its width on screen (spec/14 §3.9, #651). It is the one command that names no Canvas 2D method (D-37): the width depends on the transform at draw time |
 | `:stroke_linecap` | `{:set_lineCap, [to_string(v)]}` | |
 | `:stroke_linejoin` | `{:set_lineJoin, [to_string(v)]}` | |
 | `:opacity` | `{:set_globalAlpha, [o]}` | |
@@ -241,7 +242,7 @@ A `nil` transform or one with no operations emits nothing. Otherwise one command
 
 ### 3.4 JavaScript serialisation
 
-Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
+Each command becomes one statement. `set_*` commands become property assignments (`ctx.fillStyle = 'red';`, `ctx.lineWidth = 2;`, `ctx.globalAlpha = 0.5;`, `ctx.font = '12px serif';`, `ctx.textAlign = 'center';`). `beginPath`, `closePath`, `fill`, `stroke`, `save`, `restore` become the parameterless call. `moveTo`, `lineTo`, `bezierCurveTo`, `quadraticCurveTo`, `arc`, `ellipse`, `rect`, `translate`, `rotate`, `scale`, `transform` become the same-named call with formatted (1.3) arguments separated by `, `; a boolean argument prints as `true`/`false`. `rotate_around` becomes `ctx.translate(cx, cy); ctx.rotate(a); ctx.translate(-cx, -cy);`. `nonScalingLineWidth` becomes `ctx.lineWidth = w / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());`. `{:clip, []}` becomes `ctx.clip();` and `{:clip, ["evenodd"]}` `ctx.clip('evenodd');`. `fillText` becomes `ctx.fillText('text', x, y);` with `\`, `'` and newline escaped in the text. `drawImage` becomes an immediately-invoked function that creates an `Image`, captures `ctx.getTransform()`, and in `onload` saves the context, restores that transform, calls `ctx.drawImage(img, x, y, w, h)` and restores — the load is asynchronous, the draw lands where the statement ran. No command is emitted as a comment (D-37); a command tuple the serialiser does not know raises `FunctionClauseError`.
 
 ### 3.5 JSON serialisation
 
@@ -267,7 +268,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
 | `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
-| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style`, `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style` (with `non_scaling: true` when bit 4 is set, §4.3.5), `transform`, `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
 | `Visualize.Backend.CanvasBinary.Decoder.decode_path/1` | The one path record of a stream as a `Visualize.IR.Path`. |
 
 ### 4.2 Stream model and opcodes
@@ -362,6 +363,7 @@ The encoders always write `count = 1`; the decoder begins one path holding every
 | 1 | `0x02` | stroke colour RGBA | 4 |
 | 2 | `0x04` | stroke width, little-endian f32 | 4 |
 | 3 | `0x08` | global alpha 0–1, little-endian f32 | 4 |
+| 4 | `0x10` | the stroke width does not scale: set only with bit 2 (spec/14 §3.9, #651); the reader divides the width by `√|a·d − b·c|` of the transform current when it reads the record | 0 |
 
 Alpha `a` is 0–255. The IR encoder emits a style record whenever `element.style` is non-empty, even if it sets no flags; the SVG encoder (4.7) omits the record when `flags` would be `0`. The SVG encoder never sets bit 3.
 
