@@ -4,9 +4,9 @@ defmodule Examples.Charts.PolarTransformChart do
   `(angle, r)` and bent around the arc (spec/14 §5.2). The `angle` scale is linear over
   time and sweeps 270° from −135° (§4.3); `r` is the signal's value over an annular band.
   A `:line` with a translucent `:area` under it wraps around the arc; a `:rule` per
-  event is an indicator spoke across the band, labelled; a `:rule` at `y` is a threshold
+  event is an indicator spoke across the band, labeled; a `:rule` at `y` is a threshold
   arc across the sweep; and `:rect`s with constant radii above the signal are bars arced
-  as one ring just inside the axis, coloured by lane. The angle axis sits at the top of
+  as one ring just inside the axis, colored by lane. The angle axis sits at the top of
   the `r` range, 0.8 R, its numbers outward, and the `r` axis's spoke stands at −135°. Animated, the signal's phase drifts
   and the events advance.
   """
@@ -63,7 +63,7 @@ defmodule Examples.Charts.PolarTransformChart do
         # A threshold at a radius: an arc across the whole sweep.
         rule(:levels, %{y: :level}, style: :threshold),
         # Bars arced as one ring just inside the axis: the angle their span, the radii
-        # constants in r's domain above the signal, coloured by lane.
+        # constants in r's domain above the signal, colored by lane.
         rect(:tasks, %{x0: :from, x1: :to, y0: 91, y1: 99, value: :lane}, style: :task)
       ])
 

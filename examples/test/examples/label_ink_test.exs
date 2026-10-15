@@ -55,8 +55,8 @@ defmodule Examples.LabelInkTest do
     Chart.generate(applied, resolve: mode)
   end
 
-  # Every labelled mark's {element, its group's style, label} triples, in drawing order.
-  defp labelled(%Element{
+  # Every labeled mark's {element, its group's style, label} triples, in drawing order.
+  defp labeled(%Element{
          children: [
            %Element{style: %{class: "mark-elements"} = group, children: elements},
            %Element{style: %{class: "mark-labels"}, children: labels}
@@ -67,7 +67,7 @@ defmodule Examples.LabelInkTest do
     Enum.zip_with(elements, texts, &{&1, group, &2})
   end
 
-  defp labelled(%Element{children: children}), do: Enum.flat_map(children, &labelled/1)
+  defp labeled(%Element{children: children}), do: Enum.flat_map(children, &labeled/1)
 
   # Every text of the labels' groups, however many of its elements' labels are drawn.
   defp texts(%Element{style: %{class: "mark-labels"}, children: labels}),
@@ -78,14 +78,14 @@ defmodule Examples.LabelInkTest do
   # The literal a fill is drawn in, composited over the background by its opacities.
   defp under(element, group, background) do
     fill = Map.get(element.style, :fill, Map.get(group, :fill))
-    colour = fill |> literal() |> Color.parse()
-    assert colour, "an unreadable fill #{inspect(fill)}"
+    color = fill |> literal() |> Color.parse()
+    assert color, "an unreadable fill #{inspect(fill)}"
 
     alpha =
       Map.get(element.style, :fill_opacity, Map.get(group, :fill_opacity, 1)) *
         Map.get(element.style, :opacity, Map.get(group, :opacity, 1))
 
-    Color.interpolate_rgb(Color.parse(background), colour, alpha)
+    Color.interpolate_rgb(Color.parse(background), color, alpha)
   end
 
   defp literal("var(" <> rest) do
@@ -93,7 +93,7 @@ defmodule Examples.LabelInkTest do
     fallback |> String.trim() |> String.replace_suffix(")", "")
   end
 
-  defp literal(colour) when is_binary(colour), do: colour
+  defp literal(color) when is_binary(color), do: color
 
   test "every gallery chart that labels a fill inks its labels by contrast, with a fit" do
     for module <- @on_fills do
@@ -108,8 +108,8 @@ defmodule Examples.LabelInkTest do
   test "every label on a fill holds 4.5:1 against its element, in every palette and both modes" do
     for module <- @on_fills, palette <- ColorPalettes.list_palettes(), mode <- [:css, :literal] do
       theme = ColorPalettes.theme(palette)
-      # Every element labelled — `fit: :none` — so no label is excused by being hidden.
-      all = module |> tree(palette, mode, &Map.put(&1, :fit, :none)) |> labelled()
+      # Every element labeled — `fit: :none` — so no label is excused by being hidden.
+      all = module |> tree(palette, mode, &Map.put(&1, :fit, :none)) |> labeled()
       assert all != [], "#{inspect(module)}: no labels"
 
       for {element, group, text} <- all do

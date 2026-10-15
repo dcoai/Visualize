@@ -180,15 +180,15 @@ defmodule Examples.ChartsTest do
     end
   end
 
-  # A chart that still names an absolute colour, with the issue that keeps it there
+  # A chart that still names an absolute color, with the issue that keeps it there
   # (#421). Empty: the maps' ocean, the last entry, is the theme's `:surface` since #422.
   # A future gap goes here with its issue, and the guard below fails the moment an
   # entry stops needing its exemption.
-  @absolute_colours %{}
+  @absolute_colors %{}
 
-  # `#rgb`, `#rrggbb` and the functional forms; a named colour would slip through, and
+  # `#rgb`, `#rrggbb` and the functional forms; a named color would slip through, and
   # nothing in the gallery writes one.
-  @colour ~r/^(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\()/
+  @color ~r/^(#[0-9a-fA-F]{3,8}|(rgb|hsl)a?\()/
 
   test "no chart animates on one backend and stands still on another (#424)" do
     # The guard this class needed and did not have: the force graph, the world map and
@@ -220,27 +220,27 @@ defmodule Examples.ChartsTest do
   end
 
   describe "every chart draws in the theme (spec/14 §5.6, #421)" do
-    test "no design names an absolute colour, but for the gaps filed against it" do
+    test "no design names an absolute color, but for the gaps filed against it" do
       # Every chart of the grid, not just the recorded ones: the two streaming designs
       # are outside `charts/0`, and they are exactly where the literals were.
       # Two passes rather than one lookup per chart: with the allowlist empty, the type
       # checker proves a lookup's found branch unreachable and warns, and the guard must
       # hold for an empty list as for a full one.
-      exempt = Map.keys(@absolute_colours)
+      exempt = Map.keys(@absolute_colors)
 
       for module <- Templates.gallery_modules(), module not in exempt do
         {design, _sources} = module.design([])
-        found = literal_colours(design)
+        found = literal_colors(design)
 
         assert found == [],
                "#{inspect(module)} names #{inspect(found)} instead of a theme slot"
       end
 
-      for {module, issue} <- @absolute_colours do
+      for {module, issue} <- @absolute_colors do
         {design, _sources} = module.design([])
 
-        refute literal_colours(design) == [],
-               "#{inspect(module)} names no absolute colour now: drop it from @absolute_colours"
+        refute literal_colors(design) == [],
+               "#{inspect(module)} names no absolute color now: drop it from @absolute_colors"
 
         {:docs_v1, _, _, _, %{"en" => doc}, _, _} = Code.fetch_docs(module)
         assert doc =~ issue, "#{inspect(module)} must name the gap that keeps its literal"
@@ -292,16 +292,16 @@ defmodule Examples.ChartsTest do
     Chart.render(applied)
   end
 
-  # Every binary anywhere in the design that reads as a CSS colour.
-  defp literal_colours(term) when is_map(term),
-    do: term |> Map.values() |> Enum.flat_map(&literal_colours/1)
+  # Every binary anywhere in the design that reads as a CSS color.
+  defp literal_colors(term) when is_map(term),
+    do: term |> Map.values() |> Enum.flat_map(&literal_colors/1)
 
-  defp literal_colours(term) when is_list(term), do: Enum.flat_map(term, &literal_colours/1)
+  defp literal_colors(term) when is_list(term), do: Enum.flat_map(term, &literal_colors/1)
 
-  defp literal_colours(term) when is_binary(term),
-    do: if(Regex.match?(@colour, term), do: [term], else: [])
+  defp literal_colors(term) when is_binary(term),
+    do: if(Regex.match?(@color, term), do: [term], else: [])
 
-  defp literal_colours(_term), do: []
+  defp literal_colors(_term), do: []
 
   test "every chart renders exactly as recorded" do
     assert File.read!(@golden) == render()

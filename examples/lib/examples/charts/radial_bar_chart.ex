@@ -1,10 +1,10 @@
 defmodule Examples.Charts.RadialBarChart do
   @moduledoc """
   Radial bar chart as a design (#126, #137): a `:rose` mark over a polar frame's `angle`
-  and `r` scales, the bars coloured by value through a `:sequential` `color` scale, and
+  and `r` scales, the bars colored by value through a `:sequential` `color` scale, and
   the weekday names outside the ring on each sector's own spoke — the `:outward` anchor
   with a radial offset and `rotate: :radial` (spec/14 §5.5), which is what kept this chart
-  imperative until #137. The centre shows the average as two frame labels at
+  imperative until #137. The center shows the average as two frame labels at
   `{:frame, :center}`, the polar origin whatever the `r` range — `{:data, [0, 0]}` would map
   radius zero through `r`, whose range starts at the hole's 50 (#489). The ring is sized
   from the plot and its longest day name, so no name leaves the plot (§5.5).
@@ -116,7 +116,7 @@ defmodule Examples.Charts.RadialBarChart do
           label: %{text: [{:field, :name}], anchor: :outward, dr: 11, rotate: :radial, style: :day},
           style: :bar
         ),
-        # The plot's centre — the polar origin, whatever the r range (spec/14 §6.3).
+        # The plot's center — the polar origin, whatever the r range (spec/14 §6.3).
         label({:frame, :center}, ["67.1"], style: :title, dy: -5)
       ])
 

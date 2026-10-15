@@ -412,7 +412,7 @@ defmodule Examples.BoardDemo.Services do
 
   defstruct [:scale, :schema]
 
-  @doc "The services, in the order every design colours them."
+  @doc "The services, in the order every design colors them."
   def services, do: @services
 
   @doc "A feed whose readings are the waves times `scale`."

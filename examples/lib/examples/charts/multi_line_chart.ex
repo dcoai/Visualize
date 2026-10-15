@@ -2,11 +2,11 @@ defmodule Examples.Charts.MultiLineChart do
   @moduledoc """
   Multi-series line chart as a design (#125, #237): one `:line` mark over a **wide** feed.
 
-  The four hand-built path elements, their four colours and the hand-laid legend are one
+  The four hand-built path elements, their four colors and the hand-laid legend are one
   mark, one ordinal `color` scale and one `legend` node: the feed is wide — one row per
   point with a column per series — a `:fold` step turns it long, one row per point per
   column the row has (spec/14 §5.4.1), and a `series` channel on the folded key splits the
-  mark into one path per column and colours each from the scale (§5.6); the legend
+  mark into one path per column and colors each from the scale (§5.6); the legend
   explains the same scale. A column the feed drops is a line that is simply not there.
 
   The legend draws in the right margin the chart reserves for it, `inside: false` at the
@@ -57,7 +57,7 @@ defmodule Examples.Charts.MultiLineChart do
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
   # One row per point with a column per series — the wide shape a feed of several
-  # metrics has; the fold's field order fixes the colour each takes.
+  # metrics has; the fold's field order fixes the color each takes.
   defp rows(opts) do
     series = series(opts)
 
@@ -108,7 +108,7 @@ defmodule Examples.Charts.MultiLineChart do
         legend(:color, position: :top_right, inside: false),
 
         # The fold makes one row per point per column the row has; `series` on the folded
-        # key splits the mark into one path per column and colours each from `color`.
+        # key splits the mark into one path per column and colors each from `color`.
         line(
           fold(:series, [:series_a, :series_b, :series_c, :series_d], as: [:series, :y]),
           %{x: :x, y: :y, series: :series},

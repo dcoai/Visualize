@@ -3,7 +3,7 @@ defmodule Examples.Gallery do
   The gallery's charts, in the one order every page shows them (spec/14 §12.6, #484).
 
   The index draws a card per chart in this order, the chart page finds its module by
-  slug here and steps to its neighbours in this order, so a chart added here is on both
+  slug here and steps to its neighbors in this order, so a chart added here is on both
   pages and a chart missing here is on neither.
   """
 
@@ -83,8 +83,8 @@ defmodule Examples.Gallery do
   `{module, slug}` pair. The order wraps: the first chart's previous is the last, and the
   last chart's next is the first.
   """
-  @spec neighbours(String.t()) :: {{module(), String.t()}, {module(), String.t()}}
-  def neighbours(slug) do
+  @spec neighbors(String.t()) :: {{module(), String.t()}, {module(), String.t()}}
+  def neighbors(slug) do
     count = length(@charts)
 
     index =

@@ -7,8 +7,8 @@ defmodule Examples.Charts.TreemapChart do
   which is all the hand-written version drew. The nested map reaches the design as a flat
   node list through `Examples.Charts.Design.nodes/1`, the shape a hierarchy transform reads.
 
-  **Colour follows the branch** — the root child a cell descends from, as
-  `Visualize.Chart.Presets.treemap_chart/1` colours — which is what the hand-written
+  **Color follows the branch** — the root child a cell descends from, as
+  `Visualize.Chart.Presets.treemap_chart/1` colors — which is what the hand-written
   version did by looking up each leaf's top-level parent. **Labels are fitted to their
   cell** with `fit: :truncate` (spec/14 §5.5, #138), cut to what the cell's width holds,
   as the hand-written version cut them.
@@ -151,7 +151,7 @@ defmodule Examples.Charts.TreemapChart do
         style(:cell, fill: {:field, :branch}, stroke: :background, stroke_width: 1),
         style(:cell_label, extends: :label, fill: :contrast, font_size: 10),
         cartesian(margin: %{top: 0, right: 0, bottom: 0, left: 0}),
-        # One colour per child of the root; every cell takes its branch's (D-46).
+        # One color per child of the root; every cell takes its branch's (D-46).
         ordinal_scale(:color, domain: [0, 1, 2, 3, 4, 5, 6, 7]),
         # The squarified layout, then the leaves alone (spec/14 §5.4.2).
         rect(

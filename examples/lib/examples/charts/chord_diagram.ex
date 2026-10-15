@@ -39,7 +39,7 @@ defmodule Examples.Charts.ChordDiagram do
     {width, height} = Design.size(__MODULE__, opts)
     # The ring leaves room for the region names (spec/14 §5.5, #489). The ribbons'
     # `size` sets their radius only — 0.9 of it, the ring's inner edge — and both steps
-    # are about the plot's centre, as the arc mark is (spec/14 §5.4.3, #488).
+    # are about the plot's center, as the arc mark is (spec/14 §5.4.3, #488).
     radius = Design.ring_radius({width, height}, @groups, @region_size, @region_dr)
     size = [2 * radius, 2 * radius]
 
@@ -126,7 +126,7 @@ defmodule Examples.Charts.ChordDiagram do
         # The group arcs from the groups' own angles, and the region names outside the
         # ring on each group's spoke (spec/14 §5.5), the ring sized to leave them room.
         # The ribbons' size sets their radius only (0.9 of 183.2, the ring's inner edge);
-        # both are about the plot's centre (spec/14 §5.4.3).
+        # both are about the plot's center (spec/14 §5.4.3).
         arc(chord(:flows, [:from, :to], :value, padding: 0.05),
           %{value: :value, start: :start_angle, end: :end_angle},
           options: %{inner_radius: 164.88, outer_radius: 183.2},

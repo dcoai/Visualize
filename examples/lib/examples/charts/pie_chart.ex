@@ -5,7 +5,7 @@ defmodule Examples.Charts.PieChart do
   `Visualize.Shape.Pie` is not called: an `:arc` whose `value` channel is a share runs the
   pie itself over the mark's rows, in row order, with the radii and the pad angle as options
   (spec/14 §5.6). The slices read largest first because the rows do, and each takes its
-  colour from an ordinal `color` scale through a `{:field, :index}` on the style's `fill`.
+  color from an ordinal `color` scale through a `{:field, :index}` on the style's `fill`.
 
   The white slice separator is the theme's `background` rather than the literal `"white"`,
   so it follows a palette instead of fighting it. The slice's label sits at the arc's
@@ -66,8 +66,8 @@ defmodule Examples.Charts.PieChart do
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  # The pie draws its rows in order and the colour follows the row's index, so the sort is
-  # the assign mapping's: largest slice first, coloured first.
+  # The pie draws its rows in order and the color follows the row's index, so the sort is
+  # the assign mapping's: largest slice first, colored first.
   defp rows(opts) do
     data = opts[:data] || @data
 

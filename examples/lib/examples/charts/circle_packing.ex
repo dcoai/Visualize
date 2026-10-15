@@ -3,15 +3,15 @@ defmodule Examples.Charts.CirclePacking do
   Circle packing as a design (#127): a `:pack` transform under two `:circle` marks.
 
   The packing is a step of the mark's data pipeline (spec/14 §5.4.2), and each `:circle`
-  reads its own centre and radius — `value` on a circle is its radius in pixels (§5.2).
+  reads its own center and radius — `value` on a circle is its radius in pixels (§5.2).
   Two marks over the same layout, split by a `:filter` on `height`: the enclosing circles
   (the root and the groups) as translucent rings, and the leaves as filled discs with
-  their names at the centre. The nested map reaches the design as a flat node list through
+  their names at the center. The nested map reaches the design as a flat node list through
   `Examples.Charts.Design.nodes/1`.
 
-  **Colour follows the branch** — the root child a leaf descends from — where the
-  hand-written version coloured leaves by their depth, which in a two-level tree gave every
-  leaf the same colour. **Labels are fitted to their circle** with `fit: :truncate`
+  **Color follows the branch** — the root child a leaf descends from — where the
+  hand-written version colored leaves by their depth, which in a two-level tree gave every
+  leaf the same color. **Labels are fitted to their circle** with `fit: :truncate`
   (spec/14 §5.5, #138), cut to what the diameter holds, where the hand-written version
   shrank and cut them.
   """
@@ -96,7 +96,7 @@ defmodule Examples.Charts.CirclePacking do
         ),
         cartesian(margin: @zero_margin),
         ordinal_scale(:color, domain: Enum.to_list(0..(branches - 1)//1)),
-        # The enclosing circles under the leaves, each over its own centre and radius.
+        # The enclosing circles under the leaves, each over its own center and radius.
         circle(groups, %{x: :x, y: :y, value: :r}, style: :group),
         circle(leaves, %{x: :x, y: :y, value: :r},
           label: %{text: [{:field, :name}], anchor: :middle, fit: :truncate, style: :leaf_label},

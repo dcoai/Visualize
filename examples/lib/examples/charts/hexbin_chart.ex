@@ -120,8 +120,8 @@ defmodule Examples.Charts.HexbinChart do
         axis(:x, :bottom, ticks: 6),
         axis(:y, :left, ticks: 5),
         label(:title, ["Point Density"]),
-        # One row per non-empty cell — its centre, its count and its hexagon (spec/14
-        # §5.4.4); the count is the cell's fill through the colour scale.
+        # One row per non-empty cell — its center, its count and its hexagon (spec/14
+        # §5.4.4); the count is the cell's fill through the color scale.
         path(hexbin(from(:points), [:px, :py], radius: 20), %{path: :path}, style: :cell)
       ])
 

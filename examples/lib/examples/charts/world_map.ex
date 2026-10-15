@@ -9,17 +9,17 @@ defmodule Examples.Charts.WorldMap do
   `Sphere`, the projection's own outline, filled under everything and stroked over it; the
   graticule is one `LineString` per meridian and parallel, the equator and the prime
   meridian heavier through style keys bound to the row; the land is one feature per land
-  mass of Natural Earth's 1:110m land (#499), coloured by its id through the `color`
+  mass of Natural Earth's 1:110m land (#499), colored by its id through the `color`
   scale. The hand-written version clipped the map to an ellipse it drew by hand — a
   pseudo-cylindrical projection ends at the antimeridian, so the design clips nothing.
   The animation turns the projection's `rotate` the way the Earth turns (#523): the land
-  drifts east and the centre meridian moves west, as on the Globe. `rotate`'s `lambda` is
-  the centre meridian (spec/07 §1.4, D-44), so it falls as the ticks rise.
+  drifts east and the center meridian moves west, as on the Globe. `rotate`'s `lambda` is
+  the center meridian (spec/07 §1.4, D-44), so it falls as the ticks rise.
 
   Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
-  (`:background` would make it vanish), not a data colour (the land reads through the
+  (`:background` would make it vanish), not a data color (the land reads through the
   series), and distinct from the `:grid` that strokes the graticule over it — so the map
-  follows the palette and the gallery names no absolute colour (#421).
+  follows the palette and the gallery names no absolute color (#421).
   """
 
   import Visualize.Chart.Build

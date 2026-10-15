@@ -6,7 +6,7 @@ defmodule Examples.Charts.DayNightGps do
   **The map** is World Map's (#129, #499): a `:geo` frame on the Natural Earth projection,
   the ocean as the theme's `:surface`, the graticule every 30° and Natural Earth's 1:110m
   land (`Examples.Charts.WorldGeography`) — here one neutral fill, the theme's `:axis`
-  thinly, so the planes' colours are the only colours on the map.
+  thinly, so the planes' colors are the only colors on the map.
 
   **The clock.** One animation tick is **8 simulated minutes**, and the simulated UTC is
   `t0 + tick × 480 s`. At rest — no `animation_tick`, as the gallery's card, the tests and
@@ -16,7 +16,7 @@ defmodule Examples.Charts.DayNightGps do
   started at, with every tick's options (spec/14 §12.6), and a run without one (the
   performance pages, the tests) starts at the fixed instant.
 
-  **The rotation and what it represents.** `rotate`'s `lambda` is the centre meridian
+  **The rotation and what it represents.** `rotate`'s `lambda` is the center meridian
   (spec/07 §1.4, D-44) and turns `−2°` a tick — `lambda = −(2 × tick mod 360)` — so the
   land drifts east, as the Earth turns, at 360° per 180 ticks: per 24 simulated hours, the
   **mean solar day**. The rotation is the Earth's turn relative to the mean Sun, and the
@@ -31,13 +31,13 @@ defmodule Examples.Charts.DayNightGps do
   **Night** is `Visualize.Geo.Circle` (spec/07 §2.5, D-131): the 90° circle about the
   antisolar point, the hemisphere the Sun does not light, drawn over the land in the
   theme's `:text` — the page's ink, dark on every light palette — at a low opacity, so the
-  gallery names no absolute colour (#421). The subsolar point is the NOAA solar
+  gallery names no absolute color (#421). The subsolar point is the NOAA solar
   calculator's (Meeus's low-precision formulas): the Sun's apparent longitude and the
   obliquity give the declination, which is the subsolar latitude; the equation of time
   gives the longitude where it is apparent noon, which is the subsolar longitude. The
   terminator is the geometric one: no refraction, no twilight.
 
-  **GPS** is the nominal 24-slot constellation, **modelled, not live ephemerides**: the
+  **GPS** is the nominal 24-slot constellation, **modeled, not live ephemerides**: the
   gallery fetches nothing. Six planes, A to F, inclined 55°, their ascending nodes 60°
   apart in right ascension (A at 0°, B at 60°, … F at 300°, measured from the vernal
   equinox at J2000, 2000-01-01 12:00 TT taken as UTC); circular orbits of semi-major axis
@@ -52,8 +52,8 @@ defmodule Examples.Charts.DayNightGps do
   sub-satellite point is that direction's geocentric longitude and latitude on a sphere.
   Each satellite draws its ground track over the trailing 6 simulated hours as
   `LineString`s sampled every 5 simulated minutes, in six one-hour pieces fading toward
-  the old end, coloured by plane through a `color` scale with the explicit domain
-  `["A" … "F"]` so a plane's colour never moves, and a dot at its current position. A track
+  the old end, colored by plane through a `color` scale with the explicit domain
+  `["A" … "F"]` so a plane's color never moves, and a dot at its current position. A track
   that crosses the rotated frame's antimeridian is cut there by the path's clip (D-127).
   """
 
@@ -83,10 +83,10 @@ defmodule Examples.Charts.DayNightGps do
 
   def description,
     do:
-      "Night side and 6 h GPS ground tracks on the rotating World Map; orbits modelled from " <>
+      "Night side and 6 h GPS ground tracks on the rotating World Map; orbits modeled from " <>
         "the nominal 24-slot constellation, not live ephemerides; one tick is 8 simulated minutes"
 
-  @doc "The planes, in the colour scale's order."
+  @doc "The planes, in the color scale's order."
   def planes, do: @planes
 
   @doc "The constellation's semi-major axis in km (it sets the period; the track is a direction)."
@@ -158,7 +158,7 @@ defmodule Examples.Charts.DayNightGps do
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
   @doc """
-  The centre meridian of the view at a tick: `−(2 × tick mod 360)`, 0 at rest — 2° per
+  The center meridian of the view at a tick: `−(2 × tick mod 360)`, 0 at rest — 2° per
   8 simulated minutes, the mean solar day's rate (see the moduledoc).
   """
   def lambda(nil), do: 0
@@ -211,12 +211,12 @@ defmodule Examples.Charts.DayNightGps do
     mean_anomaly = 357.52911 + t * (35_999.05029 - 0.0001537 * t)
     eccentricity = 0.016708634 - t * (0.000042037 + 0.0000001267 * t)
 
-    centre =
+    center =
       sin(mean_anomaly) * (1.914602 - t * (0.004817 + 0.000014 * t)) +
         sin(2 * mean_anomaly) * (0.019993 - 0.000101 * t) + sin(3 * mean_anomaly) * 0.000289
 
     omega = 125.04 - 1934.136 * t
-    apparent_longitude = mean_longitude + centre - 0.00569 - 0.00478 * sin(omega)
+    apparent_longitude = mean_longitude + center - 0.00569 - 0.00478 * sin(omega)
 
     mean_obliquity =
       23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60
@@ -363,11 +363,11 @@ defmodule Examples.Charts.DayNightGps do
         style(:track, fill: :none, stroke: {:field, :plane}, stroke_width: 1.5,
           stroke_opacity: {:field, :opacity}),
         style(:satellite, fill: {:field, :plane}, stroke: :background, stroke_width: 1),
-        # rotate's lambda is the centre meridian (spec/07 §1.4): -2° a tick turns the
+        # rotate's lambda is the center meridian (spec/07 §1.4): -2° a tick turns the
         # land east under the Sun.
         geo(margin: %{top: 0, right: 0, bottom: 28, left: 0},
           projection: %{type: :natural_earth, scale: 700 / 5.5, rotate: [0, 0, 0]}),
-        # An explicit domain, so a plane's colour never moves.
+        # An explicit domain, so a plane's color never moves.
         ordinal_scale(:color, domain: ~w(A B C D E F)),
         legend(:color, position: :bottom, inside: false, prefix: "Plane "),
         path(projection(from(:globe), nil, field: :shape), %{path: :path}, style: :ocean),

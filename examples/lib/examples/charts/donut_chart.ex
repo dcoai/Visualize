@@ -4,13 +4,13 @@ defmodule Examples.Charts.DonutChart do
   texts in the hole.
 
   The hole's total and its caption are frame labels at `{:frame, :center}`, the plot's
-  centre — the polar origin (spec/14 §6.3, #489) — so the frame declares no `angle` or `r`
-  scale only to give the centre coordinates.
+  center — the polar origin (spec/14 §6.3, #489) — so the frame declares no `angle` or `r`
+  scale only to give the center coordinates.
 
   The legend draws in the right margin the chart reserves for it, `inside: false` at the
-  right, centred (spec/14 §4.5, #136). The ring is sized from the plot area that margin
+  right, centered (spec/14 §4.5, #136). The ring is sized from the plot area that margin
   leaves, not from the box, so it stays inside the plot, and a slice is filled by its
-  category, the values the colour scale's domain holds (#487).
+  category, the values the color scale's domain holds (#487).
   """
 
   import Visualize.Chart.Build
@@ -38,7 +38,7 @@ defmodule Examples.Charts.DonutChart do
   def design(opts \\ []) do
     {width, height} = Design.size(__MODULE__, opts)
     rows = rows(opts)
-    # The polar centre is the plot area's, so the ring is sized from the plot (#487).
+    # The polar center is the plot area's, so the ring is sized from the plot (#487).
     plot_width = width - @margin.left - @margin.right
     plot_height = height - @margin.top - @margin.bottom
     outer = min(plot_width, plot_height) / 2 - 20
@@ -93,7 +93,7 @@ defmodule Examples.Charts.DonutChart do
       Visualize.Chart.compose([
         chart(meta: %{name: "Donut Chart"}),
         source(:slices, [:category, :revenue]),
-        # A slice is filled by its category: the values the colour scale's domain holds.
+        # A slice is filled by its category: the values the color scale's domain holds.
         style(:slice, fill: {:field, :category}, stroke: :background, stroke_width: 1),
         style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
         polar(margin: %{top: 0, right: 120, bottom: 0, left: 0}),
@@ -107,7 +107,7 @@ defmodule Examples.Charts.DonutChart do
           style: :slice
         ),
 
-        # The plot's centre, the polar origin: the hole.
+        # The plot's center, the polar origin: the hole.
         label({:frame, :center}, ["$1000K"], dy: -10, style: :total)
       ])
 

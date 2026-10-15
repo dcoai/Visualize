@@ -375,7 +375,7 @@ A feed is what fills a chart's source slot with rows. It is a struct whose modul
 implements `Visualize.Feed`. `describe/1` returns the feed's schema: what each field
 means, under a version that is the schema's content hash. `fetch/3` returns a
 `Visualize.Data.Delivery` for a window and a budget. Only rows are required. A feed
-lists in `supports` what it honours of `[:window, :budget, :push]`, and visualize trims
+lists in `supports` what it honors of `[:window, :budget, :push]`, and visualize trims
 and reduces for it where it does not. Errors are values: a window the feed cannot read
 is `{:error, reason}`, never a raise.
 
@@ -387,7 +387,7 @@ sequence number, types it `:number` and marks it `window: true`. A time scale dr
 first and a numeric scale the second, and a `:time` field on a linear axis is reported
 before anything is drawn.
 
-This one keeps a list of rows, counts its minutes, and honours the window:
+This one keeps a list of rows, counts its minutes, and honors the window:
 
 ```elixir
 defmodule MyApp.RequestsFeed do
@@ -579,7 +579,7 @@ carries `domain: [lo, hi]` in data units, so you do not need the conversion abov
 
 ## PNG export
 
-`Visualize.Render.to_png/2` rasterises a chart through the resvg binary, if the host has
+`Visualize.Render.to_png/2` rasterizes a chart through the resvg binary, if the host has
 it. Generate the chart with `resolve: :literal` first. To offer a download from a
 LiveView, render the PNG in an event handler and send it with `push_event/3` to a small
 hook of your own, or serve it from a controller with `send_download/3`:

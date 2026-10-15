@@ -4,7 +4,7 @@ defmodule Examples.FrameDesignsTest do
   frames; *Context*, one source at four time scales in four; and *Spectrum*, the two
   panels that were one frame's two scale pairs and are now two frames.
 
-  The general guards — validity, the round trip, the golden, the gallery grid, the colour
+  The general guards — validity, the round trip, the golden, the gallery grid, the color
   profiles — are `Examples.ChartsTest`'s and apply to these three like any other chart.
   What is held here is what makes each of them the acceptance of #383.
   """

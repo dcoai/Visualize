@@ -174,8 +174,8 @@ defmodule Examples.WorldGeographyTest do
 
   # #522, D-130: the land is filled through an inferred ordinal domain. When the projection
   # dropped the rows it clipped, the domain was whichever land masses faced the viewer —
-  # 46, 73 and 106 of the 127 at these ticks — and a land mass's colour moved as it turned.
-  test "the Globe's colour domain is every land mass, in one order, whatever the viewpoint" do
+  # 46, 73 and 106 of the 127 at these ticks — and a land mass's color moved as it turned.
+  test "the Globe's color domain is every land mass, in one order, whatever the viewpoint" do
     names = Enum.map(WorldGeography.land(), & &1.name)
 
     scales =
@@ -185,19 +185,19 @@ defmodule Examples.WorldGeographyTest do
 
     for scale <- scales, do: assert(scale.domain == names)
 
-    # So each land mass keeps one colour through the animation.
-    colours = for scale <- scales, do: Enum.map(names, &Visualize.Scale.apply(scale, &1))
-    assert length(Enum.uniq(colours)) == 1
+    # So each land mass keeps one color through the animation.
+    colors = for scale <- scales, do: Enum.map(names, &Visualize.Scale.apply(scale, &1))
+    assert length(Enum.uniq(colors)) == 1
   end
 
-  # The Globe's disc: the plot's centre, and the radius `design/1` gives the orthographic.
+  # The Globe's disc: the plot's center, and the radius `design/1` gives the orthographic.
   defp globe_disc do
     {width, height} = Globe.size()
     {{width / 2, height / 2}, min(width, height) / 2 - 20}
   end
 
   # A land mass crossing the horizon is closed along it (spec/07 §2.2.1, #510). Before the
-  # small-circle clip the vertices behind it were dropped and their neighbours joined, so
+  # small-circle clip the vertices behind it were dropped and their neighbors joined, so
   # the land closed by chords through the disc — the Americas a wedge across the North
   # Atlantic at tick 0. No edge of Natural Earth 1:110m is longer than about 18 px on this
   # disc, so an edge longer than 24 px is either the horizon or a chord: it must lie on the

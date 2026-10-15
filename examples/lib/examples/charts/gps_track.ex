@@ -16,8 +16,8 @@ defmodule Examples.Charts.GpsTrack do
   **The track is generated, not recorded.** It follows the four streets that bound the
   park, from Columbus Circle east along Central Park South, north up Fifth Avenue, west
   along Central Park North and south down Central Park West. The streets are straight on
-  the Manhattan grid, so a corner-to-corner line with a few metres of deterministic
-  jitter for GPS noise sits on them, carries no one's location and needs no licence.
+  the Manhattan grid, so a corner-to-corner line with a few meters of deterministic
+  jitter for GPS noise sits on them, carries no one's location and needs no license.
 
   **The provider is the host's choice** (spec/14 §5.2). This gallery uses
   OpenStreetMap's standard tiles with the attribution their usage policy requires. That
@@ -50,7 +50,7 @@ defmodule Examples.Charts.GpsTrack do
   # One fix a second at about 4 m/s round a loop of about 9.9 km.
   @fixes 2_400
 
-  # Metres per degree of latitude, and of longitude at the park's latitude.
+  # Meters per degree of latitude, and of longitude at the park's latitude.
   @m_per_lat 111_320.0
   @m_per_lon 111_320.0 * :math.cos(40.78 * :math.pi() / 180)
 
@@ -58,14 +58,14 @@ defmodule Examples.Charts.GpsTrack do
             corners = @corners
             legs = Enum.zip(corners, tl(corners) ++ [hd(corners)])
 
-            metres = fn {{lon0, lat0}, {lon1, lat1}} ->
+            meters = fn {{lon0, lat0}, {lon1, lat1}} ->
               :math.sqrt(
                 :math.pow((lon1 - lon0) * @m_per_lon, 2) +
                   :math.pow((lat1 - lat0) * @m_per_lat, 2)
               )
             end
 
-            lengths = Enum.map(legs, metres)
+            lengths = Enum.map(legs, meters)
             total = Enum.sum(lengths)
             starts = Enum.scan([0.0 | lengths], &(&1 + &2)) |> Enum.drop(-1)
 
@@ -78,7 +78,7 @@ defmodule Examples.Charts.GpsTrack do
                 |> List.last()
 
               f = (along - start) / length
-              # A few metres of GPS noise, the same on every compilation.
+              # A few meters of GPS noise, the same on every compilation.
               east = 2.2 * :math.sin(i * 0.37) + 1.1 * :math.sin(i * 0.113 + 1.0)
               north = 2.0 * :math.sin(i * 0.29 + 2.0) + 1.0 * :math.sin(i * 0.071)
 

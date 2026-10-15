@@ -6,14 +6,14 @@ defmodule Examples.Charts.ContextChart do
 
   A year of load in one plot is a smear and the last minute of it is a pixel wide. The
   four frames are four `:window` steps over the **same** source (spec/14 §5.4.1, #426) —
-  `window(:t, from: [1, :year], to: [24, :hour])` and its three neighbours — and the
+  `window(:t, from: [1, :year], to: [24, :hour])` and its three neighbors — and the
   windows are disjoint and contiguous by the step's own rule: a given `to` is exclusive,
   an absent one closes at `now` inclusively, so no reading is drawn twice and the newest
   is drawn once.
 
   The four sit in the **cells of a grid** (§2.8, #384): `columns: [4, 3, 2, 2]` with a
   gap, so the older spans have the room they need and the recent ones stay legible, and
-  the design computes no fractions. A weight is not a fraction — the four are normalised
+  the design computes no fractions. A weight is not a fraction — the four are normalized
   over their sum — so the layout is read as proportions and edited as proportions.
 
   Each frame declares its own `x` — four scales called `x`, one per frame, which is what

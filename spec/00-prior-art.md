@@ -2,7 +2,7 @@
 
 **Status:** Implemented
 
-Visualize is a port of the computational half of D3.js to Elixir, shaped by the mechanics of Phoenix LiveView. This document records where each part of the library comes from, what was deliberately left behind, the constraints of the LiveView model that decided the architecture, and the Elixir libraries that occupy neighbouring ground.
+Visualize is a port of the computational half of D3.js to Elixir, shaped by the mechanics of Phoenix LiveView. This document records where each part of the library comes from, what was deliberately left behind, the constraints of the LiveView model that decided the architecture, and the Elixir libraries that occupy neighboring ground.
 
 ## 1. The D3.js lineage
 
@@ -10,7 +10,7 @@ D3 is not one library but a family of modules, and its lasting contribution is t
 
 | d3 module | Visualize module(s) | Notes |
 |---|---|---|
-| `d3-scale` | `Visualize.Scale`, `Visualize.Scale.*` | Linear, log, power, sqrt, symlog, time, band, ordinal, quantize, quantile, threshold, sequential and diverging colour |
+| `d3-scale` | `Visualize.Scale`, `Visualize.Scale.*` | Linear, log, power, sqrt, symlog, time, band, ordinal, quantize, quantile, threshold, sequential and diverging color |
 | `d3-scale-chromatic` | `Visualize.Scale.Color` | Named schemes reached through `scheme/1` and `schemes/0` |
 | `d3-shape` | `Visualize.Shape`, `Visualize.Shape.*` | Line, area, arc, pie, stack, symbol, and every curve in `Visualize.Shape.Curve` |
 | `d3-axis` | `Visualize.Axis` | Emits an IR element tree rather than mutating a selection |
@@ -23,7 +23,7 @@ D3 is not one library but a family of modules, and its lasting contribution is t
 | `d3-delaunay` | `Visualize.Geo.Delaunay`, `Visualize.Geo.Voronoi` | |
 | `d3-contour` | `Visualize.Contour`, `Visualize.Contour.Density` | Marching squares and kernel density |
 | `d3-polygon` | `Visualize.Polygon` | |
-| `d3-interpolate` | `Visualize.Interpolate` | Number, round, string, array, date, colour, transform, zoom, basis, discrete |
+| `d3-interpolate` | `Visualize.Interpolate` | Number, round, string, array, date, color, transform, zoom, basis, discrete |
 | `d3-ease` | `Visualize.Ease` | Every named easing, `by_name/1`, `frames/2` |
 | `d3-random` | `Visualize.Random` | Every distribution plus seeding, sampling and shuffling |
 | `d3-color` | `Visualize.Color` | RGB, HSL, Lab, HCL and the derived operations |
@@ -58,8 +58,8 @@ Hover, brushing, zoom and pan must complete inside the browser's frame budget, s
 
 Above the SVG ceiling the library emits Canvas 2D command streams instead of elements. JSON expands a float to two or three times its binary size and must be parsed on the browser's main thread; `Visualize.Backend.CanvasBinary` (and `Shape.LineNx`) therefore encode coordinates as raw `f64` binaries — with Nx, when it is loaded — that the hook wraps in a typed array with no parsing at all. `Backend.Hybrid` keeps static axes as SVG and moves only the data to canvas; `Backend.CanvasIncremental` and `Visualize.Incremental` avoid full redraws on scroll by copying the existing bitmap and rendering only the exposed regions.
 
-## 4. Elixir neighbours
+## 4. Elixir neighbors
 
-- **Contex** renders charts to SVG on the server with a fixed set of chart types. It occupies the same low-cardinality, server-rendered niche; Visualize differs in exposing the D3 primitives (scales, shapes, layouts, projections) so any chart can be composed rather than choosing from a catalogue.
+- **Contex** renders charts to SVG on the server with a fixed set of chart types. It occupies the same low-cardinality, server-rendered niche; Visualize differs in exposing the D3 primitives (scales, shapes, layouts, projections) so any chart can be composed rather than choosing from a catalog.
 - **Tucan** is a grammar-of-graphics wrapper over Vega-Lite: the server emits a JSON specification and the browser's Vega runtime renders it. It is client-rendered and declarative, which suits exploratory work; Visualize keeps rendering on the server and ships no client runtime beyond the hooks.
 - **Matplotex** targets static scientific plots through SVG or images with Nx. Visualize shares the optional Nx dependency but is oriented to live templates rather than exported figures.

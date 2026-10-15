@@ -1,9 +1,9 @@
 defmodule Examples.Charts.ScatterPlot do
   @moduledoc """
-  Scatter plot as a design (#125): one `:circle` mark, coloured by category.
+  Scatter plot as a design (#125): one `:circle` mark, colored by category.
 
   A `:circle`'s `value` channel is its radius in user units and names no scale (spec/14
-  §5.2), so the radius is a column of the rows; the colour is a `{:field, :category}` on the
+  §5.2), so the radius is a column of the rows; the color is a `{:field, :category}` on the
   style's `fill`, which is read per element and passed through the frame's `color` scale
   (§3.2), and the legend explains that same scale.
 
@@ -88,7 +88,7 @@ defmodule Examples.Charts.ScatterPlot do
         chart(meta: %{name: "Scatter Plot"}),
         source(:points, [:x, :y, :r, :category]),
 
-        # A {:field, f} on a colour key goes through the `color` scale, per element.
+        # A {:field, f} on a color key goes through the `color` scale, per element.
         style(:point, fill: {:field, :category}, opacity: 0.7),
         cartesian(margin: %{top: 20, right: 20, bottom: 40, left: 50}),
         linear_scale(:x, domain: [0, 100]),

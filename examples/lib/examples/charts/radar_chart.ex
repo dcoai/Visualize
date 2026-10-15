@@ -2,7 +2,7 @@ defmodule Examples.Charts.RadarChart do
   @moduledoc """
   A radar as a design (#389, #393): a polar frame whose `angle` scale is a `:band` over
   six categories — spaced 60° apart, the first at the top, the ring closed (spec/14 §4.3)
-  — and `r` the score from the centre. Three series read through one `:area` and one
+  — and `r` the score from the center. Three series read through one `:area` and one
   `:line`: over a categorical angle a straight segment is a chord and the loop closes on
   the full turn (§5.2), so each series is a polygon with its volume filled at a third of
   its opacity, drawn on top of one another so every volume shows through — the scope
@@ -15,7 +15,7 @@ defmodule Examples.Charts.RadarChart do
   alias Examples.Charts.Design
 
   @margin %{top: 30, right: 90, bottom: 30, left: 40}
-  @categories ~w(speed power range agility armour stealth)
+  @categories ~w(speed power range agility armor stealth)
   @series [
     %{name: "scout", scores: [9, 3, 7, 9, 2, 8]},
     %{name: "tank", scores: [3, 9, 4, 2, 9, 1]},
@@ -86,7 +86,7 @@ defmodule Examples.Charts.RadarChart do
         polar(margin: %{top: 30, right: 90, bottom: 30, left: 40}),
         # A band on angle: six categories 60° apart, the first at the top, the ring closed
         # (spec/14 §4.3).
-        band_scale(:angle, domain: ~w(speed power range agility armour stealth)),
+        band_scale(:angle, domain: ~w(speed power range agility armor stealth)),
         linear_scale(:r, domain: [0, 10]),
         ordinal_scale(:color, domain: ["scout", "tank", "ranger"]),
         axis(:angle, :bottom, grid: true),

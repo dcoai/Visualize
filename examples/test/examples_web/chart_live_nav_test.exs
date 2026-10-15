@@ -1,7 +1,7 @@
 defmodule ExamplesWeb.ChartLiveNavTest do
   @moduledoc """
   A chart page steps through the gallery (spec/14 §12.6, #484): Previous / Next beside the
-  back link, labelled with the neighbours' titles in the gallery's order and wrapping;
+  back link, labeled with the neighbors' titles in the gallery's order and wrapping;
   a step is a patch, which loads the new chart on the mount's path in the same view —
   a run stopped, the width kept, the reader's backend where the new chart offers it (#501); the arrow keys follow the
   links unless focus is in a form field; and the index and the chart page read one list.
@@ -48,7 +48,7 @@ defmodule ExamplesWeb.ChartLiveNavTest do
 
   defp index_of(slug), do: Enum.find_index(Gallery.charts(), fn {_m, s} -> s == slug end)
 
-  test "a chart's Previous and Next are its neighbours in the gallery's order, by title" do
+  test "a chart's Previous and Next are its neighbors in the gallery's order, by title" do
     charts = Gallery.charts()
     {_module, slug} = Enum.at(charts, 4)
     {prev_module, prev_slug} = Enum.at(charts, 3)
@@ -76,12 +76,12 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     {href, tag} = nav_link(html(page(last)), "next")
     assert href == "/chart/#{first}" and tag =~ first_module.title()
 
-    assert Gallery.neighbours(first) == {{last_module, last}, Enum.at(Gallery.charts(), 1)}
+    assert Gallery.neighbors(first) == {{last_module, last}, Enum.at(Gallery.charts(), 1)}
   end
 
   test "Next patches: the same view loads the next chart and keeps the page's own state" do
     s = page("bar")
-    # The page's state: a measured width (#434), a colour style, the drawer open.
+    # The page's state: a measured width (#434), a color style, the drawer open.
     {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 500}, s)
     {:noreply, s} = ChartLive.handle_event("change_palette", %{"palette" => "winter"}, s)
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
@@ -238,6 +238,6 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     s = page("bar")
     {:noreply, s} = ChartLive.handle_params(%{"chart" => "nope"}, "/chart/nope", s)
     assert {:live, :redirect, %{to: "/"}} = s.redirected
-    assert_raise ArgumentError, fn -> Gallery.neighbours("nope") end
+    assert_raise ArgumentError, fn -> Gallery.neighbors("nope") end
   end
 end

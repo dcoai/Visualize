@@ -144,8 +144,8 @@ The pieces, in layers:
 - **Boards** lay designs out on a grid with a shared time window, linked selection and
   drill-down. Each board and each cell runs in its own process, so one slow or broken chart
   never stalls the rest.
-- **Themes** choose every colour, including meaning-bearing ramps (status, thermal) that hold
-  under a dark or colour-blind-safe theme. Data never names a colour.
+- **Themes** choose every color, including meaning-bearing ramps (status, thermal) that hold
+  under a dark or color-blind-safe theme. Data never names a color.
 
 ### Integrating it
 
@@ -153,7 +153,7 @@ The pieces, in layers:
   [Getting started](guides/getting_started.md).
 - **Feed live data:** implement the `Visualize.Feed` behaviour over your data, whether a
   database, an HTTP API or `:telemetry` (a provider for `:telemetry` ships with the library).
-  Then run `Visualize.Feed.Conformance` in your test suite to prove the feed honours the
+  Then run `Visualize.Feed.Conformance` in your test suite to prove the feed honors the
   contract.
 - **Show a dashboard:**
   1. Add `Visualize.Board.Supervisor` to your supervision tree.

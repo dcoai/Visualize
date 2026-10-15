@@ -4,7 +4,7 @@ defmodule Examples.Charts.LoadGauge do
   a load of 0 to 4, the angle axis an arc at 0.86 R with its numbers outward, a rim just
   inside it, and **three needles on the one dial** — the fifteen-, five- and
   one-minute windows (`Examples.Charts.Load`), each its own length so they read where they
-  overlap and its own colour through the `color` scale (`fill: {:field, :window}`, spec/14
+  overlap and its own color through the `color` scale (`fill: {:field, :window}`, spec/14
   §3.4). Animated, the three pointers chase each other as the load wanders: the one-minute
   needle swings, the fifteen-minute one drifts.
 
@@ -13,7 +13,7 @@ defmodule Examples.Charts.LoadGauge do
   the travel of a pointer rather than of a number — so a reading that arrives once every
   three seconds is a sweep and not a jump.
 
-  Its neighbour `Examples.Charts.LoadAge` draws the same three windows over the last three
+  Its neighbor `Examples.Charts.LoadAge` draws the same three windows over the last three
   hours. They were two designs because a design had one frame and a dial and a plot could
   not share it; a design holds its frames by name now (§4.1, #383), and
   `Examples.Charts.LoadChart` is one source drawn both ways in one chart. These two stay
@@ -96,7 +96,7 @@ defmodule Examples.Charts.LoadGauge do
       [
         # The dial's rim, one sector of the whole sweep just inside the axis (§5.2).
         rect(:rim, %{x0: 0, x1: 4, y0: 0.72, y1: 0.84}, style: :rim),
-        # Three rows, three needles, each its own length and colour (spec/14 §5.2).
+        # Three rows, three needles, each its own length and color (spec/14 §5.2).
         needle(:reading, %{x: :load, y: :length},
           options: %{width: 7, tail: 12, hub: 7},
           style: :pointer,
@@ -129,7 +129,7 @@ defmodule Examples.Charts.LoadGauge do
       Visualize.Chart.compose([
         chart(meta: %{name: "Load gauge"}),
         source(:reading, [:window, :load, :length]),
-        # Each needle takes its colour from its row through the colour scale (§3.4).
+        # Each needle takes its color from its row through the color scale (§3.4).
         style(:pointer, fill: {:field, :window}, stroke: :background, stroke_width: 1),
         polar(margin: %{top: 30, right: 90, bottom: 30, left: 40}),
         # 240° of dial from −120°, over a load of 0 to 4 (spec/14 §4.3).

@@ -8,7 +8,7 @@ defmodule ExamplesWeb.DashboardLive do
   margin: what travels between them is the time in milliseconds, never a pixel. Only the
   panel brushed pushes `brush_select`, once, on release, with the window as `domain`, so
   the page counts one server event per window whichever panel was brushed. The page then
-  summarises each metric over the window on the server.
+  summarizes each metric over the window on the server.
   """
   use Phoenix.LiveView
 

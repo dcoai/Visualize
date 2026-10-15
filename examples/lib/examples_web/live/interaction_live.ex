@@ -20,7 +20,7 @@ defmodule ExamplesWeb.InteractionLive do
   alias Visualize.Hooks.Crosshair
   alias Visualize.Theme
 
-  # The page's one size. The design records none (#427): `build/1` realises the frame at
+  # The page's one size. The design records none (#427): `build/1` realizes the frame at
   # it, and the canvas and the crosshair's arrays read it back from that frame (#507).
   @size {720, 380}
 
@@ -71,7 +71,7 @@ defmodule ExamplesWeb.InteractionLive do
         tooltip: %{fields: [:series], template: "series {series}"}
       },
       # The points name their series as the line does (#508), so a legend toggle hides
-      # both, and they take the line's colour without a style of their own.
+      # both, and they take the line's color without a style of their own.
       %{
         type: :circle,
         data: :primary,
@@ -140,11 +140,11 @@ defmodule ExamplesWeb.InteractionLive do
   end
 
   @doc """
-  The chart once, realised at `size` (`{width, height}`): the applied chart, which
+  The chart once, realized at `size` (`{width, height}`): the applied chart, which
   `Visualize.Components.Chart` draws and resolves a click against, its SVG, the same frame on a
   binary canvas with literal paints, and the crosshair's arrays for the line mark (the
   first). Every size the page shows — the SVG's `viewBox`, the canvas's `data-width` and
-  `data-height`, the arrays' `data-size` — is the realised frame's, so the crosshair's
+  `data-height`, the arrays' `data-size` — is the realized frame's, so the crosshair's
   marks sit on the drawn series (#507).
   """
   @spec build({pos_integer(), pos_integer()}) :: map()
@@ -153,7 +153,7 @@ defmodule ExamplesWeb.InteractionLive do
     {:ok, applied} = Chart.apply(chart, sources: %{primary: rows()}, size: size)
     %{width: width, height: height} = applied.frame.size
 
-    colours =
+    colors =
       Enum.map_join(1..length(@series), ",", fn i ->
         ~s|"#{Theme.resolve(Theme.default(), {:series, i}, :literal)}"|
       end)
@@ -165,7 +165,7 @@ defmodule ExamplesWeb.InteractionLive do
       binary:
         Chart.render(applied, root: true, title: @title, backend: :canvas, format: :binary_base64),
       crosshair: Crosshair.attrs(applied.frame, applied.sources),
-      colors: "[" <> colours <> "]",
+      colors: "[" <> colors <> "]",
       width: width,
       height: height
     }

@@ -7,7 +7,7 @@ defmodule Examples.Charts.Load do
   instant reads the same whenever it is drawn, which is what lets a chart redraw a window
   without keeping it.
 
-  The three windows are **modelled, not averaged**: a mean over the last 60, 300 and 900
+  The three windows are **modeled, not averaged**: a mean over the last 60, 300 and 900
   samples would cost a thousand evaluations a point. The one-minute window is jumpy and
   prompt, the five-minute smoother and a minute behind, the fifteen-minute smoothest and
   three minutes behind — the shape of the real thing, said here to be synthetic.
@@ -33,7 +33,7 @@ defmodule Examples.Charts.Load do
   # moves the mean by a fraction, few enough that a frame stays a fraction of a millisecond.
   @samples 8
 
-  @typedoc "A load window: its key, the name it is drawn under, and how it is modelled."
+  @typedoc "A load window: its key, the name it is drawn under, and how it is modeled."
   @type window :: :one | :five | :fifteen
 
   @doc "The windows in the order they are drawn, outermost needle first."

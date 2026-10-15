@@ -32,7 +32,7 @@ Every function that is `def` and not `@doc false` in a module under `lib/` is pu
 
 ### 2.2 `@doc false`
 
-A function marked `@doc false` is internal: it is reachable, but its name, arguments and behaviour MAY change in any release without notice, and it MUST NOT appear in a function table. The current internals are of three kinds:
+A function marked `@doc false` is internal: it is reachable, but its name, arguments and behavior MAY change in any release without notice, and it MUST NOT appear in a function table. The current internals are of three kinds:
 
 - **Family and encoder modules reached through a parent** (D-9): `project/4` and `invert/4` on each `Visualize.Geo.Projection.{Azimuthal, Compromise, Conic, Cylindrical, Pseudocylindrical}`, `Visualize.Geo.Projection.family/1`, `Visualize.Backend.CanvasBinary.SVG.encode_element/1`, and `Visualize.Backend.CanvasBinary.PathEncoder.encode_cubic_path/1` and `to_float/1`.
 - **Behaviour callbacks**: on `Visualize.Backend.SVG` and `Visualize.Backend.Canvas` the `@impl` callback arities (`path_data/1`, `render_path/2`, `render_element/2`, `render_scene/2`, `wrap_root/2`) are hidden and reached through `Visualize.Render`, while the default-argument heads `render_path/1`, `render_element/1` and `render_scene/1` remain public and are specified in [09-rendering-backends](09-rendering-backends.md); likewise the GenServer callbacks of `Visualize.Layout.Force.Simulation` (`init/1`, `handle_call/3`, `handle_cast/2`, `handle_info/2`, `terminate/2`, `code_change/3`).

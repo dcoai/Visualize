@@ -34,8 +34,8 @@ defmodule Examples.ColorPalettes do
       surface: @light.surface
     },
     color_safe: %{
-      name: "Colour-safe",
-      description: "The library's colour-vision-safe theme: status runs blue → orange → red",
+      name: "Color-safe",
+      description: "The library's color-vision-safe theme: status runs blue → orange → red",
       colors: @safe.series,
       gradient: ["#3b6fa8", "#5f8abb", "#83a5cd", "#a7c0e0", "#cbdbf2"],
       background: @safe.background,
@@ -252,7 +252,7 @@ defmodule Examples.ColorPalettes do
     get(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
   end
 
-  @doc "The palette as a `Visualize.Theme`: its colours as the series, its base colours as the slots, the gallery's font stack as its `font_family`"
+  @doc "The palette as a `Visualize.Theme`: its colors as the series, its base colors as the slots, the gallery's font stack as its `font_family`"
   def theme(key) when is_binary(key) do
     theme(Enum.find(list_palettes(), :default, &(Atom.to_string(&1) == key)))
   end
@@ -261,8 +261,8 @@ defmodule Examples.ColorPalettes do
     palette = get(key)
 
     # A built-in theme's palette keeps its ramps and roles — the dark theme's are tuned for
-    # its page, the colour-safe theme's status is its point. Any other palette tunes one
-    # ramp, `sequential`, to run from its page to its first colour, so a heatmap takes the
+    # its page, the color-safe theme's status is its point. Any other palette tunes one
+    # ramp, `sequential`, to run from its page to its first color, so a heatmap takes the
     # palette's tone; its other ramps and roles are the default's (spec/08 §7.5).
     #
     # On a tinted page the default's light-page green falls under WCAG's 3:1 (spec/08 §7.7,
@@ -287,7 +287,7 @@ defmodule Examples.ColorPalettes do
     )
   end
 
-  # The page to the first colour, unless the palette names a light end of its own: a cream
+  # The page to the first color, unless the palette names a light end of its own: a cream
   # page is a hue of its own, too far round from the palette's to make one hue family.
   defp sequential(palette) do
     [Map.get(palette, :light_end, palette.background), hd(palette.colors)]

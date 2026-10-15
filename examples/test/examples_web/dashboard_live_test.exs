@@ -2,7 +2,7 @@ defmodule ExamplesWeb.DashboardLiveTest do
   @moduledoc """
   The synced dashboard (#467, spec/10 §6.4): three panels of different widths over one
   time axis, each joined to one sync group by its design, each holding a crosshair over a
-  brush; one `brush_select` is one server event and summarises the window; and the page's
+  brush; one `brush_select` is one server event and summarizes the window; and the page's
   render stays within a light chart's cost (#469).
   """
   use ExUnit.Case, async: true
@@ -60,7 +60,7 @@ defmodule ExamplesWeb.DashboardLiveTest do
     assert page =~ "No window brushed."
   end
 
-  test "one brush_select is one server event, and the window is summarised for every panel" do
+  test "one brush_select is one server event, and the window is summarized for every panel" do
     from = DateTime.to_unix(~U[2026-01-01 06:00:00Z], :millisecond)
     to = DateTime.to_unix(~U[2026-01-01 12:00:00Z], :millisecond)
 

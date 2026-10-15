@@ -6,7 +6,7 @@ defmodule Examples.Charts.ForceGraph do
 
   A graph is two tables. The links are the mark's source and the nodes reach the step
   through `nodes: :nodes` (spec/14 §5.4.3), so each laid-out node carries its table row —
-  here its `group`, which colours it through the `color` scale — and the layout's
+  here its `group`, which colors it through the `color` scale — and the layout's
   `strength` and `distance` are the step's own keys rather than the fixed ones that packed
   twelve nodes into a blob. Rendered whole, the simulation is a pure function of its
   input, so the design draws the same graph every time.

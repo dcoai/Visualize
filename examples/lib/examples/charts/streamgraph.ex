@@ -4,10 +4,10 @@ defmodule Examples.Charts.Streamgraph do
   an inside-out order fixed by the series keys under one `:area` mark.
 
   The stack is a step of the mark's data pipeline (spec/14 §5.4.1): `offset: :silhouette`
-  centres the stream on zero and the order puts the heaviest series in the middle and the
+  centers the stream on zero and the order puts the heaviest series in the middle and the
   lighter ones outward on alternating sides — the two settings that make a stack a stream —
   and the mark reads each layer's `y0` and `y1` with `key` as its `series` channel, which
-  both splits the paths and colours them from the `color` scale the legend explains. The
+  both splits the paths and colors them from the `color` scale the legend explains. The
   basis curve is the style's; the legend sits in the right margin the chart reserves for it
   (§4.5, #136).
 
@@ -106,7 +106,7 @@ defmodule Examples.Charts.Streamgraph do
         ordinal_scale(:color, domain: @keys),
         axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
-        # The silhouette offset centres the stream; the order is inside-out by the run's
+        # The silhouette offset centers the stream; the order is inside-out by the run's
         # totals, fixed so no layer changes place as the waves move (spec/14 §5.4.1, #492).
         area(
           stack(from(:months), @keys, offset: :silhouette, order: {:keys, @order}),
@@ -158,7 +158,7 @@ defmodule Examples.Charts.Streamgraph do
         ordinal_scale(:color, domain: keys),
         axis(:x, :bottom, ticks: 8, prefix: "Month "),
         legend(:color, position: :top_right, inside: false),
-        # A stack centred on zero, its order fixed bottom first so no layer changes
+        # A stack centered on zero, its order fixed bottom first so no layer changes
         # place between frames (spec/14 §5.4.1).
         area(stack(from(:months), keys, offset: :silhouette, order: {:keys, order}),
           %{x: :month, y: :y1, y0: :y0, series: :key},
