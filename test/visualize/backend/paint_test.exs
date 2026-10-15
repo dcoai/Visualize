@@ -537,4 +537,132 @@ defmodule Visualize.Backend.PaintTest do
           do: assert(abs(g - w) <= 24, "#{inspect(at)}: #{inspect(got)} vs #{inspect(want)}")
     end
   end
+
+  # -- the shadow's offset and colour (#674) ---------------------------------------------
+
+  describe "a shadow's offset and color (spec/14 §3.1, §2.7, spec/09 §3.3.3, §4.3.14, #674)" do
+    defp shadow_design(effect) do
+      %{
+        version: 3,
+        sources: %{s: %{fields: [:k, :v]}},
+        frames: %{
+          main: %{
+            kind: :cartesian,
+            scales: %{x: %{kind: :band, domain: [:a]}, y: %{kind: :linear, domain: [0, 10]}}
+          }
+        },
+        marks: [
+          %{
+            type: :rect,
+            data: :s,
+            channels: %{x0: :k, x1: :k, y0: 0, y1: :v},
+            style: %{fill: "#336699", effect: effect}
+          }
+        ]
+      }
+    end
+
+    defp shadow_tree(effect, mode) do
+      rows = [%{k: :a, v: 4}]
+      {:ok, chart} = Chart.from_map(shadow_design(effect))
+      frame = Frame.new(chart, sources: %{s: rows}, size: {240, 200})
+      Frame.generate(frame, sources: %{s: rows}, resolve: mode)
+    end
+
+    test "SVG: a plain shadow keeps its filter; an offset and a colour key a filter of their own" do
+      plain = shadow_tree(%{type: :shadow}, :literal) |> Visualize.Render.to_string()
+      assert plain =~ ~s(<filter id="vis-effect-shadow-3">)
+      assert plain =~ ~s(<feDropShadow dx="1.5" dy="1.5" flood-opacity="0.35" stdDeviation="3"/>)
+
+      moved =
+        shadow_tree(%{type: :shadow, offset: [{3, :pt}, -2], color: "#ff000080"}, :literal)
+        |> Visualize.Render.to_string()
+
+      [_, id] = Regex.run(~r/<filter id="(vis-effect-shadow-3-[0-9a-z]+)">/, moved)
+      assert moved =~ ~s|filter="url(##{id})"|
+
+      assert moved =~
+               ~s(<feDropShadow dx="4.0" dy="-2" flood-color="#ff000080" flood-opacity="1" stdDeviation="3"/>)
+    end
+
+    test "a pct offset has no box" do
+      assert {:error, errors} =
+               Visualize.Chart.Validator.validate(
+                 shadow_design(%{type: :shadow, offset: [{5, :pct}, 0]})
+               )
+
+      assert {[:marks, 0, :style, :effect, :offset], {:no_box, :offset}} in errors
+    end
+
+    test "the canvas commands and the binary effect record carry them" do
+      style = %{
+        fill: "#336699",
+        effect: :shadow,
+        effect_radius: 4,
+        effect_offset: [2, -3],
+        effect_color: "#ff0000"
+      }
+
+      rect = Element.rect(0, 0, 10, 10, style)
+
+      assert [
+               {:set_fillStyle, _},
+               {:set_shadowColor, ["rgba(255,0,0,1)"]},
+               {:set_shadowBlur, [4]},
+               {:set_shadowOffsetX, [2]},
+               {:set_shadowOffsetY, [-3]} | _
+             ] = Canvas.render_element(rect, format: :commands)
+
+      records = rect |> CanvasBinary.encode_element!() |> Decoder.decode()
+
+      assert [
+               {:version, 2},
+               {:style, _},
+               {:effect, :shadow, 4.0, {2.0, -3.0}, {255, 0, 0, 255}} | _
+             ] = records
+
+      plain = Element.rect(0, 0, 10, 10, %{fill: "#336699", effect: :shadow})
+
+      assert [_, _, {:effect, :shadow, 3.0, {1.5, 1.5}, {0, 0, 0, 89}} | _] =
+               plain |> CanvasBinary.encode_element!() |> Decoder.decode()
+
+      blur = Element.rect(0, 0, 10, 10, %{fill: "#336699", effect: :blur, effect_radius: 2})
+
+      assert [_, _, {:effect, :blur, 2.0} | _] =
+               blur |> CanvasBinary.encode_element!() |> Decoder.decode()
+    end
+
+    @tag :js
+    test "the hooks set the same shadow from :json, :js and the binary stream" do
+      style = %{
+        fill: "#336699",
+        effect: :shadow,
+        effect_radius: 4,
+        effect_offset: [2, -3],
+        effect_color: "#ff000080"
+      }
+
+      tree = Element.group([Element.rect(0, 0, 10, 10, style)])
+
+      shadow = fn log ->
+        # The binary hook writes the alpha byte over 255 unrounded: compare it as a number.
+        for %{"kind" => "set", "name" => "shadow" <> _ = name, "value" => v} <- log do
+          case Regex.run(~r/^rgba\((\d+,\d+,\d+),([\d.]+)\)$/, to_string(v)) do
+            [_, rgb, a] ->
+              {name,
+               {rgb, Float.round(String.to_float(a <> if(a =~ ".", do: "", else: ".0")), 3)}}
+
+            nil ->
+              {name, v}
+          end
+        end
+      end
+
+      json = shadow.(from_json(tree))
+      assert json == shadow.(from_js(tree))
+      assert json == shadow.(from_binary(tree))
+      assert {"shadowColor", {"255,0,0", 0.502}} in json
+      assert {"shadowOffsetY", -3} in json
+    end
+  end
 end

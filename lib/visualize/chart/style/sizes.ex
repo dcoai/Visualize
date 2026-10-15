@@ -58,6 +58,7 @@ defmodule Visualize.Chart.Style.Sizes do
       |> update_part(:stroke, :width, &length(&1, em, :width))
       |> update_part(:stroke, :dash, &dash(&1, em))
       |> update_part(:effect, :radius, &length(&1, em, :radius))
+      |> update_part(:effect, :offset, &effect_offset(&1, em))
       |> update_part(:text, :offset, &offset(&1, em))
       |> update_part(:marker, :size, &marker(&1, em))
       |> opacities()
@@ -108,6 +109,10 @@ defmodule Visualize.Chart.Style.Sizes do
 
   defp dash(list, em) when is_list(list), do: Enum.map(list, &length(&1, em, :dash))
   defp dash(dash, _em), do: dash
+
+  # A shadow's offset has no box a percentage could be of (#674).
+  defp effect_offset(list, em) when is_list(list), do: Enum.map(list, &length(&1, em, :offset))
+  defp effect_offset(offset, _em), do: offset
 
   defp offset(list, em) when is_list(list), do: Enum.map(list, &box(&1, em))
   defp offset(offset, _em), do: offset

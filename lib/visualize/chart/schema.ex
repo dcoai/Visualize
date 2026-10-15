@@ -425,7 +425,10 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:effect) do
     [
       spec(:type, {:enum, [:none, :shadow, :blur]}, :style),
-      spec(:radius, :size, :style, range: {0, 20, 0.5})
+      spec(:radius, :size, :style, range: {0, 20, 0.5}),
+      # A shadow's offset and colour (spec/14 §3.1, #674).
+      spec(:offset, {:list, :length}, :style),
+      spec(:color, :colour, :style)
     ]
   end
 

@@ -304,6 +304,20 @@ defmodule Visualize.IR.Element do
     new(:fe_drop_shadow, attrs: %{dx: dx, dy: dy, std_deviation: radius, flood_opacity: 0.35})
   end
 
+  @doc """
+  A drop shadow primitive of the offset, the blur radius and a colour: `flood-color` the
+  colour at `flood-opacity` 1, so the colour's own alpha is the shadow's (#674); a `nil`
+  colour is `drop_shadow/3`.
+  """
+  @spec drop_shadow(number(), number(), number(), String.t() | nil) :: t()
+  def drop_shadow(dx, dy, radius, nil), do: drop_shadow(dx, dy, radius)
+
+  def drop_shadow(dx, dy, radius, color) do
+    new(:fe_drop_shadow,
+      attrs: %{dx: dx, dy: dy, std_deviation: radius, flood_color: color, flood_opacity: 1}
+    )
+  end
+
   @doc "A Gaussian blur primitive of the radius."
   @spec gaussian_blur(number()) :: t()
   def gaussian_blur(radius), do: new(:fe_gaussian_blur, attrs: %{std_deviation: radius})

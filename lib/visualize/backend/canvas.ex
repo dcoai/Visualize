@@ -556,12 +556,19 @@ defmodule Visualize.Backend.Canvas do
     cmds =
       case style[:effect] do
         :shadow ->
+          # The offset and the colour a shadow gives, else half the radius and black at 0.35
+          # (spec/09 §3.3.3, #674).
+          [dx, dy] = style[:effect_offset] || [radius / 2, radius / 2]
+
+          colour =
+            if c = style[:effect_color], do: Paint.canvas_colour(c), else: "rgba(0,0,0,0.35)"
+
           cmds ++
             [
-              {:set_shadowColor, ["rgba(0,0,0,0.35)"]},
+              {:set_shadowColor, [colour]},
               {:set_shadowBlur, [radius]},
-              {:set_shadowOffsetX, [radius / 2]},
-              {:set_shadowOffsetY, [radius / 2]}
+              {:set_shadowOffsetX, [dx]},
+              {:set_shadowOffsetY, [dy]}
             ]
 
         :blur ->

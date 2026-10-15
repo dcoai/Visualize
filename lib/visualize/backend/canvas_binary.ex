@@ -31,6 +31,7 @@ defmodule Visualize.Backend.CanvasBinary do
   | `version` | `0x00` | `version:u8` — version 2 and later; first in a stream that draws a paint |
   | `paint` | `0x50` | `index:u16 kind:u8`, the geometry in box units (f32), `count:u8` stops `at:f32 r g b a` |
   | `box` | `0x51` | `x y w h` (f32): the box the next draw's paint is built over |
+  | `effect` | `0x52` | `kind:u8 radius:f32`, and for a shadow `dx dy:f32` and its RGBA colour |
 
   The point-list record is used only for a path that is one `M` followed by `L`
   commands, and the cubic run only for one `M` followed by `C` commands — the shapes
@@ -496,8 +497,24 @@ defmodule Visualize.Backend.CanvasBinary do
     {flags, parts} = paint_field(style[:fill], 0x20, paints, {flags, parts})
     {flags, parts} = paint_field(style[:stroke], 0x40, paints, {flags, parts})
 
-    <<Opcodes.style()::8, flags::8>> <> IO.iodata_to_binary(parts)
+    <<Opcodes.style()::8, flags::8>> <> IO.iodata_to_binary(parts) <> effect_record(style)
   end
+
+  # Version 2: a shadow's radius, offset and colour, or a blur's radius, after the style record
+  # (spec/09 §4.3.14, #674); the offset and colour default as the canvas commands' do.
+  defp effect_record(%{effect: :shadow} = style) do
+    r = style[:effect_radius] || 3
+    [dx, dy] = style[:effect_offset] || [r / 2, r / 2]
+    {cr, cg, cb, ca} = if c = style[:effect_color], do: Paint.rgba({0, c, 1}), else: {0, 0, 0, 89}
+
+    <<Opcodes.effect()::8, 0x01::8, r::little-float-32, dx::little-float-32, dy::little-float-32,
+      cr::8, cg::8, cb::8, ca::8>>
+  end
+
+  defp effect_record(%{effect: :blur} = style),
+    do: <<Opcodes.effect()::8, 0x02::8, style[:effect_radius] || 3::little-float-32>>
+
+  defp effect_record(_style), do: <<>>
 
   # The draw records of an element under its effective style, with the box its paints are
   # built over first when it draws one (spec/09 §4.3.13).
@@ -539,11 +556,11 @@ defmodule Visualize.Backend.CanvasBinary do
     ctx = %{precision: precision, paints: Map.new(paints)}
     body = do_encode_element(element, ctx, %{})
 
-    case paints do
-      [] ->
+    case {paints, effects?(element)} do
+      {[], false} ->
         body
 
-      _ ->
+      _version_2 ->
         IO.iodata_to_binary([
           <<Opcodes.version()::8, 2::8>>,
           Enum.map(paints, &paint_record/1),
@@ -551,6 +568,9 @@ defmodule Visualize.Backend.CanvasBinary do
         ])
     end
   end
+
+  defp effects?(%Element{style: style, children: children}),
+    do: style[:effect] in [:shadow, :blur] or Enum.any?(children, &effects?/1)
 
   defp paints(%Element{style: style, children: children}) do
     Enum.filter([style[:fill], style[:stroke]], &is_struct(&1, Paint)) ++

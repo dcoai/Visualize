@@ -12,6 +12,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
   - `{:circles, [{cx, cy, r}]}`, `{:rects, [{x, y, w, h}]}`
   - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field), with `fill_paint:`
     and `stroke_paint:` indexes under bits 5 and 6
+  - `{:effect, :shadow, radius, {dx, dy}, {r, g, b, a}}` and `{:effect, :blur, radius}` (§4.3.14)
   - the version 2 records `{:version, v}`, `{:paint, index, %{type:, geometry: [f32], stops:
     [{at, {r, g, b, a}}]}}` and `{:box, {x, y, w, h}}` (spec/09 §4.3.11–4.3.13)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
@@ -174,6 +175,17 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
          acc
        ),
        do: decode(rest, [{:box, {x, y, w, h}} | acc])
+
+  # The effect (spec/09 §4.3.14, #674): a shadow's radius, offset and colour, or a blur.
+  defp decode(
+         <<0x52, 0x01, r::little-float-32, dx::little-float-32, dy::little-float-32, cr, cg, cb,
+           ca, rest::binary>>,
+         acc
+       ),
+       do: decode(rest, [{:effect, :shadow, r, {dx, dy}, {cr, cg, cb, ca}} | acc])
+
+  defp decode(<<0x52, 0x02, r::little-float-32, rest::binary>>, acc),
+    do: decode(rest, [{:effect, :blur, r} | acc])
 
   defp decode(<<0x30, rest::binary>>, acc), do: decode(rest, [:save | acc])
   defp decode(<<0x31, rest::binary>>, acc), do: decode(rest, [:restore | acc])

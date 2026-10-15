@@ -38,4 +38,6 @@ defmodule Visualize.Backend.CanvasBinary.Opcodes do
   defmacro paint, do: 0x50
   @doc false
   defmacro box, do: 0x51
+  @doc false
+  defmacro effect, do: 0x52
 end
