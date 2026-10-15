@@ -44,8 +44,10 @@ defmodule Visualize.Chart.Style.Parts do
 
   @parts [:fill, :stroke, :font, :text, :effect, :marker, :curve]
   @paints [:fill, :stroke]
-  @paint_types [:none, :solid, :linear, :radial, :paint]
+  @paint_types [:none, :solid, :linear, :radial, :hatch, :paint]
   @gradients [:linear, :radial]
+  # The paints the frame draws from its `defs`: the gradients and the hatch (#673).
+  @drawn [:hatch | @gradients]
 
   # The keys a part keeps when a later node changes its `type`: what does not depend on the
   # type. A paint's colour or stops and a gradient's geometry do, and go; its opacity and a
@@ -361,8 +363,9 @@ defmodule Visualize.Chart.Style.Parts do
       {:opacity, opacity}, acc ->
         Map.put(acc, :"#{prefix}opacity", opacity)
 
+      # A hatch's width is its lines', drawn from the frame's defs (#673).
       {:width, width}, acc ->
-        Map.put(acc, :stroke_width, width)
+        if paint[:type] == :hatch, do: acc, else: Map.put(acc, :stroke_width, width)
 
       {:dash, dash}, acc ->
         Map.put(acc, :stroke_dasharray, dash)
@@ -436,7 +439,7 @@ defmodule Visualize.Chart.Style.Parts do
 
   defp solid?(paint), do: Map.get(paint, :type, :solid) == :solid
 
-  defp gradient(acc, key, %{type: type} = paint) when type in @gradients,
+  defp gradient(acc, key, %{type: type} = paint) when type in @drawn,
     do: Map.put(acc, key, {:paint, paint_name(paint)})
 
   defp gradient(acc, _key, _paint), do: acc
@@ -492,7 +495,7 @@ defmodule Visualize.Chart.Style.Parts do
         is_map(node) and not is_struct(node),
         key <- @paints,
         %{type: type} = paint <- [Map.get(node, key)],
-        type in @gradients,
+        type in @drawn,
         into: %{},
         do: {paint_name(paint), drawn(paint)}
   end

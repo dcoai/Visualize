@@ -414,6 +414,7 @@ defmodule Visualize.Backend.Canvas do
               :defs,
               :clip_path,
               :linear_gradient,
+              :pattern,
               :radial_gradient,
               :stop,
               :filter,
@@ -606,6 +607,22 @@ defmodule Visualize.Backend.Canvas do
   # A paint is drawn over the element's own box, inside a save/restore so the gradient is
   # never state a sibling inherits; a box without area draws nothing, as SVG draws no
   # bounding-box paint on one (spec/09 §3.3.3, D-175).
+  # A hatch is laid from the user-space origin, as SVG's `userSpaceOnUse` pattern is, so it
+  # needs no box and draws on an element without area (spec/09 §3.3.3, #673).
+  defp paint_commands(%Paint{type: :hatch, geometry: g} = paint, op, _element) do
+    args = [
+      Atom.to_string(op),
+      Atom.to_string(g.pattern),
+      g.angle,
+      g.spacing,
+      g.width,
+      Paint.canvas_colour(paint.color),
+      paint.background && Paint.canvas_colour(paint.background)
+    ]
+
+    [{:save, []}, {:hatchPattern, args}, {op, []}, {:restore, []}]
+  end
+
   defp paint_commands(paint, op, element) do
     case Paint.bounds(element) do
       {_x, _y, w, h} = box when w > 0 and h > 0 ->
@@ -712,6 +729,17 @@ defmodule Visualize.Backend.Canvas do
         ["ctx.createRadialGradient(", js_args([cx, cy, 0, cx, cy, r]), ")"],
         stops
       )
+
+  defp command_to_js_line({:hatchPattern, [target | args]}),
+    do: [
+      "ctx.",
+      target,
+      "Style = (",
+      hatch_js(),
+      ")(ctx, ",
+      Enum.map_intersperse(args, ", ", &js_value/1),
+      ");"
+    ]
 
   defp command_to_js_line({:set_lineCap, [cap]}), do: ["ctx.lineCap = '", cap, "';"]
   defp command_to_js_line({:set_lineJoin, [join]}), do: ["ctx.lineJoin = '", join, "';"]
@@ -878,6 +906,30 @@ defmodule Visualize.Backend.Canvas do
     ["ctx.", target, "Style = (function(g){", adds, "return g;})(", create, ");"]
   end
 
+  defp js_value(nil), do: "null"
+  defp js_value(v) when is_binary(v), do: ["'", escape_js(v), "'"]
+  defp js_value(v), do: format_num(v)
+
+  @doc false
+  # The one source of a hatch's CanvasPattern (spec/09 §3.3.3, #673), written into a `:js`
+  # script and into the hooks' `visualizePattern`: a tile `n = ⌈4·spacing⌉` pixels square,
+  # scaled to one period, holding the ground and the lines or the dot, and the pattern's
+  # transform `rotate(angle) · scale(spacing / n)`.
+  @spec hatch_js() :: String.t()
+  def hatch_js do
+    "function(ctx, pattern, angle, s, w, colour, background) {" <>
+      "var n = Math.max(1, Math.ceil(4 * s)), tile = document.createElement('canvas');" <>
+      "tile.width = n; tile.height = n; var t = tile.getContext('2d'); t.scale(n / s, n / s);" <>
+      "if (background) { t.fillStyle = background; t.fillRect(0, 0, s, s); }" <>
+      "t.strokeStyle = colour; t.fillStyle = colour; t.lineWidth = w; t.beginPath();" <>
+      "if (pattern === 'dots') { t.arc(s / 2, s / 2, w, 0, 2 * Math.PI); t.fill(); } else {" <>
+      "t.moveTo(0, s / 2); t.lineTo(s, s / 2);" <>
+      "if (pattern === 'crosshatch') { t.moveTo(s / 2, 0); t.lineTo(s / 2, s); } t.stroke(); }" <>
+      "var p = ctx.createPattern(tile, 'repeat'), a = angle * Math.PI / 180, k = s / n;" <>
+      "p.setTransform({a: Math.cos(a) * k, b: Math.sin(a) * k, c: -Math.sin(a) * k, d: Math.cos(a) * k, e: 0, f: 0});" <>
+      "return p; }"
+  end
+
   defp js_args(args), do: args |> Enum.map(&format_num/1) |> Enum.intersperse(", ")
 
   defp commands_to_json(commands) do
@@ -908,6 +960,7 @@ defmodule Visualize.Backend.Canvas do
     ["{\"cmd\":\"", cmd, "\",\"args\":[", args_json, "]}"]
   end
 
+  defp encode_json_value(nil), do: "null"
   defp encode_json_value(v) when is_binary(v), do: ["\"", escape_json_string(v), "\""]
   defp encode_json_value(v) when is_number(v), do: format_num(v)
   defp encode_json_value(v) when is_boolean(v), do: Atom.to_string(v)

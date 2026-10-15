@@ -107,6 +107,25 @@ defmodule Visualize.Theme.Palette do
   @spec builtin() :: %{atom() => map()}
   def builtin, do: @builtin
 
+  # The print theme's role fills (spec/08 §7.2, #673): hatches of the role's colour, so a
+  # role keeps its meaning on a grayscale copy; `:neutral` stays solid.
+  @hatches %{
+    good: %{pattern: :lines, angle: 45},
+    warning: %{pattern: :lines, angle: 135},
+    bad: %{pattern: :crosshatch, angle: 45},
+    info: %{pattern: :dots, angle: 45}
+  }
+
+  @doc false
+  # The palette of the print theme: the built-in one with its role fills hatched.
+  @spec print() :: %{atom() => map()}
+  def print do
+    Enum.reduce(@hatches, @builtin, fn {role, hatch}, palette ->
+      fill = Map.merge(%{type: :hatch, color: {:color, role}, spacing: 6, width: 1}, hatch)
+      put_in(palette, [role, :fill], fill)
+    end)
+  end
+
   @doc false
   @spec roles() :: [atom(), ...]
   def roles, do: @roles

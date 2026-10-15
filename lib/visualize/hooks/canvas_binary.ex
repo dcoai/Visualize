@@ -35,501 +35,530 @@ defmodule Visualize.Hooks.CanvasBinary do
   it calls.
   """
   def js_decoder do
-    ~S"""
-    // Standard base64 (as Base.encode64/1 writes it) to bytes.
-    export function decodeBase64(base64) {
-      const binaryStr = atob(base64);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      return bytes;
-    }
-
-    // SVG arc to Canvas ellipse: the endpoint-to-center parameterization of the SVG
-    // specification (implementation notes B.2.4).
-    export function drawSvgArc(ctx, x1, y1, rx, ry, phi, fA, fS, x2, y2) {
-      if (x1 === x2 && y1 === y2) return;
-      if (rx === 0 || ry === 0) {
-        ctx.lineTo(x2, y2);
-        return;
-      }
-
-      rx = Math.abs(rx);
-      ry = Math.abs(ry);
-
-      const cosPhi = Math.cos(phi);
-      const sinPhi = Math.sin(phi);
-
-      // Step 1: Compute (x1', y1')
-      const dx2 = (x1 - x2) / 2;
-      const dy2 = (y1 - y2) / 2;
-      const x1p = cosPhi * dx2 + sinPhi * dy2;
-      const y1p = -sinPhi * dx2 + cosPhi * dy2;
-
-      // Step 2: Compute (cx', cy')
-      let rxSq = rx * rx;
-      let rySq = ry * ry;
-      const x1pSq = x1p * x1p;
-      const y1pSq = y1p * y1p;
-
-      // Check if radii are large enough
-      let lambda = x1pSq / rxSq + y1pSq / rySq;
-      if (lambda > 1) {
-        const lambdaSqrt = Math.sqrt(lambda);
-        rx *= lambdaSqrt;
-        ry *= lambdaSqrt;
-        rxSq = rx * rx;
-        rySq = ry * ry;
-      }
-
-      let sq = ((rxSq * rySq) - (rxSq * y1pSq) - (rySq * x1pSq)) /
-               ((rxSq * y1pSq) + (rySq * x1pSq));
-      sq = sq < 0 ? 0 : sq;
-      const coef = (fA !== fS ? 1 : -1) * Math.sqrt(sq);
-      const cxp = coef * ((rx * y1p) / ry);
-      const cyp = coef * -((ry * x1p) / rx);
-
-      // Step 3: Compute (cx, cy) from (cx', cy')
-      const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
-      const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
-
-      // Step 4: Compute theta1 and dtheta
-      const ux = (x1p - cxp) / rx;
-      const uy = (y1p - cyp) / ry;
-      const vx = (-x1p - cxp) / rx;
-      const vy = (-y1p - cyp) / ry;
-
-      let n = Math.sqrt(ux * ux + uy * uy);
-      let p = ux;
-      let theta1 = (uy < 0 ? -1 : 1) * Math.acos(p / n);
-
-      n = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
-      p = ux * vx + uy * vy;
-      let dtheta = (ux * vy - uy * vx < 0 ? -1 : 1) * Math.acos(Math.max(-1, Math.min(1, p / n)));
-
-      if (fS === 0 && dtheta > 0) dtheta -= 2 * Math.PI;
-      if (fS === 1 && dtheta < 0) dtheta += 2 * Math.PI;
-
-      ctx.ellipse(cx, cy, rx, ry, phi, theta1, theta1 + dtheta, fS === 0);
-    }
-
-    // A gradient as ctx[target + 'Style'] (spec/10 §8.1, #652): a linear one from
-    // [x0, y0, x1, y1], a radial one [cx, cy, r] about its focus at its centre, with one
-    // addColorStop per [at, colour].
-    export function visualizeGradient(ctx, target, kind, g, stops) {
-      const gradient = kind === 'linear' ?
-        ctx.createLinearGradient(g[0], g[1], g[2], g[3]) :
-        ctx.createRadialGradient(g[0], g[1], 0, g[0], g[1], g[2]);
-      stops.forEach(([at, colour]) => gradient.addColorStop(at, colour));
-      ctx[target + 'Style'] = gradient;
-    }
-
-    // The current path's fill or stroke (op) drawn with a paint in box units over a box
-    // [x, y, w, h], as spec/09 §3.3.3 maps it: a linear gradient exactly into user units, a
-    // radial fill under the box transform, a radial stroke the circle of the same area;
-    // nothing on a box without area. In a save/restore, so the gradient is never state.
-    export function drawVisualizePaint(ctx, op, paint, box) {
-      const [x, y, w, h] = box;
-      if (!(w > 0 && h > 0)) return;
-      const g = paint.geometry;
-      ctx.save();
-      if (paint.kind === 'linear') {
-        const dx = g[2] - g[0], dy = g[3] - g[1], dd = dx * dx + dy * dy;
-        const gx = dx / w / dd, gy = dy / h / dd, gg = gx * gx + gy * gy;
-        const x0 = x + g[0] * w, y0 = y + g[1] * h;
-        visualizeGradient(ctx, op, 'linear', [x0, y0, x0 + gx / gg, y0 + gy / gg], paint.stops);
-      } else if (op === 'fill') {
-        ctx.transform(w, 0, 0, h, x, y);
-        visualizeGradient(ctx, op, 'radial', g, paint.stops);
-      } else {
-        visualizeGradient(ctx, op, 'radial', [x + g[0] * w, y + g[1] * h, g[2] * Math.sqrt(w * h)], paint.stops);
-      }
-      ctx[op]();
-      ctx.restore();
-    }
-
-    // One coordinate of a path record: 8 bytes (f64) or 4 (f32), little-endian.
-    function readCoord(view, offset, width) {
-      return width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
-    }
-
-    // The point-list records `path` (f64) and `path32` (f32): moveTo the first point,
-    // lineTo the rest, the path left open. Returns the offset after the last point.
-    function drawPolyline(ctx, view, offset, count, width) {
-      ctx.beginPath();
-      for (let i = 0; i < count; i++) {
-        const x = readCoord(view, offset, width);
-        const y = readCoord(view, offset + width, width);
-        offset += 2 * width;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      return offset;
-    }
-
-    // The command-stream records `path_cubic` (f64) and `path_cubic32` (f32): one
-    // sub-opcode per command (spec/09 §4.3.2, §4.3.9) against a tracked current point and
-    // subpath start; the arc flags are u32 at either width. Returns the offset reached.
-    function drawPathCommands(ctx, view, bytes, offset, cmdCount, width) {
-      const f = (o) => readCoord(view, o, width);
-      const w = width;
-      ctx.beginPath();
-      let curX = 0, curY = 0, startX = 0, startY = 0;
-      for (let i = 0; i < cmdCount; i++) {
-        const subcmd = bytes[offset++];
-        switch (subcmd) {
-          case 0x01: { // M
-            curX = f(offset); curY = f(offset + w);
-            startX = curX; startY = curY;
-            ctx.moveTo(curX, curY);
-            offset += 2 * w;
-            break;
-          }
-          case 0x02: { // L
-            curX = f(offset); curY = f(offset + w);
-            ctx.lineTo(curX, curY);
-            offset += 2 * w;
-            break;
-          }
-          case 0x03: { // C
-            const x1 = f(offset), y1 = f(offset + w), x2 = f(offset + 2 * w), y2 = f(offset + 3 * w);
-            curX = f(offset + 4 * w); curY = f(offset + 5 * w);
-            ctx.bezierCurveTo(x1, y1, x2, y2, curX, curY);
-            offset += 6 * w;
-            break;
-          }
-          case 0x04: { // Q
-            const qx1 = f(offset), qy1 = f(offset + w);
-            curX = f(offset + 2 * w); curY = f(offset + 3 * w);
-            ctx.quadraticCurveTo(qx1, qy1, curX, curY);
-            offset += 4 * w;
-            break;
-          }
-          case 0x05: { // Z
-            ctx.closePath();
-            curX = startX; curY = startY;
-            break;
-          }
-          case 0x06: { // A (absolute end point)
-            const rx = f(offset), ry = f(offset + w);
-            const rotation = f(offset + 2 * w) * Math.PI / 180;
-            const largeArc = view.getUint32(offset + 3 * w, true);
-            const sweep = view.getUint32(offset + 3 * w + 4, true);
-            const x = f(offset + 3 * w + 8), y = f(offset + 4 * w + 8);
-            offset += 5 * w + 8;
-            drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
-            curX = x; curY = y;
-            break;
-          }
-          case 0x07: { // a (end point relative to the current point)
-            const rx = f(offset), ry = f(offset + w);
-            const rotation = f(offset + 2 * w) * Math.PI / 180;
-            const largeArc = view.getUint32(offset + 3 * w, true);
-            const sweep = view.getUint32(offset + 3 * w + 4, true);
-            const x = curX + f(offset + 3 * w + 8), y = curY + f(offset + 4 * w + 8);
-            offset += 5 * w + 8;
-            drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
-            curX = x; curY = y;
-            break;
-          }
-          case 0x08: { // H
-            curX = f(offset);
-            ctx.lineTo(curX, curY);
-            offset += w;
-            break;
-          }
-          case 0x09: { // V
-            curY = f(offset);
-            ctx.lineTo(curX, curY);
-            offset += w;
-            break;
-          }
-          case 0x0A: { // h
-            curX += f(offset);
-            ctx.lineTo(curX, curY);
-            offset += w;
-            break;
-          }
-          case 0x0B: { // v
-            curY += f(offset);
-            ctx.lineTo(curX, curY);
-            offset += w;
-            break;
-          }
-          case 0x0C: { // m
-            curX += f(offset); curY += f(offset + w);
-            startX = curX; startY = curY;
-            ctx.moveTo(curX, curY);
-            offset += 2 * w;
-            break;
-          }
-          case 0x0D: { // l
-            curX += f(offset); curY += f(offset + w);
-            ctx.lineTo(curX, curY);
-            offset += 2 * w;
-            break;
-          }
-          case 0x0E: { // c
-            const dx1 = f(offset), dy1 = f(offset + w), dx2 = f(offset + 2 * w), dy2 = f(offset + 3 * w);
-            const dx = f(offset + 4 * w), dy = f(offset + 5 * w);
-            ctx.bezierCurveTo(curX + dx1, curY + dy1, curX + dx2, curY + dy2, curX + dx, curY + dy);
-            curX += dx; curY += dy;
-            offset += 6 * w;
-            break;
-          }
-          case 0x0F: { // q
-            const dx1 = f(offset), dy1 = f(offset + w);
-            const dx = f(offset + 2 * w), dy = f(offset + 3 * w);
-            ctx.quadraticCurveTo(curX + dx1, curY + dy1, curX + dx, curY + dy);
-            curX += dx; curY += dy;
-            offset += 4 * w;
-            break;
-          }
-          default:
-            throw new Error('Unknown canvas binary path command 0x' + subcmd.toString(16) + ' at offset ' + (offset - 1));
+    pattern_js() <>
+      ~S"""
+      // Standard base64 (as Base.encode64/1 writes it) to bytes.
+      export function decodeBase64(base64) {
+        const binaryStr = atob(base64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
         }
+        return bytes;
       }
-      return offset;
-    }
 
-    // The cubic run `cubic_run` (spec/09 §4.3.10): the start point, then six f32 per curve
-    // with no sub-opcode. Returns the offset after the last curve.
-    function drawCubicRun(ctx, view, offset, count) {
-      ctx.beginPath();
-      ctx.moveTo(view.getFloat32(offset, true), view.getFloat32(offset + 4, true));
-      offset += 8;
-      for (let i = 0; i < count; i++) {
-        ctx.bezierCurveTo(
-          view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
-          view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true),
-          view.getFloat32(offset + 16, true), view.getFloat32(offset + 20, true)
-        );
-        offset += 24;
+      // SVG arc to Canvas ellipse: the endpoint-to-center parameterization of the SVG
+      // specification (implementation notes B.2.4).
+      export function drawSvgArc(ctx, x1, y1, rx, ry, phi, fA, fS, x2, y2) {
+        if (x1 === x2 && y1 === y2) return;
+        if (rx === 0 || ry === 0) {
+          ctx.lineTo(x2, y2);
+          return;
+        }
+
+        rx = Math.abs(rx);
+        ry = Math.abs(ry);
+
+        const cosPhi = Math.cos(phi);
+        const sinPhi = Math.sin(phi);
+
+        // Step 1: Compute (x1', y1')
+        const dx2 = (x1 - x2) / 2;
+        const dy2 = (y1 - y2) / 2;
+        const x1p = cosPhi * dx2 + sinPhi * dy2;
+        const y1p = -sinPhi * dx2 + cosPhi * dy2;
+
+        // Step 2: Compute (cx', cy')
+        let rxSq = rx * rx;
+        let rySq = ry * ry;
+        const x1pSq = x1p * x1p;
+        const y1pSq = y1p * y1p;
+
+        // Check if radii are large enough
+        let lambda = x1pSq / rxSq + y1pSq / rySq;
+        if (lambda > 1) {
+          const lambdaSqrt = Math.sqrt(lambda);
+          rx *= lambdaSqrt;
+          ry *= lambdaSqrt;
+          rxSq = rx * rx;
+          rySq = ry * ry;
+        }
+
+        let sq = ((rxSq * rySq) - (rxSq * y1pSq) - (rySq * x1pSq)) /
+                 ((rxSq * y1pSq) + (rySq * x1pSq));
+        sq = sq < 0 ? 0 : sq;
+        const coef = (fA !== fS ? 1 : -1) * Math.sqrt(sq);
+        const cxp = coef * ((rx * y1p) / ry);
+        const cyp = coef * -((ry * x1p) / rx);
+
+        // Step 3: Compute (cx, cy) from (cx', cy')
+        const cx = cosPhi * cxp - sinPhi * cyp + (x1 + x2) / 2;
+        const cy = sinPhi * cxp + cosPhi * cyp + (y1 + y2) / 2;
+
+        // Step 4: Compute theta1 and dtheta
+        const ux = (x1p - cxp) / rx;
+        const uy = (y1p - cyp) / ry;
+        const vx = (-x1p - cxp) / rx;
+        const vy = (-y1p - cyp) / ry;
+
+        let n = Math.sqrt(ux * ux + uy * uy);
+        let p = ux;
+        let theta1 = (uy < 0 ? -1 : 1) * Math.acos(p / n);
+
+        n = Math.sqrt((ux * ux + uy * uy) * (vx * vx + vy * vy));
+        p = ux * vx + uy * vy;
+        let dtheta = (ux * vy - uy * vx < 0 ? -1 : 1) * Math.acos(Math.max(-1, Math.min(1, p / n)));
+
+        if (fS === 0 && dtheta > 0) dtheta -= 2 * Math.PI;
+        if (fS === 1 && dtheta < 0) dtheta += 2 * Math.PI;
+
+        ctx.ellipse(cx, cy, rx, ry, phi, theta1, theta1 + dtheta, fS === 0);
       }
-      return offset;
-    }
 
-    // Replays one canvas binary stream (Visualize.Backend.CanvasBinary, spec/09 §4) on ctx
-    // from startOffset up to endOffset (default: the end of bytes). Returns the offset
-    // reached. Opcodes are those of Visualize.Backend.CanvasBinary.Opcodes; an unknown
-    // byte is an encoder/decoder mismatch and throws.
-    // A decode failure is visible on the page (spec/10 §9.2, #270): the message goes on
-    // the hook element as data-vis-error and under the canvas as a line of text, and the
-    // error is rethrown so the console keeps the stack. A stream that replays clears both.
-    export function reportVisualizeError(el, error) {
-      const message = error && error.message ? error.message : String(error);
-      el.setAttribute('data-vis-error', message);
-      let note = el.querySelector('.vis-canvas-error');
-      if (!note) {
-        note = document.createElement('p');
-        note.className = 'vis-canvas-error';
-        note.setAttribute('role', 'alert');
-        el.appendChild(note);
+      // A gradient as ctx[target + 'Style'] (spec/10 §8.1, #652): a linear one from
+      // [x0, y0, x1, y1], a radial one [cx, cy, r] about its focus at its centre, with one
+      // addColorStop per [at, colour].
+      export function visualizeGradient(ctx, target, kind, g, stops) {
+        const gradient = kind === 'linear' ?
+          ctx.createLinearGradient(g[0], g[1], g[2], g[3]) :
+          ctx.createRadialGradient(g[0], g[1], 0, g[0], g[1], g[2]);
+        stops.forEach(([at, colour]) => gradient.addColorStop(at, colour));
+        ctx[target + 'Style'] = gradient;
       }
-      note.textContent = 'canvas stream failed: ' + message;
-    }
 
-    export function clearVisualizeError(el) {
-      el.removeAttribute('data-vis-error');
-      const note = el.querySelector('.vis-canvas-error');
-      if (note) note.remove();
-    }
+      // The current path's fill or stroke (op) drawn with a paint in box units over a box
+      // [x, y, w, h], as spec/09 §3.3.3 maps it: a linear gradient exactly into user units, a
+      // radial fill under the box transform, a radial stroke the circle of the same area;
+      // nothing on a box without area. In a save/restore, so the gradient is never state.
+      export function drawVisualizePaint(ctx, op, paint, box) {
+        // A hatch is laid from the origin in user units and needs no box (#673).
+        if (paint.kind === 'hatch') {
+          ctx.save();
+          visualizePattern(ctx, op, ...paint.args);
+          ctx[op]();
+          ctx.restore();
+          return;
+        }
+        const [x, y, w, h] = box;
+        if (!(w > 0 && h > 0)) return;
+        const g = paint.geometry;
+        ctx.save();
+        if (paint.kind === 'linear') {
+          const dx = g[2] - g[0], dy = g[3] - g[1], dd = dx * dx + dy * dy;
+          const gx = dx / w / dd, gy = dy / h / dd, gg = gx * gx + gy * gy;
+          const x0 = x + g[0] * w, y0 = y + g[1] * h;
+          visualizeGradient(ctx, op, 'linear', [x0, y0, x0 + gx / gg, y0 + gy / gg], paint.stops);
+        } else if (op === 'fill') {
+          ctx.transform(w, 0, 0, h, x, y);
+          visualizeGradient(ctx, op, 'radial', g, paint.stops);
+        } else {
+          visualizeGradient(ctx, op, 'radial', [x + g[0] * w, y + g[1] * h, g[2] * Math.sqrt(w * h)], paint.stops);
+        }
+        ctx[op]();
+        ctx.restore();
+      }
 
-    export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset) {
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-      let offset = startOffset || 0;
-      const maxOffset = endOffset === undefined ? bytes.length : endOffset;
-      // Version 2 (spec/09 §4.2): the stream's paints, the fill and stroke paint as state that
-      // save and restore scope, and the box the next draw's paint is built over.
-      const paints = [];
-      const scopes = [];
-      let fillPaint = null, strokePaint = null, box = null;
+      // One coordinate of a path record: 8 bytes (f64) or 4 (f32), little-endian.
+      function readCoord(view, offset, width) {
+        return width === 4 ? view.getFloat32(offset, true) : view.getFloat64(offset, true);
+      }
 
-      while (offset < maxOffset) {
-        const cmd = bytes[offset++];
+      // The point-list records `path` (f64) and `path32` (f32): moveTo the first point,
+      // lineTo the rest, the path left open. Returns the offset after the last point.
+      function drawPolyline(ctx, view, offset, count, width) {
+        ctx.beginPath();
+        for (let i = 0; i < count; i++) {
+          const x = readCoord(view, offset, width);
+          const y = readCoord(view, offset + width, width);
+          offset += 2 * width;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        return offset;
+      }
 
-        switch (cmd) {
-          case 0x01: { // path: one open polyline, f64
-            const count = view.getUint32(offset, true);
-            offset = drawPolyline(ctx, view, offset + 4, count, 8);
-            break;
-          }
-
-          case 0x05: { // path32: one open polyline, f32
-            const count = view.getUint32(offset, true);
-            offset = drawPolyline(ctx, view, offset + 4, count, 4);
-            break;
-          }
-
-          case 0x02: { // path_cubic: the full command stream, f64
-            const cmdCount = view.getUint32(offset, true);
-            offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 8);
-            break;
-          }
-
-          case 0x06: { // path_cubic32: the full command stream, f32
-            const cmdCount = view.getUint32(offset, true);
-            offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 4);
-            break;
-          }
-
-          case 0x07: { // cubic_run: a start point and a run of cubic curves, f32
-            const count = view.getUint32(offset, true);
-            offset = drawCubicRun(ctx, view, offset + 4, count);
-            break;
-          }
-
-          case 0x03: { // circles: one path holding every circle
-            const count = view.getUint32(offset, true);
-            offset += 4;
-            ctx.beginPath();
-            for (let i = 0; i < count; i++) {
-              const cx = view.getFloat64(offset, true);
-              const cy = view.getFloat64(offset + 8, true);
-              const r = view.getFloat64(offset + 16, true);
-              offset += 24;
-              ctx.moveTo(cx + r, cy);
-              ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      // The command-stream records `path_cubic` (f64) and `path_cubic32` (f32): one
+      // sub-opcode per command (spec/09 §4.3.2, §4.3.9) against a tracked current point and
+      // subpath start; the arc flags are u32 at either width. Returns the offset reached.
+      function drawPathCommands(ctx, view, bytes, offset, cmdCount, width) {
+        const f = (o) => readCoord(view, o, width);
+        const w = width;
+        ctx.beginPath();
+        let curX = 0, curY = 0, startX = 0, startY = 0;
+        for (let i = 0; i < cmdCount; i++) {
+          const subcmd = bytes[offset++];
+          switch (subcmd) {
+            case 0x01: { // M
+              curX = f(offset); curY = f(offset + w);
+              startX = curX; startY = curY;
+              ctx.moveTo(curX, curY);
+              offset += 2 * w;
+              break;
             }
-            break;
+            case 0x02: { // L
+              curX = f(offset); curY = f(offset + w);
+              ctx.lineTo(curX, curY);
+              offset += 2 * w;
+              break;
+            }
+            case 0x03: { // C
+              const x1 = f(offset), y1 = f(offset + w), x2 = f(offset + 2 * w), y2 = f(offset + 3 * w);
+              curX = f(offset + 4 * w); curY = f(offset + 5 * w);
+              ctx.bezierCurveTo(x1, y1, x2, y2, curX, curY);
+              offset += 6 * w;
+              break;
+            }
+            case 0x04: { // Q
+              const qx1 = f(offset), qy1 = f(offset + w);
+              curX = f(offset + 2 * w); curY = f(offset + 3 * w);
+              ctx.quadraticCurveTo(qx1, qy1, curX, curY);
+              offset += 4 * w;
+              break;
+            }
+            case 0x05: { // Z
+              ctx.closePath();
+              curX = startX; curY = startY;
+              break;
+            }
+            case 0x06: { // A (absolute end point)
+              const rx = f(offset), ry = f(offset + w);
+              const rotation = f(offset + 2 * w) * Math.PI / 180;
+              const largeArc = view.getUint32(offset + 3 * w, true);
+              const sweep = view.getUint32(offset + 3 * w + 4, true);
+              const x = f(offset + 3 * w + 8), y = f(offset + 4 * w + 8);
+              offset += 5 * w + 8;
+              drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
+              curX = x; curY = y;
+              break;
+            }
+            case 0x07: { // a (end point relative to the current point)
+              const rx = f(offset), ry = f(offset + w);
+              const rotation = f(offset + 2 * w) * Math.PI / 180;
+              const largeArc = view.getUint32(offset + 3 * w, true);
+              const sweep = view.getUint32(offset + 3 * w + 4, true);
+              const x = curX + f(offset + 3 * w + 8), y = curY + f(offset + 4 * w + 8);
+              offset += 5 * w + 8;
+              drawSvgArc(ctx, curX, curY, rx, ry, rotation, largeArc, sweep, x, y);
+              curX = x; curY = y;
+              break;
+            }
+            case 0x08: { // H
+              curX = f(offset);
+              ctx.lineTo(curX, curY);
+              offset += w;
+              break;
+            }
+            case 0x09: { // V
+              curY = f(offset);
+              ctx.lineTo(curX, curY);
+              offset += w;
+              break;
+            }
+            case 0x0A: { // h
+              curX += f(offset);
+              ctx.lineTo(curX, curY);
+              offset += w;
+              break;
+            }
+            case 0x0B: { // v
+              curY += f(offset);
+              ctx.lineTo(curX, curY);
+              offset += w;
+              break;
+            }
+            case 0x0C: { // m
+              curX += f(offset); curY += f(offset + w);
+              startX = curX; startY = curY;
+              ctx.moveTo(curX, curY);
+              offset += 2 * w;
+              break;
+            }
+            case 0x0D: { // l
+              curX += f(offset); curY += f(offset + w);
+              ctx.lineTo(curX, curY);
+              offset += 2 * w;
+              break;
+            }
+            case 0x0E: { // c
+              const dx1 = f(offset), dy1 = f(offset + w), dx2 = f(offset + 2 * w), dy2 = f(offset + 3 * w);
+              const dx = f(offset + 4 * w), dy = f(offset + 5 * w);
+              ctx.bezierCurveTo(curX + dx1, curY + dy1, curX + dx2, curY + dy2, curX + dx, curY + dy);
+              curX += dx; curY += dy;
+              offset += 6 * w;
+              break;
+            }
+            case 0x0F: { // q
+              const dx1 = f(offset), dy1 = f(offset + w);
+              const dx = f(offset + 2 * w), dy = f(offset + 3 * w);
+              ctx.quadraticCurveTo(curX + dx1, curY + dy1, curX + dx, curY + dy);
+              curX += dx; curY += dy;
+              offset += 4 * w;
+              break;
+            }
+            default:
+              throw new Error('Unknown canvas binary path command 0x' + subcmd.toString(16) + ' at offset ' + (offset - 1));
           }
+        }
+        return offset;
+      }
 
-          case 0x04: { // rects: one path holding every rectangle
-            const count = view.getUint32(offset, true);
-            offset += 4;
-            ctx.beginPath();
-            for (let i = 0; i < count; i++) {
-              const x = view.getFloat64(offset, true);
-              const y = view.getFloat64(offset + 8, true);
-              const w = view.getFloat64(offset + 16, true);
-              const h = view.getFloat64(offset + 24, true);
-              offset += 32;
-              ctx.rect(x, y, w, h);
-            }
-            break;
-          }
+      // The cubic run `cubic_run` (spec/09 §4.3.10): the start point, then six f32 per curve
+      // with no sub-opcode. Returns the offset after the last curve.
+      function drawCubicRun(ctx, view, offset, count) {
+        ctx.beginPath();
+        ctx.moveTo(view.getFloat32(offset, true), view.getFloat32(offset + 4, true));
+        offset += 8;
+        for (let i = 0; i < count; i++) {
+          ctx.bezierCurveTo(
+            view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
+            view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true),
+            view.getFloat32(offset + 16, true), view.getFloat32(offset + 20, true)
+          );
+          offset += 24;
+        }
+        return offset;
+      }
 
-          case 0x10: { // style
-            const flags = bytes[offset++];
-            if (flags & 0x01) { // fill colour
-              fillPaint = null;
-              const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
-              ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
+      // Replays one canvas binary stream (Visualize.Backend.CanvasBinary, spec/09 §4) on ctx
+      // from startOffset up to endOffset (default: the end of bytes). Returns the offset
+      // reached. Opcodes are those of Visualize.Backend.CanvasBinary.Opcodes; an unknown
+      // byte is an encoder/decoder mismatch and throws.
+      // A decode failure is visible on the page (spec/10 §9.2, #270): the message goes on
+      // the hook element as data-vis-error and under the canvas as a line of text, and the
+      // error is rethrown so the console keeps the stack. A stream that replays clears both.
+      export function reportVisualizeError(el, error) {
+        const message = error && error.message ? error.message : String(error);
+        el.setAttribute('data-vis-error', message);
+        let note = el.querySelector('.vis-canvas-error');
+        if (!note) {
+          note = document.createElement('p');
+          note.className = 'vis-canvas-error';
+          note.setAttribute('role', 'alert');
+          el.appendChild(note);
+        }
+        note.textContent = 'canvas stream failed: ' + message;
+      }
+
+      export function clearVisualizeError(el) {
+        el.removeAttribute('data-vis-error');
+        const note = el.querySelector('.vis-canvas-error');
+        if (note) note.remove();
+      }
+
+      export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset) {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        let offset = startOffset || 0;
+        const maxOffset = endOffset === undefined ? bytes.length : endOffset;
+        // Version 2 (spec/09 §4.2): the stream's paints, the fill and stroke paint as state that
+        // save and restore scope, and the box the next draw's paint is built over.
+        const paints = [];
+        const scopes = [];
+        let fillPaint = null, strokePaint = null, box = null;
+
+        while (offset < maxOffset) {
+          const cmd = bytes[offset++];
+
+          switch (cmd) {
+            case 0x01: { // path: one open polyline, f64
+              const count = view.getUint32(offset, true);
+              offset = drawPolyline(ctx, view, offset + 4, count, 8);
+              break;
             }
-            if (flags & 0x02) { // stroke colour
-              strokePaint = null;
-              const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
-              ctx.strokeStyle = `rgba(${r},${g},${b},${a / 255})`;
+
+            case 0x05: { // path32: one open polyline, f32
+              const count = view.getUint32(offset, true);
+              offset = drawPolyline(ctx, view, offset + 4, count, 4);
+              break;
             }
-            if (flags & 0x04) { // stroke width, divided by the scale when it does not scale
-              const w = view.getFloat32(offset, true);
-              if (flags & 0x10) {
-                const t = ctx.getTransform();
-                ctx.lineWidth = w / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
-              } else {
-                ctx.lineWidth = w;
+
+            case 0x02: { // path_cubic: the full command stream, f64
+              const cmdCount = view.getUint32(offset, true);
+              offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 8);
+              break;
+            }
+
+            case 0x06: { // path_cubic32: the full command stream, f32
+              const cmdCount = view.getUint32(offset, true);
+              offset = drawPathCommands(ctx, view, bytes, offset + 4, cmdCount, 4);
+              break;
+            }
+
+            case 0x07: { // cubic_run: a start point and a run of cubic curves, f32
+              const count = view.getUint32(offset, true);
+              offset = drawCubicRun(ctx, view, offset + 4, count);
+              break;
+            }
+
+            case 0x03: { // circles: one path holding every circle
+              const count = view.getUint32(offset, true);
+              offset += 4;
+              ctx.beginPath();
+              for (let i = 0; i < count; i++) {
+                const cx = view.getFloat64(offset, true);
+                const cy = view.getFloat64(offset + 8, true);
+                const r = view.getFloat64(offset + 16, true);
+                offset += 24;
+                ctx.moveTo(cx + r, cy);
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
               }
-              offset += 4;
+              break;
             }
-            if (flags & 0x08) { // global alpha
-              ctx.globalAlpha = view.getFloat32(offset, true);
-              offset += 4;
-            }
-            if (flags & 0x20) { // version 2: the fill is a paint
-              fillPaint = paints[view.getUint16(offset, true)];
-              offset += 2;
-            }
-            if (flags & 0x40) { // version 2: the stroke is a paint
-              strokePaint = paints[view.getUint16(offset, true)];
-              offset += 2;
-            }
-            break;
-          }
 
-          case 0x20: { // transform
-            const kind = bytes[offset++];
-            switch (kind) {
-              case 0x01: // translate
-                ctx.translate(view.getFloat64(offset, true), view.getFloat64(offset + 8, true));
-                offset += 16;
-                break;
-              case 0x03: // translate then scale
-                ctx.translate(view.getFloat64(offset, true), view.getFloat64(offset + 8, true));
-                ctx.scale(view.getFloat64(offset + 16, true), view.getFloat64(offset + 24, true));
+            case 0x04: { // rects: one path holding every rectangle
+              const count = view.getUint32(offset, true);
+              offset += 4;
+              ctx.beginPath();
+              for (let i = 0; i < count; i++) {
+                const x = view.getFloat64(offset, true);
+                const y = view.getFloat64(offset + 8, true);
+                const w = view.getFloat64(offset + 16, true);
+                const h = view.getFloat64(offset + 24, true);
                 offset += 32;
-                break;
-              case 0xFF: // full matrix, composed onto the current transform
-                ctx.transform(
-                  view.getFloat64(offset, true), view.getFloat64(offset + 8, true),
-                  view.getFloat64(offset + 16, true), view.getFloat64(offset + 24, true),
-                  view.getFloat64(offset + 32, true), view.getFloat64(offset + 40, true)
-                );
-                offset += 48;
-                break;
-              default:
-                throw new Error('Unknown canvas binary transform kind 0x' + kind.toString(16) + ' at offset ' + (offset - 1));
+                ctx.rect(x, y, w, h);
+              }
+              break;
             }
-            break;
-          }
 
-          case 0x30: // save
-            ctx.save();
-            scopes.push([fillPaint, strokePaint]);
-            break;
-
-          case 0x31: // restore
-            ctx.restore();
-            [fillPaint, strokePaint] = scopes.pop() || [null, null];
-            break;
-
-          case 0x40: // fill, with the fill paint over the box when there is one
-            if (fillPaint) drawVisualizePaint(ctx, 'fill', fillPaint, box);
-            else ctx.fill();
-            break;
-
-          case 0x41: // stroke
-            if (strokePaint) drawVisualizePaint(ctx, 'stroke', strokePaint, box);
-            else ctx.stroke();
-            break;
-
-          case 0x00: { // version (spec/09 §4.3.11)
-            const version = bytes[offset++];
-            if (version > 2) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
-            break;
-          }
-
-          case 0x50: { // paint: a gradient in box units, defined for the stream (§4.3.12)
-            const index = view.getUint16(offset, true);
-            const kind = bytes[offset + 2];
-            offset += 3;
-            if (kind !== 0x01 && kind !== 0x02) throw new Error('Unknown canvas binary paint kind 0x' + kind.toString(16) + ' at offset ' + (offset - 1));
-            const geometry = [];
-            for (let i = 0; i < (kind === 0x01 ? 4 : 3); i++, offset += 4) geometry.push(view.getFloat32(offset, true));
-            const stops = [];
-            const count = bytes[offset++];
-            for (let i = 0; i < count; i++, offset += 8) {
-              const r = bytes[offset + 4], g = bytes[offset + 5], b = bytes[offset + 6], a = bytes[offset + 7];
-              stops.push([view.getFloat32(offset, true), `rgba(${r},${g},${b},${a / 255})`]);
+            case 0x10: { // style
+              const flags = bytes[offset++];
+              if (flags & 0x01) { // fill colour
+                fillPaint = null;
+                const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
+                ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
+              }
+              if (flags & 0x02) { // stroke colour
+                strokePaint = null;
+                const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
+                ctx.strokeStyle = `rgba(${r},${g},${b},${a / 255})`;
+              }
+              if (flags & 0x04) { // stroke width, divided by the scale when it does not scale
+                const w = view.getFloat32(offset, true);
+                if (flags & 0x10) {
+                  const t = ctx.getTransform();
+                  ctx.lineWidth = w / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
+                } else {
+                  ctx.lineWidth = w;
+                }
+                offset += 4;
+              }
+              if (flags & 0x08) { // global alpha
+                ctx.globalAlpha = view.getFloat32(offset, true);
+                offset += 4;
+              }
+              if (flags & 0x20) { // version 2: the fill is a paint
+                fillPaint = paints[view.getUint16(offset, true)];
+                offset += 2;
+              }
+              if (flags & 0x40) { // version 2: the stroke is a paint
+                strokePaint = paints[view.getUint16(offset, true)];
+                offset += 2;
+              }
+              break;
             }
-            paints[index] = {kind: kind === 0x01 ? 'linear' : 'radial', geometry, stops};
-            break;
+
+            case 0x20: { // transform
+              const kind = bytes[offset++];
+              switch (kind) {
+                case 0x01: // translate
+                  ctx.translate(view.getFloat64(offset, true), view.getFloat64(offset + 8, true));
+                  offset += 16;
+                  break;
+                case 0x03: // translate then scale
+                  ctx.translate(view.getFloat64(offset, true), view.getFloat64(offset + 8, true));
+                  ctx.scale(view.getFloat64(offset + 16, true), view.getFloat64(offset + 24, true));
+                  offset += 32;
+                  break;
+                case 0xFF: // full matrix, composed onto the current transform
+                  ctx.transform(
+                    view.getFloat64(offset, true), view.getFloat64(offset + 8, true),
+                    view.getFloat64(offset + 16, true), view.getFloat64(offset + 24, true),
+                    view.getFloat64(offset + 32, true), view.getFloat64(offset + 40, true)
+                  );
+                  offset += 48;
+                  break;
+                default:
+                  throw new Error('Unknown canvas binary transform kind 0x' + kind.toString(16) + ' at offset ' + (offset - 1));
+              }
+              break;
+            }
+
+            case 0x30: // save
+              ctx.save();
+              scopes.push([fillPaint, strokePaint]);
+              break;
+
+            case 0x31: // restore
+              ctx.restore();
+              [fillPaint, strokePaint] = scopes.pop() || [null, null];
+              break;
+
+            case 0x40: // fill, with the fill paint over the box when there is one
+              if (fillPaint) drawVisualizePaint(ctx, 'fill', fillPaint, box);
+              else ctx.fill();
+              break;
+
+            case 0x41: // stroke
+              if (strokePaint) drawVisualizePaint(ctx, 'stroke', strokePaint, box);
+              else ctx.stroke();
+              break;
+
+            case 0x00: { // version (spec/09 §4.3.11)
+              const version = bytes[offset++];
+              if (version > 2) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
+              break;
+            }
+
+            case 0x50: { // paint: a gradient in box units or a hatch, defined for the stream (§4.3.12)
+              const index = view.getUint16(offset, true);
+              const kind = bytes[offset + 2];
+              offset += 3;
+              if (kind === 0x03) { // hatch: pattern, angle, spacing, width, colour, ground
+                const pattern = ['lines', 'crosshatch', 'dots'][bytes[offset] - 1];
+                if (!pattern) throw new Error('Unknown canvas binary hatch pattern 0x' + bytes[offset].toString(16) + ' at offset ' + offset);
+                const f = (i) => view.getFloat32(offset + 1 + 4 * i, true);
+                const c = (o) => `rgba(${bytes[o]},${bytes[o + 1]},${bytes[o + 2]},${bytes[o + 3] / 255})`;
+                const ground = bytes[offset + 20] === 0 ? null : c(offset + 17);
+                paints[index] = {kind: 'hatch', args: [pattern, f(0), f(1), f(2), c(offset + 13), ground]};
+                offset += 21;
+                break;
+              }
+              if (kind !== 0x01 && kind !== 0x02) throw new Error('Unknown canvas binary paint kind 0x' + kind.toString(16) + ' at offset ' + (offset - 1));
+              const geometry = [];
+              for (let i = 0; i < (kind === 0x01 ? 4 : 3); i++, offset += 4) geometry.push(view.getFloat32(offset, true));
+              const stops = [];
+              const count = bytes[offset++];
+              for (let i = 0; i < count; i++, offset += 8) {
+                const r = bytes[offset + 4], g = bytes[offset + 5], b = bytes[offset + 6], a = bytes[offset + 7];
+                stops.push([view.getFloat32(offset, true), `rgba(${r},${g},${b},${a / 255})`]);
+              }
+              paints[index] = {kind: kind === 0x01 ? 'linear' : 'radial', geometry, stops};
+              break;
+            }
+
+            case 0x51: // box: what the next draw's paint is built over (§4.3.13)
+              box = [view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
+                     view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true)];
+              offset += 16;
+              break;
+
+            default:
+              throw new Error('Unknown canvas binary opcode 0x' + cmd.toString(16) + ' at offset ' + (offset - 1));
           }
-
-          case 0x51: // box: what the next draw's paint is built over (§4.3.13)
-            box = [view.getFloat32(offset, true), view.getFloat32(offset + 4, true),
-                   view.getFloat32(offset + 8, true), view.getFloat32(offset + 12, true)];
-            offset += 16;
-            break;
-
-          default:
-            throw new Error('Unknown canvas binary opcode 0x' + cmd.toString(16) + ' at offset ' + (offset - 1));
         }
-      }
 
-      return offset;
-    }
-    """
+        return offset;
+      }
+      """
+  end
+
+  # A hatch's CanvasPattern as ctx[target + 'Style'] (spec/10 §8.1, #673): the tile source the
+  # server writes into a `:js` script, `Visualize.Backend.Canvas.hatch_js/0`, so the two never
+  # draw different tiles.
+  defp pattern_js do
+    "    export function visualizePattern(ctx, target, pattern, angle, spacing, width, colour, background) {\n" <>
+      "      ctx[target + 'Style'] = (" <>
+      Visualize.Backend.Canvas.hatch_js() <>
+      ")(ctx, pattern, angle, spacing, width, colour, background);\n    }\n\n"
   end
 
   @doc """

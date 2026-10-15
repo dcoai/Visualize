@@ -999,8 +999,8 @@ defmodule Visualize.Chart.Validator do
   defp check(:string, v, _path, _ctx) when is_binary(v), do: []
   defp check(type, _v, path, _ctx), do: [{path, {:type, type}}]
 
-  # A declared paint's own faults beside its keys' types: no type, a type that is not a
-  # gradient, no stops (spec/14 §2.7). A variable stands for what application gives.
+  # A declared paint's own faults beside its keys' types: no type, a type that is neither a
+  # gradient nor a hatch, a gradient with no stops (spec/14 §2.7, #673). A variable stands for what application gives.
   defp gradient(paint, path) do
     type =
       case Map.fetch(paint, :type) do
@@ -1010,18 +1010,22 @@ defmodule Visualize.Chart.Validator do
         {:ok, %Var{}} ->
           []
 
-        {:ok, t} when t in [:linear, :radial] ->
+        {:ok, t} when t in [:linear, :radial, :hatch] ->
           []
 
         # A paint's other types are named here; anything else is the paint's own enum fault.
         {:ok, t} when t in [:none, :solid, :paint] ->
-          [{path ++ [:type], {:enum, [:linear, :radial]}}]
+          [{path ++ [:type], {:enum, [:linear, :radial, :hatch]}}]
 
         {:ok, _other} ->
           []
       end
 
-    stops = if Map.has_key?(paint, :stops), do: [], else: [{path ++ [:stops], :required}]
+    stops =
+      if Map.has_key?(paint, :stops) or Map.get(paint, :type) == :hatch,
+        do: [],
+        else: [{path ++ [:stops], :required}]
+
     type ++ stops
   end
 

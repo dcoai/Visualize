@@ -7,7 +7,7 @@ defmodule Visualize.Chart.Validator.Units do
   alias Visualize.Units
 
   # The keys whose size has no box a percentage could be of.
-  @boxless %{stroke: [:width, :dash], effect: [:radius]}
+  @boxless %{stroke: [:width, :dash], effect: [:radius], paint: [:spacing, :width]}
 
   @doc false
   # The faults of a value at a `:size` or a `:length` position (spec/14 §1.4): none for a

@@ -557,6 +557,20 @@ defmodule Visualize.Backend.CanvasBinary do
       Enum.flat_map(children, &paints/1)
   end
 
+  # A hatch (#673): the pattern, the angle, spacing and width, then its colour and its ground,
+  # a ground of alpha 0 being none; no stops.
+  defp paint_record({%Paint{type: :hatch, geometry: g} = paint, index}) do
+    pattern = Map.fetch!(%{lines: 0x01, crosshatch: 0x02, dots: 0x03}, g.pattern)
+    {r, gr, b, a} = Paint.rgba({0, paint.color, 1})
+
+    {br, bg, bb, ba} =
+      if paint.background, do: Paint.rgba({0, paint.background, 1}), else: {0, 0, 0, 0}
+
+    <<Opcodes.paint()::8, index::little-16, 0x03::8, pattern::8, g.angle::little-float-32,
+      g.spacing::little-float-32, g.width::little-float-32, r::8, gr::8, b::8, a::8, br::8, bg::8,
+      bb::8, ba::8>>
+  end
+
   defp paint_record({%Paint{type: type, geometry: g} = paint, index}) do
     {kind, geometry} =
       case type do

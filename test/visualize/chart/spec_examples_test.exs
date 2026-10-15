@@ -100,6 +100,7 @@ defmodule Visualize.Chart.SpecExamplesTest do
   # rather than covered or skipped without anyone saying so.
   @evaluated [
     {"3.1 Keys: a style in compound parts", 1},
+    {"3.1 Keys: a style in compound parts", 2},
     {"3.6 Composition at a site: the style stack", 1},
     {"3.6 Composition at a site: the style stack", 2},
     {"3.8 Defaults: inherited by container and mark kind", 1},

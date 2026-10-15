@@ -10,16 +10,26 @@ defmodule Visualize.Chart.Frame.Defs do
 
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.IR.{Element, Paint}
+  alias Visualize.Units
+
+  # A hatch's angle when it gives none; the schema's `180` is a linear gradient's (spec/14
+  # §3.1).
+  @hatch_angle 45
 
   @doc false
-  # The `defs` element holding the design's gradients and the filters the tree's effects
-  # need, or `[]` with neither.
-  @spec defs(map(), atom(), Element.t()) :: [Element.t()]
-  def defs(%{defs: defs, theme: theme}, mode, tree) do
+  # The `defs` element holding the design's paints and the filters the tree's effects need,
+  # or `[]` with neither. A declared paint is always declared; one written in place (a
+  # string name) only when the tree draws it — the theme's palette is among the styles it
+  # was found in — unless `all: true`, for a compiled chart whose later ticks may draw
+  # what this one did not (spec/14 §2.7, #673).
+  @spec defs(map(), atom(), Element.t(), keyword()) :: [Element.t()]
+  def defs(%{defs: defs, theme: theme}, mode, tree, opts \\ []) do
     prefix = prefix(defs)
+    drawn = if Keyword.get(opts, :all, false), do: :all, else: drawn(tree)
 
     gradients =
-      for {name, node} <- Enum.sort_by(defs, fn {name, _} -> name end) do
+      for {name, node} <- Enum.sort_by(defs, fn {name, _} -> name end),
+          is_atom(name) or drawn == :all or MapSet.member?(drawn, id(prefix, name)) do
         node |> paint(id(prefix, name), theme, mode) |> Paint.definition()
       end
 
@@ -27,6 +37,12 @@ defmodule Visualize.Chart.Frame.Defs do
       [] -> []
       children -> [Element.defs(children)]
     end
+  end
+
+  # The ids of the paints the tree's styles draw.
+  defp drawn(%Element{style: style, children: children}) do
+    own = for %Paint{id: id} <- [style[:fill], style[:stroke]], into: MapSet.new(), do: id
+    Enum.reduce(children, own, &MapSet.union(drawn(&1), &2))
   end
 
   # One filter per {effect, radius} pair any style in the tree carries (spec/14 §2.7).
@@ -89,6 +105,14 @@ defmodule Visualize.Chart.Frame.Defs do
   @spec literal(atom() | String.t(), map()) :: String.t() | nil
   def literal(name, %{defs: defs, theme: theme}) do
     case Map.fetch(defs, name) do
+      # A hatch's ground is what a text over it is read against; with none, nothing is
+      # under the text but the page (spec/14 §5.5, #673).
+      {:ok, %{type: :hatch} = node} ->
+        case Map.get(node, :background) do
+          background when background in [nil, :none] -> nil
+          background -> Style.colour(background, theme, :literal)
+        end
+
       {:ok, node} ->
         [first | _] = stops(node)
         Style.colour(colour(first), theme, :literal)
@@ -102,6 +126,31 @@ defmodule Visualize.Chart.Frame.Defs do
 
   # The node as the paint every backend draws: its geometry in box units derived from the
   # words a person wrote (spec/14 §2.7), its stops' colours resolved for the mode.
+  defp paint(%{type: :hatch} = node, id, theme, mode) do
+    size = fn key ->
+      Units.resolve(Map.get(node, key, Schema.default(:paint, key)), %{em: theme.font_size})
+    end
+
+    background =
+      case Map.get(node, :background) do
+        background when background in [nil, :none] -> nil
+        background -> Style.colour(unvar(background), theme, mode)
+      end
+
+    %Paint{
+      id: id,
+      type: :hatch,
+      geometry: %{
+        pattern: Map.get(node, :pattern, Schema.default(:paint, :pattern)),
+        angle: Map.get(node, :angle, @hatch_angle),
+        spacing: size.(:spacing),
+        width: size.(:width)
+      },
+      color: Style.colour(unvar(Map.fetch!(node, :color)), theme, mode),
+      background: background
+    }
+  end
+
   defp paint(node, id, theme, mode) do
     stops =
       for stop <- stops(node) do
@@ -130,12 +179,10 @@ defmodule Visualize.Chart.Frame.Defs do
     end
   end
 
-  defp colour(stop) do
-    case Map.fetch!(stop, :color) do
-      %Var{name: name} -> Style.unresolved!(name)
-      colour -> colour
-    end
-  end
+  defp colour(stop), do: unvar(Map.fetch!(stop, :color))
+
+  defp unvar(%Var{name: name}), do: Style.unresolved!(name)
+  defp unvar(value), do: value
 
   # A coordinate rounded to what the angle means, so 180° is exactly top to bottom.
   defp tidy(n), do: Float.round(n * 1.0, 4)

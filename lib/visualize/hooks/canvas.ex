@@ -74,6 +74,9 @@ defmodule Visualize.Hooks.Canvas do
               // A stroke that keeps its width on screen (spec/09 §3.3.3).
               const t = ctx.getTransform();
               ctx.lineWidth = args[0] / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
+            } else if (cmd === 'hatchPattern') {
+              // A hatch's pattern (spec/09 §3.3.3, #673): target, then the hatch.
+              visualizePattern(ctx, ...args);
             } else if (cmd === 'linearGradient' || cmd === 'radialGradient') {
               // A gradient in user units (spec/09 §3.3.3, #652): target, geometry, stops.
               const [target, ...rest] = args;
