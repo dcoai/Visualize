@@ -2139,3 +2139,9 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Builder goldens change where a style form is drawn; chart goldens do not.
 - A gradient written by the builder is a paint in place (§3.2), not a `defs` entry named for the style.
 - #683–#686 build on the form: the color picker and its transform chain, units and the defaults editor, the palette panel, the stack editor and explain in the inspector.
+
+**Amended by #683** (work item 2 of #655). **A color is picked by name and built as a chain.**
+- **The chooser's patches are the theme's color table by name**, grouped by use — series, roles, furniture, the theme's own colors, the CSS names folded — each in the color the theme gives it. A name picked writes `color(:name)`, the typed form (D-173), never a bare atom.
+- **A typed transform is a chain**: a base and the steps applied to it, in the order they read in a pipe, each previewed as the color reached so far through the design's theme. Steps are added at the end, changed and removed one at a time; `blend` makes the color the first operand of a blend, whose operands are chains of their own at their paths.
+- **A picked color replaces the base and keeps the steps**, so a person changes the hue of `color(:red) |> shade(700) |> alpha(0.8)` without rebuilding it.
+- *Rejected:* a text box for the color expression. It is the term a person would have to learn to spell, and the reader would need a second grammar; the chain is the term, shown and built by its parts. *Rejected:* inserting steps anywhere. Order matters in a pipe; appending and removing say every pipe there is, one gesture at a time.
