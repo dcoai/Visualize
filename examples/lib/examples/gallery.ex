@@ -61,7 +61,10 @@ defmodule Examples.Gallery do
     {Examples.Charts.Downsampling, "downsampling"},
     # Streaming: a viewport on x, so the drawer offers Incremental (#327, #402)
     {Examples.Charts.ScrollingSeries, "scrolling_series"},
-    {Examples.Charts.IncrementalLine, "incremental_line"}
+    {Examples.Charts.IncrementalLine, "incremental_line"},
+    # The style grammar of 0.7.0 (#705): typed colors and their transforms, paints
+    {Examples.Charts.ColorsChart, "colors"},
+    {Examples.Charts.PaintsChart, "paints"}
   ]
 
   @by_slug Map.new(@charts, fn {module, slug} -> {slug, module} end)

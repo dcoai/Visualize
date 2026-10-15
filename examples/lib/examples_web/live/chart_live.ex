@@ -51,7 +51,9 @@ defmodule ExamplesWeb.ChartLive do
     "globe",
     "gps_track",
     "hexbin",
-    "spectrum"
+    "spectrum",
+    "colors",
+    "paints"
   ]
 
   # The page's own state — what the viewer chose about the page, kept from chart to chart
@@ -117,6 +119,8 @@ defmodule ExamplesWeb.ChartLive do
       neighbors: Gallery.neighbors(chart_slug),
       animatable: chart_slug in @animatable_charts,
       hex_radius: 20,
+      # The chart's own panels (spec/14 §12.6, #705), each with its state, made afresh.
+      panels: ExamplesWeb.ChartPanels.init(module),
       # The still chart (#362): the last frame rendered outside a run — on mount and on
       # a palette, backend or hex-size change — in a task, with the design as data.
       still_frame: nil,
@@ -230,6 +234,10 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   def handle_event("resize", _params, socket), do: {:noreply, socket}
+
+  # A panel's own event (spec/14 §12.6, #705): the panel the params name takes it.
+  def handle_event("chart_panel", params, socket),
+    do: {:noreply, update(socket, :panels, &ExamplesWeb.ChartPanels.event(&1, params))}
 
   def handle_event("change_palette", %{"palette" => palette_key}, socket) do
     palette =
@@ -1047,6 +1055,9 @@ defmodule ExamplesWeb.ChartLive do
           points={points_info(assigns)}
           frames={frames_info(assigns)}
         />
+
+        <%!-- The chart's own panels, when its module names any (spec/14 §12.6, #705). --%>
+        <ExamplesWeb.ChartPanels.panels panels={@panels} slug={@slug} />
 
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@run_backend) %></h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
