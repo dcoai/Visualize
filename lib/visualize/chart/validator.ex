@@ -18,24 +18,20 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
+  alias Visualize.Chart.{Migration, Schema, Urls, Var}
 
   alias Visualize.Chart.Validator.{
-    Colors,
+    Context,
+    Cycles,
     Defaults,
     Domain,
-    Frames,
     Generators,
+    Held,
     Palette,
+    Types,
     Units,
     Words
   }
-
-  alias Visualize.Data.Schema, as: FeedSchema
-  alias Visualize.Theme
-
-  # The motion parts' node kinds, whose times and names Validator.Motion checks (spec/14 §3.10).
-  @motion_kinds Visualize.Chart.Validator.Motion.kinds()
 
   @typedoc """
   Keys and list indexes from the design to a value; `[]` is the design. A path into a
@@ -96,21 +92,6 @@ defmodule Visualize.Chart.Validator do
 
   @type error :: {path(), reason()}
 
-  @frame_anchors [:title, :subtitle, :caption]
-  @typed_colours [
-    :color,
-    :intensity,
-    :alpha,
-    :lighten,
-    :darken,
-    :saturate,
-    :shade,
-    :blend,
-    :contrast
-  ]
-  # The plot's four corners and its centre (spec/14 §6.3, #489).
-  @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
-  @not_names [nil, true, false]
   # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
   @style_kinds ~w(style defaults kind_defaults paint stroke font text_layout effect marker curve)a
 
@@ -148,9 +129,9 @@ defmodule Visualize.Chart.Validator do
     map = Migration.parts(map, :design)
     # The registry is built only for a design that names a generator (spec/14 §3.13).
     registry = if Generators.present?(map), do: Visualize.Generators.registry(modules), else: %{}
-    ctx = context(map) |> Map.put(:urls, urls) |> Map.put(:generators, registry)
+    ctx = Context.context(map) |> Map.put(:urls, urls) |> Map.put(:generators, registry)
 
-    case node(:design, map, [], ctx) ++ cycles(map) ++ Domain.faults(map) do
+    case node(:design, map, [], ctx) ++ Cycles.cycles(map) ++ Domain.faults(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
@@ -224,37 +205,23 @@ defmodule Visualize.Chart.Validator do
   defp as_kind(kind, body) do
     case Schema.key(:design, kind) do
       nil when is_map(body) and not is_struct(body) ->
-        node(kind, Migration.parts(body, kind), [kind], open_context())
+        node(kind, Migration.parts(body, kind), [kind], Context.open())
 
       nil ->
         [{[kind], {:type, {:node, kind}}}]
 
       spec ->
         body = Map.fetch!(Migration.parts(%{kind => body}, :design), kind)
-        check_key(:design, spec, body, [kind], open_context())
+        check_key(:design, spec, body, [kind], Context.open())
     end
-  end
-
-  defp open_context do
-    %{
-      context(%{})
-      | scales: :unknown,
-        frame_kind: :unknown,
-        styles: :unknown,
-        paints: :unknown,
-        sources: :unknown,
-        vars: :unknown,
-        slots: :unknown,
-        colors: :unknown,
-        partial?: true
-    }
   end
 
   @doc false
   # A value checked as `type` in a fragment's context with `known` laid over it (§19.8):
   # what a generator's result is held to (`Visualize.Chart.Validator.Generators`).
   @spec check_open(Schema.type(), term(), map()) :: [error()]
-  def check_open(type, value, known), do: check(type, value, [], Map.merge(open_context(), known))
+  def check_open(type, value, known),
+    do: Types.check(type, value, [], Map.merge(Context.open(), known))
 
   @doc "One error as `path: reason` in words; the path in `marks[1].channels.y` form."
   @spec format(error()) :: String.t()
@@ -281,134 +248,14 @@ defmodule Visualize.Chart.Validator do
     end)
   end
 
-  # -- style derivation (spec/14 §3.5) --------------------------------------------------
-
-  # A style that reaches itself — through `extends`, a name or a list (spec/14 §3.5, §3.6,
-  # #658) — is `:cycle` at its own path; a style that merely reaches one that is on a cycle
-  # is not at fault and is not reported.
-  defp cycles(map) do
-    case map[:styles] do
-      styles when is_map(styles) and not is_struct(styles) ->
-        for {name, _node} <- styles,
-            name?(name),
-            reaches?(styles, refs(Map.get(styles, name)), name, []),
-            do: {[:styles, name], :cycle}
-
-      _other ->
-        []
-    end
-  end
-
-  defp reaches?(styles, names, target, seen) do
-    Enum.any?(names, fn
-      ^target ->
-        true
-
-      name ->
-        name not in seen and reaches?(styles, refs(Map.get(styles, name)), target, [name | seen])
-    end)
-  end
-
-  # The style names an entry refers to: itself as a name, a list's entries, an `extends`.
-  defp refs(entries) when is_list(entries), do: Enum.flat_map(entries, &refs/1)
-  defp refs(%{extends: parent} = node) when not is_struct(node), do: refs(parent)
-  defp refs(name) when is_atom(name), do: if(name?(name), do: [name], else: [])
-  defp refs(_entry), do: []
-
-  # -- context: what the design declares -----------------------------------------------
-
-  defp context(map) do
-    frames = if is_map(map[:frames]), do: map[:frames], else: %{}
-    one = if map_size(frames) == 1, do: frames |> Map.values() |> hd()
-    theme = known_theme(Map.get(map, :theme, Schema.default(:design, :theme)))
-
-    %{
-      # A scale name resolves inside a mark's *own* frame (spec/14 §5.1, #383): the
-      # design-level context is the single frame's where there is one, and `enter(:mark)`
-      # narrows it to the frame the mark names where there are several.
-      layout: if(is_map(map[:layout]), do: map[:layout], else: nil),
-      frames: declared(map[:frames]),
-      frame_nodes: frames,
-      scales: declared(one && nested(one, [:scales])),
-      frame_kind: one && nested(one, [:kind]),
-      frame_node: one,
-      # A style reference reaches the design's styles, then the theme's palette (spec/14
-      # §3.3, #637): a theme the validator cannot see says how many style series it has.
-      styles: union(declared(map[:styles]), Palette.names(theme)),
-      open_series: theme == :unknown,
-      paints: declared(map[:defs] || %{}),
-      sources: source_fields(map[:sources]),
-      vars: declared(map[:vars]),
-      slots: theme_slots(theme),
-      colors: theme_colors(theme),
-      mark_type: nil,
-      op: nil,
-      transform_keys: [],
-      fields: :unknown,
-      datum?: false,
-      channel_keys: [],
-      partial?: false,
-      # The registry generator names are checked against (spec/14 §3.13): a design's is
-      # given, a fragment's is not known, and where no generator goes it is `:refused`.
-      generators: :unknown
-    }
-  end
-
-  defp nested(map, []), do: map
-  defp nested(map, [k | rest]) when is_map(map) and not is_struct(map), do: nested(map[k], rest)
-  defp nested(_, _), do: nil
-
-  # What a design declares under a key: the names of the map, the empty set when the key is
-  # absent (D-113) — a reference into it is then undeclared, never unchecked — and unknown
-  # only for a value that is not a map, which is a type fault of its own.
-  defp declared(map) when is_map(map) and not is_struct(map) do
-    map |> Map.keys() |> Enum.filter(&name?/1) |> MapSet.new()
-  end
-
-  defp declared(nil), do: MapSet.new()
-  defp declared(_), do: :unknown
-
-  defp union(:unknown, _), do: :unknown
-  defp union(set, more), do: MapSet.union(set, MapSet.new(more))
-
-  defp source_fields(map) when is_map(map) and not is_struct(map) do
-    Map.new(map, fn
-      {name, %{fields: fields}} when is_list(fields) -> {name, fields}
-      {name, _} -> {name, :unknown}
-    end)
-  end
-
-  defp source_fields(nil), do: %{}
-  defp source_fields(_), do: :unknown
-
-  # The theme the validator can see: a built-in one, or an inline one that is whole and
-  # valid — a variable in it is resolved at application, and an invalid one is already
-  # reported on its keys. Its slots and its palette names are what references are checked
-  # against (spec/14 §2.5, §3.2, §3.3); any other theme is `:unknown`.
-  defp known_theme(name) when is_atom(name) and name not in @not_names,
-    do: Theme.builtin(name) || :unknown
-
-  defp known_theme(map) when is_map(map) and not is_struct(map) do
-    variable? = Enum.any?(map, fn {_, v} -> is_struct(v, Var) end)
-
-    case node(:theme, map, [], %{open_context() | vars: :unknown}) do
-      [] when not variable? -> Theme.new(map)
-      _ -> :unknown
-    end
-  end
-
-  defp known_theme(_), do: :unknown
-
-  defp theme_slots(:unknown), do: :unknown
-  defp theme_slots(theme), do: MapSet.new(Theme.slots(theme))
-
-  defp theme_colors(:unknown), do: :unknown
-  defp theme_colors(theme), do: MapSet.new(Theme.color_names(theme))
-
   # -- nodes ----------------------------------------------------------------------------
 
-  defp node(kind, map, path, ctx) do
-    ctx = enter(kind, map, ctx)
+  @doc false
+  # A node of `kind` at `path`: its unknown keys, its missing required ones, each present
+  # key's own faults, then what its keys owe each other (`Validator.Held`).
+  @spec node(atom(), map(), path(), map()) :: [error()]
+  def node(kind, map, path, ctx) do
+    ctx = Context.enter(kind, map, ctx)
     specs = specs(kind, ctx)
     known = Enum.map(specs, & &1.key)
 
@@ -426,258 +273,8 @@ defmodule Visualize.Chart.Validator do
         check_key(kind, s, Map.fetch!(map, s.key), path ++ [s.key], ctx)
       end
 
-    unknown ++ missing ++ List.flatten(present) ++ held(kind, map, path, ctx)
+    unknown ++ missing ++ List.flatten(present) ++ Held.held(kind, map, path, ctx)
   end
-
-  # What a node's keys owe each other: a source's `types` and `requires` name only its
-  # `fields` (§2.3, §7.4).
-  defp held(:source, %{fields: fields} = source, path, _ctx) when is_list(fields) do
-    for key <- [:types, :requires],
-        names = Map.get(source, key),
-        is_map(names) and not is_struct(names),
-        {name, _value} <- names,
-        name?(name),
-        name not in fields,
-        do: {path ++ [key, name], {:undeclared, :field, name}}
-  end
-
-  # An inline theme's ramps, colors and palette entries hold their contracts (spec/08 §7.5,
-  # §7.7, D-135, D-171): measured once the keys they are read with are well typed, so a
-  # type fault is not reported twice, and only the first breach, as construction refuses
-  # at the first.
-  defp held(:theme, map, path, _ctx) do
-    with ramps when is_map(ramps) <- Map.get(map, :ramps, %{}),
-         colors when is_map(colors) <- Map.get(map, :colors, %{}),
-         styles when is_map(styles) and not is_struct(styles) <- Map.get(map, :styles, %{}),
-         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &Colors.anchor?/1) end),
-         true <-
-           Enum.all?(colors, fn {_, v} ->
-             is_binary(v) or is_map(v) or Visualize.Color.value?(v)
-           end),
-         true <- Enum.all?(styles, fn {_, v} -> is_map(v) and not is_struct(v) end),
-         theme = Theme.build(Theme.default(), Colors.measured(map)),
-         {:error, {kind, name}, message} <- Theme.check(theme) do
-      [{path ++ [plural(kind), name], {:contract, message}}]
-    else
-      _ -> []
-    end
-  end
-
-  # A layout's weights are positive: a cell of no width is not a cell (spec/14 §2.8, #384).
-  defp held(:layout, map, path, _ctx) do
-    for key <- [:columns, :rows],
-        weights = Map.get(map, key),
-        is_list(weights),
-        not Enum.all?(weights, &(is_number(&1) and &1 > 0)),
-        do: {path ++ [key], {:weight, key}}
-  end
-
-  # A sync group and the design's brush read a linear or a time x of a cartesian frame
-  # (spec/14 §2.9, D-116, D-143): the hooks map a value by linear interpolation, which is
-  # that scale and no other.
-  defp held(:interaction, map, path, ctx) do
-    for {key, given?} <- [sync: is_binary(Map.get(map, :sync)), brush: Map.get(map, :brush) == :x],
-        given?,
-        fault <- Frames.linear_x(Map.get(map, :frame), ctx.frame_nodes),
-        do: {path ++ [key], Tuple.insert_at(fault, 0, key)}
-  end
-
-  # A frame says where it goes once (spec/14 §4.2, §2.8, #384): its box, or its cell on
-  # the design's grid, and a cell stays inside that grid.
-  defp held(:frame, %{box: _box, cell: _cell}, path, _ctx), do: [{path, :both}]
-
-  defp held(:frame, %{cell: cell} = frame, path, ctx) when is_list(cell) do
-    if inside?(cell, Map.get(frame, :span), ctx.layout),
-      do: [],
-      else: [{path ++ [:cell], :outside}]
-  end
-
-  # A needle is a polar frame's mark (spec/14 §5.2, #392): elsewhere its type is invalid.
-  defp held(:mark, %{type: :needle}, path, %{frame_kind: kind})
-       when kind not in [:polar, :unknown],
-       do: [{path ++ [:type], {:invalid_for, :needle}}]
-
-  # A basemap lies under a tile-aligned Mercator projection only (spec/14 §5.2, spec/07
-  # §8.1), and its provider's node belongs to it alone.
-  defp held(:mark, %{type: :tiles}, path, ctx),
-    do: Frames.tiles_frame(ctx.frame_node, path ++ [:type])
-
-  defp held(:mark, %{type: type, tiles: _}, path, _ctx) when is_atom(type),
-    do: [{path ++ [:tiles], {:invalid_for, type}}]
-
-  defp held(:tiles, map, path, ctx) do
-    attribution =
-      case Map.get(map, :attribution) do
-        text when is_binary(text) ->
-          if String.trim(text) == "",
-            do: [{path ++ [:attribution], {:tiles, :attribution}}],
-            else: []
-
-        _other ->
-          []
-      end
-
-    url =
-      case Map.get(map, :url) do
-        url when is_binary(url) ->
-          missing? = not Enum.all?(["{z}", "{x}", "{y}"], &String.contains?(url, &1))
-          empty? = String.contains?(url, "{s}") and Map.get(map, :subdomains) == []
-
-          if(missing?, do: [{path ++ [:url], {:tiles, :url}}], else: []) ++
-            if(empty?, do: [{path ++ [:subdomains], {:tiles, :subdomains}}], else: [])
-
-        _other ->
-          []
-      end
-
-    attribution ++ url ++ policy(map, path, ctx)
-  end
-
-  defp held(:scale, map, path, _ctx) do
-    sweep(map, path) ++ zone(map, path) ++ colour_map(map, path) ++ polarity(map, path)
-  end
-
-  defp held(:axis, %{radius: radius}, path, _ctx) when is_number(radius) and radius <= 0,
-    do: [{path ++ [:radius], :radius}]
-
-  # An axis's measure is a UCUM code Visualize.Unit reads and a quantity of its dimension
-  # (spec/14 §4.4, §10.1, D-138). Only values of the right type are checked: a wrong type
-  # or quantity is the type check's fault, and a variable is checked once it is bound.
-  defp held(:measure, measure, path, _ctx) do
-    typed =
-      Map.filter(measure, fn
-        {:unit, unit} -> is_binary(unit)
-        {:quantity, quantity} -> quantity in Visualize.Quantity.all()
-        _other -> false
-      end)
-
-    case Visualize.Quantity.resolve(typed) do
-      {:ok, _resolved} -> []
-      {:error, {:unit, code, reason}} -> [{path ++ [:unit], {:unit, code, reason}}]
-      {:error, {:quantity, _quantity, _code} = reason} -> [{path ++ [:quantity], reason}]
-    end
-  end
-
-  defp held(kind, map, path, _ctx) when kind in @motion_kinds,
-    do: Visualize.Chart.Validator.Motion.check(map, path)
-
-  # A color generator draws a solid paint: a gradient's colors are its stops, which the frame
-  # holds in its `defs` before it draws (spec/14 §3.13).
-  defp held(kind, %{type: type, color: {:generate, _, _}}, path, _ctx)
-       when kind in [:paint, :stroke] and type != :solid,
-       do: [{path ++ [:color], {:invalid_for, type}}]
-
-  defp held(_kind, _map, _path, _ctx), do: []
-
-  # The angle scale's sweep is a turn at most and never nothing; an axis's radius is
-  # positive (spec/14 §4.3, §4.4, #390).
-  defp sweep(%{sweep: sweep}, path) when is_number(sweep) and (sweep == 0 or abs(sweep) > 360),
-    do: [{path ++ [:sweep], :sweep}]
-
-  defp sweep(_scale, _path), do: []
-
-  # A time scale's zone is one the host's time zone database can show (spec/14 §4.3, §10.1,
-  # #447): a host without a database, or a name it does not know, is refused by name
-  # rather than drawn in UTC (D-115).
-  defp zone(%{kind: :time, zone: zone}, path) when is_binary(zone) do
-    case Visualize.Scale.Time.check_zone(zone) do
-      :ok -> []
-      {:error, reason} -> [{path ++ [:zone], {:zone, zone, reason}}]
-    end
-  end
-
-  defp zone(_scale, _path), do: []
-
-  # A map of colours is an ordinal scale's range (spec/14 §4.3, D-143): it pins categories,
-  # and a continuous scale has none.
-  defp colour_map(%{kind: kind, range: %{} = range}, path)
-       when is_atom(kind) and kind != :ordinal and not is_struct(range),
-       do: [{path ++ [:range], {:colour_map, kind}}]
-
-  defp colour_map(_scale, _path), do: []
-
-  # Polarity orders a ramp (spec/14 §4.3, D-143) — a `{:ramp, name}` range, or the `:auto`
-  # range of a sequential or a diverging scale, which is its theme ramp; a list or a map
-  # already says each colour.
-  defp polarity(%{polarity: polarity} = scale, path) when is_atom(polarity) and polarity != nil do
-    case {Map.get(scale, :kind), Map.get(scale, :range, :auto)} do
-      {_kind, {:ramp, _name}} -> []
-      {kind, :auto} when kind in [:sequential, :diverging] -> []
-      {_kind, %Var{}} -> []
-      {_kind, %Fact{}} -> []
-      _other -> [{path ++ [:polarity], {:polarity, :range}}]
-    end
-  end
-
-  defp polarity(_scale, _path), do: []
-
-  defp enter(:mark, map, ctx) do
-    type = map[:type]
-
-    ctx
-    |> in_frame(map[:frame])
-    |> Map.merge(%{
-      mark_type: if(type in Schema.mark_types(), do: type),
-      fields: mark_fields(map[:data], ctx),
-      datum?: true
-    })
-  end
-
-  defp enter(:label, map, ctx), do: %{in_frame(ctx, map[:frame]) | datum?: false}
-
-  # A generator is a site's and its styles' (spec/14 §3.13): a theme and a defaults node are
-  # laid without a frame to call it.
-  defp enter(kind, _map, ctx) when kind in [:theme, :defaults, :kind_defaults],
-    do: %{ctx | generators: :refused}
-
-  defp enter(:channels, map, ctx), do: %{ctx | channel_keys: Map.keys(map)}
-
-  defp enter(:transform, map, ctx) do
-    op = map[:op]
-    %{ctx | op: if(op in Schema.transform_ops(), do: op), transform_keys: Map.keys(map)}
-  end
-
-  # Inside a frame, a scale name is that frame's (spec/14 §4.3, #383): its axes and its
-  # legend read the scales it declares, whatever the design's other frames declare.
-  defp enter(:frame, map, ctx) do
-    %{ctx | scales: declared(map[:scales]), frame_kind: map[:kind]}
-  end
-
-  defp enter(:fit, map, ctx),
-    do: %{ctx | transform_keys: Map.keys(map), fields: fields_of(map[:data], ctx)}
-
-  defp enter(_kind, _map, ctx), do: ctx
-
-  # The scales and the kind a node's scale references resolve against: its own frame's
-  # where it names one, the design-level context's otherwise (spec/14 §5.1, §6.1).
-  defp in_frame(ctx, nil), do: ctx
-
-  defp in_frame(%{frame_nodes: frames} = ctx, name) when is_map_key(frames, name) do
-    node = Map.fetch!(frames, name)
-
-    %{
-      ctx
-      | scales: declared(nested(node, [:scales])),
-        frame_kind: nested(node, [:kind]),
-        frame_node: node
-    }
-  end
-
-  defp in_frame(ctx, _name), do: ctx
-
-  defp mark_fields(name, ctx) when is_atom(name), do: fields_of(name, ctx)
-
-  defp mark_fields(%{source: name} = data, ctx) when is_map(data) do
-    case Map.get(data, :transforms, []) do
-      [] -> fields_of(name, ctx)
-      _ -> :unknown
-    end
-  end
-
-  defp mark_fields(_, _), do: :unknown
-
-  defp fields_of(_, %{sources: :unknown}), do: :unknown
-  defp fields_of(name, %{sources: sources}), do: Map.get(sources, name, :unknown)
 
   # The channels and options a mark type reads; every key, none required, when the type
   # is unknown (its own error is reported on `type`).
@@ -801,12 +398,12 @@ defmodule Visualize.Chart.Validator do
   # A style value may be a channel binding for any key (spec/14 §3.2); the version must
   # be the one this library writes (spec/14 §9).
   defp check_key(kind, _spec, {:field, _} = ref, path, ctx) when kind in @style_kinds,
-    do: check(:field_ref, ref, path, ctx)
+    do: Types.check(:field_ref, ref, path, ctx)
 
   # A color generator (spec/14 §3.13): a paint's `color` and an effect's.
   defp check_key(kind, %{key: :color}, {:generate, _, _} = call, path, ctx)
        when kind in [:paint, :stroke, :effect],
-       do: generator(call, path, ctx, :colour)
+       do: Types.generator(call, path, ctx, :colour)
 
   defp check_key(:design, %{key: :version}, v, path, _ctx) when is_integer(v) do
     cond do
@@ -822,10 +419,10 @@ defmodule Visualize.Chart.Validator do
        when is_map(defs) and not is_struct(defs) do
     gradients =
       for {name, paint} <- defs, is_map(paint) and not is_struct(paint), at = path ++ [name] do
-        gradient(paint, at)
+        Types.gradient(paint, at)
       end
 
-    check(spec.type, defs, path, %{ctx | generators: :refused}) ++ List.flatten(gradients)
+    Types.check(spec.type, defs, path, %{ctx | generators: :refused}) ++ List.flatten(gradients)
   end
 
   # Strings a style or a theme sends to SVG, CSS or a canvas hold only what their contexts
@@ -835,7 +432,7 @@ defmodule Visualize.Chart.Validator do
        when {kind, key} in [{:font, :family}, {:theme, :font_family}] and is_binary(family) do
     if Regex.match?(~r/[<>\/;{}\\\x00-\x1f\x7f]/, family),
       do: [{path, {:unsafe, :font_family}}],
-      else: check(spec.type, family, path, ctx)
+      else: Types.check(spec.type, family, path, ctx)
   end
 
   defp check_key(:style, %{key: :class}, class, path, _ctx) when is_binary(class) do
@@ -853,12 +450,12 @@ defmodule Visualize.Chart.Validator do
        when is_map(styles) and not is_struct(styles) do
     Enum.flat_map(styles, fn
       {name, entry} when is_map(entry) and not is_struct(entry) ->
-        if name?(name),
+        if Types.name?(name),
           do: node(:style, Palette.entry(entry), path ++ [name], ctx),
           else: [{path ++ [name], {:type, :name}}]
 
       {name, %Var{} = var} ->
-        check(:term, var, path ++ [name], ctx)
+        Types.check(:term, var, path ++ [name], ctx)
 
       # A list of palette names and nodes, or one name (#658): its names are the
       # contract's to hold, its nodes style nodes.
@@ -883,401 +480,5 @@ defmodule Visualize.Chart.Validator do
   end
 
   defp check_key(kind, spec, v, path, ctx),
-    do: Units.faults(kind, spec.key, v, path) ++ check(spec.type, v, path, ctx)
-
-  # -- types ----------------------------------------------------------------------------
-
-  defp check(_type, %Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)
-  defp check(_type, %Fact{} = fact, path, ctx), do: fact(fact, path, ctx, false)
-
-  defp check({:node, kind}, v, path, ctx) when is_map(v) and not is_struct(v) do
-    node(kind, v, path, ctx)
-  end
-
-  defp check({:list, t}, v, path, ctx) when is_list(v) do
-    v |> Enum.with_index() |> Enum.flat_map(fn {e, i} -> check(t, e, path ++ [i], ctx) end)
-  end
-
-  defp check({:map, t}, v, path, ctx) when is_map(v) and not is_struct(v) do
-    Enum.flat_map(v, fn {k, e} ->
-      if name?(k), do: check(t, e, path ++ [k], ctx), else: [{path ++ [k], {:type, :name}}]
-    end)
-  end
-
-  defp check({:one_of, types} = t, v, path, ctx) do
-    case Schema.select(types, v) do
-      nil -> [{path, {:type, t}}]
-      type -> check(type, v, path, ctx)
-    end
-  end
-
-  defp check({:enum, allowed}, v, path, _ctx) do
-    if v in allowed, do: [], else: [{path, {:enum, allowed}}]
-  end
-
-  defp check({:ref, kind}, v, path, ctx) when is_atom(v) do
-    if name?(v), do: ref(kind, v, path, ctx), else: [{path, {:type, {:ref, kind}}}]
-  end
-
-  # An id is accepted by its tag alone (spec/14 §19.2, D-100): whether the store holds it is
-  # resolution's question, and a missing one is a mask there, not an error here. A tag of
-  # the wrong kind is refused now, before anything tries to resolve it.
-  defp check({:ref, kind}, {kind, n}, _path, _ctx) when is_integer(n) and n > 0, do: []
-
-  defp check({:ref, kind}, {other, n}, path, _ctx) when is_atom(other) and is_integer(n),
-    do: [{path, {:ref_kind, kind, other}}]
-
-  defp check(:field, v, path, ctx) when is_atom(v) do
-    if name?(v), do: ref(:field, v, path, ctx), else: [{path, {:type, :field}}]
-  end
-
-  defp check(:field_ref, {:field, f}, path, ctx) when is_atom(f) do
-    if name?(f), do: ref(:field, f, path, ctx), else: [{path, {:type, :field_ref}}]
-  end
-
-  # A generator as a stack entry (spec/14 §3.6, §3.13).
-  defp check(:generator, v, path, ctx), do: generator(v, path, ctx, :generator)
-
-  defp check(:channel, v, _path, _ctx) when is_number(v), do: []
-  defp check(:channel, v, path, ctx) when is_atom(v), do: check(:field, v, path, ctx)
-  defp check(:channel, {:field, _} = v, path, ctx), do: check(:field_ref, v, path, ctx)
-
-  # A channel naming its scale's own end (spec/14 §5.2, #420); any other `:scale` tuple is
-  # a typed fault rather than a silent pass.
-  defp check(:channel, {:scale, which}, _path, _ctx) when which in [:min, :max], do: []
-  defp check(:channel, {:scale, _other}, path, _ctx), do: [{path, {:type, :channel}}]
-
-  # A scale adopted from another frame (spec/14 §4.3, #384): the frame is declared, it
-  # declares the scale, and the chain of adoptions ends at a node rather than returning.
-  defp check(:adopted, {:frame, frame, scale} = value, path, ctx) do
-    cond do
-      not (name?(frame) and name?(scale)) -> [{path, {:type, :adopted}}]
-      ctx.frame_nodes == %{} -> []
-      true -> adopted(frame, scale, path, ctx, MapSet.new([source(path, value)]))
-    end
-  end
-
-  defp check(:adopted, _value, path, _ctx), do: [{path, {:type, :adopted}}]
-
-  # A stack's fixed order (spec/14 §5.4.1, #492): series keys, which need not be the
-  # step's fields — a listed key the stack lacks is ignored, never a fault.
-  defp check(:key_order, {:keys, keys}, path, _ctx) when is_list(keys) do
-    if Enum.all?(keys, &name?/1), do: [], else: [{path, {:type, :key_order}}]
-  end
-
-  defp check(:key_order, _value, path, _ctx), do: [{path, {:type, :key_order}}]
-
-  defp check(:extent, :auto, _path, _ctx), do: []
-
-  defp check(:extent, v, path, _ctx) when is_list(v) do
-    if extent?(v), do: [], else: [{path, {:type, :extent}}]
-  end
-
-  defp check(:text, v, path, ctx) when is_list(v) do
-    v |> Enum.with_index() |> Enum.flat_map(fn {part, i} -> text_part(part, path ++ [i], ctx) end)
-  end
-
-  # The string form (§7.1): read into parts and checked as parts, at the key's path.
-  defp check(:text, v, path, ctx) when is_binary(v) do
-    case Text.parse(v) do
-      {:ok, parts} -> Enum.flat_map(parts, &text_part(&1, path, ctx))
-      {:error, reason} -> [{path, {:template, reason}}]
-    end
-  end
-
-  defp check(:anchor, v, _path, _ctx) when v in @frame_anchors, do: []
-
-  defp check(:anchor, {:axis, s}, path, ctx) when is_atom(s) do
-    if name?(s), do: ref(:scale, s, path, ctx), else: [{path, {:type, :anchor}}]
-  end
-
-  defp check(:anchor, {:frame, c}, _path, _ctx) when c in @frame_points, do: []
-
-  defp check(:anchor, {:data, [x, y]}, path, _ctx) do
-    if term?(x) and term?(y), do: [], else: [{path, {:type, :anchor}}]
-  end
-
-  defp check(:colour, v, _path, _ctx) when is_binary(v) or v in [:none, :contrast], do: []
-  # A paint names a gradient of `defs` (spec/14 §2.7, §3.2).
-  defp check(:colour, {:paint, name}, path, ctx) when is_atom(name),
-    do: ref(:paint, name, path, ctx)
-
-  # A ramp position is a meaning the theme renders (spec/14 §3.2, D-135).
-  defp check(:colour, {:ramp, name, t}, path, _ctx) do
-    if name in Theme.ramp_names() and is_number(t) and t >= 0 and t <= 1,
-      do: [],
-      else: [{path, {:type, :colour}}]
-  end
-
-  # A typed color (spec/14 §3.2, spec/08 §1.9, #664): its shape, its literal operands and
-  # every name it reads from the theme's color table.
-  defp check(:colour, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colours,
-    do: Colors.check(v, path, ctx.colors)
-
-  defp check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
-
-  defp check(:ramp, {:ramp, name}, path, _ctx) do
-    if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
-  end
-
-  # A theme's counterpart in a color scheme (spec/08 §7.3, #668): a name, or `nil` for none.
-  defp check(:counterpart, v, _path, _ctx) when v == nil or (is_atom(v) and not is_boolean(v)),
-    do: []
-
-  defp check(:counterpart, _v, path, _ctx), do: [{path, {:type, :counterpart}}]
-
-  # A theme's color (spec/08 §7.1, #667): a colour, or the steps it pins of a name.
-  defp check(:theme_colour, map, path, _ctx) when is_map(map) and not is_struct(map),
-    do: Colors.steps(map, path)
-
-  defp check(:theme_colour, v, path, ctx), do: check(:colour, v, path, ctx)
-
-  # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
-  # checked at the category's own path.
-  defp check(:colour_map, map, path, ctx) when is_map(map) and not is_struct(map) do
-    Enum.flat_map(map, fn {category, colour} ->
-      check(:colour, colour, path ++ [category], ctx)
-    end)
-  end
-
-  defp check(:size, v, path, ctx), do: Units.check(:size, v, path) || slot_or(:size, v, path, ctx)
-  defp check(:length, v, path, _ctx), do: Units.check(:length, v, path)
-  defp check(:font, v, _path, _ctx) when is_binary(v), do: []
-  defp check(:font, v, path, ctx), do: slot_or(:font, v, path, ctx)
-  defp check(:slot, v, path, ctx), do: slot_or(:slot, v, path, ctx)
-
-  defp check(:term, v, path, _ctx) do
-    if term?(v), do: [], else: [{path, {:type, :term}}]
-  end
-
-  defp check(:name, v, _path, _ctx) when is_atom(v) and v not in @not_names, do: []
-  defp check(:integer, v, _path, _ctx) when is_integer(v), do: []
-  defp check(:number, v, _path, _ctx) when is_number(v), do: []
-  defp check(:boolean, v, _path, _ctx) when is_boolean(v), do: []
-  defp check(:string, v, _path, _ctx) when is_binary(v), do: []
-  defp check(type, _v, path, _ctx), do: [{path, {:type, type}}]
-
-  # A declared paint's own faults beside its keys' types: no type, a type that is neither a
-  # gradient nor a hatch, a gradient with no stops (spec/14 §2.7, #673). A variable stands for what application gives.
-  defp gradient(paint, path) do
-    type =
-      case Map.fetch(paint, :type) do
-        :error ->
-          [{path ++ [:type], :required}]
-
-        {:ok, %Var{}} ->
-          []
-
-        {:ok, t} when t in [:linear, :radial, :hatch] ->
-          []
-
-        # A paint's other types are named here; anything else is the paint's own enum fault.
-        {:ok, t} when t in [:none, :solid, :paint] ->
-          [{path ++ [:type], {:enum, [:linear, :radial, :hatch]}}]
-
-        {:ok, _other} ->
-          []
-      end
-
-    stops =
-      if Map.has_key?(paint, :stops) or Map.get(paint, :type) == :hatch,
-        do: [],
-        else: [{path ++ [:stops], :required}]
-
-    type ++ stops
-  end
-
-  # A generator call's faults: its shape, its name against the registry and each argument
-  # — a term, or a field binding checked as any is. Where no generator goes the call is the
-  # position's own type fault.
-  defp generator(_call, path, %{generators: :refused}, type), do: [{path, {:type, type}}]
-
-  defp generator(call, path, ctx, _type) do
-    Generators.faults(call, path, ctx.generators, fn
-      {:field, _} = ref, at -> check(:field_ref, ref, at, ctx)
-      arg, at -> if term?(arg), do: [], else: [{at, {:type, :generator}}]
-    end)
-  end
-
-  defp text_part(part, _path, _ctx) when is_binary(part), do: []
-  defp text_part(%Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)
-  defp text_part(%Fact{} = fact, path, ctx), do: fact(fact, path, ctx, true)
-
-  defp text_part({:field, _} = part, path, %{datum?: true} = ctx) do
-    check(:field_ref, part, path, ctx)
-  end
-
-  defp text_part({:field, _}, path, _ctx), do: [{path, {:invalid_for, :label}}]
-  defp text_part(_, path, _ctx), do: [{path, {:type, :text}}]
-
-  # A fact of a feed's schema (spec/14 §7.4): a declared slot, one of its fields and an
-  # attribute; in a text, an attribute written as words, never `order`'s list or
-  # `status`'s map. Whether the schema gives it is application's question.
-  defp fact(%Fact{source: s, field: f, key: k}, path, ctx, text?) do
-    cond do
-      not (name?(s) and name?(f) and name?(k)) ->
-        [{path, {:type, :fact}}]
-
-      k not in FeedSchema.attributes() ->
-        [{path, {:enum, FeedSchema.attributes()}}]
-
-      text? and k in [:order, :status] ->
-        [{path, {:invalid_for, :text}}]
-
-      true ->
-        fact_field(s, f, path, ctx.sources)
-    end
-  end
-
-  defp fact_field(source, field, path, sources) when is_map(sources) do
-    case Map.fetch(sources, source) do
-      :error -> [{path, {:undeclared, :source, source}}]
-      {:ok, fields} when is_list(fields) -> fact_in(source, field, path, field in fields)
-      {:ok, _unknown} -> []
-    end
-  end
-
-  defp fact_field(_source, _field, _path, _unknown), do: []
-
-  defp fact_in(_source, _field, _path, true), do: []
-  defp fact_in(source, field, path, false), do: [{path, {:undeclared_field, source, field}}]
-
-  defp slot_or(type, v, path, ctx) do
-    if slot?(v), do: ref(:slot, v, path, ctx), else: [{path, {:type, type}}]
-  end
-
-  defp slot?({:series, i}), do: is_integer(i) and i >= 1
-  defp slot?(v), do: name?(v)
-
-  defp name?(v), do: is_atom(v) and v not in @not_names
-
-  # `:auto` is a bound, so only a two-element list may carry it (spec/14 §1.4).
-  defp extent?(list) do
-    Enum.all?(list, &(category?(&1) or &1 == :auto)) and
-      (:auto not in list or length(list) == 2)
-  end
-
-  defp category?(%DateTime{}), do: true
-  # A variable or a fact stands for one member — a threshold at a feed's target (§4.3,
-  # §7.4) — and is typed once application has replaced it.
-  defp category?(%Var{}), do: true
-  defp category?(%Fact{}), do: true
-  defp category?(v), do: is_number(v) or is_binary(v) or (name?(v) and v != :auto)
-
-  defp term?(%DateTime{}), do: true
-  defp term?(v) when is_number(v) or is_binary(v) or is_atom(v), do: true
-  defp term?(v) when is_list(v), do: Enum.all?(v, &term?/1)
-
-  defp term?(v) when is_map(v) and not is_struct(v) do
-    Enum.all?(v, fn {k, e} -> name?(k) and term?(e) end)
-  end
-
-  defp term?(_), do: false
-
-  # -- references -----------------------------------------------------------------------
-
-  # Where an adoption stands: the frame it is written in and the name it is written
-  # under, so a scale adopting itself is a cycle and not an unknown name.
-  defp source([:frames, frame | rest], _value) when is_atom(frame) do
-    case List.last(rest) do
-      name when is_atom(name) -> {frame, name}
-      _other -> nil
-    end
-  end
-
-  defp source(_path, {:frame, frame, scale}), do: {frame, scale}
-
-  defp adopted(frame, scale, path, ctx, seen) do
-    cond do
-      {frame, scale} in seen ->
-        [{path, {:cycle, :scale, scale}}]
-
-      not Map.has_key?(ctx.frame_nodes, frame) ->
-        [{path, {:undeclared, :frame, frame}}]
-
-      true ->
-        scales = nested(Map.fetch!(ctx.frame_nodes, frame), [:scales]) || %{}
-
-        case Map.fetch(scales, scale) do
-          :error -> [{path, {:undeclared, :scale, scale}}]
-          {:ok, {:frame, f, s}} -> adopted(f, s, path, ctx, MapSet.put(seen, {frame, scale}))
-          {:ok, _node} -> []
-        end
-    end
-  end
-
-  defp ref(:slot, {:series, _}, _path, _ctx), do: []
-
-  # Under a theme the validator cannot see, every style series name may be the host's.
-  defp ref(:style, name, path, %{open_series: true} = ctx) do
-    if Palette.series?(name), do: [], else: ref_in(:style, name, path, ctx)
-  end
-
-  defp ref(kind, name, path, ctx), do: ref_in(kind, name, path, ctx)
-
-  defp ref_in(kind, name, path, ctx) do
-    case Map.fetch!(ctx, plural(kind)) do
-      :unknown ->
-        []
-
-      %MapSet{} = set ->
-        undeclared(kind, name, path, not MapSet.member?(set, name))
-
-      fields when is_list(fields) ->
-        undeclared(kind, name, path, name not in fields)
-
-      sources when is_map(sources) ->
-        undeclared(kind, name, path, not Map.has_key?(sources, name))
-    end
-  end
-
-  # Whether a cell, with its span, lies inside the grid the design declares. A design
-  # with no `layout` has one cell, which is the default grid (spec/14 §2.8).
-  defp inside?(cell, span, layout) do
-    layout = layout || %{}
-    columns = length(sizes(layout, :columns))
-    rows = length(sizes(layout, :rows))
-
-    with [c, r] when is_integer(c) and is_integer(r) <- cell,
-         [dc, dr] <- span || [1, 1],
-         true <- is_integer(dc) and is_integer(dr) and dc > 0 and dr > 0 do
-      c >= 0 and r >= 0 and c + dc <= columns and r + dr <= rows
-    else
-      _other -> false
-    end
-  end
-
-  defp sizes(layout, key) do
-    case Map.get(layout, key, [1]) do
-      weights when is_list(weights) and weights != [] -> weights
-      _other -> [1]
-    end
-  end
-
-  defp undeclared(kind, name, path, true), do: [{path, {:undeclared, kind, name}}]
-  defp undeclared(_kind, _name, _path, false), do: []
-
-  defp plural(:scale), do: :scales
-  defp plural(:style), do: :styles
-  defp plural(:paint), do: :paints
-  defp plural(:source), do: :sources
-  defp plural(:var), do: :vars
-  defp plural(:field), do: :fields
-  defp plural(:slot), do: :slots
-  defp plural(:frame), do: :frames
-  defp plural(:ramp), do: :ramps
-  defp plural(:color), do: :colors
-
-  # The URL policy of §10.3 (#660): the fault names the field and the reason, never the URL.
-  defp policy(%{url: url} = map, path, ctx) when is_binary(url) do
-    subdomains = Map.get(map, :subdomains, Schema.default(:tiles, :subdomains))
-    subdomains = if is_list(subdomains), do: Enum.filter(subdomains, &is_binary/1), else: []
-
-    case Urls.check(url, Map.get(ctx, :urls) || Urls.policy(), subdomains) do
-      :ok -> []
-      {:error, reason} -> [{path ++ [:url], {:url, reason}}]
-    end
-  end
-
-  defp policy(_map, _path, _ctx), do: []
+    do: Units.faults(kind, spec.key, v, path) ++ Types.check(spec.type, v, path, ctx)
 end
