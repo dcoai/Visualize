@@ -10,6 +10,7 @@ defmodule Visualize.Check do
     {"verify:api-surface", "dev", ~w(vis.surface --check)},
     {"verify:headings", "dev", ~w(vis.headings)},
     {"verify:citations", "dev", ~w(vis.citations)},
+    {"verify:spelling", "dev", ~w(vis.spelling)},
     {"verify:models", "dev", ~w(vis.verify)},
     {"verify:hooks", "test", ~w(test --warnings-as-errors --only js --include js_resvg), ".",
      :node},
