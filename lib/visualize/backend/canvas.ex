@@ -36,7 +36,7 @@ defmodule Visualize.Backend.Canvas do
 
   alias Visualize.Backend.Canvas.Arc
   alias Visualize.Backend.CanvasBinary
-  alias Visualize.IR.{Element, Paint, Path, Transform}
+  alias Visualize.IR.{Element, Motion, Paint, Path, Transform}
 
   @type output_format :: :js | :json | :commands | :binary | :binary_base64
 
@@ -186,6 +186,14 @@ defmodule Visualize.Backend.Canvas do
   # ============================================================
   # Element to Commands Conversion
   # ============================================================
+
+  # An element that names its identity is drawn inside a motion span carrying its style's
+  # transition, or a group's above it (spec/09 §3.3.5, D-176); the span holds its commands.
+  defp element_to_commands(%Element{attrs: %{"data-vis-id" => id} = attrs} = element, inherited) do
+    bare = %{element | attrs: Map.delete(attrs, "data-vis-id")}
+    span = Motion.span(id, element, Map.merge(inherited, element.style))
+    [{:motion, span}] ++ element_to_commands(bare, inherited) ++ [{:motionEnd, []}]
+  end
 
   # A clipped element (spec/02 §2.1, spec/09 §3.3): the shape's geometry as the clip —
   # alone for inside, under a rectangle of everything with the even-odd rule for
@@ -706,8 +714,11 @@ defmodule Visualize.Backend.Canvas do
   defp format_output(commands, :js), do: commands_to_js(commands)
   defp format_output(commands, :json), do: commands_to_json(commands)
 
+  # A script runs with no library beside it to move an element: it draws the end state, and
+  # a motion span writes nothing (spec/09 §3.4).
   defp commands_to_js(commands) do
     commands
+    |> Enum.reject(fn {cmd, _args} -> cmd in [:motion, :motionEnd] end)
     |> Enum.map(&command_to_js_line/1)
     |> Enum.intersperse("\n")
   end
@@ -957,6 +968,11 @@ defmodule Visualize.Backend.Canvas do
     |> Enum.map(&encode_json_object/1)
     |> Enum.intersperse(",")
   end
+
+  # A span's arguments are nested lists whose strings are a datum's: `Visualize.IR.Motion`
+  # writes them, every character escaped, the text the binary record carries too.
+  defp encode_json_object(%{cmd: "motion", args: args}),
+    do: ["{\"cmd\":\"motion\",\"args\":", Motion.json(args), "}"]
 
   defp encode_json_object(%{cmd: cmd, args: args}) do
     args_json =

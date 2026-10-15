@@ -13,6 +13,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
   - `{:style, %{fill:, stroke:, stroke_width:, opacity:}}` (`nil` for an absent field), with `fill_paint:`
     and `stroke_paint:` indexes under bits 5 and 6
   - `{:effect, :shadow, radius, {dx, dy}, {r, g, b, a}}` and `{:effect, :blur, radius}` (§4.3.14)
+  - `{:motion, json}` and `:motion_end`, a motion span and its end (§4.3.15, §4.3.16, #653)
   - the version 2 records `{:version, v}`, `{:paint, index, %{type:, geometry: [f32], stops:
     [{at, {r, g, b, a}}]}}` and `{:box, {x, y, w, h}}` (spec/09 §4.3.11–4.3.13)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
@@ -186,6 +187,12 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
 
   defp decode(<<0x52, 0x02, r::little-float-32, rest::binary>>, acc),
     do: decode(rest, [{:effect, :blur, r} | acc])
+
+  # A motion span (spec/09 §4.3.15, #653): its arguments as the JSON text they are written in.
+  defp decode(<<0x53, length::little-16, json::binary-size(length), rest::binary>>, acc),
+    do: decode(rest, [{:motion, json} | acc])
+
+  defp decode(<<0x54, rest::binary>>, acc), do: decode(rest, [:motion_end | acc])
 
   defp decode(<<0x30, rest::binary>>, acc), do: decode(rest, [:save | acc])
   defp decode(<<0x31, rest::binary>>, acc), do: decode(rest, [:restore | acc])

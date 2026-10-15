@@ -17,6 +17,22 @@ release it merely follows.
 
 ### Added
 
+- **Style transitions** (#676, D-176). A style may say how its look changes:
+  `transition: %{duration: 200, easing: :cubic_out}` moves the fill, the stroke and the
+  opacity, `transition: %{fill: %{duration: 400}}` the fill alone, along a
+  `Visualize.Ease` curve. It is a part like any other: a state's or a role's style carries
+  it (`error: %{fill: color(:red), transition: %{duration: 300}}`), and `defaults` give it
+  to every element below. In `:css` SVG each distinct transition is one class and one rule
+  in a `<style>` the frame writes, the easing as CSS `linear()` sampled from the same
+  curve, and a moving element's colours are written as `oklch()` so the browser blends
+  them in OKLab. On a canvas, `CanvasChart` and `CanvasBinaryChart` move each element in a
+  `requestAnimationFrame` loop, keyed by the row's identity, which a moving mark's
+  elements now carry as `data-vis-id` (the slot's declared identity, else the series);
+  the `:json` commands gain `motion`/`motionEnd` and the binary stream the version 2
+  records `0x53`/`0x54`. `prefers-reduced-motion: reduce` makes every transition
+  instant, and a design cannot override it. A chart without a transition renders byte for
+  byte as before. New: `Visualize.IR.Motion`.
+
 - **A shadow's offset and color** (#674, D-175). `effect: %{type: :shadow, radius: 4,
   offset: [pt(2), pt(3)], color: color(:text) |> alpha(0.4)}` moves and colours a shadow;
   the offset takes #671's units (a `pct` is refused, there is no box), and a colour given

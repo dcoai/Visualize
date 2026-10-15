@@ -41,7 +41,8 @@ defmodule Visualize.Chart.ValidatorTest do
         font: %{family: :font_family, size: :label_size},
         marker: %{shape: :star, size: 64},
         text: %{anchor: :middle, offset: [2, 0]},
-        effect: %{type: :shadow, radius: 3}
+        effect: %{type: :shadow, radius: 3},
+        transition: %{duration: 200, easing: :cubic_out, fill: %{duration: 400}}
       },
       wash: %{fill: %{type: :paint, name: :fade}}
     },
@@ -154,6 +155,8 @@ defmodule Visualize.Chart.ValidatorTest do
     marker: [:styles, :muted, :marker],
     text_layout: [:styles, :muted, :text],
     effect: [:styles, :muted, :effect],
+    style_transition: [:styles, :muted, :transition],
+    part_transition: [:styles, :muted, :transition, :fill],
     stop: [:defs, :fade, :stops, 0],
     label: [:labels, 0],
     layout: [:layout],

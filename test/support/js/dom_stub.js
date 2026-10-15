@@ -253,6 +253,9 @@ const Stub = (() => {
   globalThis.setTimeout = (fn, ms) => { timers.set(++timerIds, {fn, at: now + ms}); return timerIds; };
   globalThis.clearTimeout = (id) => { timers.delete(id); };
   Object.defineProperty(globalThis, 'performance', {value: {now: () => now}, configurable: true});
+  // An animation frame is a 16 ms timer on the same clock, handed the clock's time (#653).
+  globalThis.requestAnimationFrame = (fn) => setTimeout(() => fn(now), 16);
+  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 
   return {
     log,

@@ -39,7 +39,7 @@ defmodule Visualize.Chart.Frame do
   """
 
   alias Visualize.{Chart, Theme}
-  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
+  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Motion, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
   alias Visualize.Chart.Style.{Defaults, Parts}
   alias Visualize.Chart.Transform.Force
@@ -372,8 +372,11 @@ defmodule Visualize.Chart.Frame do
       |> Defs.resolve(frame, mode)
       |> Lines.split()
 
+    # A style's motion as classes and the one `<style>` they need (spec/14 §3.10, D-176).
+    {group, motion} = Motion.apply(group, mode)
+
     # The defs come first (spec/14 §2.7): the paints declared, the filters the tree uses.
-    %{group | children: Defs.defs(frame, mode, group) ++ group.children}
+    %{group | children: motion ++ Defs.defs(frame, mode, group) ++ group.children}
   end
 
   # The frame's own box painted under its contents, `[]` when it declares no `background`

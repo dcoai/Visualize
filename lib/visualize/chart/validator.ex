@@ -19,7 +19,18 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Units, Words}
+
+  alias Visualize.Chart.Validator.{
+    Colors,
+    Defaults,
+    Domain,
+    Frames,
+    Motion,
+    Palette,
+    Units,
+    Words
+  }
+
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
@@ -521,6 +532,9 @@ defmodule Visualize.Chart.Validator do
       {:error, {:quantity, _quantity, _code} = reason} -> [{path ++ [:quantity], reason}]
     end
   end
+
+  defp held(kind, map, path, _ctx) when kind in [:style_transition, :part_transition],
+    do: Motion.check(map, path)
 
   defp held(_kind, _map, _path, _ctx), do: []
 

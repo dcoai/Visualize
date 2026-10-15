@@ -345,7 +345,9 @@ defmodule Visualize.Hooks.CanvasBinary do
         if (note) note.remove();
       }
 
-      export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset) {
+      // `motion`, a VisualizeMotion state, runs the stream's motion spans (spec/10 §4.5);
+      // without it a span is skipped and every element drawn at its target.
+      export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset, motion) {
         const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
         let offset = startOffset || 0;
         const maxOffset = endOffset === undefined ? bytes.length : endOffset;
@@ -494,12 +496,28 @@ defmodule Visualize.Hooks.CanvasBinary do
 
             case 0x40: // fill, with the fill paint over the box when there is one
               if (fillPaint) drawVisualizePaint(ctx, 'fill', fillPaint, box);
+              else if (motion && motion.span) VisualizeMotion.draw(motion, ctx, 'fill', () => ctx.fill());
               else ctx.fill();
               break;
 
             case 0x41: // stroke
               if (strokePaint) drawVisualizePaint(ctx, 'stroke', strokePaint, box);
+              else if (motion && motion.span) VisualizeMotion.draw(motion, ctx, 'stroke', () => ctx.stroke());
               else ctx.stroke();
+              break;
+
+            case 0x53: { // motion: a span begins, its arguments as JSON (§4.3.15, #653)
+              const length = view.getUint16(offset, true);
+              if (motion) {
+                const text = new TextDecoder().decode(bytes.subarray(offset + 2, offset + 2 + length));
+                VisualizeMotion.open(motion, VisualizeMotion.parseSpan(text));
+              }
+              offset += 2 + length;
+              break;
+            }
+
+            case 0x54: // motion_end (§4.3.16)
+              if (motion) VisualizeMotion.close(motion);
               break;
 
             case 0x00: { // version (spec/09 §4.3.11)
@@ -593,6 +611,10 @@ defmodule Visualize.Hooks.CanvasBinary do
         this.canvas = this.el.querySelector('canvas') || this.createCanvas();
         this.ctx = this.canvas.getContext('2d');
         this.lastData = null;
+        // A style's motion (spec/10 §4.5): what each identity shows, and the pending frame.
+        this.motion = VisualizeMotion.create();
+        this.bytes = null;
+        this.motionFrame = null;
 
         // Acknowledge frames when asked (spec/10 §8.2, D-107), as CanvasIncrementalChart
         // does: data-ack names the event, data-ack-interval the most often it is pushed.
@@ -620,6 +642,7 @@ defmodule Visualize.Hooks.CanvasBinary do
       },
       destroyed() {
         if (this.ackTimer !== null) clearTimeout(this.ackTimer);
+        if (this.motionFrame !== null) cancelAnimationFrame(this.motionFrame);
       },
       acknowledge(seq) {
         if (this.ackEvent === null) return;
@@ -664,17 +687,28 @@ defmodule Visualize.Hooks.CanvasBinary do
         const base64Data = this.el.dataset.binary;
         if (!base64Data || base64Data === this.lastData) return;
         this.lastData = base64Data;
-
+        this.bytes = decodeBase64(base64Data);
+        this.draw();
+      },
+      // One replay of the last stream; while a motion runs, one per animation frame
+      // (spec/10 §4.5).
+      draw() {
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        VisualizeMotion.begin(this.motion, performance.now());
         try {
-          executeVisualizeBinary(ctx, decodeBase64(base64Data));
+          executeVisualizeBinary(ctx, this.bytes, 0, this.bytes.length, this.motion);
           clearVisualizeError(this.el);
         } catch (error) {
           reportVisualizeError(this.el, error);
           throw error;
         }
+        if (VisualizeMotion.end(this.motion)) this.loop();
+      },
+      loop() {
+        if (this.motionFrame !== null) return;
+        this.motionFrame = requestAnimationFrame(() => { this.motionFrame = null; this.draw(); });
       }
     };
     """

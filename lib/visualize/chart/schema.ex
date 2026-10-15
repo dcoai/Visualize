@@ -69,6 +69,8 @@ defmodule Visualize.Chart.Schema do
     :effect,
     :marker,
     :curve,
+    :style_transition,
+    :part_transition,
     :stop,
     :label,
     :layout,
@@ -447,6 +449,17 @@ defmodule Visualize.Chart.Schema do
     ]
   end
 
+  # A style's transition (spec/14 §3.10, D-176): a duration and an easing for the fill, the
+  # stroke and the opacity, or an entry per property. No defaults: a style says what it
+  # changes, and the resolver supplies the rest.
+  defp design_node(:style_transition) do
+    part_transition_keys() ++
+      for property <- [:fill, :stroke, :opacity],
+          do: spec(property, {:node, :part_transition}, :style)
+  end
+
+  defp design_node(:part_transition), do: part_transition_keys()
+
   defp design_node(:theme) do
     theme = Theme.default()
 
@@ -571,7 +584,17 @@ defmodule Visualize.Chart.Schema do
       spec(:opacity, :size, :style, range: {0, 1, 0.05}),
       spec(:blend, {:enum, @blends}, :style),
       spec(:marker, {:node, :marker}, :style),
-      spec(:curve, {:node, :curve}, :style)
+      spec(:curve, {:node, :curve}, :style),
+      # How a change of the look is reached (spec/14 §3.10, #653).
+      spec(:transition, {:node, :style_transition}, :style)
+    ]
+  end
+
+  # A transition's own keys: how long, along which of `Visualize.Ease`'s curves.
+  defp part_transition_keys do
+    [
+      spec(:duration, :number, :style, range: {0, 5000, 50}),
+      spec(:easing, {:enum, Visualize.Ease.names()}, :style)
     ]
   end
 

@@ -34,6 +34,10 @@ defmodule Visualize.Hooks.Canvas do
         this.canvas = this.el.querySelector('canvas') || this.createCanvas();
         this.ctx = this.canvas.getContext('2d');
         this.lastKey = null;
+        // A style's motion (spec/10 §4.5): what each identity shows, and the pending frame.
+        this.motion = VisualizeMotion.create();
+        this.parsed = null;
+        this.motionFrame = null;
 
         this.handleEvent("canvas_commands", ({commands, script}) => {
           if (commands !== undefined) this.el.dataset.commands = commands;
@@ -43,7 +47,9 @@ defmodule Visualize.Hooks.Canvas do
 
         this.render();
       },
-      destroyed() {},
+      destroyed() {
+        if (this.motionFrame !== null) cancelAnimationFrame(this.motionFrame);
+      },
       updated() {
         this.render();
       },
@@ -61,14 +67,27 @@ defmodule Visualize.Hooks.Canvas do
         const key = commands || script;
         if (!key || key === this.lastKey) return;
         this.lastKey = key;
-
+        this.parsed = commands ? JSON.parse(commands) : null;
+        this.draw();
+      },
+      // One replay of the last value; while a motion runs, one per animation frame.
+      draw() {
         const ctx = this.ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        if (commands) {
-          JSON.parse(commands).forEach(({cmd, args}) => {
-            if (cmd.startsWith('set_')) {
+        if (this.parsed) {
+          const motion = this.motion;
+          VisualizeMotion.begin(motion, performance.now());
+          this.parsed.forEach(({cmd, args}) => {
+            if (cmd === 'motion') {
+              // A motion span (spec/09 §3.3.5): its fills and strokes drawn at the shown values.
+              VisualizeMotion.open(motion, args);
+            } else if (cmd === 'motionEnd') {
+              VisualizeMotion.close(motion);
+            } else if (cmd === 'fill' || cmd === 'stroke') {
+              VisualizeMotion.draw(motion, ctx, cmd, () => ctx[cmd](...args));
+            } else if (cmd.startsWith('set_')) {
               ctx[cmd.slice(4)] = args[0];
             } else if (cmd === 'nonScalingLineWidth') {
               // A stroke that keeps its width on screen (spec/09 §3.3.3).
@@ -86,9 +105,14 @@ defmodule Visualize.Hooks.Canvas do
               ctx[cmd](...args);
             }
           });
+          if (VisualizeMotion.end(motion)) this.loop();
         } else {
-          new Function('ctx', script)(ctx);
+          new Function('ctx', this.el.dataset.script)(ctx);
         }
+      },
+      loop() {
+        if (this.motionFrame !== null) return;
+        this.motionFrame = requestAnimationFrame(() => { this.motionFrame = null; this.draw(); });
       }
     };
     """

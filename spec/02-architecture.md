@@ -99,6 +99,9 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 |---|---|
 | `Visualize.IR.Motion.samples/1` | The easing's 21 values at `t = 0, 0.05, …, 1`, each rounded to 4 decimals; `[0, 1]` for `:linear`. |
 | `Visualize.IR.Motion.css_easing/1` | `"linear"` for `:linear`, else CSS `linear(v₀, v₁, …, v₂₀)` of the samples. |
+| `Visualize.IR.Motion.css_transition/1` | The CSS `transition` value of a resolved list: each CSS property each property moves (`css_properties/1`), its duration in `ms` and its easing, joined by `, `. |
+| `Visualize.IR.Motion.span/3` | `span(id, element, style)`: a motion span's arguments `[id, box, transitions]` for an element drawn with `style`, its effective style — `box` `bounds/1` of the element as a list, `nil` without one; `transitions` empty when the style moves nothing ([09-rendering-backends](09-rendering-backends.md) §3.3.5). |
+| `Visualize.IR.Motion.json/1` | A span's arguments as JSON text — lists, strings, numbers, atoms as their names and `nil` as `null`, numbers formatted as path data is, every string escaped with control characters as `\uXXXX` — the text the `:json` command and the binary record both carry. |
 | `Visualize.IR.Motion.transitions/1` | The resolved list as the canvas encoders write it: `[[property, duration, samples], …]`, the property a string ([09-rendering-backends](09-rendering-backends.md) §3.3.5). |
 | `Visualize.IR.Motion.css_properties/1` | The CSS properties a property moves: `fill` → `fill`, `fill-opacity`; `stroke` → `stroke`, `stroke-width`, `stroke-opacity`; `opacity` → `opacity`. |
 | `Visualize.IR.Motion.oklch/1` | A colour string as `oklch()`: a literal `Visualize.Color.parse/1` reads as `oklch(L C H)` (`/ alpha` below `1`), an `oklch(…)` as it is, anything else as `oklch(from <value> l c h / alpha)`; `:none`, `:current_color` and a paint as they are. |
