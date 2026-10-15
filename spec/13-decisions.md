@@ -2116,6 +2116,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - spec/14 §3.7's layer 6 is implemented; every layer of the precedence order now is.
 - #655's builder shows a generator as a stack entry and a color, and #643's stored-source generators, when they come, are a second kind of registration behind the same stored call.
 
+**Amended by #681** (D-181). **A board's export runs its generators as the board does.** A board's snapshot export (spec/15 §12) resolved `generate(...)` with the configuration's generators and no assigns, so a generator registered only on the board was an unknown name in the export and a viewer-dependent one drew for nobody. `Snapshot.views/2` and the `Export` functions take `generators:` and `assigns:`, and `Board.Server.export/3` passes the board's own; the layer-6 resolution above is unchanged.
+
 ## 178. D-178 — The builder edits a style in its parts: a section per part, the paint's type first, a control named by its path, a write that is only what was set; a named style is a site of the design
 
 **Context.** #655, part 7 of the set shaped from Research #641 ("The style grammar, reshaped"), work item #682. After parts 1–6 a style is compound parts (D-172) with typed colors (D-173), defaults and units (D-174), paints on every backend (D-175), motion (D-176) and generators (D-177), but the builder still edited the 29 flat keys of version 2 through a hidden schema kind (`describe(:flat_style)` behind `Builder.FormSchema`), its fill as a "fill style" that declared a gradient under `defs`. Two rules of spec/14 also disagreed: §18.14 wrote a created style into the selected layer, §19.11 said a declaration in place is values and a name is the library's. #655's acceptance settled the second: an override writes `styles.<name>` in the design, never into a layer (modification 2).
@@ -2205,3 +2207,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A stream with a translucent paint, a dash, a cap or a join is version 3; a page still running a version 2 hook throws on it rather than drawing it wrong.
 - `test/visualize/backend/paint_opacity_test.exs` is the guard: the key-driven parity test, the hooks on three streams, and a translucent band against resvg (`:js_resvg`, in CI since D-179).
+
+## 181. D-181 — A board's export draws with the board's generators and assigns: explicit options over the running board's, over the configuration
+
+**Context.** #681, found by #654 (work item #680, D-177) and left out of it; work item #691. A board's live rendering resolves `generate(...)` with the `generators:` and `assigns:` it was started with (`Visualize.Board.Server`, `Board.realise/4`), but its snapshot export (spec/15 §12) drew every cell through `Snapshot.views/2` with neither: only `config :visualize, generators:` and no assigns. A board started with generators that are not in the configuration exported every generated style as an unknown name — each cell its fault's panel — and a generator that reads the viewer, the tenant chat's "view as", exported as if there were no viewer. The export disagreed with what the viewer saw.
+
+**Decision.**
+- **`Snapshot.views/2` and every export take `generators:` and `assigns:`**, passed to each cell's drawing as the cell process passes them (`Board.Draw`). Their defaults are today's: the configuration's generators and `%{}`.
+- **The snapshot does not record them.** A snapshot is data that reopens anywhere (§12.2–§12.3); a module list is the host's and an assigns map is a viewer's, neither a property of the frozen board, and neither has a codec. A reader passes them, as it passes `system:` (D-156).
+- **`Board.Server.export/3` passes the running board's own** `generators:`, `assigns:` and `system:` with its snapshot, in one call to the board process, and draws with `Export.svg/2`, `png/2`, `pages/2` or `html/2`. An option given wins: the precedence is the explicit option, then the server's, then the configuration and no assigns.
+- **The gallery's export buttons use it**, so the demo board's exports are drawn as its cells are.
+
+**Rejected.**
+- **Fields on the snapshot that its codecs do not write.** `from_json(to_json(s))` would no longer be `s`, and a viewer's assigns would ride in a value meant to be sent to someone else.
+- **Calling the generators when the snapshot is taken and freezing their results.** A snapshot redraws at any width and in any theme (§12.2), and a generator reads the theme; frozen results would be right only for the theme they were taken in.
+- **`system:` left out of `Server.export/3`.** It is the same kind of value — the viewer's, held by the board, not recorded by the snapshot — and an export drawn in another unit system than the live board disagrees with it the same way.
+
+**Consequences.**
+- A snapshot exported with the board's generators and assigns draws each cell byte for byte as the live cell does (`test/visualize/board/export_test.exs`).
+- A host exporting a snapshot it reopened elsewhere passes its own `generators:` and `assigns:`, as it passes `system:`.
+- D-177 is amended; spec/15 §12 says the options and the precedence.

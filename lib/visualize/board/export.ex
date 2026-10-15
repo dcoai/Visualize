@@ -40,6 +40,10 @@ defmodule Visualize.Board.Export do
     letter: {8.5 * 96, 11 * 96, "8.5in", "11in"}
   }
 
+  # What a cell is drawn with beside the snapshot's data: the reader's unit system, and the
+  # board's generators and assigns (spec/15 §12.2, D-156, D-181).
+  @drawing [:system, :generators, :assigns]
+
   @typedoc "A box on the document or the page: `{x, y, w, h}` in pixels."
   @type box :: {number(), number(), number(), number()}
 
@@ -61,6 +65,10 @@ defmodule Visualize.Board.Export do
     * `:theme` - the theme the cells and the page are drawn in (default the snapshot's)
     * `:system` - the unit system the cells' measures are shown in (default `:as_posted`,
       spec/14 §4.4, D-156)
+    * `:generators`, `:assigns` - the generator modules the cells' frames call and the
+      host's assigns, as `Visualize.Board.Snapshot.views/2` takes them (default none and
+      `%{}`): the board's own, so the export draws what the board draws for its viewer
+      (D-181). `Visualize.Board.Server.export/3` passes a running board's
     * `:title` - the header's name (default the board's `meta.name`)
     * `:resolve` - `:css` (default), every theme value a custom-property reference with
       its literal as fallback, as the cells draw it; or `:literal`, each reference
@@ -71,8 +79,7 @@ defmodule Visualize.Board.Export do
     width = Keyword.get(opts, :width, snapshot.width)
     theme = Keyword.get(opts, :theme, snapshot.theme)
 
-    views =
-      Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, [:system]))
+    views = Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, @drawing))
 
     %{gap: margin} = Board.layout(snapshot.board)
     lines = header_lines(snapshot, Keyword.get(opts, :title), nil)
@@ -100,13 +107,14 @@ defmodule Visualize.Board.Export do
   @doc """
   The board as a PNG (spec/15 §12.1): `svg/2` with `resolve: :literal`, rasterised by
   `Visualize.Render.to_png/2`. `{:ok, png, warnings}` or `{:error, reason}`, as `to_png/2`
-  answers. The options are `svg/2`'s, and `to_png/2`'s `:scale`, `:background`,
+  answers. The options are `svg/2`'s, `:generators` and `:assigns` among them, and
+  `to_png/2`'s `:scale`, `:background`,
   `:timeout` and font options.
   """
   @spec png(Snapshot.t(), keyword()) ::
           {:ok, binary(), [Render.png_warning()]} | {:error, Render.png_error()}
   def png(%Snapshot{} = snapshot, opts \\ []) do
-    {ours, raster} = Keyword.split(opts, [:width, :theme, :system, :title])
+    {ours, raster} = Keyword.split(opts, [:width, :theme, :title | @drawing])
     snapshot |> svg([resolve: :literal] ++ ours) |> Render.to_png(raster)
   end
 
@@ -204,7 +212,8 @@ defmodule Visualize.Board.Export do
   drawn at the page's width in `:theme`, the print theme by default, from the snapshot's
   data.
 
-  The options are `paginate/2`'s, `svg/2`'s `:system`, `:title` and `:resolve`.
+  The options are `paginate/2`'s, `svg/2`'s `:system`, `:generators`, `:assigns`, `:title`
+  and `:resolve`.
   """
   @spec pages(Snapshot.t(), keyword()) :: [String.t()]
   def pages(%Snapshot{} = snapshot, opts \\ []) do
@@ -213,8 +222,7 @@ defmodule Visualize.Board.Export do
     {_pw, _ph, wl, hl} = paper(opts)
     %{size: size, width: width, pages: pages} = paginate(snapshot.board, opts)
 
-    views =
-      Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, [:system]))
+    views = Snapshot.views(snapshot, [width: width, theme: theme] ++ Keyword.take(opts, @drawing))
 
     margin = Keyword.get(opts, :margin, 48)
     count = length(pages)

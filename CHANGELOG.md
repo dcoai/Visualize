@@ -415,6 +415,16 @@ release it merely follows.
 
 ### Fixed
 
+- **A board's export draws what the live board draws for its viewer** (#691, D-181).
+  A snapshot export (SVG, PNG, printed pages) resolved `generate(...)` with only
+  `config :visualize, generators:` and no assigns, so a board started with its own
+  `generators:` exported every cell as an unknown-generator fault, and a generator that
+  reads the viewer exported for nobody. `Visualize.Board.Snapshot.views/2` and
+  `Visualize.Board.Export.svg/2`, `png/2`, `pages/2` and `html/2` now take `generators:` and
+  `assigns:`, and the new **`Visualize.Board.Server.export(board, :svg | :png | :pages |
+  :html, opts)`** exports a running board with its own generators, assigns and unit system
+  (an option you pass wins). Exports that pass neither behave as before.
+
 - **A translucent fill or stroke is translucent on a canvas too** (#690, D-180). Every
   canvas ignored a paint's own opacity — `fill: %{color: …, opacity: 0.4}`,
   `fill_opacity`/`stroke_opacity`, a theme's translucent band, a percentile band — and drew

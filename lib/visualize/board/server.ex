@@ -73,7 +73,7 @@ defmodule Visualize.Board.Server do
   use GenServer, restart: :transient
 
   alias Visualize.Board
-  alias Visualize.Board.{Binding, Cell, Snapshot, State, View}
+  alias Visualize.Board.{Binding, Cell, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Feed.Monitor
 
@@ -314,6 +314,33 @@ defmodule Visualize.Board.Server do
   @spec snapshot(GenServer.server()) :: Snapshot.t()
   def snapshot(board), do: GenServer.call(board, :snapshot)
 
+  @doc "As `export/3` with `[]` options."
+  @spec export(GenServer.server(), :svg | :png | :pages | :html) ::
+          String.t() | [String.t()] | {:ok, binary(), list()} | {:error, term()}
+  def export(board, format), do: export(board, format, [])
+
+  @doc """
+  The running board exported (spec/15 §12, D-181): its `snapshot/1` drawn by
+  `Visualize.Board.Export` — `:svg` (`svg/2`), `:png` (`png/2`), `:pages` (`pages/2`) or
+  `:html` (`html/2`) — with the board's own `:generators`, `:assigns` and `:system`, so the
+  export draws what the board draws for its viewer. `opts` are that function's, and an
+  option given here wins over the board's. The snapshot and the options are one call to the
+  board process.
+  """
+  @spec export(GenServer.server(), :svg | :png | :pages | :html, keyword()) ::
+          String.t() | [String.t()] | {:ok, binary(), list()} | {:error, term()}
+  def export(board, format, opts) when format in [:svg, :png, :pages, :html] do
+    {snapshot, own} = GenServer.call(board, :export)
+    opts = Keyword.merge(own, opts)
+
+    case format do
+      :svg -> Export.svg(snapshot, opts)
+      :png -> Export.png(snapshot, opts)
+      :pages -> Export.pages(snapshot, opts)
+      :html -> Export.html(snapshot, opts)
+    end
+  end
+
   @doc "The board and its cells stopped; `:ok`."
   @spec stop(GenServer.server()) :: :ok
   def stop(board), do: GenServer.stop(board, :normal)
@@ -491,6 +518,12 @@ defmodule Visualize.Board.Server do
   def handle_call(:tick, _from, state), do: {:reply, :ok, turn(state)}
   def handle_call(:info, _from, state), do: {:reply, present(state), state}
   def handle_call(:snapshot, _from, state), do: {:reply, frozen(state), state}
+
+  # What the board draws with beside its data, which a snapshot does not record (D-181).
+  def handle_call(:export, _from, state) do
+    own = [generators: state.generators, assigns: state.assigns, system: state.system]
+    {:reply, {frozen(state), own}, state}
+  end
 
   @impl true
   def handle_info(:tick, state) do
