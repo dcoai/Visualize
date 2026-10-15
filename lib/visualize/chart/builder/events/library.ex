@@ -19,8 +19,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Writes, only: [admits: 2, linked: 3, update_layer: 4]
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Document, Stack, Store}
-    alias Visualize.Chart.{Composite, Fragment, Schema, Validator}
+    alias Visualize.Chart.Builder.{Document, FormSchema, Stack, Store}
+    alias Visualize.Chart.{Composite, Fragment, Validator}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -198,7 +198,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       with {:ok, stored} <- fetch(socket.assigns.store, submitted),
            %{key: key, type: type} <-
-             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
            kind when kind != nil <- ref_kind(type) do
         cond do
           stored.kind != kind ->

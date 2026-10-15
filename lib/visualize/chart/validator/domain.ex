@@ -18,6 +18,7 @@ defmodule Visualize.Chart.Validator.Domain do
 
   alias Visualize.Chart.Frame.Scales
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Style.Parts
 
   @colour_keys [:fill, :stroke]
   @temporal [DateTime, Date, NaiveDateTime]
@@ -180,22 +181,28 @@ defmodule Visualize.Chart.Validator.Domain do
 
   # The stack's entries cascaded left to right, each through its `extends` chain
   # (spec/14 §3.5, §3.6). A cycle stops the walk where it closes — the validator reports
-  # it by path — and a variable contributes nothing.
+  # it by path — and a variable contributes nothing. The entries merge in their parts and
+  # the result is projected onto the flat keys, as `Visualize.Chart.Style.node/2` does
+  # (D-172).
   @doc false
   @spec cascade(term(), map()) :: map()
   def cascade(entries, styles) when is_list(entries) do
-    Enum.reduce(entries, %{}, fn entry, node -> Map.merge(node, entry(entry, styles, [])) end)
+    entries
+    |> Enum.reduce(%{}, fn entry, node -> Parts.merge(node, entry(entry, styles, [])) end)
+    |> Parts.project()
   end
 
-  def cascade(entry, styles), do: entry(entry, styles, [])
+  def cascade(entry, styles), do: entry |> entry(styles, []) |> Parts.project()
 
   defp entry(%Var{}, _styles, _seen), do: %{}
 
   defp entry(%{} = inline, styles, seen) when not is_struct(inline) do
+    inline = Parts.normalize(inline)
+
     parent =
       if Map.has_key?(inline, :extends), do: entry(inline[:extends], styles, seen), else: %{}
 
-    Map.merge(parent, Map.delete(inline, :extends))
+    Parts.merge(parent, Map.delete(inline, :extends))
   end
 
   defp entry(name, styles, seen) when is_atom(name) and is_map_key(styles, name) do
@@ -205,8 +212,9 @@ defmodule Visualize.Chart.Validator.Domain do
   defp entry(_entry, _styles, _seen), do: %{}
 
   defp named(%{} = node, styles, seen) when not is_struct(node) do
+    node = Parts.normalize(node)
     parent = if Map.has_key?(node, :extends), do: entry(node[:extends], styles, seen), else: %{}
-    Map.merge(parent, Map.delete(node, :extends))
+    Parts.merge(parent, Map.delete(node, :extends))
   end
 
   defp named(_node, _styles, _seen), do: %{}

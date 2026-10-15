@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Fills, Glyphs, Store}
+    alias Visualize.Chart.Builder.{Fills, FormSchema, Glyphs, Store}
     alias Visualize.Chart.{Fragment, Schema, Text, Validator, Var}
     alias Visualize.Theme
 
@@ -74,7 +74,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp children(node, kind, path) do
-      Enum.flat_map(Schema.describe(kind), fn spec ->
+      Enum.flat_map(FormSchema.describe(kind), fn spec ->
         case Map.fetch(node, spec.key) do
           {:ok, value} -> descend(spec.type, value, path ++ [spec.key])
           :error -> []
@@ -404,7 +404,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec changes(atom(), map()) :: [{atom(), {:ok, term()} | :error}]
     def changes(kind, %{"_target" => ["font_face"], "font_face" => picked} = _params) do
-      with true <- Schema.key(kind, :font_weight) != nil and Schema.key(kind, :font_style) != nil,
+      with true <-
+             FormSchema.key(kind, :font_weight) != nil and
+               FormSchema.key(kind, :font_style) != nil,
            {_face, weight, style} <- Enum.find(@faces, &(to_string(elem(&1, 0)) == picked)) do
         [font_weight: {:ok, weight}, font_style: {:ok, style}]
       else
@@ -459,7 +461,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp weight_word(_other), do: :normal
 
     defp key_spec(kind, submitted) do
-      Enum.find(Schema.describe(kind), &(to_string(&1.key) == submitted))
+      Enum.find(FormSchema.describe(kind), &(to_string(&1.key) == submitted))
     end
 
     defp typed(nil, _value), do: nil
@@ -520,7 +522,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec facets(atom()) :: [Schema.facet()]
     def facets(kind) do
-      specs = Schema.describe(kind)
+      specs = FormSchema.describe(kind)
       Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
     end
 
@@ -982,7 +984,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:target, :any, default: nil)
 
     def form_body(assigns) do
-      specs = Schema.describe(assigns.kind)
+      specs = FormSchema.describe(assigns.kind)
       facets = facets(assigns.kind)
       open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
 
@@ -1440,7 +1442,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
     defp well(:colour, {:paint, name}, theme, defs) do
       case Map.get(defs, name) do
-        %{stops: [%{colour: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
+        %{stops: [%{color: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
         _other -> %{colour: nil, none?: false, word: to_string(name)}
       end
     end
@@ -1451,7 +1453,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The points between lines a line height means (§18.6): font_size × (line_height − 1),
     # from the node's font size or the theme's.
     defp points(:line_height, node, theme) do
-      height = number_or(Map.get(node, :line_height), Schema.default(:style, :line_height) || 1.2)
+      height =
+        number_or(Map.get(node, :line_height), FormSchema.default(:style, :line_height) || 1.2)
+
       size = number_or(Map.get(node, :font_size), (theme && theme.font_size) || 12)
       Float.round(size * (height - 1) * 1.0, 1)
     end
@@ -1527,7 +1531,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(_widget, {:ok, %Var{}}), do: nil
     # A colour is the well's to show, never a control's.
     defp shown(:colour, {:ok, _value}), do: nil
-    defp shown(:textarea, {:ok, value}), do: inspect(value)
+    # Whole: a literal `inspect/1` cut short at its default limit would read back as less
+    # than it is — a theme's palette in its parts is well over fifty terms.
+    defp shown(:textarea, {:ok, value}),
+      do: inspect(value, limit: :infinity, printable_limit: :infinity)
+
     defp shown({:select, _}, {:ok, value}), do: option(value)
     defp shown({:columns, _}, {:ok, value}), do: to_string(value)
     defp shown({:pool, _}, {:ok, value}), do: option(value)

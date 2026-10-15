@@ -15,7 +15,7 @@ defmodule Visualize.Chart.InferredDomainTest do
   # A series over `t` 100..199 in one cartesian frame, `x` and `y` inferred, plus `marks`.
   defp design(marks, scales \\ %{}) do
     %{
-      version: 2,
+      version: 3,
       sources: %{s: %{fields: [:t, :v]}},
       frames: %{
         main: %{
@@ -104,7 +104,7 @@ defmodule Visualize.Chart.InferredDomainTest do
   test "an adopted scale is followed to the frame that owns it" do
     two = fn owner_domain ->
       %{
-        version: 2,
+        version: 3,
         sources: %{s: %{fields: [:t, :v]}},
         layout: %{rows: [1, 1]},
         frames: %{
@@ -137,7 +137,7 @@ defmodule Visualize.Chart.InferredDomainTest do
 
   test "in a polar frame the positions are angle and r" do
     d = %{
-      version: 2,
+      version: 3,
       sources: %{s: %{fields: [:t, :v]}},
       frames: %{
         main: %{

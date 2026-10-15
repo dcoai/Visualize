@@ -44,7 +44,7 @@ defmodule Visualize.ChartGen do
           meta <- meta(vars)
         ) do
       %{
-        version: 2,
+        version: 3,
         meta: meta,
         sources: sources,
         vars: vars,

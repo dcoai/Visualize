@@ -34,10 +34,12 @@ defmodule Visualize.Theme do
   `styles` carries the same design over to whole styles (spec/08 §7.7, D-171): style series
   `:style_1` … `:style_n`, which `{:style, i}` cycles over; the five roles as whole looks;
   the view states `:hover`, `:focused`, `:selected`, `:active`, `:disabled`, `:muted`,
-  `:emphasis` and `:breakpoint`; and the furniture styles `:axis`, `:grid`, `:label`,
-  `:title`, `:caption`, `:value` and `:annotation`. Entries are flat style nodes written in
-  slots, the names are the library's, and each entry is held to its group's contract when a
-  theme is built. `style/2` reads one, the default theme's where the theme lacks it.
+  `:emphasis` and `:breakpoint`; the furniture styles `:axis`, `:grid`, `:label`, `:title`,
+  `:caption`, `:value` and `:annotation`; and the modifiers `:bold`, `:italic`, `:thin`,
+  `:thick`, `:dashed`, `:dotted` and `:outline`, each changing one thing (D-172). Entries
+  are style nodes in their parts (`fill`, `stroke`, `font`, …) written in slots, the names
+  are the library's, and each entry is held to its group's contract when a theme is built.
+  `style/2` reads one, the default theme's where the theme lacks it.
 
   ## Examples
 
@@ -55,6 +57,7 @@ defmodule Visualize.Theme do
   """
 
   alias Visualize.{Backend, Color}
+  alias Visualize.Chart.Style
   alias Visualize.Theme.{Contract, Palette}
 
   @light_series ~w(#3b6fa8 #d9730d #c8373b #2f8f86 #3f8a37 #a8891a #8f5f99 #c9527f #8a6a4f #6f7480)
@@ -251,16 +254,16 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The palette entry `name` as a flat style node (spec/08 §7.7): the theme's own, or the
-  default theme's entry of that name, whole, where the theme lacks it.
+  The palette entry `name` as a style node in its parts (spec/08 §7.7, D-172): the theme's
+  own, or the default theme's entry of that name, whole, where the theme lacks it.
 
   `name` is an atom of `style_names/1`, or `{:style, i}` for the i-th style series entry,
-  cycling over the theme's style series. In a role's entry `:cue` becomes the role's dash
-  and glyph (`cue/1`), and a solid dash leaves the key out. Any other name raises
-  `ArgumentError`.
+  cycling over the theme's style series. In a role's entry `:cue` — a stroke's `dash`, a
+  marker's `shape` — becomes the role's dash and glyph (`cue/1`), and a solid dash leaves
+  the key out. Any other name raises `ArgumentError`.
 
       iex> Visualize.Theme.style(Visualize.Theme.default(), :warning)
-      %{fill: :warning, stroke: :warning, stroke_dasharray: "6 3", symbol: :triangle}
+      %{fill: %{type: :solid, color: :warning}, stroke: %{type: :solid, color: :warning, dash: "6 3"}, marker: %{shape: :triangle}}
       iex> Visualize.Theme.style(Visualize.Theme.dark(), {:style, 12}) == Visualize.Theme.style(Visualize.Theme.dark(), :style_2)
       true
       iex> Visualize.Theme.style(Visualize.Theme.default(), :muted)
@@ -296,7 +299,7 @@ defmodule Visualize.Theme do
   the furniture styles.
 
       iex> Visualize.Theme.default() |> Visualize.Theme.style_names() |> Enum.drop(10)
-      [:good, :warning, :bad, :info, :neutral, :hover, :focused, :selected, :active, :disabled, :muted, :emphasis, :breakpoint, :axis, :grid, :label, :title, :caption, :value, :annotation]
+      [:good, :warning, :bad, :info, :neutral, :hover, :focused, :selected, :active, :disabled, :muted, :emphasis, :breakpoint, :axis, :grid, :label, :title, :caption, :value, :annotation, :bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
 
   """
   @spec style_names(t()) :: [atom(), ...]
@@ -320,23 +323,34 @@ defmodule Visualize.Theme do
   defp own_styles(%__MODULE__{styles: styles}) when is_map(styles), do: styles
   defp own_styles(%__MODULE__{}), do: %{}
 
-  # A role's `:cue` is its dash and glyph; a solid dash is no key.
+  # A role's `:cue` is its dash and glyph — a stroke's `dash`, a marker's `shape` — and a
+  # solid dash is no key.
   defp cued(name, entry) do
-    if name in @role_slots do
+    entry = Style.normalize(entry)
+
+    if name in @role_slots and is_map(entry) do
       %{glyph: glyph, dash: dash} = cue(name)
 
-      Enum.reduce(entry, %{}, fn
-        {:symbol, :cue}, acc -> Map.put(acc, :symbol, glyph)
-        {:stroke_dasharray, :cue}, acc -> put_cue_dash(acc, dash)
-        {key, value}, acc -> Map.put(acc, key, value)
-      end)
+      entry
+      |> cue_part(:marker, :shape, glyph)
+      |> cue_part(:stroke, :dash, dash)
     else
       entry
     end
   end
 
-  defp put_cue_dash(acc, nil), do: acc
-  defp put_cue_dash(acc, dash), do: Map.put(acc, :stroke_dasharray, dash)
+  defp cue_part(entry, part, key, value) do
+    case entry do
+      %{^part => %{^key => :cue} = map} when value == nil ->
+        %{entry | part => Map.delete(map, key)}
+
+      %{^part => %{^key => :cue} = map} ->
+        %{entry | part => Map.put(map, key, value)}
+
+      _other ->
+        entry
+    end
+  end
 
   @doc """
   `default/0` with the given fields replaced; `ramps`, `roles` and `styles` are merged key by
@@ -356,7 +370,7 @@ defmodule Visualize.Theme do
       iex> Visualize.Theme.style(theme, :muted)
       %{opacity: 0.4}
       iex> Visualize.Theme.new(name: :house, styles: %{bad: %{fill: :good}})
-      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill must be :bad or absent; got :good
+      ** (ArgumentError) theme :house: style :bad breaks its contract: a role style paints with its own role, so fill.color must be :bad or absent; got :good
 
   """
   @spec merge(t(), keyword() | map()) :: t()
@@ -393,16 +407,21 @@ defmodule Visualize.Theme do
       theme
       | ramps: merged(theme.ramps, ramps, :ramps),
         roles: merged(theme.roles, roles, :roles),
-        styles: merged(theme.styles, styles, :styles)
+        styles: theme.styles |> merged(styles, :styles) |> normalized()
     }
   end
 
   defp merged(own, given, _key) when is_map(given), do: Map.merge(own || %{}, given)
+
   defp merged(own, given, key) when is_list(given), do: merged(own, Map.new(given), key)
 
   defp merged(_own, given, key) do
     raise ArgumentError, "#{key}: a map of name to value, got #{inspect(given)}"
   end
+
+  # Palette entries in their parts, whatever spelling a host gave them (spec/14 §3.1, D-172).
+  defp normalized(styles),
+    do: Map.new(styles, fn {name, entry} -> {name, Style.normalize(entry)} end)
 
   @doc """
   `:ok`, or `{:error, subject, message}` for the first ramp, role or palette style of the

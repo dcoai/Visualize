@@ -129,8 +129,8 @@ defmodule Visualize.Board do
   `Visualize.Chart.from_map/2` takes them, the defaults when absent — and validated alone
   (spec/15 §3.1). A map with no `version` reads as the current one.
 
-      iex> Visualize.Board.from_map(%{version: 3})
-      {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      iex> Visualize.Board.from_map(%{version: 4})
+      {:error, [{[:version], {:newer_schema, 4, 3}}]}
   """
   @spec from_map(term(), keyword()) :: {:ok, t()} | {:error, [error(), ...]}
   def from_map(map, opts \\ []) do
@@ -188,7 +188,7 @@ defmodule Visualize.Board do
   without Jason the result is `{:error, {:missing_dependency, :jason}}`.
 
       iex> Visualize.Board.from_json(~s({"$version": 9, "cells": {}}))
-      {:error, [{["$version"], {:newer_schema, 9, 2}}]}
+      {:error, [{["$version"], {:newer_schema, 9, 3}}]}
   """
   @spec from_json(String.t(), keyword()) ::
           {:ok, t()} | {:error, [error(), ...] | {:missing_dependency, :jason}}

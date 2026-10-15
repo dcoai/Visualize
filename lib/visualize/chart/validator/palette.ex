@@ -26,9 +26,19 @@ defmodule Visualize.Chart.Validator.Palette do
 
   @doc false
   # A stored theme's palette entry as the style grammar reads it (spec/14 §2.5): a role's
-  # `:cue` and an `extends` are the palette contract's to judge, so they are left to it.
+  # `:cue` — a stroke's `dash` or a marker's `shape` — and an `extends` are the palette
+  # contract's to judge, so they are left to it.
   @spec entry(map()) :: map()
   def entry(entry) do
-    entry |> Map.delete(:extends) |> Map.reject(fn {_key, value} -> value == :cue end)
+    entry
+    |> Visualize.Chart.Style.normalize()
+    |> Map.delete(:extends)
+    |> Map.new(fn
+      {key, part} when is_map(part) and not is_struct(part) ->
+        {key, Map.reject(part, fn {_key, value} -> value == :cue end)}
+
+      other ->
+        other
+    end)
   end
 end

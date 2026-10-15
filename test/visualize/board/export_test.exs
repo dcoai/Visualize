@@ -253,10 +253,10 @@ defmodule Visualize.Board.ExportTest do
 
     test "a newer snapshot is refused by name before anything is read" do
       assert Snapshot.from_json(~s({"$version": 9, "board": 1})) ==
-               {:error, [{["$version"], {:newer_schema, 9, 2}}]}
+               {:error, [{["$version"], {:newer_schema, 9, 3}}]}
 
       assert Snapshot.from_map(%{version: 9, cells: :nonsense}) ==
-               {:error, [{[:version], {:newer_schema, 9, 2}}]}
+               {:error, [{[:version], {:newer_schema, 9, 3}}]}
     end
 
     test "the limits hold before a key is read, and every fault is reported by path" do

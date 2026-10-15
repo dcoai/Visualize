@@ -13,7 +13,8 @@ defmodule Visualize.Chart.Stack do
   # it. `cascade/2` drops the second; `explain/1` folds the layers and keeps it, so what
   # provenance reports and what the cascade produces cannot drift.
 
-  alias Visualize.Chart.{Fragment, Schema, Text, Var}
+  alias Visualize.Chart.{Fragment, Migration, Schema, Text, Var}
+  alias Visualize.Chart.Style.Parts
 
   @doc false
   @spec cascade(map(), map()) :: map()
@@ -137,11 +138,23 @@ defmodule Visualize.Chart.Stack do
   # at the top, `%{style: %{…}}`, which is a node of its kind (spec/14 §19.2), so two style
   # fragments cascade key by key as two styles would.
   defp key(kind, k, va, vb, path) do
+    {va, vb} = parts(kind, k, va, vb)
+
     case spec(kind, k) do
       nil -> {vb, [path]}
       spec -> rule(spec.merge, spec.type, va, vb, path)
     end
   end
+
+  # A style's part written as a shorthand on one side and as a part on the other is the
+  # part on both, so they merge key by key as two parts do (spec/14 §3.1, D-172).
+  defp parts(:style, k, va, vb) when k in [:fill, :stroke, :curve, :effect] do
+    if node_map?(va) != node_map?(vb), do: {part(k, va), part(k, vb)}, else: {va, vb}
+  end
+
+  defp parts(_kind, _k, va, vb), do: {va, vb}
+
+  defp part(k, v), do: Map.get(Parts.normalize(%{k => v}), k)
 
   defp spec(kind, k) do
     case {Schema.key(kind, k), kind} do
@@ -184,7 +197,8 @@ defmodule Visualize.Chart.Stack do
   defp rule(_merge, type, va, vb, path) do
     with true <- node_map?(va) and node_map?(vb),
          kind when kind != nil <- node_kind(type) do
-      node(kind, va, vb, path)
+      # A part whose type changes keeps of the lower only what no type decides (D-172).
+      node(kind, Parts.under(kind, va, vb), vb, path)
     else
       _other -> {vb, leaves(type, vb, path)}
     end
@@ -256,7 +270,7 @@ defmodule Visualize.Chart.Stack do
   defp variables(type, %Var{name: name}, path), do: [{path, type, name}]
 
   defp variables({:node, kind}, v, path) when is_map(v) and not is_struct(v) do
-    Enum.flat_map(v, fn {k, e} -> variables(type(kind, k), e, path ++ [k]) end)
+    Enum.flat_map(v, fn {k, e} -> variables(type(kind, k, e), e, path ++ [k]) end)
   end
 
   defp variables({:map, t}, v, path) when is_map(v) and not is_struct(v) do
@@ -295,7 +309,7 @@ defmodule Visualize.Chart.Stack do
   # Every path the walk does not descend into: it descends through a node, a name-keyed
   # declaration and a collection of nodes, and stops everywhere else (spec/14 §17.1).
   defp leaves({:node, kind}, v, path) when is_map(v) and not is_struct(v) do
-    Enum.flat_map(v, fn {k, e} -> leaves(type(kind, k), e, path ++ [k]) end)
+    Enum.flat_map(v, fn {k, e} -> leaves(type(kind, k, e), e, path ++ [k]) end)
   end
 
   defp leaves({:map, t}, v, path) when is_map(v) and not is_struct(v) do
@@ -324,10 +338,18 @@ defmodule Visualize.Chart.Stack do
 
   defp type(kind, key) do
     case spec(kind, key) do
-      nil -> :term
+      nil -> Migration.legacy_type(kind, key) || :term
       spec -> spec.type
     end
   end
+
+  # A style's `fill`, `stroke`, `curve` or `effect` written as a shorthand is the flat key's
+  # value, and expects what that key did (spec/14 §9, D-172).
+  defp type(:style, key, value) when key in [:fill, :stroke, :curve, :effect] do
+    if Parts.flat?(%{key => value}), do: Migration.flat_type(key), else: type(:style, key)
+  end
+
+  defp type(kind, key, _value), do: type(kind, key)
 
   defp node_map?(v), do: is_map(v) and not is_struct(v)
 

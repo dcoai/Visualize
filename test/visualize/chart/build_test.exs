@@ -17,6 +17,7 @@ defmodule Visualize.Chart.BuildTest do
   alias Visualize.Chart
   alias Visualize.Chart.Build
   alias Visualize.Chart.Build.Generate
+  alias Visualize.Chart.Migration
   alias Visualize.Designs
 
   doctest Build
@@ -28,7 +29,10 @@ defmodule Visualize.Chart.BuildTest do
       test "#{name}" do
         name = unquote(name)
         assert {:ok, built} = Chart.compose(pipeline(name))
-        assert built == Designs.design(name)
+        # The stored designs are version 2, in flat style keys: the 2 -> 3 step's rewrite
+        # of the styles into their parts (D-172) is what a pipeline builds today.
+        stored = name |> Designs.design() |> Map.put(:version, 3) |> Migration.parts(:design)
+        assert built == stored
         assert {:ok, _chart} = Chart.from_map(built)
       end
     end
@@ -60,8 +64,23 @@ defmodule Visualize.Chart.BuildTest do
     end
 
     test "a style may name the parent it extends" do
+      assert style(:heavy, extends: :series, stroke: %{width: 3}) ==
+               %{styles: %{heavy: %{extends: :series, stroke: %{width: 3}}}}
+    end
+
+    test "a style written in the flat keys of version 2 is built in its parts (D-172)" do
       assert style(:heavy, extends: :series, stroke_width: 3) ==
-               %{styles: %{heavy: %{extends: :series, stroke_width: 3}}}
+               %{styles: %{heavy: %{extends: :series, stroke: %{width: 3}}}}
+
+      assert style(:soft, fill: :series_1, fill_opacity: 0.4, curve: :step) ==
+               %{
+                 styles: %{
+                   soft: %{
+                     fill: %{type: :solid, color: :series_1, opacity: 0.4},
+                     curve: %{type: :step}
+                   }
+                 }
+               }
     end
 
     test "the keys a node does know are kept as given" do

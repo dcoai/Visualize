@@ -100,7 +100,8 @@ defmodule Examples.LabelInkTest do
       {design, _sources} = module.design([])
       [label] = for %{label: label} when is_map(label) <- design.marks, do: label
       assert label.fit == Map.fetch!(@fits, module), inspect(module)
-      assert Map.fetch!(design.styles, label.style).fill == :contrast, inspect(module)
+      style = Visualize.Chart.Style.project(Map.fetch!(design.styles, label.style))
+      assert style.fill == :contrast, inspect(module)
     end
   end
 

@@ -1,17 +1,22 @@
 defmodule Visualize.Theme.Palette do
   @moduledoc false
-  # The style palette of a theme (spec/08 §7.7, D-171): its fixed names in four groups, the
-  # built-in entries every built-in theme shares, and the contracts an entry holds. `check/1`
-  # answers the first entry that breaks its contract, with a message naming the term it
-  # breaks, or `:ok`; `violations/1` answers every one.
+  # The style palette of a theme (spec/08 §7.7, D-171, D-172): its fixed names in five
+  # groups, the built-in entries every built-in theme shares, written in compound parts, and
+  # the contracts an entry holds. `check/1` answers the first entry that breaks its
+  # contract, with a message naming the term it breaks, or `:ok`; `violations/1` answers
+  # every one.
+
+  alias Visualize.Chart.Style.Parts
 
   @roles [:good, :warning, :bad, :info, :neutral]
   @states [:hover, :focused, :selected, :active, :disabled, :muted, :emphasis, :breakpoint]
   @furniture [:axis, :grid, :label, :title, :caption, :value, :annotation]
+  @modifiers [:bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
   @text_furniture @furniture -- [:grid]
 
-  # The keys that carry hue: everything else an entry says is visible without colour.
-  @hue_keys [:fill, :stroke]
+  # The parts that carry hue: a paint's colour, which everything else an entry says is
+  # visible without.
+  @paints [:fill, :stroke]
   # Where a status role stands on the status ramp, its other spelling (spec/08 §7.3).
   @status_positions %{good: 0, warning: 0.5, bad: 1}
   @size_slots [:font_size, :label_size, :title_size]
@@ -22,58 +27,78 @@ defmodule Visualize.Theme.Palette do
   @dashes [nil, "8 3", "3 3", "8 3 3 3", "1 3"]
 
   @series (for k <- 1..10 do
-             entry = %{
-               fill: {:series, k},
-               stroke: {:series, k},
-               stroke_width: 1.5,
-               symbol: Enum.at(@symbols, rem(k - 1, length(@symbols)))
-             }
-
              dash = Enum.at(@dashes, rem(k - 1, length(@dashes)))
-             {:"style_#{k}", if(dash, do: Map.put(entry, :stroke_dasharray, dash), else: entry)}
+             stroke = %{type: :solid, color: {:series, k}, width: 1.5}
+
+             {:"style_#{k}",
+              %{
+                fill: %{type: :solid, color: {:series, k}},
+                stroke: if(dash, do: Map.put(stroke, :dash, dash), else: stroke),
+                marker: %{shape: Enum.at(@symbols, rem(k - 1, length(@symbols)))}
+              }}
            end)
 
-  @label %{fill: :text, font_family: :font_family, font_size: :label_size}
+  @label %{
+    fill: %{type: :solid, color: :text},
+    font: %{family: :font_family, size: :label_size}
+  }
 
   @builtin Map.new(
              @series ++
                Enum.map(@roles, fn role ->
-                 {role, %{fill: role, stroke: role, stroke_dasharray: :cue, symbol: :cue}}
+                 {role,
+                  %{
+                    fill: %{type: :solid, color: role},
+                    stroke: %{type: :solid, color: role, dash: :cue},
+                    marker: %{shape: :cue}
+                  }}
                end) ++
                [
-                 hover: %{stroke: :text, stroke_width: 2},
-                 focused: %{stroke: :text, stroke_width: 2, stroke_dasharray: "4 2"},
+                 hover: %{stroke: %{type: :solid, color: :text, width: 2}},
+                 focused: %{stroke: %{type: :solid, color: :text, width: 2, dash: "4 2"}},
                  # Heavier only (#638): no colour of its own to paint over a stroked mark's.
-                 selected: %{stroke_width: 2},
-                 active: %{stroke: :text, stroke_width: 3},
-                 disabled: %{opacity: 0.4, stroke_dasharray: "2 2"},
+                 selected: %{stroke: %{width: 2}},
+                 active: %{stroke: %{type: :solid, color: :text, width: 3}},
+                 disabled: %{opacity: 0.4, stroke: %{dash: "2 2"}},
                  # The board's dim of today (spec/15 §13.2), so a muted row looks as it did.
                  muted: %{opacity: 0.25},
-                 emphasis: %{stroke_width: 3, font_weight: :bold},
-                 breakpoint: %{stroke: :bad, stroke_width: 2, stroke_dasharray: "6 2 2 2"},
+                 emphasis: %{stroke: %{width: 3}, font: %{weight: :bold}},
+                 breakpoint: %{
+                   stroke: %{type: :solid, color: :bad, width: 2, dash: "6 2 2 2"}
+                 },
                  # The four built-in styles of spec/14 §3.3, exactly as they always were.
                  axis: %{
-                   stroke: :axis,
-                   fill: :text,
-                   font_family: :font_family,
-                   font_size: :font_size
+                   stroke: %{type: :solid, color: :axis},
+                   fill: %{type: :solid, color: :text},
+                   font: %{family: :font_family, size: :font_size}
                  },
-                 grid: %{stroke: :grid},
+                 grid: %{stroke: %{type: :solid, color: :grid}},
                  label: @label,
-                 title: Map.merge(@label, %{font_size: :title_size, font_weight: :bold}),
+                 title: %{
+                   @label
+                   | font: %{family: :font_family, size: :title_size, weight: :bold}
+                 },
                  caption: %{
-                   fill: :text,
-                   font_family: :font_family,
-                   font_size: :font_size,
-                   font_style: :italic
+                   fill: %{type: :solid, color: :text},
+                   font: %{family: :font_family, size: :font_size, style: :italic}
                  },
                  value: %{
-                   fill: :text,
-                   font_family: :font_family,
-                   font_size: :title_size,
-                   font_weight: :medium
+                   fill: %{type: :solid, color: :text},
+                   font: %{family: :font_family, size: :title_size, weight: :medium}
                  },
-                 annotation: %{fill: :text, font_family: :font_family, font_size: :font_size}
+                 annotation: %{
+                   fill: %{type: :solid, color: :text},
+                   font: %{family: :font_family, size: :font_size}
+                 },
+                 # The modifiers (D-172): each changes one thing, to be stacked on a look —
+                 # `[:bad, :outline]` is the bad look's outline alone.
+                 bold: %{font: %{weight: :bold}},
+                 italic: %{font: %{style: :italic}},
+                 thin: %{stroke: %{width: 1}},
+                 thick: %{stroke: %{width: 3}},
+                 dashed: %{stroke: %{dash: "6 3"}},
+                 dotted: %{stroke: %{dash: "1 3", cap: :round}},
+                 outline: %{fill: %{type: :none}}
                ]
            )
 
@@ -93,6 +118,10 @@ defmodule Visualize.Theme.Palette do
   @doc false
   @spec furniture() :: [atom(), ...]
   def furniture, do: @furniture
+
+  @doc false
+  @spec modifiers() :: [atom(), ...]
+  def modifiers, do: @modifiers
 
   @doc false
   # The style series names a palette holds, `:style_1` up to the first gap, in order; the
@@ -119,7 +148,7 @@ defmodule Visualize.Theme.Palette do
   @doc false
   # Every name of the palette whose style series is `series`, in the order of §7.7.
   @spec names([atom()]) :: [atom()]
-  def names(series), do: series ++ @roles ++ @states ++ @furniture
+  def names(series), do: series ++ @roles ++ @states ++ @furniture ++ @modifiers
 
   @doc false
   # `:ok`, or `{:error, {:style, name}, message}` for the first entry that breaks its
@@ -136,6 +165,7 @@ defmodule Visualize.Theme.Palette do
   # Every entry that breaks its contract, `{{:style, name}, message}`, in `check/1`'s order.
   @spec violations(map()) :: [{{:style, atom()}, String.t()}]
   def violations(styles) when is_map(styles) do
+    styles = Map.new(styles, fn {name, entry} -> {name, Parts.normalize(entry)} end)
     own = own_series(styles)
     known = names(own)
 
@@ -165,56 +195,75 @@ defmodule Visualize.Theme.Palette do
     with :ok <- cues(name, entry), do: group(name, entry)
   end
 
+  # Where a role's cue may stand: its stroke's dash and its marker's shape.
+  @cue_keys [{:stroke, :dash}, {:marker, :shape}]
+
   defp cues(name, entry) do
-    case Enum.find(Enum.sort(entry), fn {_key, value} -> value == :cue end) do
-      nil ->
+    found =
+      for {part, map} <- Enum.sort(entry),
+          is_map(map) and not is_struct(map),
+          {key, :cue} <- Enum.sort(map),
+          do: {part, key}
+
+    case found do
+      [] ->
         :ok
 
-      {key, :cue} when name in @roles and key in [:stroke_dasharray, :symbol] ->
-        :ok
+      [at | _] ->
+        cond do
+          name in @roles and Enum.all?(found, &(&1 in @cue_keys)) ->
+            :ok
 
-      {key, :cue} when name in @roles ->
-        {:error,
-         ":cue is a role's dash or glyph, only on stroke_dasharray or symbol; got #{key}: :cue"}
+          name in @roles ->
+            {part, key} = Enum.find(found, &(&1 not in @cue_keys))
 
-      {key, :cue} ->
-        {:error,
-         ":cue is a role's dash or glyph, and #{inspect(name)} is not a role; got #{key}: :cue"}
+            {:error,
+             ":cue is a role's dash or glyph, only on stroke.dash or marker.shape; got " <>
+               "#{part}.#{key}: :cue"}
+
+          true ->
+            {part, key} = at
+
+            {:error,
+             ":cue is a role's dash or glyph, and #{inspect(name)} is not a role; got " <>
+               "#{part}.#{key}: :cue"}
+        end
     end
   end
 
   defp group(role, entry) when role in @roles do
-    Enum.find_value([:fill, :stroke], :ok, fn key ->
-      case Map.fetch(entry, key) do
-        :error ->
+    Enum.find_value(@paints, :ok, fn part ->
+      case colour(entry, part) do
+        nil ->
           nil
 
-        {:ok, value} ->
+        value ->
           if own_role?(role, value),
             do: nil,
             else:
               {:error,
-               "a role style paints with its own role, so #{key} must be #{inspect(role)} " <>
-                 "or absent; got #{inspect(value)}"}
+               "a role style paints with its own role, so #{part}.color must be " <>
+                 "#{inspect(role)} or absent; got #{inspect(value)}"}
       end
     end)
   end
 
   defp group(state, entry) when state in @states do
-    if Enum.any?(entry, &non_hue_change?/1),
+    if non_hue_change?(entry),
       do: :ok,
       else:
         {:error,
-         "a state style must read without hue, changing at least one of stroke_width, " <>
-           "stroke_style (an outline), opacity, fill_opacity, stroke_opacity, " <>
-           "stroke_dasharray or effect; got #{inspect(entry)}"}
+         "a state style must read without hue, changing at least one of stroke.width, " <>
+           "stroke.placement (an outline), opacity, fill.opacity, stroke.opacity, " <>
+           "stroke.dash or effect; got #{inspect(entry)}"}
   end
 
   defp group(:grid, entry) do
-    case Map.get(entry, :stroke) do
+    case colour(entry, :stroke) do
       value when value in [nil, :none, false, true] ->
         {:error,
-         "the grid must resolve a stroke, a colour other than :none; got #{inspect(value)}"}
+         "the grid must resolve a stroke, a color other than :none; got stroke.color: " <>
+           inspect(value)}
 
       _colour ->
         :ok
@@ -222,27 +271,56 @@ defmodule Visualize.Theme.Palette do
   end
 
   defp group(text, entry) when text in @text_furniture do
-    family = Map.get(entry, :font_family)
-    size = Map.get(entry, :font_size)
+    family = get_in_part(entry, :font, :family)
+    size = get_in_part(entry, :font, :size)
 
     cond do
       not family?(family) ->
         {:error,
          "a text style must resolve a font family, a string or :font_family; got " <>
-           "font_family: #{inspect(family)}"}
+           "font.family: #{inspect(family)}"}
 
       not size?(size) ->
         {:error,
          "a text style must resolve a size, a positive number or one of " <>
-           "#{Enum.map_join(@size_slots, ", ", &inspect/1)}; got font_size: #{inspect(size)}"}
+           "#{Enum.map_join(@size_slots, ", ", &inspect/1)}; got font.size: #{inspect(size)}"}
 
       true ->
         :ok
     end
   end
 
+  # A modifier changes one thing (D-172), so a stack of them composes without surprise.
+  defp group(modifier, entry) when modifier in @modifiers do
+    case Map.keys(entry) do
+      [_one] ->
+        :ok
+
+      keys ->
+        {:error,
+         "a modifier changes one thing, a single part or key; got " <>
+           "#{Enum.map_join(Enum.sort(keys), ", ", &to_string/1)}"}
+    end
+  end
+
   # A style series' contract is between neighbours, so it is checked over the whole series.
   defp group(_series, _entry), do: :ok
+
+  # The colour a paint part gives, `nil` when it gives none.
+  defp colour(entry, part) do
+    case Map.get(entry, part) do
+      %{type: :none} -> :none
+      %{color: colour} -> colour
+      _none -> nil
+    end
+  end
+
+  defp get_in_part(entry, part, key) do
+    case Map.get(entry, part) do
+      map when is_map(map) and not is_struct(map) -> Map.get(map, key)
+      _other -> nil
+    end
+  end
 
   defp own_role?(role, role), do: true
 
@@ -251,17 +329,24 @@ defmodule Visualize.Theme.Palette do
 
   defp own_role?(_role, _value), do: false
 
-  # A key that changes how an object looks without hue: present, and not the value that
+  # A part that changes how an object looks without hue: present, and not the value that
   # would leave the object as it is.
-  defp non_hue_change?({:stroke_width, value}), do: value != nil
-  defp non_hue_change?({:stroke_style, value}), do: value not in [nil, :single]
-  defp non_hue_change?({:effect, value}), do: value not in [nil, :none]
+  defp non_hue_change?(entry) do
+    changed?(get_in_part(entry, :stroke, :width), &(&1 != nil)) or
+      changed?(get_in_part(entry, :stroke, :placement), &(&1 not in [nil, :center])) or
+      changed?(get_in_part(entry, :stroke, :dash), &(&1 not in [nil, "", []])) or
+      Enum.any?(
+        [
+          Map.get(entry, :opacity),
+          get_in_part(entry, :fill, :opacity),
+          get_in_part(entry, :stroke, :opacity)
+        ],
+        &(&1 != nil and &1 != 1)
+      ) or
+      changed?(get_in_part(entry, :effect, :type), &(&1 not in [nil, :none]))
+  end
 
-  defp non_hue_change?({key, value}) when key in [:opacity, :fill_opacity, :stroke_opacity],
-    do: value != nil and value != 1
-
-  defp non_hue_change?({:stroke_dasharray, value}), do: value not in [nil, "", []]
-  defp non_hue_change?(_other), do: false
+  defp changed?(value, test), do: test.(value)
 
   defp family?(family) when is_binary(family), do: String.trim(family) != ""
   defp family?(family), do: family == :font_family
@@ -272,7 +357,8 @@ defmodule Visualize.Theme.Palette do
   # -- the series -----------------------------------------------------------------------
 
   # Each style series entry beside the next, the last beside the first, since `{:style, i}`
-  # cycles: they differ in a key besides fill and stroke. One entry is its own neighbour.
+  # cycles: they differ in something besides the colours of their fill and stroke. One
+  # entry is its own neighbour.
   defp neighbours(styles, own) do
     pairs =
       case own do
@@ -285,19 +371,31 @@ defmodule Visualize.Theme.Palette do
         entry_a = Map.fetch!(styles, a),
         entry_b = Map.fetch!(styles, b),
         is_map(entry_a) and is_map(entry_b),
-        Map.drop(entry_a, @hue_keys) == Map.drop(entry_b, @hue_keys),
+        hueless(entry_a) == hueless(entry_b),
         do: {{:style, b}, neighbour(a, b)}
+  end
+
+  # An entry with the colours of its paints taken out: what it says without hue.
+  defp hueless(entry) do
+    Map.new(entry, fn
+      {part, %{} = paint} when part in @paints and not is_struct(paint) ->
+        {part, Map.delete(paint, :color)}
+
+      other ->
+        other
+    end)
   end
 
   defp neighbour(a, a),
     do:
-      "a style series of one entry has itself for a neighbour and keeps no categories apart " <>
+      "a style series of one entry has itself for a neighbor and keeps no categories apart " <>
         "without hue; give the theme at least two"
 
   defp neighbour(a, b),
     do:
-      "neighbouring style series must differ in a key besides fill and stroke (a dash, a " <>
-        "symbol, a weight), but #{inspect(a)} and #{inspect(b)} differ only in hue"
+      "neighboring style series must differ in something besides the colors of fill and " <>
+        "stroke (a dash, a marker, a weight), but #{inspect(a)} and #{inspect(b)} differ " <>
+        "only in hue"
 
   defp unknown(name, own) do
     case series_index(name) do
@@ -307,8 +405,8 @@ defmodule Visualize.Theme.Palette do
 
       _ ->
         "is not a name of the palette; a theme cannot add one. The names are the style " <>
-          "series :style_1 … :style_n, the roles #{list(@roles)}, the states #{list(@states)} " <>
-          "and the furniture #{list(@furniture)}"
+          "series :style_1 … :style_n, the roles #{list(@roles)}, the states #{list(@states)}, " <>
+          "the furniture #{list(@furniture)} and the modifiers #{list(@modifiers)}"
     end
   end
 

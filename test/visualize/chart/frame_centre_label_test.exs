@@ -15,7 +15,7 @@ defmodule Visualize.Chart.FrameCentreLabelTest do
 
   defp design(kind, scales, labels, styles \\ %{}) do
     %{
-      version: 2,
+      version: 3,
       sources: %{},
       styles: styles,
       frames: %{main: %{kind: kind, margin: @margin, scales: scales}},

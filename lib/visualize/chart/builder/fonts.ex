@@ -14,8 +14,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Editor, Glyphs}
-    alias Visualize.Chart.{Schema, Var}
+    alias Visualize.Chart.Builder.{Editor, FormSchema, Glyphs}
+    alias Visualize.Chart.Var
 
     @faces [
       "system-ui",
@@ -123,7 +123,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec keys(atom()) :: [atom()]
     def keys(kind) do
-      declared = Enum.map(Schema.describe(kind), & &1.key)
+      declared = Enum.map(FormSchema.describe(kind), & &1.key)
       Enum.filter(@keys, &(&1 in declared))
     end
 

@@ -58,7 +58,7 @@ defmodule Visualize.Chart.OverlaysTest do
   defp design(extra \\ %{}) do
     Map.merge(
       %{
-        version: 2,
+        version: 3,
         sources: %{
           primary: %{fields: [:t, :v, :host]},
           events: %{fields: [:at, :ends, :title, :severity]},
@@ -513,7 +513,7 @@ defmodule Visualize.Chart.OverlaysTest do
       to = ~U[2026-10-11 01:00:00Z]
 
       design = %{
-        version: 2,
+        version: 3,
         interaction: %{brush: :x, frame: :lower},
         frames: %{
           upper: %{

@@ -11,13 +11,21 @@ defmodule Visualize.Chart.Style do
   scale when the frame declares one. The frame's furniture and the marks share this
   resolver.
 
-  A style is looked up by name with its `extends` chain flattened first — the parent's keys,
-  the child's over them (spec/14 §3.5, D-80) — so no consumer sees that key and a resolved
-  node never carries it. A cycle raises `ArgumentError`; the validator reports it by path.
+  A style is stored in **compound parts** (spec/14 §3.1, D-172) — `fill`, `stroke`, `font`,
+  `text`, `effect`, `marker`, `curve` — and `normalize/1` turns a shorthand or the flat keys
+  of an earlier version into them. The element keys are the flat ones they always were:
+  `resolve/3` projects the parts onto them, so the IR and the backends read what they read.
+
+  A style is looked up by name with its `extends` chain flattened first — the parent's parts,
+  the child's merged over them by `merge/2` (spec/14 §3.5, D-80, D-172) — so no consumer
+  sees that key and a resolved node never carries it. A cycle raises `ArgumentError`; the
+  validator reports it by path.
 
   ## Examples
 
       iex> theme = Visualize.Theme.default()
+      iex> Visualize.Chart.Style.resolve(%{stroke: %{color: :axis, width: 2}, curve: :step}, theme, :css)
+      %{stroke: "var(--vis-axis, #666666)", stroke_width: 2}
       iex> Visualize.Chart.Style.resolve(%{stroke: :axis, stroke_width: 2, curve: :step}, theme, :css)
       %{stroke: "var(--vis-axis, #666666)", stroke_width: 2}
       iex> Visualize.Chart.Style.resolve(%{stroke: :axis, stroke_dasharray: [2, 2]}, theme, :literal)
@@ -25,6 +33,7 @@ defmodule Visualize.Chart.Style do
 
   """
 
+  alias Visualize.Chart.Style.Parts
   alias Visualize.Chart.Var
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme}
@@ -68,6 +77,7 @@ defmodule Visualize.Chart.Style do
 
   def resolve(node, theme, mode) when is_map(node) do
     node
+    |> Parts.project()
     |> Map.take(@element_keys)
     |> Map.new(fn {key, value} -> {key, value(key, value, theme, mode)} end)
   end
@@ -154,8 +164,52 @@ defmodule Visualize.Chart.Style do
   # reference a design may override (spec/14 §3.3, #637, D-171).
   @spec all(map(), Theme.t()) :: %{atom() => map()}
   def all(declared, theme \\ Theme.default()) do
-    theme |> Theme.palette() |> Map.merge(declared)
+    theme
+    |> Theme.palette()
+    |> Map.merge(declared)
+    |> Map.new(fn {name, node} -> {name, Parts.normalize(node)} end)
   end
+
+  @doc """
+  A style node in the shape it is stored in (spec/14 §3.1, D-172): the flat keys of an
+  earlier version moved into their parts, and every shorthand expanded — `fill: :red` is a
+  solid paint, `curve: :step` a curve of that type, a gradient's `color` list its stops.
+
+      iex> Visualize.Chart.Style.normalize(%{stroke: :axis, stroke_width: 2})
+      %{stroke: %{type: :solid, color: :axis, width: 2}}
+      iex> Visualize.Chart.Style.normalize(%{fill: %{type: :linear, color: ["#fff", "#000"]}})
+      %{fill: %{type: :linear, stops: [%{at: 0, color: "#fff"}, %{at: 1, color: "#000"}]}}
+  """
+  @spec normalize(term()) :: term()
+  def normalize(node), do: Parts.normalize(node)
+
+  @doc """
+  `over` laid on `under` (spec/14 §3.5, D-172): each part merges key by key, so
+  `%{stroke: %{width: 3}}` over a dashed red stroke is a dashed red stroke 3 wide — but a
+  part whose `type` changes is replaced, keeping only what no type decides (a paint's
+  opacity, a stroke's width, dash, join, cap and placement).
+
+      iex> under = Visualize.Chart.Style.normalize(%{stroke: :bad, stroke_dasharray: "4 2"})
+      iex> Visualize.Chart.Style.merge(under, %{stroke: %{width: 3}})
+      %{stroke: %{type: :solid, color: :bad, dash: "4 2", width: 3}}
+      iex> Visualize.Chart.Style.merge(%{fill: %{type: :solid, color: :red, opacity: 0.5}}, %{fill: %{type: :linear, stops: []}})
+      %{fill: %{type: :linear, stops: [], opacity: 0.5}}
+  """
+  @spec merge(map(), map()) :: map()
+  def merge(under, over), do: Parts.merge(Parts.normalize(under), Parts.normalize(over))
+
+  @doc """
+  A style's parts written as the flat keys an element and a mark's generator read (spec/14
+  §3.4, D-172): `fill.color` is `fill`, `stroke.width` is `stroke_width`, `font.size` is
+  `font_size`, a curve's type is `curve` and its tension and alpha `curve_opts`. A
+  gradient written inline is `{:paint, name}`, drawn from the frame's `defs`. Keys
+  already flat pass through, so projecting twice is projecting once.
+
+      iex> Visualize.Chart.Style.project(%{stroke: %{type: :solid, color: :axis, width: 2, dash: [2, 2]}, font: %{size: 12}})
+      %{stroke: :axis, stroke_width: 2, stroke_dasharray: [2, 2], font_size: 12}
+  """
+  @spec project(map()) :: map()
+  def project(node), do: Parts.project(node)
 
   @doc false
   # The style node of a **stack** with every entry's `extends` chain flattened — the parent's
@@ -173,17 +227,25 @@ defmodule Visualize.Chart.Style do
   # `node/2` with each `{:field, f}` entry laid where it stands: `pick` answers the style
   # name the entry names — for one datum, the site's to read (spec/14 §3.6) — or `nil` to
   # lay nothing.
+  #
+  # The entries merge in their parts (`merge/2`), and the result is projected onto the flat
+  # keys the frame and the marks read (`Visualize.Chart.Style.Parts.project/1`, D-172).
   @spec node(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
-  def node(_styles, nil, _pick), do: %{}
-  def node(_styles, %Var{name: name}, _pick), do: unresolved!(name)
+  def node(styles, stack, pick), do: styles |> compound(stack, pick) |> Parts.project()
 
-  def node(styles, stack, pick) when is_list(stack) do
+  @doc false
+  # `node/3` before the projection: the stack's style in its parts.
+  @spec compound(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
+  def compound(_styles, nil, _pick), do: %{}
+  def compound(_styles, %Var{name: name}, _pick), do: unresolved!(name)
+
+  def compound(styles, stack, pick) when is_list(stack) do
     Enum.reduce(stack, %{}, fn entry, resolved ->
-      Map.merge(resolved, node(styles, entry, pick))
+      Parts.merge(resolved, compound(styles, entry, pick))
     end)
   end
 
-  def node(styles, {:field, _field} = entry, pick) do
+  def compound(styles, {:field, _field} = entry, pick) do
     case pick.(entry) do
       nil -> %{}
       name -> flatten(styles, name, [])
@@ -192,9 +254,10 @@ defmodule Visualize.Chart.Style do
 
   # An inline node is already the style: only its own `extends` needs flattening, and it is
   # looked up under no name, so nothing can reach it and no cycle can start here.
-  def node(styles, inline, _pick) when is_map(inline), do: inline_node(styles, inline)
+  def compound(styles, inline, _pick) when is_map(inline),
+    do: inline_node(styles, Parts.normalize(inline))
 
-  def node(styles, name, _pick), do: flatten(styles, name, [])
+  def compound(styles, name, _pick), do: flatten(styles, name, [])
 
   @doc false
   # The `{:field, f}` entries of a stack, in order (spec/14 §3.6).
@@ -206,7 +269,7 @@ defmodule Visualize.Chart.Style do
   defp inline_node(styles, inline) do
     case Map.fetch(inline, :extends) do
       :error -> inline
-      {:ok, parent} -> Map.merge(flatten(styles, parent, []), Map.delete(inline, :extends))
+      {:ok, parent} -> Parts.merge(flatten(styles, parent, []), Map.delete(inline, :extends))
     end
   end
 
@@ -215,14 +278,14 @@ defmodule Visualize.Chart.Style do
   defp flatten(styles, name, seen) do
     if name in seen, do: cycle!(name)
 
-    node = Map.get(styles, name, %{})
+    node = styles |> Map.get(name, %{}) |> Parts.normalize()
 
     case Map.fetch(node, :extends) do
       :error ->
         node
 
       {:ok, parent} ->
-        Map.merge(flatten(styles, parent, [name | seen]), Map.delete(node, :extends))
+        Parts.merge(flatten(styles, parent, [name | seen]), Map.delete(node, :extends))
     end
   end
 

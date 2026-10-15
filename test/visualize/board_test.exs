@@ -105,8 +105,8 @@ defmodule Visualize.BoardTest do
     end
 
     test "a newer board is refused by name before anything else is read" do
-      bad = board(%{version: 3, cells: :not_a_map, oops: 1})
-      assert Board.from_map(bad) == {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      bad = board(%{version: 4, cells: :not_a_map, oops: 1})
+      assert Board.from_map(bad) == {:error, [{[:version], {:newer_schema, 4, 3}}]}
     end
 
     test "boards begin at schema version 2" do
@@ -149,7 +149,7 @@ defmodule Visualize.BoardTest do
       {:ok, json} = Board.to_json(board)
       decoded = Jason.decode!(json)
 
-      assert decoded["$version"] == 2
+      assert decoded["$version"] == Visualize.Chart.Migration.current()
       refute Map.has_key?(decoded, "version")
       assert decoded["cells"]["latency"]["ref"] == %{"$id" => ["composite", 1]}
       assert decoded["window"]["from"] == %{"$time" => "2026-10-11T10:00:00Z"}
@@ -159,9 +159,9 @@ defmodule Visualize.BoardTest do
     end
 
     test "a newer stamp is refused before a key is decoded" do
-      json = ~s({"$version": 3, "cells": {"never_made_atom_board_x1": {"x": 0}}})
+      json = ~s({"$version": 4, "cells": {"never_made_atom_board_x1": {"x": 0}}})
 
-      assert Board.from_json(json) == {:error, [{["$version"], {:newer_schema, 3, 2}}]}
+      assert Board.from_json(json) == {:error, [{["$version"], {:newer_schema, 4, 3}}]}
       assert_raise ArgumentError, fn -> String.to_existing_atom("never_made_atom_board_x1") end
     end
 
@@ -173,7 +173,7 @@ defmodule Visualize.BoardTest do
     end
 
     test "an unstamped document reads as the current version" do
-      assert {:ok, %Board{version: 2}} = Board.from_json(~s({"cells": {}}))
+      assert {:ok, %Board{version: 3}} = Board.from_json(~s({"cells": {}}))
     end
 
     test "an unknown key stays a string and is reported at its own spelling" do

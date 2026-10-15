@@ -204,7 +204,7 @@ defmodule Visualize.Chart.StyleTest do
       assert Style.node(styles, :c) == %{stroke: "#001", opacity: 0.5, fill: "#003"}
 
       assert Style.node(styles(%{heavy: %{extends: :axis, stroke_width: 2}}), :heavy) ==
-               Map.put(Style.builtin(:axis), :stroke_width, 2)
+               Map.put(Style.project(Style.builtin(:axis)), :stroke_width, 2)
     end
 
     test "the key never reaches a resolved node" do
@@ -293,9 +293,11 @@ defmodule Visualize.Chart.StyleTest do
       # declared styles over the built-in four (spec/14 §3.3).
       styles = Style.all(%{})
 
-      assert Style.node(styles, [:axis]) == Style.builtin(:axis)
+      assert Style.node(styles, [:axis]) == Style.project(Style.builtin(:axis))
       assert Style.node(styles, [:grid, %{stroke_width: 3}]).stroke_width == 3
-      assert Style.node(styles, [:grid, %{stroke_width: 3}]).stroke == Style.builtin(:grid).stroke
+
+      assert Style.node(styles, [:grid, %{stroke_width: 3}]).stroke ==
+               Style.project(Style.builtin(:grid)).stroke
     end
   end
 end

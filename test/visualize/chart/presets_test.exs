@@ -10,7 +10,7 @@ defmodule Visualize.Chart.PresetsTest do
   use ExUnit.Case, async: true
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Frame, Presets}
+  alias Visualize.Chart.{Frame, Presets, Style}
 
   doctest Presets
 
@@ -155,8 +155,14 @@ defmodule Visualize.Chart.PresetsTest do
 
   test "the assigns reach the design: colours, options, labels, meta and the transform" do
     design = Presets.line_chart(Map.put(assigns().line_chart, :stroke, "tomato"))
-    assert design.styles.line == %{stroke: "tomato", stroke_width: 2, curve: :linear}
-    assert design.styles.point == %{fill: "tomato"}
+
+    assert Style.project(design.styles.line) == %{
+             stroke: "tomato",
+             stroke_width: 2,
+             curve: :linear
+           }
+
+    assert Style.project(design.styles.point) == %{fill: "tomato"}
     assert [%{type: :line}, %{type: :circle, options: %{radius: 4}}] = design.marks
     assert design.labels == [%{anchor: {:axis, :x}, text: ["t"]}]
 
@@ -170,7 +176,7 @@ defmodule Visualize.Chart.PresetsTest do
     assert label.text == [{:field, :label}]
     # A label on a fill reads on it and fits it, as the gallery's pie's (D-123, #494).
     assert label.fit == :hide
-    assert pie.styles.slice_label == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(pie.styles.slice_label) == %{fill: :contrast, font_size: :label_size}
 
     refute Map.has_key?(
              hd(Presets.pie_chart(Map.put(assigns().pie_chart, :show_labels, false)).marks),
@@ -211,7 +217,7 @@ defmodule Visualize.Chart.PresetsTest do
     assert Enum.at(horizontal.marks, 1).channels == %{x: :y, y: :x}
 
     # The links are open cubics: stroked, never filled and closed by their chord (#345).
-    assert tree.styles.link.fill == :none
+    assert Style.project(tree.styles.link).fill == :none
 
     {:ok, applied} =
       Chart.apply(tree, sources: Presets.sources(:tree_diagram, %{data: @hierarchy}))
@@ -233,7 +239,7 @@ defmodule Visualize.Chart.PresetsTest do
              style: :cell_label
            }
 
-    assert treemap.styles.cell_label == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(treemap.styles.cell_label) == %{fill: :contrast, font_size: :label_size}
 
     sunburst = Presets.sunburst_chart(assigns().sunburst_chart)
     assert sunburst.meta == %{description: ["Rings"]}
@@ -255,7 +261,7 @@ defmodule Visualize.Chart.PresetsTest do
              style: :arc_label
            }
 
-    assert sunburst.styles.arc_label == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(sunburst.styles.arc_label) == %{fill: :contrast, font_size: :label_size}
   end
 
   test "a chart preset renders through the layer on its own, and binds to another source" do

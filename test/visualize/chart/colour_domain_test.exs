@@ -16,7 +16,7 @@ defmodule Visualize.Chart.ColourDomainTest do
   defp design(overrides \\ %{}) do
     Map.merge(
       %{
-        version: 2,
+        version: 3,
         sources: %{cells: %{fields: [:x0, :x1, :k]}},
         styles: %{cell: %{fill: {:field, :k}, stroke: "#000000"}},
         frames: %{

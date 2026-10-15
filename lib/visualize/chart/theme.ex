@@ -31,8 +31,8 @@ defmodule Visualize.Chart.Theme do
       iex> Visualize.Chart.Theme.from_map(%{theme: :dark})
       {:ok, Visualize.Theme.dark()}
 
-      iex> Visualize.Chart.Theme.from_map(%{version: 3, theme: %{}})
-      {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      iex> Visualize.Chart.Theme.from_map(%{version: 4, theme: %{}})
+      {:error, [{[:version], {:newer_schema, 4, 3}}]}
 
   """
 

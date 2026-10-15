@@ -73,7 +73,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Fills.style_of(:none, %{})
         :none
 
-        iex> Visualize.Chart.Builder.Fills.style_of({:paint, :g}, %{g: %{kind: :radial}})
+        iex> Visualize.Chart.Builder.Fills.style_of({:paint, :g}, %{g: %{type: :radial}})
         :radial
 
         iex> Visualize.Chart.Builder.Fills.style_of("#abc", %{})
@@ -87,7 +87,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def style_of({:paint, name}, defs) do
       case Map.get(defs, name) do
-        %{kind: :radial} -> :radial
+        %{type: :radial} -> :radial
         _other -> :linear
       end
     end
@@ -106,17 +106,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Fills.writes("fill_style", "none", "#abc", %{}, :s_fill, "#abc")
         [fill: {:ok, :none}]
 
-        iex> Visualize.Chart.Builder.Fills.writes("fill_style", "solid", {:paint, :s_fill}, %{s_fill: %{kind: :linear, stops: [%{offset: 0, colour: "#123"}]}}, :s_fill, "#123")
+        iex> Visualize.Chart.Builder.Fills.writes("fill_style", "solid", {:paint, :s_fill}, %{s_fill: %{type: :linear, stops: [%{at: 0, color: "#123"}]}}, :s_fill, "#123")
         [fill: {:ok, "#123"}]
 
         iex> [{:declare, :s_fill, gradient}, {:fill, {:ok, {:paint, :s_fill}}}] =
         ...>   Visualize.Chart.Builder.Fills.writes("fill_style", "linear", "#abc", %{}, :s_fill, "#abc")
         iex> gradient
-        %{kind: :linear, stops: [%{offset: 0, colour: "#abc", opacity: 0.8}, %{offset: 1, colour: "#abc", opacity: 0.1}]}
+        %{type: :linear, stops: [%{at: 0, color: "#abc", opacity: 0.8}, %{at: 1, color: "#abc", opacity: 0.1}]}
 
         iex> [{:gradient, :s_fill, fun}] = Visualize.Chart.Builder.Fills.writes("fill.angle", "90", nil, %{}, :s_fill, nil)
-        iex> fun.(%{kind: :linear, stops: []})
-        %{kind: :linear, stops: [], angle: 90}
+        iex> fun.(%{type: :linear, stops: []})
+        %{type: :linear, stops: [], angle: 90}
 
         iex> Visualize.Chart.Builder.Fills.writes("fill.nonsense", "1", nil, %{}, :s_fill, nil)
         []
@@ -136,7 +136,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           gradient =
             case Map.get(defs, name) do
               nil -> fresh(kind, solid(value, defs, well))
-              declared -> Map.put(declared, :kind, kind)
+              declared -> Map.put(declared, :type, kind)
             end
 
           [{:declare, name, gradient}, {:fill, {:ok, {:paint, name}}}]
@@ -148,8 +148,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def writes("fill.stop." <> rest, submitted, _value, _defs, name, _well) do
       case String.split(rest, ".") do
-        [i] -> stop(name, i, :colour, Editor.submitted(:colour, submitted))
-        [i, "slot"] -> stop(name, i, :colour, Editor.submitted(:slot, submitted))
+        [i] -> stop(name, i, :color, Editor.submitted(:colour, submitted))
+        [i, "slot"] -> stop(name, i, :color, Editor.submitted(:slot, submitted))
         [i, "opacity"] -> stop(name, i, :opacity, Editor.submitted(:size, submitted))
         _other -> []
       end
@@ -168,8 +168,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           [
             {:gradient, name,
              fn g ->
-               centre = Map.get(g, :centre, Schema.default(:gradient, :centre))
-               Map.put(g, :centre, List.replace_at(centre, at, n))
+               center = Map.get(g, :center, Schema.default(:paint, :center))
+               Map.put(g, :center, List.replace_at(center, at, n))
              end}
           ]
 
@@ -183,7 +183,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The colour a solid fill takes: the well's, the paint's first stop, or the first series.
     defp solid({:paint, name}, defs, _well) do
       case Map.get(defs, name) do
-        %{stops: [%{colour: colour} | _]} -> colour
+        %{stops: [%{color: colour} | _]} -> colour
         _other -> :series_1
       end
     end
@@ -198,10 +198,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       colour = if colour == :none, do: :series_1, else: colour
 
       %{
-        kind: kind,
+        type: kind,
         stops: [
-          %{offset: 0, colour: colour, opacity: 0.8},
-          %{offset: 1, colour: colour, opacity: 0.1}
+          %{at: 0, color: colour, opacity: 0.8},
+          %{at: 1, color: colour, opacity: 0.1}
         ]
       }
     end
@@ -248,8 +248,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         name: name,
         gradient: gradient,
         stops: stops(gradient),
-        angle: gradient && Map.get(gradient, :angle, Schema.default(:gradient, :angle)),
-        centre: gradient && Map.get(gradient, :centre, Schema.default(:gradient, :centre))
+        angle: gradient && Map.get(gradient, :angle, Schema.default(:paint, :angle)),
+        centre: gradient && Map.get(gradient, :center, Schema.default(:paint, :center))
       }
     end
 
@@ -264,7 +264,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.map(fn {stop, i} ->
         %{
           index: i,
-          colour: colour(Map.get(stop, :colour)),
+          colour: colour(Map.get(stop, :color)),
           opacity: Map.get(stop, :opacity, Schema.default(:stop, :opacity))
         }
       end)

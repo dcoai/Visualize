@@ -139,7 +139,7 @@ defmodule Visualize.Chart.DownsampleTest do
   # so a 650-wide render has a 600 px plot.
   defp design(steps) do
     %{
-      version: 2,
+      version: 3,
       sources: %{s: %{fields: [:t, :v]}},
       frames: %{
         main: %{

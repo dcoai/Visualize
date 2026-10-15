@@ -292,7 +292,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
           spec.default != "" do
         shown =
           case Editor.widget(spec.type) do
-            :textarea -> inspect(spec.default)
+            :textarea -> inspect(spec.default, limit: :infinity)
             # A list of items has no one control to read back from: its default is its rows.
             {:items, _} -> inspect(spec.default)
             _other -> to_string(spec.default)
@@ -423,7 +423,8 @@ defmodule Visualize.Chart.Builder.EditorTest do
         |> Enum.map(fn [_, group] -> group end)
 
       assert blocks == ~w(fill stroke font position effects)
-      assert blocks == Enum.map(Schema.groups(:style), &to_string/1)
+      # The builder's form edits the flat style until #655 (D-172).
+      assert blocks == Enum.map(Schema.groups(:flat_style), &to_string/1)
 
       # Each block holds its run of keys in table order; extends stands before the first
       # block and class after the last.

@@ -581,9 +581,9 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 
 ### 7.7 The style palette
 
-**Implemented** (#621, work items #636, #637 and #644, D-171). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
+**Implemented** (#621, work items #636, #637 and #644, D-171; compound parts and the modifiers, #649, D-172). The colours of 7.1 and 7.5 are a palette: positions promise *distinct*, roles promise a meaning, and the theme renders both. `styles` carries the same design over to **whole styles** — fill, stroke and its width, dash, opacity, symbol, font — so a design can name a whole look by position, by meaning or by view state, and a theme swap restyles it.
 
-**Four groups, and a fixed set of names.**
+**Five groups, and a fixed set of names.**
 
 | Group | Names | Promises |
 |---|---|---|
@@ -591,47 +591,56 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | style roles | `:good`, `:warning`, `:bad`, `:info`, `:neutral` | a meaning as a whole style: the role's colour on fill and stroke, and its cue (7.5) |
 | state styles | `:hover`, `:focused`, `:selected`, `:active`, `:disabled`, `:muted`, `:emphasis`, `:breakpoint` | what a view state looks like, laid over an object's own look |
 | furniture styles | `:axis`, `:grid`, `:label`, `:title`, `:caption`, `:value`, `:annotation` | the chart's furniture: the axis's lines and tick labels, the grid's lines, and the font, size, weight and colour of each kind of text |
+| modifiers | `:bold`, `:italic`, `:thin`, `:thick`, `:dashed`, `:dotted`, `:outline` | one change each, to stack on a look (spec/14 §3.6): `[:bad, :outline]` is the bad look's outline alone, `[:warning, :bold]` its text bold |
 
-A theme chooses only **how many style series** it has, `:style_1` to `:style_n` with no gap, and how each entry looks. It cannot add a name: the names are the library's, as the ramps and roles are, so a design that names one reads the same on every theme. `style_names/1` lists a theme's names — its style series, then the roles, the state styles and the furniture styles, each in the order of the table. The palette's names are style names, not slots: `:axis` the style and `:axis` the colour slot are different things, as the built-in style and the slot always were (spec/14 §3.3).
+A theme chooses only **how many style series** it has, `:style_1` to `:style_n` with no gap, and how each entry looks. It cannot add a name: the names are the library's, as the ramps and roles are, so a design that names one reads the same on every theme. `style_names/1` lists a theme's names — its style series, then the roles, the state styles, the furniture styles and the modifiers, each in the order of the table. The palette's names are style names, not slots: `:axis` the style and `:axis` the colour slot are different things, as the built-in style and the slot always were (spec/14 §3.3).
 
-**An entry is a flat style node written in slots.** Its keys are the style keys of spec/14 §3.1, and its values are written as a design writes them — `fill: :bad`, `stroke: {:series, 3}`, `font_size: :label_size` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). In a role's entry `stroke_dasharray: :cue` and `symbol: :cue` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the key out where the dash is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
+**An entry is a style node in compound parts, written in slots** (spec/14 §3.1, D-172). Its keys are the style's parts — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve` — and `opacity`, `blend` and `class`, and its values are written as a design writes them — `fill: %{type: :solid, color: :bad}`, `stroke: %{type: :solid, color: {:series, 3}, width: 1.5}`, `font: %{size: :label_size}` — never as literal colours where a slot says the same, so an entry follows its theme's colours and a stylesheet (7.3). A host may give an entry in the flat keys of version 2 (`stroke_width: 2`) or in shorthands (`fill: :bad`); `new/1` and `merge/2` hold it in its parts. In a role's entry `stroke: %{dash: :cue}` and `marker: %{shape: :cue}` take the role's cue (7.5, D-142): `style/2` replaces `:cue` with the role's dash and glyph, and leaves the dash out where it is solid. An entry is **flat**: it may not use `extends`. A design's own style may still `extends: :warning`, since a palette name is a style reference (spec/14 §3.3, #637), but the palette is the end of every chain, so a theme never makes a cycle a design cannot see.
 
-**Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` is `stroke_width: 2` alone — a stroked mark keeps its own paint and draws heavier, and a mark with no stroke of its own draws as it is (#638) — and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2).
+**Entries may be partial.** A series or a role entry is usually whole; a state entry gives a few keys, because it is laid over whatever the object already looks like through the style stack (spec/14 §3.6). The default `:selected` is `stroke: %{width: 2}` alone — a stroked mark keeps its own paint and draws heavier, and a mark with no stroke of its own draws as it is (#638) — and the default `:muted` is `opacity: 0.25`, the board's dim of today (spec/15 §13.2). A modifier is partial by design: it changes one thing.
 
 **The built-in palette.** `default/0`, `dark/0`, `colour_safe/0` and `print/0` each define every name, with the same entries: written in slots, the entries take each theme's own colours, so one palette serves all four.
 
 | Name | Entry |
 |---|---|
-| `:style_1` … `:style_10` | `fill` and `stroke` `{:series, k}`, `stroke_width` `1.5`, and the `symbol` and the `stroke_dasharray` below |
-| `:good` … `:neutral` | `fill` and `stroke` the role, `stroke_dasharray: :cue`, `symbol: :cue` |
-| `:hover` | `stroke: :text`, `stroke_width: 2` |
-| `:focused` | `stroke: :text`, `stroke_width: 2`, `stroke_dasharray: "4 2"` |
-| `:selected` | `stroke_width: 2` (#638: no stroke colour and no `stroke_style`, so it never paints over a mark's own stroke) |
-| `:active` | `stroke: :text`, `stroke_width: 3` |
-| `:disabled` | `opacity: 0.4`, `stroke_dasharray: "2 2"` |
+| `:style_1` … `:style_10` | a solid `fill` of `{:series, k}`; a solid `stroke` of `{:series, k}`, `width: 1.5` and the `dash` below; a `marker` of the `shape` below |
+| `:good` … `:neutral` | a solid `fill` of the role; a solid `stroke` of the role with `dash: :cue`; `marker: %{shape: :cue}` |
+| `:hover` | `stroke: %{type: :solid, color: :text, width: 2}` |
+| `:focused` | `stroke: %{type: :solid, color: :text, width: 2, dash: "4 2"}` |
+| `:selected` | `stroke: %{width: 2}` (#638: no stroke colour and no `placement`, so it never paints over a mark's own stroke) |
+| `:active` | `stroke: %{type: :solid, color: :text, width: 3}` |
+| `:disabled` | `opacity: 0.4`, `stroke: %{dash: "2 2"}` |
 | `:muted` | `opacity: 0.25` |
-| `:emphasis` | `stroke_width: 3`, `font_weight: :bold` |
-| `:breakpoint` | `stroke: :bad`, `stroke_width: 2`, `stroke_dasharray: "6 2 2 2"` |
-| `:axis` | `stroke: :axis`, `fill: :text`, `font_family: :font_family`, `font_size: :font_size` |
-| `:grid` | `stroke: :grid` |
-| `:label` | `fill: :text`, `font_family: :font_family`, `font_size: :label_size` |
-| `:title` | as `:label` with `font_size: :title_size`, `font_weight: :bold` |
-| `:caption` | `fill: :text`, `font_family: :font_family`, `font_size: :font_size`, `font_style: :italic` |
-| `:value` | `fill: :text`, `font_family: :font_family`, `font_size: :title_size`, `font_weight: :medium` |
-| `:annotation` | `fill: :text`, `font_family: :font_family`, `font_size: :font_size` |
+| `:emphasis` | `stroke: %{width: 3}`, `font: %{weight: :bold}` |
+| `:breakpoint` | `stroke: %{type: :solid, color: :bad, width: 2, dash: "6 2 2 2"}` |
+| `:axis` | a solid `stroke` of `:axis`, a solid `fill` of `:text`, `font: %{family: :font_family, size: :font_size}` |
+| `:grid` | a solid `stroke` of `:grid` |
+| `:label` | a solid `fill` of `:text`, `font: %{family: :font_family, size: :label_size}` |
+| `:title` | as `:label` with `font: %{family: :font_family, size: :title_size, weight: :bold}` |
+| `:caption` | a solid `fill` of `:text`, `font: %{family: :font_family, size: :font_size, style: :italic}` |
+| `:value` | a solid `fill` of `:text`, `font: %{family: :font_family, size: :title_size, weight: :medium}` |
+| `:annotation` | a solid `fill` of `:text`, `font: %{family: :font_family, size: :font_size}` |
+| `:bold` | `font: %{weight: :bold}` |
+| `:italic` | `font: %{style: :italic}` |
+| `:thin` | `stroke: %{width: 1}` |
+| `:thick` | `stroke: %{width: 3}` |
+| `:dashed` | `stroke: %{dash: "6 3"}` |
+| `:dotted` | `stroke: %{dash: "1 3", cap: :round}` |
+| `:outline` | `fill: %{type: :none}` |
 
-The ten style series take the symbols `:circle`, `:square`, `:triangle`, `:diamond`, `:cross`, `:star`, `:wye`, then `:circle`, `:square`, `:triangle` again, and the dashes solid (no key), `"8 3"`, `"3 3"`, `"8 3 3 3"`, `"1 3"`, then the same five again: seven symbols against five dashes, so no two of the ten share both, and every neighbour — `:style_10` beside `:style_1` too — differs in its symbol. A dash on a style series is drawn only where the object has a stroke, and a symbol only where the mark draws symbols; a category still reads by the one it has. The four furniture entries `:axis`, `:grid`, `:label` and `:title` are exactly spec/14 §3.3's built-in styles of before, so a chart drawn under any built-in theme renders as it did.
+The ten style series take the marker shapes `:circle`, `:square`, `:triangle`, `:diamond`, `:cross`, `:star`, `:wye`, then `:circle`, `:square`, `:triangle` again, and the dashes solid (no key), `"8 3"`, `"3 3"`, `"8 3 3 3"`, `"1 3"`, then the same five again: seven shapes against five dashes, so no two of the ten share both, and every neighbour — `:style_10` beside `:style_1` too — differs in its marker. A dash on a style series is drawn only where the object has a stroke, and a marker only where the mark draws symbols; a category still reads by the one it has. The four furniture entries `:axis`, `:grid`, `:label` and `:title` are exactly spec/14 §3.3's built-in styles of before, in parts, so a chart drawn under any built-in theme renders as it did.
 
-**Contracts, checked when a theme is built.** The library fixes what an entry means and a theme tunes how it looks. `new/1` and `merge/2` check every entry the theme holds and raise `ArgumentError` naming the theme, the entry and the term it breaks — `theme :house: style :bad breaks its contract: a role style paints with its own role, so fill must be :bad or absent; got :good` — and `check/1` and `violations/1` report the same faults under the subject `{:style, name}`, after the ramps and roles. Each holds:
+**Contracts, checked when a theme is built.** The library fixes what an entry means and a theme tunes how it looks. `new/1` and `merge/2` check every entry the theme holds and raise `ArgumentError` naming the theme, the entry and the term it breaks — `theme :house: style :bad breaks its contract: a role style paints with its own role, so fill.color must be :bad or absent; got :good` — and `check/1` and `violations/1` report the same faults under the subject `{:style, name}`, after the ramps and roles. Each holds:
 
-- **A name of the palette.** A name not of the four groups, or `:style_k` with a gap below it (`:style_3` without `:style_2`), is refused: a theme cannot add a name.
-- **A flat style node.** An entry is a map, and has no `extends`.
-- **`:cue` only where it means something:** on `stroke_dasharray` or `symbol` of a role's entry.
-- **A style role paints with its own role.** Its `fill` and its `stroke` are each the role — or, for a status role, its status ramp position, `{:ramp, :status, 0 | 0.5 | 1}` (7.3) — or absent. A role whose look carried another role's colour would say two meanings at once.
-- **A state style is distinguishable without hue.** It changes at least one of stroke width (`stroke_width`), outline (`stroke_style` other than `:single`), opacity (`opacity`, `fill_opacity` or `stroke_opacity` other than `1`), dash (`stroke_dasharray`, not empty) or effect (`effect` other than `:none`) — never only a colour. A state then reads in greyscale and for a colour-blind reader, which #546 began for statuses.
-- **Neighbouring style series differ in a non-hue key.** `:style_k` and `:style_k+1`, and the last and `:style_1`, since `{:style, i}` cycles, differ in at least one key besides `fill` and `stroke`. A style series of one entry has itself for a neighbour and fails; a theme that wants style series has at least two.
-- **A text furniture entry resolves a font.** `:axis`, `:label`, `:title`, `:caption`, `:value` and `:annotation` each give a `font_family` — a string, or the slot `:font_family` — and a `font_size` — a positive number, or one of the size slots `:font_size`, `:label_size` and `:title_size`.
-- **`:grid` resolves a stroke.** Its `stroke` is a colour other than `:none`: a grid with no line is not a grid.
+- **A name of the palette.** A name not of the five groups, or `:style_k` with a gap below it (`:style_3` without `:style_2`), is refused: a theme cannot add a name.
+- **A style node with no `extends`.** An entry is a map of parts, and has no `extends`.
+- **`:cue` only where it means something:** on the `stroke`'s `dash` or the `marker`'s `shape` of a role's entry.
+- **A style role paints with its own role.** The `color` of its `fill` and of its `stroke` are each the role — or, for a status role, its status ramp position, `{:ramp, :status, 0 | 0.5 | 1}` (7.3) — or absent. A role whose look carried another role's colour would say two meanings at once.
+- **A state style is distinguishable without hue.** It changes at least one of stroke width (`stroke.width`), outline (`stroke.placement` other than `:center`), opacity (`opacity`, `fill.opacity` or `stroke.opacity` other than `1`), dash (`stroke.dash`, not empty) or effect (`effect.type` other than `:none`) — never only a colour. A state then reads in greyscale and for a colour-blind reader, which #546 began for statuses.
+- **Neighbouring style series differ in something besides hue.** `:style_k` and `:style_k+1`, and the last and `:style_1`, since `{:style, i}` cycles, differ in something besides the `color` of their `fill` and `stroke` — a dash, a marker, a width. A style series of one entry has itself for a neighbour and fails; a theme that wants style series has at least two.
+- **A text furniture entry resolves a font.** `:axis`, `:label`, `:title`, `:caption`, `:value` and `:annotation` each give a `font.family` — a string, or the slot `:font_family` — and a `font.size` — a positive number, or one of the size slots `:font_size`, `:label_size` and `:title_size`.
+- **`:grid` resolves a stroke.** Its `stroke` has a `color` other than `:none`: a grid with no line is not a grid.
+- **A modifier changes one thing** (D-172). A modifier's entry gives exactly one key — one part, or `opacity`, `blend` or `class` — so a stack of modifiers composes without one undoing another's other change.
 
 The contracts bind what an entry *means*, not every key's type; a value of the wrong type for its key is the style grammar's to refuse where the entry is drawn (spec/14 §3.2). A struct written literally, `%Visualize.Theme{…}`, is not checked, as for ramps (7.5).
 

@@ -22,12 +22,31 @@ defmodule Visualize.Chart.Codec do
 
   defp node(kind, map) do
     Map.new(map, fn {k, v} ->
-      case Schema.key(kind, k) do
+      case type_of(kind, k, flat?(kind, k, not part?(v))) do
         nil -> {key(k), term(v)}
-        spec -> {key(k), value(spec.type, v)}
+        type -> {key(k), value(type, v)}
       end
     end)
   end
+
+  # The type a key is written and read by: the schema's, or — for a style's flat keys of an
+  # earlier version, and `fill`, `stroke`, `curve` and `effect` written as a shorthand
+  # rather than a part — the flat type it had (spec/14 §9, D-172), so a fragment the
+  # builder writes in them round-trips and a version 2 document reads typed.
+  defp type_of(kind, k, true), do: Migration.legacy_type(kind, k) || schema_type(kind, k)
+  defp type_of(kind, k, false), do: schema_type(kind, k) || Migration.legacy_type(kind, k)
+
+  defp schema_type(kind, k) do
+    case Schema.key(kind, k) do
+      nil -> nil
+      spec -> spec.type
+    end
+  end
+
+  defp flat?(:style, k, shorthand?) when k in [:fill, :stroke, :curve, :effect], do: shorthand?
+  defp flat?(_kind, _k, _shorthand?), do: false
+
+  defp part?(v), do: is_map(v) and not is_struct(v)
 
   defp key(k) when is_atom(k), do: Atom.to_string(k)
   defp key(k), do: to_string(k)
@@ -154,23 +173,23 @@ defmodule Visualize.Chart.Codec do
 
   # A key only an earlier version had is read by the type it had there, so the migration
   # that moves it gets typed values (spec/14 §9, #479); any other unknown key is a term.
-  defp read_legacy(kind, k, v) do
-    case Migration.legacy_type(kind, k) do
-      nil -> read_term(v)
-      type -> read(type, v)
-    end
-  end
-
   defp read_node(kind, map) do
     Map.new(map, fn {k, v} ->
       k = atom(k)
 
-      case Schema.key(kind, k) do
-        nil -> {k, read_legacy(kind, k, v)}
-        spec -> {k, read(spec.type, v)}
+      case type_of(kind, k, flat?(kind, k, not json_part?(v))) do
+        nil -> {k, read_term(v)}
+        type -> {k, read(type, v)}
       end
     end)
   end
+
+  # A JSON object is a part unless it is one tagged term (`{"$paint": …}`), which is a
+  # shorthand's value.
+  defp json_part?(v) when is_map(v) and map_size(v) == 1,
+    do: not String.starts_with?(to_string(hd(Map.keys(v))), "$")
+
+  defp json_part?(v), do: is_map(v)
 
   defp atom(k) when is_binary(k), do: String.to_atom(k)
   defp atom(k), do: k
