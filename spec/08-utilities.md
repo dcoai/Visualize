@@ -118,6 +118,82 @@ Each row sums to 1, so every grey is its own simulation — a property the tests
 | `Visualize.Color.Vision.simulate/2` | `simulate(colour, deficiency)`: a `%Visualize.Color{}` as the deficiency sees it, opacity kept; `:none` is the colour; any other atom raises `ArgumentError` |
 | `Visualize.Color.Vision.recolour/2` | `recolour(text, deficiency)`: every `#rrggbb` and `#rgb` colour literal in a text — an SVG's attribute values, a style — replaced by its simulation as `#rrggbb`; a `#` that is a reference, `url(#id)`, is left alone |
 
+### 1.9 Typed colors and their transforms
+
+**Implemented** (#650, work item #662, D-173). A design names a color as a **typed value**, never as a bare atom (spec/14 §3.2). A bare atom is a style. `Visualize.Color` builds the values, and they are plain data: tuples, built by functions that check their arguments and compile nothing. They are resolved against a theme at render (7.3), so a theme swap changes every color derived from the theme's colors.
+
+| Value | Built by | Meaning |
+|---|---|---|
+| `{:color, name}` | `color(name)` | the color `name` of the theme's color table (7.1): a hue such as `:red`, a name by use such as `:bad`, furniture such as `:text`, or `:series_k` |
+| `{:series, i}` | — | the i-th series color, cycling (7.1) |
+| `{:ramp, name, t}` | `ramp(name, t)` | the color at `t` along one of the theme's ramps (7.5) |
+| a string | — | a literal CSS color, as written |
+| `{:intensity, c, t}` | `intensity(c, t)` | how much of `c` is present; the rest is transparent |
+| `{:blend, [c, …]}` | `blend(list)` | the colors mixed in OKLab, each weighted by its intensity |
+| `{:alpha, c, a}` | `alpha(c, a)` | `c` at opacity `a` |
+| `{:lighten, c, t}`, `{:darken, c, t}`, `{:saturate, c, t}` | `lighten(c, t)`, `darken(c, t)`, `saturate(c, t)` | `c` moved toward white, black or full chroma in OKLCH |
+| `{:contrast, c}` | `contrast(c)` | the readable ink over `c`: the theme's text or background, else black or white (7.3) |
+
+**Each helper takes the color first, and every number is in `0..1`,** so colors pipe:
+
+```elixir
+import Visualize.Color, only: [color: 1, intensity: 2, blend: 1, alpha: 2]
+
+[color(:blue) |> intensity(0.65), color(:red) |> intensity(0.3)]
+|> blend()
+|> alpha(0.65)
+#=> {:alpha, {:blend, [{:intensity, {:color, :blue}, 0.65}, {:intensity, {:color, :red}, 0.3}]}, 0.65}
+```
+
+A helper raises `ArgumentError` for a number outside `0..1`, an operand that is not a color value, a name that is not an atom (`nil`, `true` and `false` are not names), or an empty `blend`. It does not check that a name exists. A name is the theme's to resolve, so the check is the validator's, against the design's theme (spec/14 §10.2).
+
+`saturate/2` keeps its earlier meaning on a `%Visualize.Color{}` (1.5): HSL saturation multiplied by an amount. On a color value it builds the transform. The two are told apart by the argument, so no released call changes.
+
+**The transforms, exactly.** Every computation is in **OKLab** (Björn Ottosson, 2020; CSS Color 4 §9), whose lightness and hue steps look even where sRGB's and HSL's do not. That is why Sass dropped HSL `lighten`/`darken`.
+
+- **`intensity(c, t)`** on its own is `c` with its alpha multiplied by `t`, as CSS's `color-mix(in oklab, c t%, transparent)` is.
+- **`blend(list)`** follows CSS Color 5's `color-mix` with any number of colors:
+  1. An element `intensity(c, w)` contributes `c` with weight `w`. Any other element contributes itself with weight 1.
+  2. With `W` the sum of the weights, each weight is normalized to `w / W`, and the colors are averaged in OKLab with **premultiplied alpha**.
+  3. When `W < 1`, the result's alpha is multiplied by `W`: the remainder is transparent. When `W > 1`, the normalization alone applies, so weights above 1 are scaled to sum to 1.
+  4. A blend whose weights are all 0 is fully transparent.
+
+  A blend of one color at weight 1 is that color.
+- **`alpha(c, a)`** sets the opacity of `c` to `a`, whatever it was. It replaces rather than multiplies, so `alpha` after a `blend` states the final opacity.
+- **`lighten(c, t)`** moves OKLCH lightness toward 1: `L + (1 − L) t`. **`darken(c, t)`** moves it toward 0: `L (1 − t)`. **`saturate(c, t)`** moves chroma toward 0.4, the chroma CSS calls 100% in `oklch()`: `C + (0.4 − C) t`. Hue and alpha are kept.
+- **`contrast(c)`** is `Visualize.Theme.ink/2` over `c`. A translucent `c` is first laid over the theme's background, since that is what the text is read against. Like the ink of 7.3, it is a literal in both modes.
+
+**Resolution.** `resolve(value, theme, mode)` resolves a color value against a theme in `:literal` or `:css` mode (7.3).
+
+- A name, a series position, a ramp position and a bare slot atom resolve exactly as `Visualize.Theme.resolve/3` resolves them. A literal string is returned as written.
+- A transform is computed to a literal, `#rrggbb`, or `#rrggbbaa` when its alpha is below 1. Its operands are resolved as literals first, and a literal operand must be one `parse/1` reads, else `ArgumentError`.
+- A result outside sRGB is brought into it by CSS Color 4's gamut mapping (§13.2): chroma is reduced in OKLCH by binary search until the clipped color is within a ΔEOK of 0.02, the just-noticeable difference. A result that is too light or too dark is white or black. Browsers draw an out-of-gamut CSS color the same way, so the two outputs agree.
+- In `:css` mode a transform is, for now, its literal.
+
+**Conversions.** `to_oklab/1` gives `%{l, a, b, opacity}` and `to_oklch/1` gives `%{l, c, h, opacity}`, with `l` in `0..1` and `h` in degrees `[0, 360)`. `oklab/3,4` and `oklch/3,4` build a `%Visualize.Color{}` from them, gamut-mapped as above.
+
+**Testing.** `test/visualize/color_typed_test.exs` holds the conversions to the published OKLab values of the sRGB primaries. It also holds every transform to values it computes on its own through CSS Color 4's XYZ route, which is independent of the library's direct LMS matrices.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Color.color/1` | `{:color, name}` |
+| `Visualize.Color.ramp/2` | `{:ramp, name, t}`, `t` in `0..1` |
+| `Visualize.Color.intensity/2` | `{:intensity, c, t}` |
+| `Visualize.Color.blend/1` | `{:blend, list}`, a non-empty list of color values |
+| `Visualize.Color.alpha/2` | `{:alpha, c, a}` |
+| `Visualize.Color.lighten/2` | `{:lighten, c, t}` |
+| `Visualize.Color.darken/2` | `{:darken, c, t}` |
+| `Visualize.Color.saturate/2` | on a color value, `{:saturate, c, t}`; on a `%Visualize.Color{}`, 1.5 |
+| `Visualize.Color.contrast/1` | `{:contrast, c}` |
+| `Visualize.Color.value?/1` | whether a term is a color value of the table above, operands included |
+| `Visualize.Color.resolve/3` | `resolve(value, theme, mode)`: the color as `Visualize.Theme.resolve/3` gives a slot, or a transform's literal |
+| `Visualize.Color.to_oklab/1` | the OKLab map |
+| `Visualize.Color.to_oklch/1` | the OKLCH map |
+| `Visualize.Color.oklab/3` | `oklab(l, a, b, 1.0)` |
+| `Visualize.Color.oklab/4` | a color from OKLab, gamut-mapped |
+| `Visualize.Color.oklch/3` | `oklch(l, c, h, 1.0)` |
+| `Visualize.Color.oklch/4` | a color from OKLCH, gamut-mapped |
+
 ## 2. Interpolate
 
 Every function in `Visualize.Interpolate` returns a one-argument function of `t`. `t` is not clamped unless stated; callers pass `[0, 1]` for the nominal range.

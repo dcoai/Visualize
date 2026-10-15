@@ -29,7 +29,26 @@ defmodule Visualize.Color do
       # Interpolation
       Visualize.Color.interpolate_rgb(color1, color2, 0.5)
 
+  ## Typed colors
+
+  A design names a color as a typed value (spec/08 §1.9, D-173): `color(:red)` from the
+  theme's color table, `ramp(:thermal, 0.7)`, a literal string, or a transform of colors
+  — `intensity/2`, `blend/1`, `alpha/2`, `lighten/2`, `darken/2`, `saturate/2` and
+  `contrast/1` — computed in OKLab. Each takes the color first, so colors pipe; the
+  helpers build data, and `resolve/3` resolves it against a theme at render.
+
+      import Visualize.Color, only: [color: 1, intensity: 2, blend: 1, alpha: 2]
+
+      [color(:blue) |> intensity(0.65), color(:red) |> intensity(0.3)]
+      |> blend()
+      |> alpha(0.65)
+
+  Import the helpers by name: a bare `import Visualize.Color` also brings `to_string/1`,
+  which a call would find beside `Kernel`'s.
+
   """
+
+  alias Visualize.Color.{OK, Typed}
 
   defstruct r: 0, g: 0, b: 0, opacity: 1.0
 
@@ -456,12 +475,27 @@ defmodule Visualize.Color do
     %{color | opacity: clamp(opacity, 0, 1)}
   end
 
-  @doc "Returns a saturated copy (in HSL space)"
+  @doc """
+  On a `%Visualize.Color{}`, a saturated copy: HSL saturation multiplied by `amount`
+  (default `1.2`).
+
+  On a color value (spec/08 §1.9), the transform `{:saturate, c, t}`: chroma moved toward
+  full in OKLCH by `t` in `0..1`, resolved against the theme at render.
+
+      iex> Visualize.Color.color(:red) |> Visualize.Color.saturate(0.2)
+      {:saturate, {:color, :red}, 0.2}
+
+  """
   @spec saturate(t(), number()) :: t()
-  def saturate(%__MODULE__{} = color, amount \\ 1.2) do
+  @spec saturate(value(), number()) :: value()
+  def saturate(color, amount \\ 1.2)
+
+  def saturate(%__MODULE__{} = color, amount) do
     %{h: h, s: s, l: l, opacity: opacity} = to_hsl(color)
     hsl(h, s * amount, l, opacity)
   end
+
+  def saturate(value, t), do: transform(:saturate, value, t)
 
   @doc "Returns a desaturated copy (in HSL space)"
   @spec desaturate(t(), number()) :: t()
@@ -592,6 +626,223 @@ defmodule Visualize.Color do
 
     hcl(h, c, l, opacity)
   end
+
+  # ============================================
+  # OKLab and OKLCH
+  # ============================================
+
+  @doc """
+  The color in OKLab (spec/08 §1.9): `%{l, a, b, opacity}`, `l` in `0..1`.
+
+      iex> %{l: l} = Visualize.Color.to_oklab(Visualize.Color.parse("#ffffff"))
+      iex> Float.round(l, 4)
+      1.0
+
+  """
+  @spec to_oklab(t()) :: %{l: float(), a: float(), b: float(), opacity: number()}
+  def to_oklab(%__MODULE__{r: r, g: g, b: b, opacity: opacity}) do
+    {l, a, b} = OK.from_srgb({r / 255, g / 255, b / 255})
+    %{l: l, a: a, b: b, opacity: opacity}
+  end
+
+  @doc "The color in OKLCH (spec/08 §1.9): `%{l, c, h, opacity}`, `h` in degrees `[0, 360)`."
+  @spec to_oklch(t()) :: %{l: float(), c: float(), h: float(), opacity: number()}
+  def to_oklch(%__MODULE__{opacity: opacity} = color) do
+    %{l: l, a: a, b: b} = to_oklab(color)
+    {l, c, h} = OK.to_lch({l, a, b})
+    %{l: l, c: c, h: h, opacity: opacity}
+  end
+
+  @doc """
+  A color from OKLab, brought into sRGB by CSS Color 4's gamut mapping (spec/08 §1.9).
+  Channels are left unrounded.
+  """
+  @spec oklab(number(), number(), number(), number()) :: t()
+  def oklab(l, a, b, opacity \\ 1.0) do
+    {r, g, b} = OK.map_to_srgb({l, a, b})
+    rgb(r * 255, g * 255, b * 255, opacity)
+  end
+
+  @doc "A color from OKLCH (`h` in degrees), gamut-mapped as `oklab/4` is."
+  @spec oklch(number(), number(), number(), number()) :: t()
+  def oklch(l, c, h, opacity \\ 1.0) do
+    {l, a, b} = OK.from_lch({l, c, h})
+    oklab(l, a, b, opacity)
+  end
+
+  # ============================================
+  # Typed colors (spec/08 §1.9, D-173)
+  # ============================================
+
+  @typedoc """
+  A color as a design names it (spec/08 §1.9): a name of the theme's color table, a series
+  or a ramp position, a literal string, or a transform of colors.
+  """
+  @type value ::
+          String.t()
+          | {:color, atom()}
+          | {:series, pos_integer()}
+          | {:ramp, atom(), number()}
+          | {:intensity | :alpha | :lighten | :darken | :saturate, value(), number()}
+          | {:blend, [value(), ...]}
+          | {:contrast, value()}
+
+  @doc """
+  The color `name` of the theme's color table (spec/08 §1.9, §7.1).
+
+      iex> Visualize.Color.color(:red)
+      {:color, :red}
+
+  """
+  @spec color(atom()) :: value()
+  def color(name) do
+    if Typed.name?(name),
+      do: {:color, name},
+      else: raise(ArgumentError, "a color name is an atom, got: #{inspect(name)}")
+  end
+
+  @doc """
+  The color at `t` in `0..1` along the theme's ramp `name` (spec/08 §7.5).
+
+      iex> Visualize.Color.ramp(:thermal, 0.7)
+      {:ramp, :thermal, 0.7}
+
+  """
+  @spec ramp(atom(), number()) :: value()
+  def ramp(name, t) do
+    cond do
+      not Typed.name?(name) ->
+        raise ArgumentError, "a ramp name is an atom, got: #{inspect(name)}"
+
+      not Typed.unit?(t) ->
+        raise ArgumentError, "ramp #{inspect(name)}: #{unit(t)}"
+
+      true ->
+        {:ramp, name, t}
+    end
+  end
+
+  @doc """
+  How much of the color `c` is present, `t` in `0..1`; the rest is transparent. On its own
+  it is `c` at `t` of its alpha; in `blend/1` it is the color's weight (spec/08 §1.9).
+
+      iex> Visualize.Color.color(:blue) |> Visualize.Color.intensity(0.65)
+      {:intensity, {:color, :blue}, 0.65}
+
+  """
+  @spec intensity(value(), number()) :: value()
+  def intensity(c, t), do: transform(:intensity, c, t)
+
+  @doc """
+  The colors mixed in OKLab, each weighted by its `intensity/2` (1 without one), as CSS's
+  `color-mix` mixes them: weights summing below 1 leave the remainder transparent, and
+  above 1 are scaled to sum to 1 (spec/08 §1.9).
+
+      iex> import Visualize.Color, only: [color: 1, intensity: 2, blend: 1, alpha: 2]
+      iex> [color(:blue) |> intensity(0.65), color(:red) |> intensity(0.3)] |> blend() |> alpha(0.65)
+      {:alpha, {:blend, [{:intensity, {:color, :blue}, 0.65}, {:intensity, {:color, :red}, 0.3}]}, 0.65}
+
+  """
+  @spec blend([value(), ...]) :: value()
+  def blend([_ | _] = colors) do
+    case Enum.reject(colors, &Typed.value?/1) do
+      [] -> {:blend, colors}
+      [bad | _] -> raise ArgumentError, operand(:blend, bad)
+    end
+  end
+
+  def blend(other) do
+    raise ArgumentError, "blend takes a non-empty list of colors, got: #{inspect(other)}"
+  end
+
+  @doc """
+  The color `c` at opacity `a` in `0..1`, whatever its opacity was (spec/08 §1.9).
+
+      iex> Visualize.Color.color(:red) |> Visualize.Color.alpha(0.5)
+      {:alpha, {:color, :red}, 0.5}
+
+  """
+  @spec alpha(value(), number()) :: value()
+  def alpha(c, a), do: transform(:alpha, c, a)
+
+  @doc """
+  The color `c` moved toward white by `t` in `0..1`, in OKLCH lightness (spec/08 §1.9).
+
+      iex> Visualize.Color.color(:red) |> Visualize.Color.lighten(0.3)
+      {:lighten, {:color, :red}, 0.3}
+
+  """
+  @spec lighten(value(), number()) :: value()
+  def lighten(c, t), do: transform(:lighten, c, t)
+
+  @doc """
+  The color `c` moved toward black by `t` in `0..1`, in OKLCH lightness (spec/08 §1.9).
+
+      iex> Visualize.Color.color(:red) |> Visualize.Color.darken(0.3)
+      {:darken, {:color, :red}, 0.3}
+
+  """
+  @spec darken(value(), number()) :: value()
+  def darken(c, t), do: transform(:darken, c, t)
+
+  @doc """
+  The readable ink over `c`: the theme's text or background, else black or white,
+  whichever contrasts more (spec/08 §1.9, §7.3).
+
+      iex> Visualize.Color.color(:bad) |> Visualize.Color.contrast()
+      {:contrast, {:color, :bad}}
+
+  """
+  @spec contrast(value()) :: value()
+  def contrast(c) do
+    if Typed.value?(c), do: {:contrast, c}, else: raise(ArgumentError, operand(:contrast, c))
+  end
+
+  @doc """
+  Whether a term is a color value (spec/08 §1.9), every operand of a transform included.
+
+      iex> Visualize.Color.value?({:alpha, {:color, :red}, 0.5})
+      true
+      iex> Visualize.Color.value?(:red)
+      false
+
+  """
+  @spec value?(term()) :: boolean()
+  def value?(term), do: Typed.value?(term)
+
+  @doc """
+  A color value resolved against a theme in `mode` (spec/08 §1.9, §7.3): a name, a series
+  or a ramp position exactly as `Visualize.Theme.resolve/3` resolves the slot, a literal as
+  written, and a transform as the literal it computes to, `#rrggbb` or `#rrggbbaa`.
+
+      iex> theme = Visualize.Theme.default()
+      iex> Visualize.Color.resolve(Visualize.Color.color(:axis), theme, :css)
+      "var(--vis-axis, #666666)"
+      iex> Visualize.Color.resolve({:intensity, "#ff0000", 0.5}, theme, :literal)
+      "#ff000080"
+
+  """
+  @spec resolve(value() | atom(), Visualize.Theme.t(), Visualize.Theme.mode()) :: String.t()
+  def resolve(value, theme, mode), do: Typed.resolve(value, theme, mode)
+
+  defp transform(op, c, t) do
+    cond do
+      not Typed.value?(c) -> raise ArgumentError, operand(op, c)
+      not Typed.unit?(t) -> raise ArgumentError, "#{op}: #{unit(t)}"
+      true -> {op, c, t}
+    end
+  end
+
+  defp operand(op, c) when is_atom(c) and c not in [nil, true, false] do
+    "#{op}: a bare atom is a style, not a color; write color(#{inspect(c)})"
+  end
+
+  defp operand(op, c) do
+    "#{op}: not a color value: #{inspect(c)}; a color is color(name), ramp(name, t), a " <>
+      "literal string or a transform of them"
+  end
+
+  defp unit(t), do: "a number in 0..1, got: #{inspect(t)}"
 
   # ============================================
   # Private Helpers

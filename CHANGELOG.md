@@ -17,6 +17,18 @@ release it merely follows.
 
 ### Added
 
+- **Typed colors and their transforms** (#662, D-173). `Visualize.Color` builds colors as data:
+  `color(:red)` and `ramp(:thermal, 0.7)` name a color, and `intensity/2`, `blend/1`, `alpha/2`,
+  `lighten/2`, `darken/2`, `saturate/2` and `contrast/1` derive one from others. Each takes the
+  color first, so they pipe:
+  `[color(:blue) |> intensity(0.65), color(:red) |> intensity(0.3)] |> blend() |> alpha(0.65)`.
+  The transforms work in OKLab and OKLCH, and `blend` follows CSS's `color-mix`: the intensities
+  are the weights, and a sum below 1 leaves the rest transparent. `Visualize.Color.resolve/3`
+  resolves a color against a theme; a transform resolves to the literal it computes,
+  gamut-mapped as a browser maps it. `to_oklab/1`, `to_oklch/1`, `oklab/4` and `oklch/4` convert.
+  `saturate/2` on a `%Visualize.Color{}` keeps its old meaning. Import the helpers by name
+  (`import Visualize.Color, only: [color: 1, …]`), since `Visualize.Color.to_string/1` would
+  clash with `Kernel`'s.
 - **A style palette in the theme** (#636, D-171). `%Visualize.Theme{}` has a `styles` field: whole
   looks under fixed names, as the colours already were — style series `:style_1` … `:style_n`
   (`{:style, i}` cycles), the five roles, the view states `:hover`, `:focused`, `:selected`,
