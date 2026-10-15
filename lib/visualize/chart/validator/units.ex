@@ -24,6 +24,27 @@ defmodule Visualize.Chart.Validator.Units do
   def check(:length, _value, path), do: [{path, {:type, :length}}]
   def check(:size, _value, _path), do: nil
 
+  @doc """
+  The units a size at a node kind's key may be written in (spec/14 §3.9): none at an
+  opacity, every unit but `:pct` where the size has no box, else every unit — the table the
+  validator checks and the builder's unit select offers (§18.6).
+
+      iex> :pct in Visualize.Chart.Validator.Units.units(:stroke, :width)
+      false
+
+      iex> :pct in Visualize.Chart.Validator.Units.units(:font, :size)
+      true
+
+      iex> Visualize.Chart.Validator.Units.units(:paint, :opacity)
+      []
+  """
+  @spec units(atom(), atom()) :: [Units.unit()]
+  def units(_kind, :opacity), do: []
+
+  def units(kind, key) do
+    if key in Map.get(@boxless, kind, []), do: Units.units() -- [:pct], else: Units.units()
+  end
+
   @doc false
   # What a key of a node kind owes its units, beside its type: `{:no_box, key}` for a `pct`
   # where the size has no box, `{:no_unit, key}` for any unit at an opacity.

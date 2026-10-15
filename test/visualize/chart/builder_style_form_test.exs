@@ -64,7 +64,10 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       end
 
       assert hatch =~ ~s(data-builder-well="fill.background")
-      assert hatch =~ ~s(<option value="dots" selected>dots</option>)
+
+      assert hatch =~
+               ~s(<input type="radio" name="fill.pattern" value="dots" checked aria-label="dots">)
+
       refute hatch =~ ~s(name="fill.angle")
 
       named =

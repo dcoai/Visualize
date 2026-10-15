@@ -38,6 +38,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "forms shown first: `%{kind, node, path, label}` (the frame's meta)"
     )
 
+    attr(:design_defaults, :map,
+      default: nil,
+      doc: "the design's `defaults`, edited on a frame's page (§18.7, #684); nil elsewhere"
+    )
+
     attr(:collapsed, :any,
       default: MapSet.new(),
       doc: "the section keys folded shut (`toggle_section`)"
@@ -328,6 +333,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           needs: needs(page.errors, [page.path ++ [:facet]])
         }
       ] ++
+        defaults_section(page) ++
         for spec <- parts do
           kids = children(spec, node, page)
 
@@ -386,6 +392,40 @@ if Code.ensure_loaded?(Phoenix.Component) do
         }
       end
       |> Enum.reject(&(&1.keys == [] and &1.children == []))
+    end
+
+    # A frame's defaults and the design's (spec/14 §3.8, §18.7, #684): a section of the
+    # frame's page, each a style form in its parts, written where the frame and the design
+    # keep them; the first edit makes the node.
+    defp defaults_section(page) do
+      own = [
+        %{
+          kind: :defaults,
+          node: Map.get(page.node, :defaults) || %{},
+          path: page.path ++ [:defaults],
+          label: Editor.label(page.path ++ [:defaults])
+        }
+      ]
+
+      design =
+        case page[:design_defaults] do
+          nil -> []
+          node -> [%{kind: :defaults, node: node, path: [:defaults], label: "defaults"}]
+        end
+
+      [
+        %{
+          key: "#{page.label}:defaults",
+          name: "defaults",
+          title:
+            "what the frame's elements, and the design's, inherit under their styles (spec/14 §3.8)",
+          bare: false,
+          keys: [],
+          forms: own ++ design,
+          children: [],
+          needs: needs(page.errors, [page.path ++ [:defaults], [:defaults]])
+        }
+      ]
     end
 
     attr(:id, :string, required: true)

@@ -143,9 +143,10 @@ defmodule Visualize.Chart.Composite do
   # own `defaults`, a whole frame — one that says its kind — as its frame's, and a frame
   # that only carries axes passes them to its axes. A composite without defaults changes
   # nothing.
-  defp scope(contribution, nil), do: contribution
+  @doc false
+  def scope(contribution, nil), do: contribution
 
-  defp scope(%{} = contribution, defaults) when not is_struct(contribution) do
+  def scope(%{} = contribution, defaults) when not is_struct(contribution) do
     Map.new(contribution, fn
       {kind, node} when kind in [:mark, :label, :axis] -> {kind, under(node, defaults)}
       {list, nodes} when list in [:marks, :labels] -> {list, all_under(nodes, defaults)}
@@ -154,7 +155,7 @@ defmodule Visualize.Chart.Composite do
     end)
   end
 
-  defp scope(contribution, _defaults), do: contribution
+  def scope(contribution, _defaults), do: contribution
 
   defp frames(frames, defaults) when is_map(frames) and not is_struct(frames) do
     Map.new(frames, fn
