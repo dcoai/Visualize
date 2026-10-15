@@ -205,12 +205,12 @@ defmodule Visualize.Chart.Transform.Layout do
       end)
 
     result = Chord.new() |> Chord.pad_angle(Map.get(node, :padding, 0)) |> Chord.generate(matrix)
-    # `size` sets the radius only; the centre is the point an `:arc` mark is about, so
+    # `size` sets the radius only; the center is the point an `:arc` mark is about, so
     # the ribbons meet the ring however either step is sized (spec/14 §5.4.3, #488).
     [w, h] = Map.get(node, :size, ctx.size)
     r = min(w, h) / 2
     [cx, cy] = ctx.center
-    centre = Transform.translate(cx, cy)
+    center = Transform.translate(cx, cy)
 
     case Map.get(node, :output, :groups) do
       :groups ->
@@ -221,7 +221,7 @@ defmodule Visualize.Chart.Transform.Layout do
             start_angle: g.start_angle,
             end_angle: g.end_angle,
             value: g.value,
-            path: Path.transform(group_path(g, r), centre)
+            path: Path.transform(group_path(g, r), center)
           })
         end)
 
@@ -232,7 +232,7 @@ defmodule Visualize.Chart.Transform.Layout do
             target: Enum.at(ids, c.target.index),
             source_value: c.source.value,
             target_value: c.target.value,
-            path: Path.transform(ribbon_path(c, @ring * r), centre)
+            path: Path.transform(ribbon_path(c, @ring * r), center)
           }
         end)
 
@@ -251,7 +251,7 @@ defmodule Visualize.Chart.Transform.Layout do
   end
 
   # The ribbon of `Visualize.Layout.Chord.ribbon_path/2` as an `IR.Path`: the source arc,
-  # a quadratic curve through the centre, the target arc, a quadratic curve back.
+  # a quadratic curve through the center, the target arc, a quadratic curve back.
   defp ribbon_path(chord, r) do
     {sx0, sy0} = point(chord.source.start_angle, r)
     {sx1, sy1} = point(chord.source.end_angle, r)

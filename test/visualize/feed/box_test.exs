@@ -2,7 +2,7 @@ defmodule Visualize.Feed.BoxTest do
   @moduledoc """
   The box window (spec/08 §11.1–§11.2, §11.4–§11.6, §12.3, #626, D-168): ranges over any
   `:time` or `:number` field, each identity's latest row, the shorthand kept, a box checked
-  against its schema, and a feed that honours a box answering the same rows as one
+  against its schema, and a feed that honors a box answering the same rows as one
   `Visualize.Feed.finish/3` finishes.
   """
   use ExUnit.Case, async: true
@@ -27,7 +27,7 @@ defmodule Visualize.Feed.BoxTest do
     delivery
   end
 
-  # What a monitor does with a delivery: finished for what the feed does not honour.
+  # What a monitor does with a delivery: finished for what the feed does not honor.
   defp finished(feed, window, budget \\ nil) do
     {_version, schema, supports} = Feed.describe(feed)
 
@@ -228,17 +228,17 @@ defmodule Visualize.Feed.BoxTest do
     end
   end
 
-  describe "a feed that honours a box and one that does not" do
+  describe "a feed that honors a box and one that does not" do
     test "finish the same rows, box by box" do
       for window <- @boxes ++ [nil, [2, 6]] do
         assert finished(Fleet.new(), window).rows ==
-                 finished(Fleet.new(honours: false), window).rows,
+                 finished(Fleet.new(honors: false), window).rows,
                "window #{inspect(window)}"
       end
     end
 
     test "latest gives at most one row per identity, the last within the box" do
-      for %{latest: true} = box <- @boxes, feed <- [Fleet.new(), Fleet.new(honours: false)] do
+      for %{latest: true} = box <- @boxes, feed <- [Fleet.new(), Fleet.new(honors: false)] do
         rows = finished(feed, box).rows
         assert rows |> Enum.map(& &1.car) |> Enum.uniq() |> length() == length(rows)
         whole = finished(feed, %{box | latest: false}).rows
@@ -253,9 +253,9 @@ defmodule Visualize.Feed.BoxTest do
     test "a monitor hands out the same rows of either" do
       for window <- @boxes do
         handed =
-          for honours <- [true, false] do
+          for honors <- [true, false] do
             monitor =
-              Monitor.new(%{f: Fleet.new(honours: honours)}, window: window)
+              Monitor.new(%{f: Fleet.new(honors: honors)}, window: window)
               |> Monitor.tick(now: 0)
 
             Monitor.deliveries(monitor).f.rows
@@ -390,17 +390,17 @@ defmodule Visualize.Feed.BoxTest do
       box = %{ranges: %{t: [0, 11], x: [0, 4]}, latest: true}
 
       assert {_version, _schema, [:window]} = Feed.describe(combined)
-      assert finished(combined, box).rows == finished(Fleet.new(honours: false), box).rows
+      assert finished(combined, box).rows == finished(Fleet.new(honors: false), box).rows
       assert Feeds.calls(fresh_agent, :fetch) == 1
       assert Feeds.calls(older_agent, :fetch) == 1
     end
   end
 
   describe "the conformance kit" do
-    test "a feed that honours a box, and one that does not, pass every check" do
+    test "a feed that honors a box, and one that does not, pass every check" do
       windows = [nil, [2, 6]] ++ @boxes
       assert Conformance.check(Fleet.new(), windows: windows) == []
-      assert Conformance.check(Fleet.new(honours: false), windows: windows) == []
+      assert Conformance.check(Fleet.new(honors: false), windows: windows) == []
     end
 
     test "a region or latest feed with no box to probe it says so" do

@@ -1,11 +1,11 @@
 defmodule Visualize.Chart.OverlaysTest do
   @moduledoc """
   The overlays a host drew around a chart, drawn as marks fed from sources (#565, D-143,
-  spec/14 §2.9, §4.3, §5.2): event markers and spans coloured by what their feed says a
+  spec/14 §2.9, §4.3, §5.2): event markers and spans colored by what their feed says a
   severity means, threshold rules from a source and a target rule from a feed's schema,
-  rules and bands cut to the plot, a mark's own colour scale inside a series-coloured
+  rules and bands cut to the plot, a mark's own color scale inside a series-colored
   chart, polarity on a ramp, and the design's brush — each from data on SVG, the canvas,
-  the binary stream and the hybrid page, in the colours of whichever theme draws it.
+  the binary stream and the hybrid page, in the colors of whichever theme draws it.
   """
   use ExUnit.Case, async: true
 
@@ -22,7 +22,7 @@ defmodule Visualize.Chart.OverlaysTest do
   @size {300, 200}
   @margin %{top: 0, right: 0, bottom: 0, left: 0}
 
-  # The events feed: what each severity means, never a colour (spec/08 §10.1).
+  # The events feed: what each severity means, never a color (spec/08 §10.1).
   @events_schema Schema.new!(%{
                    at: %{type: :number},
                    ends: %{type: :number},
@@ -54,7 +54,7 @@ defmodule Visualize.Chart.OverlaysTest do
 
   @thresholds [%{value: 3, severity: "warning"}, %{value: 8, severity: "critical"}]
 
-  # The overlay layer over a line per host, with every colour by meaning (spec/14 §5.2).
+  # The overlay layer over a line per host, with every color by meaning (spec/14 §5.2).
   defp design(extra \\ %{}) do
     Map.merge(
       %{
@@ -146,7 +146,7 @@ defmodule Visualize.Chart.OverlaysTest do
   defp role(theme, role, mode), do: Theme.resolve(theme, role, mode)
 
   describe "event markers and spans from a source (spec/14 §5.2)" do
-    test "an instant is a rule at x, labelled and coloured by its feed's meaning" do
+    test "an instant is a rule at x, labeled and colored by its feed's meaning" do
       root = group(apply!(design()))
       [rules, thresholds] = find(root, "mark mark-rule")
 
@@ -188,7 +188,7 @@ defmodule Visualize.Chart.OverlaysTest do
       assert incident.style.fill == role(Theme.default(), :bad, :css)
     end
 
-    test "the series keep their colors: the overlay reads a colour scale of its own (D-143)" do
+    test "the series keep their colors: the overlay reads a color scale of its own (D-143)" do
       [line] = group(apply!(design())) |> find("mark mark-line")
       strokes = for path <- line.children, do: path.style.stroke
 
@@ -339,8 +339,8 @@ defmodule Visualize.Chart.OverlaysTest do
 
       {:ok, applied} = Chart.apply(design, sources: sources, describe: &describe/1, size: @size)
       [circles] = group(applied) |> find("mark mark-circle")
-      colours = for c <- circles.children, uniq: true, do: c.style.fill
-      assert Enum.sort(colours) == Enum.sort([good, bad])
+      colors = for c <- circles.children, uniq: true, do: c.style.fill
+      assert Enum.sort(colors) == Enum.sort([good, bad])
     end
 
     test "higher is better reverses the ramp, and neutral draws both sides bad" do
@@ -371,7 +371,7 @@ defmodule Visualize.Chart.OverlaysTest do
   end
 
   describe "every backend draws the overlays (spec/14 §5.2)" do
-    test "SVG, canvas and the binary stream carry the role colours, literal on a canvas" do
+    test "SVG, canvas and the binary stream carry the role colors, literal on a canvas" do
       applied = apply!(design())
       bad = role(Theme.default(), :bad, :literal)
       info = role(Theme.default(), :info, :literal)
@@ -381,13 +381,13 @@ defmodule Visualize.Chart.OverlaysTest do
       assert svg =~ role(Theme.default(), :bad, :css)
 
       canvas = Chart.render(applied, backend: :canvas)
-      for colour <- [bad, info, warning], do: assert(canvas =~ "'#{colour}'")
+      for color <- [bad, info, warning], do: assert(canvas =~ "'#{color}'")
 
       records =
         group(applied, resolve: :literal) |> CanvasBinary.encode_element!() |> Decoder.decode()
 
-      colours = for {:style, style} <- records, c <- [style.stroke, style.fill], c != nil, do: c
-      for colour <- [bad, info, warning], do: assert(rgba(colour) in colours)
+      colors = for {:style, style} <- records, c <- [style.stroke, style.fill], c != nil, do: c
+      for color <- [bad, info, warning], do: assert(rgba(color) in colors)
     end
 
     test "a hybrid page draws them on its canvas layer and its SVG layer alike" do
@@ -416,8 +416,8 @@ defmodule Visualize.Chart.OverlaysTest do
   end
 
   describe "the theme draws the meaning (D-135)" do
-    test "default, dark and colour-safe draw each severity in their own tones" do
-      colours =
+    test "default, dark and color-safe draw each severity in their own tones" do
+      colors =
         for theme <- [:default, :dark, :color_safe] do
           applied = apply!(design(%{theme: theme}))
           [rules, _thresholds] = group(applied, resolve: :literal) |> find("mark mark-rule")
@@ -428,12 +428,12 @@ defmodule Visualize.Chart.OverlaysTest do
           {theme, outage.style.stroke}
         end
 
-      assert colours |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> length() == 3
+      assert colors |> Enum.map(&elem(&1, 1)) |> Enum.uniq() |> length() == 3
     end
   end
 
   describe "validation and the codec (spec/14 §10.1, §11.2)" do
-    test "a map of colours is an ordinal scale's, and polarity orders a ramp" do
+    test "a map of colors is an ordinal scale's, and polarity orders a ramp" do
       design =
         design()
         |> put_in([:frames, :main, :scales, :severity], %{kind: :linear, range: %{"a" => :bad}})
@@ -453,7 +453,7 @@ defmodule Visualize.Chart.OverlaysTest do
       assert Enum.any?(formatted, &(&1 =~ "orders a ramp"))
     end
 
-    test "a colour in a map is checked as a style's colour is, at the category's path" do
+    test "a color in a map is checked as a style's color is, at the category's path" do
       design = put_in(design(), [:frames, :main, :scales, :severity, :range], %{"x" => 7})
       assert {:error, errors} = Validator.validate(design)
       assert {[:frames, :main, :scales, :severity, :range, "x"], {:type, :color}} in errors
@@ -469,7 +469,7 @@ defmodule Visualize.Chart.OverlaysTest do
       assert Validator.validate(design) == :ok
     end
 
-    test "a map of colours, polarity and the brush round-trip through JSON" do
+    test "a map of colors, polarity and the brush round-trip through JSON" do
       design =
         design(%{interaction: %{brush: :x}})
         |> put_in([:frames, :main, :scales, :severity], %{

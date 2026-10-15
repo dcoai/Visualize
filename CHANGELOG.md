@@ -313,6 +313,11 @@ release it merely follows.
   | the builder's `colour_chain` and `drop_colour` events, `:colour` panel and glyph, `vis-builder-colour*` classes and `data-builder-colour` attribute | `color_chain`, `drop_color`, `:color`, `vis-builder-color*`, `data-builder-color` |
   <!-- spelling: end -->
 
+  The words the library writes are American too: `Visualize.Chart.Validator.format/1`'s
+  and a feed schema's messages ("is not a color"), the builder's labels and titles, and
+  the builder library's group for entries without one, **Uncategorized**. A host that
+  compares a message's text changes it.
+
 - **A JSON document's unknown or retired `$` tag is refused, not read as data** (#645,
   D-182). `Chart.from_json/2`, `Board.from_json/2`, `Board.Snapshot.from_json/2` and
   `Chart.Fragment.from_json/2` hold a document to the one table of tags before decoding it:

@@ -1,7 +1,7 @@
 defmodule Visualize.ThemeContrastTest do
   @moduledoc """
   The contrast a theme guarantees (spec/08 §7.4, D-56): both built-in themes hold their
-  floors against their own background, and every colour scheme keeps a usable colour on
+  floors against their own background, and every color scheme keeps a usable color on
   either theme.
   """
   use ExUnit.Case, async: true
@@ -12,9 +12,9 @@ defmodule Visualize.ThemeContrastTest do
   @themes [Theme.default(), Theme.dark()]
 
   defp contrast(hex, %Theme{background: background}) do
-    colour = Color.parse(hex)
-    assert colour, "#{hex} does not parse"
-    Color.contrast(colour, Color.parse(background))
+    color = Color.parse(hex)
+    assert color, "#{hex} does not parse"
+    Color.contrast(color, Color.parse(background))
   end
 
   for theme <- @themes do
@@ -25,9 +25,9 @@ defmodule Visualize.ThemeContrastTest do
       assert contrast(@theme.axis, @theme) >= 3.0
       assert contrast(@theme.grid, @theme) >= 1.2
 
-      for colour <- @theme.series do
-        ratio = contrast(colour, @theme)
-        assert ratio >= 3.0, "#{colour} is #{Float.round(ratio, 2)}:1 on #{@theme.name}"
+      for color <- @theme.series do
+        ratio = contrast(color, @theme)
+        assert ratio >= 3.0, "#{color} is #{Float.round(ratio, 2)}:1 on #{@theme.name}"
       end
     end
 
@@ -35,15 +35,15 @@ defmodule Visualize.ThemeContrastTest do
     # 2.6:1 on white.
     @floor if(theme.name == :dark, do: 3.0, else: 2.5)
 
-    test "on the #{theme.name} theme every scheme parses and keeps a colour at #{@floor}:1" do
+    test "on the #{theme.name} theme every scheme parses and keeps a color at #{@floor}:1" do
       for scheme <- Schemes.schemes() do
         ratios = Enum.map(Schemes.scheme(scheme), &contrast(&1, @theme))
-        assert Enum.max(ratios) >= @floor, "#{scheme} has no #{@floor}:1 colour on #{@theme.name}"
+        assert Enum.max(ratios) >= @floor, "#{scheme} has no #{@floor}:1 color on #{@theme.name}"
       end
     end
   end
 
-  test "a scheme's lightest colour vanishes on the light theme and its darkest on the dark" do
+  test "a scheme's lightest color vanishes on the light theme and its darkest on the dark" do
     # The reason each theme carries its own palette (spec/08 §7.2).
     [light, dark] = @themes
     blues = Schemes.scheme(:blues)

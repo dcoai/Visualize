@@ -235,10 +235,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     a rectangle, of the stroke drawn beside it, and of its `Aa` label — the entry in its parts
     resolved through `theme` in `:literal` mode and projected onto what the picture draws.
 
-    A whole style has no single colour, so it is drawn rather than swatched; the stroke is
+    A whole style has no single color, so it is drawn rather than swatched; the stroke is
     drawn on its own as well as round the shape, because a dash round a shape filled in the
-    stroke's own colour cannot be seen. A key the
-    entry leaves unset is the sample's own — no fill on the shape; the theme's text colour,
+    stroke's own color cannot be seen. A key the
+    entry leaves unset is the sample's own — no fill on the shape; the theme's text color,
     font and label size on the label — and a **state** entry, which says only what changes,
     is laid over a neutral sample first, and so is a **modifier**. A value the preview cannot
     draw, a binding or a paint, is left out.
@@ -309,8 +309,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp theme_title(%{name: name}), do: "#{name} — the theme's; click to override it"
 
     # One row per declared style: what it is called, what it declares, and a swatch where the
-    # style names a colour outright. A stroke given as a theme slot — `:series_1` — has no
-    # colour until the theme resolves it, so the swatch is left to the stylesheet rather than
+    # style names a color outright. A stroke given as a theme slot — `:series_1` — has no
+    # color until the theme resolves it, so the swatch is left to the stylesheet rather than
     # guessed at here.
     defp styles(design, theme) do
       declared = Map.get(design, :styles) || %{}
@@ -351,11 +351,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       case Enum.find_value([:fill, :stroke], &literal(get_in(style, [&1, :color]))) do
         nil -> nil
-        colour -> "background: " <> colour
+        color -> "background: " <> color
       end
     end
 
-    defp literal("#" <> _rest = colour), do: colour
+    defp literal("#" <> _rest = color), do: color
     defp literal(_other), do: nil
 
     defp summary(style) when map_size(style) == 0, do: "empty"

@@ -43,7 +43,7 @@ defmodule Visualize.Hooks.Builder do
     row — linked, as every drop is (spec/14 §18.17, #381)
   - `inspect` with `%{"path" => string, "layer" => string}` on a click on a row
   - `drop_color` with `%{"field" => string, "color" => string, "edit" => string}` when a
-    patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
+    patch of the color chooser is dropped on a color well (spec/14 §19.10)
   - `context_width` with `%{"width" => integer}` when the inspector's edge is released
     after a drag (spec/14 §18.16)
   - `pick` with `%{"node" => string}` in scope `graph` when an element of the chart that
@@ -416,7 +416,7 @@ defmodule Visualize.Hooks.Builder do
       },
 
       handleDragStart(e) {
-        // A patch of the colour chooser carries its colour — a slot's word or a hex — so
+        // A patch of the color chooser carries its color — a slot's word or a hex — so
         // a well anywhere can take it (spec/14 §19.10).
         const patch = this.carried(e, '[data-builder-color]');
         if (patch) {

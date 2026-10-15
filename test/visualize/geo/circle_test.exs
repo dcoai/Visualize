@@ -7,7 +7,7 @@ defmodule Visualize.Geo.CircleTest do
   (`circle_golden.mjs`, whose header names the command), and every point of every ring is
   held to d3's within `1e-9` degrees. The rest of the module holds what the port is for: a
   circle drawn through `Visualize.Geo.Path`, which clips on the sphere as d3 does
-  (spec/07 §2.2.1, D-127), fills the cap about its centre and nothing else.
+  (spec/07 §2.2.1, D-127), fills the cap about its center and nothing else.
   """
   use ExUnit.Case, async: true
 
@@ -25,7 +25,7 @@ defmodule Visualize.Geo.CircleTest do
          |> Enum.map(&Jason.decode!/1)
 
   describe "conformance with d3-geo's geoCircle" do
-    test "the golden covers every centre, radius and precision it was written for" do
+    test "the golden covers every center, radius and precision it was written for" do
       assert length(@cases) == 10 * 8 * 4 + 3 * 3 * 2
     end
 
@@ -58,7 +58,7 @@ defmodule Visualize.Geo.CircleTest do
       assert distance(hd(ring), List.last(ring)) < 1.0e-6
     end
 
-    test "every point is the radius away from the centre" do
+    test "every point is the radius away from the center" do
       center = [-75.5, -23.44]
       %{"coordinates" => [ring]} = Circle.polygon(center: center, radius: 37, precision: 5)
 
@@ -88,7 +88,7 @@ defmodule Visualize.Geo.CircleTest do
       assert rings != []
 
       # Every point of a 5° grid well clear of the circle and of the seam: inside the
-      # drawn rings (even–odd) exactly when it is within 90° of the centre. A chord drawn
+      # drawn rings (even–odd) exactly when it is within 90° of the center. A chord drawn
       # the long way round would put the far side's points inside.
       for lon <- -175..175//5,
           lat <- -85..85//5,

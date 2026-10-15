@@ -12,7 +12,7 @@ defmodule Visualize.Feed.Telemetry do
 
   Each metric is a feed (`feeds/1`, `feed/2`) whose rows are `%{t: DateTime, value: v}`
   plus the metric's tags, and whose schema says so: `t` the window field, a `:time` field
-  of `DateTime`s; `value` labelled with the definition's description (else its name), in
+  of `DateTime`s; `value` labeled with the definition's description (else its name), in
   the definition's unit as a UCUM
   code (`Visualize.Unit.from_telemetry/1`) with the quantity it implies, each tag a
   category. A counter's value is the count so far for its tags and a sum's the running
@@ -32,7 +32,7 @@ defmodule Visualize.Feed.Telemetry do
   with `{:telemetry_facts, metric, errors}`, the metric named as `feeds/1` keys it.
 
   The collector stamps every row on receipt with its own clock, strictly increasing, and
-  keeps the newest `keep:` rows of each metric. It honours a window of `DateTime` bounds
+  keeps the newest `keep:` rows of each metric. It honors a window of `DateTime` bounds
   and pushes: every `every:` milliseconds each subscriber gets the rows new since the last
   flush, its schema sent first at subscription.
   """

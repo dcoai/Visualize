@@ -550,7 +550,7 @@ defmodule Visualize.Board do
     end)
   end
 
-  # -- realising (spec/15 §6) --------------------------------------------------------------
+  # -- realizing (spec/15 §6) --------------------------------------------------------------
 
   @doc "As `realize/4` with `[]` options."
   @spec realize(t(), store(), %{atom() => map()}) ::

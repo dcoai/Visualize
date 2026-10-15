@@ -95,7 +95,7 @@ defmodule Visualize.Shape.ArcStackTest do
       assert length(arcs(path, 50)) == 1
 
       # The first corner: its edge tangent point is on the start edge (x = 0), and its ring
-      # tangent point is on the outer ring; the corner circle's centre is r1 − rc from the origin.
+      # tangent point is on the outer ring; the corner circle's center is r1 − rc from the origin.
       %Path{commands: [{:M, mx, my}, {:A, 10, 10, _, _, _, tx, ty} | _]} = path
       assert_in_delta mx, 0, 1.0e-9
       assert_in_delta norm({tx, ty}), 100, 1.0e-9

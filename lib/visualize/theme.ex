@@ -1,16 +1,16 @@
 defmodule Visualize.Theme do
   @moduledoc """
-  The colours, font and sizes a chart draws with (spec/08 §7).
+  The colors, font and sizes a chart draws with (spec/08 §7).
 
   A theme is a struct of named *slots*: `:series_1` … `:series_n` for the categorical
-  colours, `:axis`, `:grid`, `:text`, `:background` and `:surface` — the plane the data is laid
+  colors, `:axis`, `:grid`, `:text`, `:background` and `:surface` — the plane the data is laid
   on, between the background and the grid — the five **roles** `:good`, `:warning`, `:bad`,
   `:info` and `:neutral`, and `:font_family`, `:font_size`, `:label_size` and `:title_size`.
   Its colors are one **color table** (spec/08 §7.1, D-173): the theme's own `colors` — its
   hues, such as `:red`, and names by use, the roles among them — over the default theme's
   and the CSS named colors, with the furniture and the series as names too, so
   `Visualize.Color.color(:red)` is the theme's red.
-  Nothing in the library carries a colour literal; every axis, mark and component reads its
+  Nothing in the library carries a color literal; every axis, mark and component reads its
   values through `resolve/3`, in the mode its render target needs:
 
     * `:literal` - the stored value, which a canvas needs
@@ -23,11 +23,11 @@ defmodule Visualize.Theme do
 
   ## Meaning: ramps and roles
 
-  A series colour promises *distinct*, never a meaning. A theme also carries four
+  A series color promises *distinct*, never a meaning. A theme also carries four
   **ramps** whose meaning the library fixes (spec/08 §7.5, D-135) — `:status` (good →
   caution → bad), `:thermal` (cold → neutral → hot), `:diverging` (below → at → above a
-  midpoint) and `:sequential` (less → more) — each a list of anchor colours interpolated
-  in CIE Lab. `{:ramp, name, t}` is the colour at `t` in `0..1`, and the status roles are
+  midpoint) and `:sequential` (less → more) — each a list of anchor colors interpolated
+  in CIE Lab. `{:ramp, name, t}` is the color at `t` in `0..1`, and the status roles are
   by default fixed points on the status ramp: the table holds `:good` as
   `{:ramp, :status, 0}`, `:warning` as `0.5` and `:bad` as `1`. Every ramp and role is checked against its contract — hue order,
   lightness direction, a neutral midpoint — when a theme is built by `new/1` or `merge/2`,
@@ -81,7 +81,7 @@ defmodule Visualize.Theme do
     diverging: ~w(#f7a35c #3a3f48 #c1acee),
     sequential: ~w(#273b4f #457cb1 #aad1f9)
   }
-  # Blue → orange → red: the status order survives the commonest colour-vision deficiencies.
+  # Blue → orange → red: the status order survives the commonest color-vision deficiencies.
   @safe_status ~w(#5996d6 #cd6012 #b92931)
 
   # The theme's own part of its color table (spec/08 §7.1, #663): its status hues, the hues
@@ -135,7 +135,7 @@ defmodule Visualize.Theme do
   @typedoc "One of the four ramps whose meaning the library fixes (spec/08 §7.5)."
   @type ramp_name :: :status | :thermal | :diverging | :sequential
 
-  @typedoc "A slot name, or `{:series, i}` for the i-th series colour, cycling."
+  @typedoc "A slot name, or `{:series, i}` for the i-th series color, cycling."
   @type slot :: atom() | {:series, pos_integer()}
 
   @typedoc "A position along a ramp: `t` in `0..1`, clamped."
@@ -202,8 +202,8 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The colour-vision-safe theme (spec/08 §7.2): `default/0` with its `status` ramp blue →
-  orange → red, which survives the commonest colour-vision deficiencies, in place of green
+  The color-vision-safe theme (spec/08 §7.2): `default/0` with its `status` ramp blue →
+  orange → red, which survives the commonest color-vision deficiencies, in place of green
   → amber → red. Every role and ramp position a design names follows it unchanged.
   """
   @spec color_safe() :: t()
@@ -214,9 +214,9 @@ defmodule Visualize.Theme do
   @doc """
   The print theme (spec/08 §7.2, spec/15 §12.4): paper. A white background and surface, so
   a printer lays no ink under the data; near-black text and axes and a grid dark enough to
-  survive a photocopy; the default's series; and the colour-safe theme's blue → orange →
+  survive a photocopy; the default's series; and the color-safe theme's blue → orange →
   red `status` ramp, since a printed page is read in whatever light and by whatever eyes
-  it reaches, often in greyscale, where the ramp's falling lightness and each role's glyph
+  it reaches, often in grayscale, where the ramp's falling lightness and each role's glyph
   still carry the order.
   """
   @spec print() :: t()
@@ -289,7 +289,7 @@ defmodule Visualize.Theme do
 
   @doc """
   A role's cue besides its hue (spec/08 §7.5, D-142): its glyph, a symbol type, and its
-  dash, a stroke pattern (`nil` for solid), so a status reads in greyscale. Fixed by the
+  dash, a stroke pattern (`nil` for solid), so a status reads in grayscale. Fixed by the
   library for every theme. Raises `ArgumentError` for anything but a role.
 
       iex> Visualize.Theme.cue(:warning)
@@ -442,7 +442,7 @@ defmodule Visualize.Theme do
     theme = build(theme, fields)
 
     if theme.series == [] do
-      raise ArgumentError, "series: a theme needs at least one colour"
+      raise ArgumentError, "series: a theme needs at least one color"
     end
 
     case check(theme) do
@@ -539,7 +539,7 @@ defmodule Visualize.Theme do
     colors = own_colors(theme)
 
     # A ramp's anchors are measured as the strings they name (#664); one that names none is
-    # left as written, which the contract refuses as no colour.
+    # left as written, which the contract refuses as no color.
     resolved =
       Map.new(ramps, fn
         {name, anchors} when is_list(anchors) ->
@@ -587,10 +587,10 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The colour at `t` along the theme's ramp `name`, as a literal: the anchors are spread
+  The color at `t` along the theme's ramp `name`, as a literal: the anchors are spread
   evenly over `0..1` and interpolated in CIE Lab, a position on an anchor is the anchor as
   written, and `t` is clamped to `0..1` (spec/08 §7.5). A theme that lacks the ramp takes
-  the default theme's — never a series colour.
+  the default theme's — never a series color.
 
       iex> theme = Visualize.Theme.default()
       iex> Visualize.Theme.ramp(theme, :status, 1)
@@ -611,8 +611,8 @@ defmodule Visualize.Theme do
       Enum.at(anchors, i)
     else
       Color.interpolate_lab(
-        colour!(name, Enum.at(anchors, i)),
-        colour!(name, Enum.at(anchors, i + 1)),
+        color!(name, Enum.at(anchors, i)),
+        color!(name, Enum.at(anchors, i + 1)),
         u
       )
       |> Color.to_hex()
@@ -640,7 +640,7 @@ defmodule Visualize.Theme do
   end
 
   @doc false
-  # Each anchor as the colour string it is: a string as written, `{:color, name}` the
+  # Each anchor as the color string it is: a string as written, `{:color, name}` the
   # string its name holds in the theme's table through any chain of names; `nil` for one
   # that reaches no string — a ramp's anchor never reads a ramp, so it cannot loop (#664).
   @spec anchor_literals(t(), list()) :: [String.t() | nil]
@@ -664,9 +664,9 @@ defmodule Visualize.Theme do
 
   defp anchor_literal(_theme, _anchor, _seen), do: nil
 
-  defp colour!(name, anchor) do
+  defp color!(name, anchor) do
     (is_binary(anchor) && Color.parse(anchor)) ||
-      raise ArgumentError, "ramp #{inspect(name)}: anchor #{inspect(anchor)} is not a colour"
+      raise ArgumentError, "ramp #{inspect(name)}: anchor #{inspect(anchor)} is not a color"
   end
 
   @doc "The theme's slot names: `:series_1` to `:series_n`, then the fixed slots."
@@ -676,7 +676,7 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The theme's colour slots — the series, then axis, grid, text, background and surface,
+  The theme's color slots — the series, then axis, grid, text, background and surface,
   then the five roles (spec/08 §7.1).
   """
   @spec color_slots(t()) :: [atom(), ...]
@@ -685,7 +685,7 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  Every name of the theme's color table (spec/08 §7.1): its colour slots, its own and the
+  Every name of the theme's color table (spec/08 §7.1): its color slots, its own and the
   default theme's `colors`, and the CSS named colors, sorted.
 
       iex> names = Visualize.Theme.color_names(Visualize.Theme.default())
@@ -791,7 +791,7 @@ defmodule Visualize.Theme do
   `text` on a tie — or `#000000`/`#ffffff`, whichever contrasts more, when neither slot
   reaches 4.5:1. One of black and white always does, so the ink always meets WCAG AA.
 
-  `under` is a colour string `Visualize.Color.parse/1` reads, a `%Visualize.Color{}`, or
+  `under` is a color string `Visualize.Color.parse/1` reads, a `%Visualize.Color{}`, or
   `nil` for nothing under the text — the theme's own background. An unreadable string is
   `nil`, and a slot whose own value does not parse is skipped.
 
@@ -812,9 +812,9 @@ defmodule Visualize.Theme do
 
     slots =
       for literal <- [theme.text, theme.background],
-          colour = parsed(literal),
-          colour != nil,
-          do: {literal, Color.contrast(colour, under)}
+          color = parsed(literal),
+          color != nil,
+          do: {literal, Color.contrast(color, under)}
 
     case best(slots) do
       {literal, ratio} when ratio >= @aa ->
@@ -840,7 +840,7 @@ defmodule Visualize.Theme do
     end)
   end
 
-  defp parsed(%Color{} = colour), do: colour
+  defp parsed(%Color{} = color), do: color
   defp parsed(string) when is_binary(string), do: Color.parse(string)
   defp parsed(_other), do: nil
 
@@ -958,7 +958,7 @@ defmodule Visualize.Theme do
   defp own_colors(%__MODULE__{}), do: %{}
 
   # A name's entry: the theme's own, the default theme's — a theme that lacks a role takes
-  # the default's, never a series colour (§7.5) — or the CSS named color's hex; `nil` when
+  # the default's, never a series color (§7.5) — or the CSS named color's hex; `nil` when
   # the table has no such name.
   defp lookup(theme, name) do
     Map.get(own_colors(theme), name) || Map.get(@light_colors, name) ||
@@ -993,7 +993,7 @@ defmodule Visualize.Theme do
     end
   end
 
-  # A pinned entry: integer steps in 0..1000, 500 among them, to colour strings.
+  # A pinned entry: integer steps in 0..1000, 500 among them, to color strings.
   defp steps(steps) do
     cond do
       not Map.has_key?(steps, 500) ->
@@ -1021,7 +1021,7 @@ defmodule Visualize.Theme do
         {:error, "a color name is lower-case letters, digits and _, starting with a letter"}
 
       is_binary(value) ->
-        if Color.parse(value), do: :ok, else: {:error, "#{inspect(value)} is not a colour"}
+        if Color.parse(value), do: :ok, else: {:error, "#{inspect(value)} is not a color"}
 
       Color.value?(value) ->
         names_resolve(theme, value, [name])

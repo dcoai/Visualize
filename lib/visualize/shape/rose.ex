@@ -1,6 +1,6 @@
 defmodule Visualize.Shape.Rose do
   @moduledoc """
-  Rose generator: one `Visualize.Shape.Arc` sector per datum, centred on its angle and
+  Rose generator: one `Visualize.Shape.Arc` sector per datum, centered on its angle and
   as long as its value (spec/04 §15, D-31).
 
   `angle/2` and `width/2` are in the domain units of the radial scale given to `scale/2`
@@ -51,7 +51,7 @@ defmodule Visualize.Shape.Rose do
     %__MODULE__{angle: fn d -> elem(d, 0) end, outer_radius: fn d -> elem(d, 1) end}
   end
 
-  @doc "Sets the sector-centre accessor, in the scale's domain units"
+  @doc "Sets the sector-center accessor, in the scale's domain units"
   @spec angle(t(), accessor()) :: t()
   def angle(%__MODULE__{} = rose, accessor) do
     %{rose | angle: Line.normalize_accessor(accessor)}
@@ -92,18 +92,18 @@ defmodule Visualize.Shape.Rose do
     rose |> generate_path(data) |> Enum.map(&Visualize.Backend.SVG.path_data/1)
   end
 
-  @doc "Returns one `IR.Path` per datum: the `Arc` sector centred on its angle"
+  @doc "Returns one `IR.Path` per datum: the `Arc` sector centered on its angle"
   @spec generate_path(t(), Visualize.Data.Table.source()) :: [Path.t()]
   def generate_path(%__MODULE__{} = rose, data) do
     Enum.map(Visualize.Data.Table.rows(data), fn d ->
-      centre = Annotation.value(rose.angle, d)
+      center = Annotation.value(rose.angle, d)
       half = Annotation.value(rose.width, d) / 2
 
       Arc.new()
       |> Arc.inner_radius(Annotation.value(rose.inner_radius, d))
       |> Arc.outer_radius(Annotation.value(rose.outer_radius, d))
-      |> Arc.start_angle(Annotation.position(rose.scale, centre - half))
-      |> Arc.end_angle(Annotation.position(rose.scale, centre + half))
+      |> Arc.start_angle(Annotation.position(rose.scale, center - half))
+      |> Arc.end_angle(Annotation.position(rose.scale, center + half))
       |> Arc.pad_angle(Annotation.value(rose.pad_angle, d))
       |> Arc.generate_path(d)
     end)

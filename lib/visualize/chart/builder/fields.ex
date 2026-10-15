@@ -198,7 +198,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           :if={is_nil(@field.variable) and @field.widget == :color}
           class={well_class(@field.well)}
           style={"--vis-builder-swatch: #{@field.well.color || "transparent"}"}
-          title={@field.well.word || "no colour set"}
+          title={@field.well.word || "no color set"}
           role="img"
           aria-label={"#{@field.name}: #{@field.well.word || "not set"}"}
           data-builder-well={@field.name}
@@ -585,7 +585,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp ref_field({:one_of, alts}), do: Enum.find_value(alts, &ref_field/1)
     defp ref_field(_type), do: nil
 
-    # An option is what the control submits and what a person reads: an id is spelt as the
+    # An option is what the control submits and what a person reads: an id is spelled as the
     # DOM carries one, and read back through the same table (§19.2).
     defp options({:select, allowed}), do: Enum.map(allowed, &{option(&1), option(&1)})
 
@@ -702,7 +702,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp unit_word(:pct), do: "%"
     defp unit_word(unit), do: to_string(unit)
 
-    # A pair of numbers — a gradient's centre — as two boxes, from the default where the
+    # A pair of numbers — a gradient's center — as two boxes, from the default where the
     # key has none (§18.6, #684).
     defp pair(%{type: {:list, :number}, default: [_, _] = default}, value) do
       case value do
@@ -725,7 +725,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
     defp well(:color, {:paint, name}, theme, defs) do
       case Map.get(defs, name) do
-        %{stops: [%{color: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
+        %{stops: [%{color: color} | _]} -> %{well(color, theme) | word: to_string(name)}
         _other -> %{color: nil, none?: false, word: to_string(name)}
       end
     end
@@ -734,7 +734,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp well(_widget, _value, _theme, _defs), do: %{color: nil, none?: false, word: nil}
 
     @doc false
-    # What a colour well shows for a value (spec/14 §19.10); `Editor.well/2` is its face.
+    # What a color well shows for a value (spec/14 §19.10); `Editor.well/2` is its face.
     def well(nil, _theme), do: %{color: nil, none?: false, word: nil}
     def well(:none, _theme), do: %{color: nil, none?: true, word: "none"}
     def well("#" <> _ = hex, _theme), do: %{color: hex, none?: false, word: hex}
@@ -742,7 +742,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def well({:series, i}, %Theme{} = theme) when is_integer(i) and i >= 1,
       do: well(Theme.series_slot(theme, i), theme)
 
-    # A name of the theme's colour table, written typed (spec/08 §1.9, D-173).
+    # A name of the theme's color table, written typed (spec/08 §1.9, D-173).
     def well({:color, name}, theme) when is_atom(name), do: well(name, theme)
 
     def well(slot, %Theme{} = theme) when is_atom(slot) do
@@ -756,7 +756,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def well(value, _theme) when is_binary(value), do: %{color: value, none?: false, word: value}
 
-    # A transform of colours (D-173): the colour it computes to, under its expression, where
+    # A transform of colors (D-173): the color it computes to, under its expression, where
     # every name it reads is the theme's; else the expression alone.
     def well(value, theme) do
       cond do
@@ -804,7 +804,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp shown(_widget, :error), do: nil
     # A variable is shown by the name box, not the typed control (spec/14 §19.9).
     defp shown(_widget, {:ok, %Var{}}), do: nil
-    # A colour is the well's to show, never a control's.
+    # A color is the well's to show, never a control's.
     defp shown(:color, {:ok, _value}), do: nil
     # Whole: a literal `inspect/1` cut short at its default limit would read back as less
     # than it is — a theme's palette in its parts is well over fifty terms.

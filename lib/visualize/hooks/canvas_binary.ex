@@ -21,7 +21,7 @@ defmodule Visualize.Hooks.CanvasBinary do
   command-stream sub-opcode has a case — the f64 and the f32 path records (D-73) share one
   reader taking the coordinate width, and the cubic run (D-74) has its own — and an unknown
   byte throws rather than
-  desynchronise silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
+  desynchronize silently. A full-matrix transform (`0xFF`) composes with `ctx.transform`.
 
   The canvas's drawing size is the element's `data-width` × `data-height` at every draw
   (spec/10 §8.2, #456): a size change re-sizes the canvas, which clears it, and redraws
@@ -116,13 +116,13 @@ defmodule Visualize.Hooks.CanvasBinary do
       }
 
       // A gradient as ctx[target + 'Style'] (spec/10 §8.1, #652): a linear one from
-      // [x0, y0, x1, y1], a radial one [cx, cy, r] about its focus at its centre, with one
-      // addColorStop per [at, colour].
+      // [x0, y0, x1, y1], a radial one [cx, cy, r] about its focus at its center, with one
+      // addColorStop per [at, color].
       export function visualizeGradient(ctx, target, kind, g, stops) {
         const gradient = kind === 'linear' ?
           ctx.createLinearGradient(g[0], g[1], g[2], g[3]) :
           ctx.createRadialGradient(g[0], g[1], 0, g[0], g[1], g[2]);
-        stops.forEach(([at, colour]) => gradient.addColorStop(at, colour));
+        stops.forEach(([at, color]) => gradient.addColorStop(at, color));
         ctx[target + 'Style'] = gradient;
       }
 
@@ -427,12 +427,12 @@ defmodule Visualize.Hooks.CanvasBinary do
 
             case 0x10: { // style
               const flags = bytes[offset++];
-              if (flags & 0x01) { // fill colour
+              if (flags & 0x01) { // fill color
                 fillPaint = null;
                 const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
                 ctx.fillStyle = `rgba(${r},${g},${b},${a / 255})`;
               }
-              if (flags & 0x02) { // stroke colour
+              if (flags & 0x02) { // stroke color
                 strokePaint = null;
                 const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
                 ctx.strokeStyle = `rgba(${r},${g},${b},${a / 255})`;
@@ -561,7 +561,7 @@ defmodule Visualize.Hooks.CanvasBinary do
               const index = view.getUint16(offset, true);
               const kind = bytes[offset + 2];
               offset += 3;
-              if (kind === 0x03) { // hatch: pattern, angle, spacing, width, colour, ground
+              if (kind === 0x03) { // hatch: pattern, angle, spacing, width, color, ground
                 const pattern = ['lines', 'crosshatch', 'dots'][bytes[offset] - 1];
                 if (!pattern) throw new Error('Unknown canvas binary hatch pattern 0x' + bytes[offset].toString(16) + ' at offset ' + offset);
                 const f = (i) => view.getFloat32(offset + 1 + 4 * i, true);
@@ -623,10 +623,10 @@ defmodule Visualize.Hooks.CanvasBinary do
   # server writes into a `:js` script, `Visualize.Backend.Canvas.hatch_js/0`, so the two never
   # draw different tiles.
   defp pattern_js do
-    "    export function visualizePattern(ctx, target, pattern, angle, spacing, width, colour, background) {\n" <>
+    "    export function visualizePattern(ctx, target, pattern, angle, spacing, width, color, background) {\n" <>
       "      ctx[target + 'Style'] = (" <>
       Visualize.Backend.Canvas.hatch_js() <>
-      ")(ctx, pattern, angle, spacing, width, colour, background);\n    }\n\n"
+      ")(ctx, pattern, angle, spacing, width, color, background);\n    }\n\n"
   end
 
   @doc """

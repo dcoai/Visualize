@@ -11,7 +11,7 @@ defmodule Visualize.Chart.Mark.Channels do
   alias Visualize.Scale.Band
 
   # Channels a mark reads raw whatever scale they name: `series` groups the rows and is
-  # mapped through the colour scale per series; a rose's `angle` is mapped by the rose.
+  # mapped through the color scale per series; a rose's `angle` is mapped by the rose.
   @raw_always [:series, :path]
 
   @typedoc "A row with its channel readings in pixels: `%{datum: row, x: px, ...}`."
@@ -54,7 +54,7 @@ defmodule Visualize.Chart.Mark.Channels do
 
   # A band within a band (spec/14 §5.1, D-109): the outer band's start from the family's
   # scale, then the inner band's placement from the offset scale over the offset field —
-  # start, end or centre by the channel. Anything not a band, or a datum either scale
+  # start, end or center by the channel. Anything not a band, or a datum either scale
   # cannot place, places nothing.
   defp offset(_frame, _mark, _channel, nil, _row, _offsets), do: nil
 
@@ -101,7 +101,7 @@ defmodule Visualize.Chart.Mark.Channels do
   def placed?(row, channels), do: Enum.all?(channels, &(Map.get(row, &1) != nil))
 
   @doc false
-  # The realised scale a channel of the mark maps through, or `nil`.
+  # The realized scale a channel of the mark maps through, or `nil`.
   @spec scale(map(), atom()) :: struct() | nil
   def scale(%{frame: frame, mark: mark}, channel) do
     case Scales.scale_for(frame.kind, mark, channel) do
@@ -139,7 +139,7 @@ defmodule Visualize.Chart.Mark.Channels do
 
   # A channel may name its scale's own end (spec/14 §5.2, #420): the reading is the end of
   # that scale's domain and is then mapped like any other, so it follows an inferred
-  # domain frame by frame and honours the mark's `scales` rename.
+  # domain frame by frame and honors the mark's `scales` rename.
   defp read({:scale, which}, _row, frame, mark, channel) when which in [:min, :max] do
     case scale_named(frame, Scales.scale_for(frame.kind, mark, channel)) do
       nil -> nil
@@ -174,7 +174,7 @@ defmodule Visualize.Chart.Mark.Channels do
   defp place(nil, _channel, value), do: value
 
   # Through a band scale an edge channel reads the band's start or end and a position
-  # channel its centre (spec/14 §5.2).
+  # channel its center (spec/14 §5.2).
   defp place(%Band{} = scale, channel, value) do
     case Scale.apply(scale, value) do
       nil -> nil

@@ -172,10 +172,10 @@ defmodule Visualize.Feed.Conformance do
     with {:ok, {_version, schema, supports}} <- described(feed, o) do
       if supports -- Feed.capabilities() == [] and
            Enum.uniq(supports) == supports do
-        window_honoured(feed, supports, Feed.window_field(schema), o) ++
+        window_honored(feed, supports, Feed.window_field(schema), o) ++
           Box.region(&fetched(feed, &1, o), supports, schema, o) ++
           Box.latest(&fetched(feed, &1, o), supports, schema, o) ++
-          budget_honoured(feed, supports, o) ++ push_honoured(feed, supports, o)
+          budget_honored(feed, supports, o) ++ push_honored(feed, supports, o)
       else
         [{:supports, supports}]
       end
@@ -272,7 +272,7 @@ defmodule Visualize.Feed.Conformance do
   defp measure?({[_field, :quantity], {:quantity, _quantity, _code}}), do: true
   defp measure?(_error), do: false
 
-  # A feed that honours windows names the field they are over (spec/08 §10.1, D-154): one
+  # A feed that honors windows names the field they are over (spec/08 §10.1, D-154): one
   # `window: true`, or a single `:time` field.
   defp window_field(schema, supports) do
     if is_list(supports) and :window in supports and Feed.window_field(schema) == nil,
@@ -702,7 +702,7 @@ defmodule Visualize.Feed.Conformance do
 
   # -- the supports check --------------------------------------------------------------------
 
-  defp window_honoured(feed, supports, time, o) do
+  defp window_honored(feed, supports, time, o) do
     bounded = for w <- o.windows, bounded?(Window.range(w, time)), do: w
 
     cond do
@@ -755,7 +755,7 @@ defmodule Visualize.Feed.Conformance do
 
   defp served_within?(_served, _asked), do: false
 
-  defp budget_honoured(feed, supports, o) do
+  defp budget_honored(feed, supports, o) do
     budgets = Enum.reject(o.budgets, &is_nil/1)
 
     cond do
@@ -779,7 +779,7 @@ defmodule Visualize.Feed.Conformance do
     end
   end
 
-  defp push_honoured(feed, supports, o) do
+  defp push_honored(feed, supports, o) do
     if :push in supports do
       probe = if o.push, do: [], else: [{:no_probe, :push}]
 

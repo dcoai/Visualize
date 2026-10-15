@@ -45,7 +45,7 @@ defmodule Visualize.Color.Typed do
 
   @doc false
   # Whether a term is tagged as a typed color, whatever its operands: what a paint's
-  # shorthand is read as, so a malformed one is reported as the colour it tries to be.
+  # shorthand is read as, so a malformed one is reported as the color it tries to be.
   @spec tagged?(term()) :: boolean()
   def tagged?(v) when is_tuple(v) and tuple_size(v) in [2, 3],
     do: elem(v, 0) in [:color, :blend, :contrast | @ops]
@@ -73,7 +73,7 @@ defmodule Visualize.Color.Typed do
   @doc false
   # The literal strings among a value's operands that no transform could compute from:
   # strings `Visualize.Color.parse/1` does not read. A literal that is the whole value is a
-  # CSS colour as written and is never computed, so it is not among them.
+  # CSS color as written and is never computed, so it is not among them.
   @spec unreadable(term()) :: [String.t()]
   def unreadable(value) do
     if transform?(value), do: value |> operands() |> Enum.reject(&readable?/1), else: []
@@ -245,12 +245,12 @@ defmodule Visualize.Color.Typed do
   end
 
   @doc false
-  # An OKLab colour and alpha as the literal a canvas takes: `#rrggbb`, with `aa` below an
+  # An OKLab color and alpha as the literal a canvas takes: `#rrggbb`, with `aa` below an
   # alpha of 1, gamut-mapped (spec/08 §1.9).
   @spec literal({{number(), number(), number()}, number()}) :: String.t()
   def literal({lab, alpha}) do
     {r, g, b} = OK.map_to_srgb(lab)
-    # An alpha that rounds to the opaque byte is opaque: no `ff` written after the colour.
+    # An alpha that rounds to the opaque byte is opaque: no `ff` written after the color.
     alpha = if round(alpha * 255) >= 255, do: 1.0, else: alpha
     Color.to_hex(Color.rgb(r * 255, g * 255, b * 255, alpha))
   end

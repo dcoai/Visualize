@@ -271,7 +271,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?({:ref, _}, {:generate, _name, _args}), do: false
   defp shape?(:generator, v), do: match?({:generate, _, _}, v)
   defp shape?(:color_map, v), do: is_map(v) and not is_struct(v)
-  # A theme's color: a colour, or the steps it pins of a name (spec/08 §7.1, #667).
+  # A theme's color: a color, or the steps it pins of a name (spec/08 §7.1, #667).
   defp shape?(:theme_color, _v), do: true
   # A theme's counterpart in a color scheme: a theme's name, or `nil` for none (#668).
   defp shape?(:counterpart, v), do: is_atom(v)
@@ -343,7 +343,7 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:var), do: [spec(:default, :term, :binding)]
 
   # A paint (spec/14 §2.7, §3.2, D-172): what an area is filled with or a line drawn with,
-  # in the words a person uses — a type, then a colour or stops and a gradient's geometry,
+  # in the words a person uses — a type, then a color or stops and a gradient's geometry,
   # then an opacity. A `fill`, a `stroke` and a `defs` entry are each one.
   defp design_node(:paint), do: paint_keys(true)
   defp design_node(:gradient), do: paint_keys(true)
@@ -397,7 +397,7 @@ defmodule Visualize.Chart.Schema do
     [
       spec(:type, {:enum, [:none, :shadow, :blur]}, :style),
       spec(:radius, :size, :style, range: {0, 20, 0.5}),
-      # A shadow's offset and colour (spec/14 §3.1, #674).
+      # A shadow's offset and color (spec/14 §3.1, #674).
       spec(:offset, {:list, :length}, :style),
       spec(:color, :color, :style)
     ]
@@ -594,8 +594,8 @@ defmodule Visualize.Chart.Schema do
     ]
   end
 
-  # A paint's keys: `type` decides which of the others it reads — a colour for `:solid`,
-  # stops and geometry for `:linear` and `:radial`, a colour, a pattern and its sizes for
+  # A paint's keys: `type` decides which of the others it reads — a color for `:solid`,
+  # stops and geometry for `:linear` and `:radial`, a color, a pattern and its sizes for
   # `:hatch` (#673), a `defs` name for `:paint` — and `opacity` is every type's. `:none` is
   # no paint. A stroke's paint has no hatch (`hatch?` false).
   defp paint_keys(hatch?) do

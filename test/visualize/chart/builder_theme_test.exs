@@ -178,7 +178,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
   end
 
   describe "the editor (spec/14 §20.2)" do
-    test "a chrome colour, a series colour, the name and a font write the theme node" do
+    test "a chrome color, a series color, the name and a font write the theme node" do
       socket =
         new_theme()
         |> edit("axis", "#aa0000")
@@ -200,7 +200,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
       before = theme_node(socket)
 
       for {field, value} <- [
-            {"axis", "not a colour"},
+            {"axis", "not a color"},
             {"font_size", "-3"},
             {"name", " "},
             {"series.99", "#000000"}
@@ -222,7 +222,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
       assert theme_node(socket) == %{Visualize.Chart.Theme.node(Theme.dark()) | grid: "#444444"}
     end
 
-    test "series colours are added and removed; the last one stays" do
+    test "series colors are added and removed; the last one stays" do
       socket = new_theme() |> event("theme_series_add")
       assert length(Themes.effective(theme_node(socket), nil).series) == 11
 
@@ -287,14 +287,14 @@ defmodule Visualize.Chart.BuilderThemeTest do
       html = BuilderFixture.render(socket)
 
       # Every sample's frame paints the edited background, and the series sample draws in
-      # the edited first colour; literals only, so no stylesheet re-points a slot.
+      # the edited first color; literals only, so no stylesheet re-points a slot.
       assert length(String.split(html, ~s(fill="#102030"))) - 1 >= length(ThemeSheet.samples())
       assert html =~ ~s(stroke="#fe0000")
       sheet = html |> String.split("vis-builder-theme-sheet") |> Enum.at(1)
       refute sheet =~ "var(--vis-"
     end
 
-    test "the status sample is coloured by the five roles" do
+    test "the status sample is colored by the five roles" do
       theme = Theme.color_safe()
       html = render_component(&ThemeSheet.sheet/1, %{id: "s", theme: theme})
 
@@ -340,7 +340,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
     assert Stack.kinds() |> Enum.member?(:theme)
   end
 
-  # -- ramps, roles and colour vision (spec/14 §20.4, §20.5) ----------------------------
+  # -- ramps, roles and color vision (spec/14 §20.4, §20.5) ----------------------------
 
   # The markup of one ramp's block in a rendered builder.
   defp ramp_block(html, name) do
@@ -443,14 +443,14 @@ defmodule Visualize.Chart.BuilderThemeTest do
       assert BuilderFixture.render(socket) =~ "status has no anchor at 0.5"
     end
 
-    test "info and neutral are colours of their own" do
+    test "info and neutral are colors of their own" do
       socket = new_theme() |> edit("roles.info", "#2255aa") |> edit("roles.neutral", "#777777")
       theme = Themes.effective(theme_node(socket), nil)
       assert Map.take(theme.colors, [:info, :neutral]) == %{info: "#2255aa", neutral: "#777777"}
     end
   end
 
-  describe "colour-vision simulation (spec/14 §20.5)" do
+  describe "color-vision simulation (spec/14 §20.5)" do
     test "the vision select redraws the ramps and the sheet under the deficiency" do
       socket = new_theme()
       normal = BuilderFixture.render(socket)
@@ -463,7 +463,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
       assert seen =~ ~s(aria-label="status, under deuteranopia")
       assert seen =~ ~s(data-vision="deuteranopia")
 
-      # The sheet's colours are the simulated ones: the default's red series colour is gone
+      # The sheet's colors are the simulated ones: the default's red series color is gone
       # from it, and its deuteranope reading is there. The sheet ends where the tray's style
       # palette begins, whose previews are the theme as drawn, not simulated (§18.14, #685).
       sheet = fn html ->

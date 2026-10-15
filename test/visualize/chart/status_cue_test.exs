@@ -2,7 +2,7 @@ defmodule Visualize.Chart.StatusCueTest do
   @moduledoc """
   Status beyond hue (spec/14 §21.7, spec/08 §7.5, #560, D-142): each role's glyph and dash,
   a mark drawing them through the role its datum has, a symbol keeping its glyph on a polar
-  arc, and a greyscale render of a status gauge whose zones stay distinguishable.
+  arc, and a grayscale render of a status gauge whose zones stay distinguishable.
   """
   use ExUnit.Case, async: true
 
@@ -17,7 +17,7 @@ defmodule Visualize.Chart.StatusCueTest do
     %{from: 85, to: 100, mid: 92.5, zone: "hot"}
   ]
 
-  # A status gauge: three zones coloured by role, and — with `cues?` — each zone's glyph at
+  # A status gauge: three zones colored by role, and — with `cues?` — each zone's glyph at
   # its middle; the zone outlines dashed by role.
   defp gauge(cues?) do
     glyphs =
@@ -86,7 +86,7 @@ defmodule Visualize.Chart.StatusCueTest do
     assert_raise ArgumentError, ~r/a cue is a role's/, fn -> Theme.cue(:series_1) end
   end
 
-  test "a field bound to symbol and stroke_dasharray draws the role's glyph and dash through the colour scale" do
+  test "a field bound to symbol and stroke_dasharray draws the role's glyph and dash through the color scale" do
     svg = Chart.render(applied(gauge(true)))
 
     # The zones' outlines: warning's and bad's dashes, and good solid — no third dash.
@@ -120,15 +120,15 @@ defmodule Visualize.Chart.StatusCueTest do
     assert svg =~ SVG.path_data(path.(:star))
     assert svg =~ SVG.path_data(path.(:circle))
     assert svg =~ ~s(stroke-dasharray="4 4")
-    # A role read without a colour scale is still a role.
+    # A role read without a color scale is still a role.
     assert svg =~ ~s(stroke-dasharray="2 3")
   end
 
-  describe "a greyscale render (spec/14 §21.7)" do
+  describe "a grayscale render (spec/14 §21.7)" do
     @describetag :resvg
 
-    # The glyphs' centres in the document's pixels: the plot's centre plus each bent point.
-    defp centres(applied, scale) do
+    # The glyphs' centers in the document's pixels: the plot's center plus each bent point.
+    defp centers(applied, scale) do
       frame = applied.frame
       cx = frame.margin.left + frame.plot.width / 2
       cy = frame.margin.top + frame.plot.height / 2
@@ -145,7 +145,7 @@ defmodule Visualize.Chart.StatusCueTest do
       end
     end
 
-    # A square of greyscale luminance about a point, thresholded at its own middle: the
+    # A square of grayscale luminance about a point, thresholded at its own middle: the
     # shape in it, whatever its lightness.
     defp mask(png, {px, py}, half) do
       {w, _h, pixels} = PNGPixels.decode(png)
@@ -166,7 +166,7 @@ defmodule Visualize.Chart.StatusCueTest do
       applied = applied(gauge(cues?))
       root = Chart.generate(applied, root: true, resolve: :literal)
       {:ok, png, _warnings} = Render.to_png(root, scale: 2, background: "#ffffff")
-      for centre <- centres(applied, 2), do: mask(png, centre, 14)
+      for center <- centers(applied, 2), do: mask(png, center, 14)
     end
 
     test "with the glyphs every pair of zones differs in shape; without them they do not" do
@@ -177,7 +177,7 @@ defmodule Visualize.Chart.StatusCueTest do
       end
 
       # The control: the same gauge without its glyphs is, in shape, three equal patches —
-      # the roles differ only in tone there, and tone is what greyscale keeps least.
+      # the roles differ only in tone there, and tone is what grayscale keeps least.
       [good, warning, bad] = masks(false)
       assert distance(good, warning) + distance(good, bad) + distance(warning, bad) < 40
     end

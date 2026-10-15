@@ -72,7 +72,7 @@ defmodule Visualize.Board.ExportTest do
     end)
   end
 
-  defp realised(opts \\ []) do
+  defp realized(opts \\ []) do
     board = Keyword.get_lazy(opts, :board, &board/0)
 
     {:ok, snapshot} =
@@ -107,7 +107,7 @@ defmodule Visualize.Board.ExportTest do
 
   describe "one document (spec/15 §12.1)" do
     test "each cell sits at its grid box and embeds its own drawing byte for byte" do
-      snapshot = realised(width: 1000)
+      snapshot = realized(width: 1000)
       svg = Export.svg(snapshot)
       views = Snapshot.views(snapshot)
       %{gap: gap} = Board.layout(snapshot.board)
@@ -183,7 +183,7 @@ defmodule Visualize.Board.ExportTest do
     end
 
     test "a crashed cell exports its crashed panel" do
-      snapshot = realised()
+      snapshot = realized()
       snapshot = put_in(snapshot.cells.b.crashed, ":killed")
       view = Snapshot.views(snapshot).b
 
@@ -193,7 +193,7 @@ defmodule Visualize.Board.ExportTest do
     end
 
     test "literal mode leaves no CSS reference" do
-      svg = Export.svg(realised(), resolve: :literal)
+      svg = Export.svg(realized(), resolve: :literal)
       refute svg =~ "var(--"
       assert svg =~ ~s(fill="#ffffff")
     end
@@ -201,7 +201,7 @@ defmodule Visualize.Board.ExportTest do
     @tag :resvg
     test "the PNG renders" do
       assert {:ok, <<137, 80, 78, 71, 13, 10, 26, 10, _::binary>>, _warnings} =
-               Export.png(realised(width: 600))
+               Export.png(realized(width: 600))
     end
   end
 
@@ -271,7 +271,7 @@ defmodule Visualize.Board.ExportTest do
     end
 
     test "the limits hold before a key is read, and every fault is reported by path" do
-      map = Snapshot.to_map(realised())
+      map = Snapshot.to_map(realized())
 
       assert {:error, errors} = Snapshot.from_map(map, limits: [items: 15])
       assert {[:cells, :a, :slots, :primary, :rows], {:limit, :items, 15, 20}} in errors
@@ -296,7 +296,7 @@ defmodule Visualize.Board.ExportTest do
                "cells.z: is not a cell of the snapshot's board"
     end
 
-    test "a realise that fails is the snapshot's failure, under each cell" do
+    test "a realize that fails is the snapshot's failure, under each cell" do
       assert {:error, [{[:cells, :a, :sources, :primary], {:unbound, :source, :primary}} | _]} =
                Snapshot.realize(board(), @store, %{})
     end
@@ -367,7 +367,7 @@ defmodule Visualize.Board.ExportTest do
     end
 
     test "pages are SVG documents of the paper's size drawing the snapshot in the print theme" do
-      snapshot = realised()
+      snapshot = realized()
       [page | _] = pages = Export.pages(snapshot, paper: :a4)
       assert page =~ ~s(width="210mm") and page =~ ~s(height="297mm")
       assert page =~ "page 1 of #{length(pages)}"

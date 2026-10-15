@@ -132,7 +132,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       assert html =~ ~s(<h3 class="vis-builder-context-title">fill.stops.1.color</h3>)
       assert html =~ ~s(name="fill.stops.1.color.slot" value="axis" checked)
 
-      # Radial keeps the stops, and its centre and radius follow.
+      # Radial keeps the stops, and its center and radius follow.
       radial = edit(s, "fill.type", "radial")
       assert series(radial).fill.stops == series(s).fill.stops
       assert BuilderFixture.render(radial) =~ ~s(phx-value-field="fill.radius")

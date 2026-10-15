@@ -59,7 +59,7 @@ defmodule Visualize.Feed.MonitorTest do
       assert Enum.all?(delivery.rows, &(&1.t in 101..900))
     end
 
-    test "a budget-honouring feed is not reduced again" do
+    test "a budget-honoring feed is not reduced again" do
       answer = fn _window, budget -> {rows(1..budget), [reduced_by: :feed]} end
       {feed, _agent} = Feeds.scripted(schema: @v1, supports: [:budget], rows: answer)
       monitor = Monitor.new(%{a: feed}, budget: 40) |> Monitor.tick(now: 0)

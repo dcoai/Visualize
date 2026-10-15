@@ -2,7 +2,7 @@ defmodule Visualize.Feed.CombineTest do
   @moduledoc """
   `Visualize.Feed.Combine` and `Visualize.Feed.Signals` (spec/08 §11.5–§11.6, #537,
   D-140): live data and its history in one slot, routed by window and deduplicated at the
-  seam; a signal as a pull feed that honours its window.
+  seam; a signal as a pull feed that honors its window.
   """
   use ExUnit.Case, async: true
 
@@ -20,7 +20,7 @@ defmodule Visualize.Feed.CombineTest do
 
   defp rows(range, source), do: for(t <- range, do: %{t: t, v: t, from: source})
 
-  # A store that holds `range` and honours windows, as a history store does.
+  # A store that holds `range` and honors windows, as a history store does.
   defp store(range, source) do
     answer = fn window, _budget ->
       [from, to] = window || [nil, nil]
@@ -102,7 +102,7 @@ defmodule Visualize.Feed.CombineTest do
       assert Feed.describe(Combine.new([b])) == {:error, :combine_window_field}
     end
 
-    test "a combination honours the window, and pushes when its first feed does" do
+    test "a combination honors the window, and pushes when its first feed does" do
       {pull, _} = store(0..10, :a)
       assert {_v, @schema, [:window]} = Feed.describe(Combine.new([pull]))
 
@@ -149,7 +149,7 @@ defmodule Visualize.Feed.CombineTest do
 
     defp at(s), do: DateTime.add(@t0, s, :second)
 
-    # A store holding a row per second of `seconds`, `row/1`'s, honouring `DateTime`
+    # A store holding a row per second of `seconds`, `row/1`'s, honoring `DateTime`
     # windows over `field`.
     defp timed(schema, seconds, field, row, supports \\ [:window]) do
       answer = fn window, _budget ->
@@ -413,7 +413,7 @@ defmodule Visualize.Feed.CombineTest do
   end
 
   describe "a signal as a feed" do
-    test "honours a window of ticks up to the present tick, capped at its limit" do
+    test "honors a window of ticks up to the present tick, capped at its limit" do
       signal = Visualize.Signals.new(:sine, [:t, :v], window: 5)
       feed = Signals.new(signal, tick: 100, limit: 10)
       assert {_v, schema, [:window]} = Feed.describe(feed)

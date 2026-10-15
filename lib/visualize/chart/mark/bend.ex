@@ -1,14 +1,14 @@
 defmodule Visualize.Chart.Mark.Bend do
   @moduledoc """
   The polar transform (spec/14 §5.2, #391): a mark laid out in `(angle, r)` — every `x` an
-  angle in radians clockwise from 12 o'clock, every `y` a radius from the centre — bent
+  angle in radians clockwise from 12 o'clock, every `y` a radius from the center — bent
   around the arc.
 
   A pure function of the mark's elements, so every backend draws the same geometry:
   a point goes to `(r · sin a, −r · cos a)` (spec/04 §6.2); a straight segment is sampled
   at no more than 2° of angle and bent point by point, so a line wraps around the arc;
   a curve is sampled along its parameter, so it is interpolated in `(angle, r)` before it
-  bends; a rect becomes an annular sector; a circle keeps its radius at the bent centre,
+  bends; a rect becomes an annular sector; a circle keeps its radius at the bent center,
   and a symbol its shape at the bent point (`place/1`);
   a text moves to the bent point; a group's children bend, and a `translate` in a
   transform bends as a point.
@@ -33,7 +33,7 @@ defmodule Visualize.Chart.Mark.Bend do
 
   @doc """
   An element bent around the arc: its geometry read as `(angle, r)` and drawn in the
-  plane about the centre.
+  plane about the center.
   """
   @spec bend(Element.t()) :: Element.t()
   def bend(%Element{} = element), do: bend(element, [])
@@ -84,7 +84,7 @@ defmodule Visualize.Chart.Mark.Bend do
   @doc """
   An element drawn in pixels about its own origin — a symbol's glyph — moved to its bent
   position with its shape kept: only its `translate` bends, as a circle keeps its radius
-  at the bent centre (spec/14 §5.2, §21.7).
+  at the bent center (spec/14 §5.2, §21.7).
   """
   @spec place(Element.t()) :: Element.t()
   def place(%Element{} = element), do: bend_transform(element)
@@ -191,7 +191,7 @@ defmodule Visualize.Chart.Mark.Bend do
   defp command({:t, x, y}, {cx, cy} = current, start, control, opts),
     do: command({:T, cx + x, cy + y}, current, start, control, opts)
 
-  # An arc in (angle, r) is sampled as the chord it subtends: its parametrisation is not
+  # An arc in (angle, r) is sampled as the chord it subtends: its parametrization is not
   # worth keeping through a bend that will curve it again.
   defp command({:A, _rx, _ry, _rot, _large, _sweep, x, y}, current, start, control, opts),
     do: command({:L, x, y}, current, start, control, opts)
@@ -246,7 +246,7 @@ defmodule Visualize.Chart.Mark.Bend do
   # -- sectors ------------------------------------------------------------------------
 
   # An annular sector from the angles `a0..a1` between the radii `r0..r1`: the outer arc
-  # forward, the inner arc back, closed; a wedge to the centre when the inner radius is 0.
+  # forward, the inner arc back, closed; a wedge to the center when the inner radius is 0.
   defp sector(a0, a1, r0, r1) do
     {inner, outer} = {min(r0, r1), max(r0, r1)}
     {from, to} = {min(a0, a1), max(a0, a1)}

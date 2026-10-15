@@ -81,7 +81,7 @@ defmodule Visualize.Hooks.ExecutedBoardBuilderHookTest do
     s
   end
 
-  test "a cell dragged by its body is pushed at the squares the pointer travelled, and placed" do
+  test "a cell dragged by its body is pushed at the squares the pointer traveled, and placed" do
     s = board()
     assert rect(s, :cell_1) == %{x: 0, y: 0, w: 4, h: 2}
     assert rect(s, :cell_2) == %{x: 4, y: 0, w: 4, h: 2}

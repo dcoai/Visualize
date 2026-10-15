@@ -117,7 +117,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         refs: refs(design, assigns.store, palette_theme),
         palette_theme: palette_theme,
         look: look(kind, design, entry, Map.put(assigns, :theme, preview_theme), errors),
-        color: colour(assigns, entry, at(layer, entry.path), design),
+        color: color(assigns, entry, at(layer, entry.path), design),
         defs: Map.get(design, :defs, %{}),
         pool: assigns |> pool() |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort(),
         bound_pool: pool(assigns),
@@ -211,10 +211,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # The colour chooser (spec/14 §19.10): the selected colour field, if the selected field
-    # is one, with the theme's slots in their colours and the literals the design already
-    # uses; the theme itself is what every well shows its colour through.
-    defp colour(%{field: field}, entry, node, design) do
+    # The color chooser (spec/14 §19.10): the selected color field, if the selected field
+    # is one, with the theme's slots in their colors and the literals the design already
+    # uses; the theme itself is what every well shows its color through.
+    defp color(%{field: field}, entry, node, design) do
       theme = design |> Map.get(:theme, :default) |> theme()
 
       # The selected field, when it is a color: a key of the node, or a part's key by its
@@ -231,13 +231,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
         spec: (located && located.spec) || %{type: :color, range: nil},
         value: located && Editor.value_at(entry.kind, node, located.path),
         groups: Picker.groups(theme),
-        recent: recent_colours(design)
+        recent: recent_colors(design)
       }
     end
 
     # Every "#rrggbb" the design's styles carry, at any depth of their parts, once each, in
     # order of first use.
-    defp recent_colours(design) do
+    defp recent_colors(design) do
       design
       |> Map.get(:styles, %{})
       |> Map.values()
@@ -245,7 +245,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.uniq()
     end
 
-    defp literals("#" <> _ = colour), do: [colour]
+    defp literals("#" <> _ = color), do: [color]
 
     defp literals(map) when is_map(map) and not is_struct(map),
       do: Enum.flat_map(Map.values(map), &literals/1)
@@ -272,7 +272,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp look(_kind, _design, _entry, _assigns, _errors), do: nil
 
-    # The theme the wells show colours through, built unchecked: a theme being edited may
+    # The theme the wells show colors through, built unchecked: a theme being edited may
     # break a contract for a moment, and the editor says so rather than the render raising
     # (spec/14 §20.4).
     defp theme(value), do: Themes.effective(value, nil)

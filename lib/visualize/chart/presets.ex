@@ -188,7 +188,7 @@ defmodule Visualize.Chart.Presets do
   @spec line_chart(assigns()) :: map()
   def line_chart(assigns) do
     a = assigns(:line_chart, assigns)
-    stroke = colour(a.stroke, :series_1)
+    stroke = color(a.stroke, :series_1)
 
     points =
       if a.show_points,
@@ -218,7 +218,7 @@ defmodule Visualize.Chart.Presets do
     fold(
       seed(a, [:x, :y]) ++
         [
-          style(:bar, fill: colour(a.fill, :series_1)),
+          style(:bar, fill: color(a.fill, :series_1)),
           cartesian(margin: margin(a)),
           band_scale(:x, padding: a.padding),
           linear_scale(:y, domain: [0, :auto]),
@@ -239,7 +239,7 @@ defmodule Visualize.Chart.Presets do
     fold(
       seed(a, [:x, :y]) ++
         [
-          style(:bar, fill: colour(a.fill, :series_1)),
+          style(:bar, fill: color(a.fill, :series_1)),
           cartesian(margin: margin(a)),
           linear_scale(:x, domain: [0, :auto]),
           band_scale(:y, padding: a.padding, range: [0, height]),
@@ -254,7 +254,7 @@ defmodule Visualize.Chart.Presets do
   @spec pie_chart(assigns()) :: map()
   def pie_chart(assigns) do
     a = assigns(:pie_chart, assigns)
-    labelled? = a.label != nil
+    labeled? = a.label != nil
     outer = a.outer_radius || min(a.width, a.height) / 2 - 10
 
     opts = [
@@ -265,10 +265,10 @@ defmodule Visualize.Chart.Presets do
     # A label on a fill is inked by contrast with it and drawn only where its whole name
     # fits the slice, as the gallery's pie is (spec/14 §15.3, D-123, #494).
     label = %{text: [{:field, :label}], anchor: :middle, fit: :hide, style: :slice_label}
-    opts = if labelled? and a.show_labels, do: Keyword.put(opts, :label, label), else: opts
+    opts = if labeled? and a.show_labels, do: Keyword.put(opts, :label, label), else: opts
 
     fold(
-      seed(a, [:value, :index] ++ if(labelled?, do: [:label], else: [])) ++
+      seed(a, [:value, :index] ++ if(labeled?, do: [:label], else: [])) ++
         [
           style(:slice, fill: {:field, :index}, stroke: :background, stroke_width: 2),
           style(:slice_label, fill: :contrast, font_size: :label_size),
@@ -287,7 +287,7 @@ defmodule Visualize.Chart.Presets do
     fold(
       seed(a, [:x, :y, :r]) ++
         [
-          style(:point, fill: colour(a.fill, :series_1), opacity: 0.7),
+          style(:point, fill: color(a.fill, :series_1), opacity: 0.7),
           cartesian(margin: margin(a)),
           linear_scale(:x),
           linear_scale(:y),
@@ -307,12 +307,12 @@ defmodule Visualize.Chart.Presets do
       seed(a, [:x, :y]) ++
         [
           style(:area,
-            fill: colour(a.fill, :series_1),
+            fill: color(a.fill, :series_1),
             fill_opacity: a.fill_opacity,
             curve: a.curve
           ),
           style(:line,
-            stroke: colour(a.stroke, :series_1),
+            stroke: color(a.stroke, :series_1),
             stroke_width: a.stroke_width,
             curve: a.curve
           ),
@@ -369,10 +369,10 @@ defmodule Visualize.Chart.Presets do
     fold(
       seed(a, @hierarchy_fields) ++
         [
-          style(:link, fill: :none, stroke: colour(a.link_stroke, :grid), stroke_width: 1.5),
+          style(:link, fill: :none, stroke: color(a.link_stroke, :grid), stroke_width: 1.5),
           style(:node,
-            fill: colour(a.node_fill, :background),
-            stroke: colour(a.node_stroke, :series_1),
+            fill: color(a.node_fill, :background),
+            stroke: color(a.node_stroke, :series_1),
             stroke_width: 2
           ),
           cartesian(margin: margin(a)),
@@ -391,7 +391,7 @@ defmodule Visualize.Chart.Presets do
   def treemap_chart(assigns) do
     a = assigns(:treemap_chart, assigns)
 
-    # The leaves alone (spec/10 §3.3), each labelled at its centre as the gallery's treemap
+    # The leaves alone (spec/10 §3.3), each labeled at its center as the gallery's treemap
     # is: inked by contrast with the cell and cut to the cell (spec/14 §15.4, D-123, #497).
     data =
       from(:data)
@@ -425,7 +425,7 @@ defmodule Visualize.Chart.Presets do
     radius = min(a.width, a.height) / 2
 
     # The nodes below the root with a positive extent (spec/10 §3.4), each arc over its
-    # own angles (D-69) and labelled at its centroid as the pie is: inked by contrast with
+    # own angles (D-69) and labeled at its centroid as the pie is: inked by contrast with
     # the arc and cut to the arc's length (spec/14 §15.4, D-123, #494).
     data =
       from(:data)
@@ -494,9 +494,9 @@ defmodule Visualize.Chart.Presets do
     {a.width - m.left - m.right, a.height - m.top - m.bottom}
   end
 
-  # A colour assign: the literal as given, or the theme slot when `nil` (spec/10 §1.2).
-  defp colour(nil, slot), do: slot
-  defp colour(value, _slot), do: value
+  # A color assign: the literal as given, or the theme slot when `nil` (spec/10 §1.2).
+  defp color(nil, slot), do: slot
+  defp color(value, _slot), do: value
 
   # The `x` scale of a series chart, decided by the first datum (spec/10 §2.2): one of the
   # two choices the assigns force on the design (spec/14 §16.7).
@@ -511,7 +511,7 @@ defmodule Visualize.Chart.Presets do
   defp x_kind(n) when is_number(n), do: linear_scale(:x)
   defp x_kind(_category), do: band_scale(:x, padding: 0.1)
 
-  # The colour scale of a hierarchy: one index per child of the root (D-46) — the other
+  # The color scale of a hierarchy: one index per child of the root (D-46) — the other
   # choice the assigns force.
   defp branch_scale(a) do
     n = length(children(Map.get(a, :data, %{})))

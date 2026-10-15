@@ -40,7 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       sources = Presets.sources(name, assigns)
       chart = Chart.from_map!(Presets.design(name, assigns))
       # A component keeps its `width`/`height` assigns (spec/10 §1.2); the design records
-      # no size (spec/14 §4.2, #427), so they are the realisation's.
+      # no size (spec/14 §4.2, #427), so they are the realization's.
       size = {assigns.width, assigns.height}
       frame = Frame.new(chart, sources: sources, theme: theme, size: size)
 
@@ -60,7 +60,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # The mark groups of the frame's group in design order (spec/14 §4.7), reaching into
-    # the centred group of a polar frame. A labelled mark is a wrapper of its styled
+    # the centered group of a polar frame. A labeled mark is a wrapper of its styled
     # elements' group and its labels' group (spec/14 §5.6, #485); a template reads the
     # mark's style and its elements then its labels, so it is given the elements' group
     # with the labels after its elements.
@@ -86,7 +86,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     # The elements a template prints, each given the `labels` printed after it: the labels
     # all after the last element and none after any other, the order the layer draws a
-    # labelled mark in (spec/14 §5.6, #485). A label a mark's fit dropped has no text, so
+    # labeled mark in (spec/14 §5.6, #485). A label a mark's fit dropped has no text, so
     # its element's place cannot be told from its text's, and a label is never printed
     # under a later element (spec/10 §2.5, §3.4, #494).
     @spec followed([map()], [map()]) :: [map()]
@@ -140,7 +140,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def d(%Element{path: %Path{} = path}), do: Path.to_string(path)
 
     @doc false
-    # A style name's element style bound to a row (spec/14 §3.4): the colour scale's output
+    # A style name's element style bound to a row (spec/14 §3.4): the color scale's output
     # for a `{:field, f}`, every slot as a CSS reference.
     @spec style(Frame.t(), atom(), map()) :: map()
     def style(%Frame{} = frame, name, row) do
@@ -182,12 +182,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       font = ["font-family": Theme.resolve(theme, :font_family, :css)]
-      labelled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
+      labeled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
 
-      labelled =
-        labelled ++ if ids.describedby, do: ["aria-describedby": ids.describedby], else: []
+      labeled =
+        labeled ++ if ids.describedby, do: ["aria-describedby": ids.describedby], else: []
 
-      class ++ font ++ [role: "img"] ++ labelled ++ if(responsive, do: @responsive, else: [])
+      class ++ font ++ [role: "img"] ++ labeled ++ if(responsive, do: @responsive, else: [])
     end
 
     @doc false
@@ -205,7 +205,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def css(theme, slot), do: Theme.resolve(theme, slot, :css)
 
     @doc false
-    # Coordinates print through the one number formatter of every serialiser (spec/02 §3):
+    # Coordinates print through the one number formatter of every serializer (spec/02 §3):
     # at most four decimals, never `-0`, so a golden does not record float noise.
     defdelegate fmt(number), to: Path, as: :format_number
   end

@@ -242,13 +242,13 @@ defmodule Visualize.Chart.Migration do
   end
 
   defp value(:text, parts, true) when is_list(parts), do: Text.unparse(parts)
-  defp value(:color, v, _text?), do: colour(v)
-  # A theme's pinned steps are colour strings as they are (#667).
+  defp value(:color, v, _text?), do: color(v)
+  # A theme's pinned steps are color strings as they are (#667).
   defp value(:theme_color, v, _text?) when is_map(v) and not is_struct(v), do: v
-  defp value(:theme_color, v, _text?), do: colour(v)
+  defp value(:theme_color, v, _text?), do: color(v)
 
   defp value(:color_map, v, _text?) when is_map(v) and not is_struct(v),
-    do: Map.new(v, fn {category, c} -> {category, colour(c)} end)
+    do: Map.new(v, fn {category, c} -> {category, color(c)} end)
 
   defp value({:node, kind}, v, text?) when is_map(v) and not is_struct(v),
     do: node(kind, v, text?)
@@ -267,22 +267,22 @@ defmodule Visualize.Chart.Migration do
 
   defp value(_type, v, _text?), do: v
 
-  # A colour position holds a typed color (spec/14 §3.2, #664, D-173): a bare atom is the
+  # A color position holds a typed color (spec/14 §3.2, #664, D-173): a bare atom is the
   # name it can only mean there, `:contrast` the ink over what is under, and a transform's
-  # operands are colours too. `:none` is the one bare word a paint's place keeps.
+  # operands are colors too. `:none` is the one bare word a paint's place keeps.
   @unary Visualize.Color.Typed.ops()
 
-  defp colour(:none), do: :none
-  defp colour(:contrast), do: {:contrast, :under}
+  defp color(:none), do: :none
+  defp color(:contrast), do: {:contrast, :under}
   # A palette entry's `:cue` is its own word, left for the palette contract to judge.
-  defp colour(:cue), do: :cue
+  defp color(:cue), do: :cue
 
-  defp colour(name) when is_atom(name) and name not in [nil, true, false],
+  defp color(name) when is_atom(name) and name not in [nil, true, false],
     do: {:color, name}
 
-  defp colour({op, c, t}) when op in @unary, do: {op, colour(c), t}
-  defp colour({:blend, list}) when is_list(list), do: {:blend, Enum.map(list, &colour/1)}
-  defp colour({:contrast, :under} = ink), do: ink
-  defp colour({:contrast, c}), do: {:contrast, colour(c)}
-  defp colour(v), do: v
+  defp color({op, c, t}) when op in @unary, do: {op, color(c), t}
+  defp color({:blend, list}) when is_list(list), do: {:blend, Enum.map(list, &color/1)}
+  defp color({:contrast, :under} = ink), do: ink
+  defp color({:contrast, c}), do: {:contrast, color(c)}
+  defp color(v), do: v
 end

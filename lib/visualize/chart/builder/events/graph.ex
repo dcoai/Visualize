@@ -245,7 +245,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # *+ frame* on the frames root: a new frame at the graph's centre (#616).
+    # *+ frame* on the frames root: a new frame at the graph's center (#616).
     def handle_event("add_frame", _params, socket),
       do: {:noreply, added_frame(socket, :center, nil)}
 
@@ -482,7 +482,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           |> opened(Editor.label(path ++ [:legend]))
 
         {:error, :no_scale} ->
-          assign(socket, notice: "a legend needs a colour scale")
+          assign(socket, notice: "a legend needs a color scale")
       end
     end
 
@@ -505,7 +505,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         else: socket
     end
 
-    # A new frame (spec/14 §18.16, #616): a fresh name and a quarter of the graph centred
+    # A new frame (spec/14 §18.16, #616): a fresh name and a quarter of the graph centered
     # where it was dropped — an inline frame site of `kind: :cartesian`, or a library frame
     # linked under the name as its key with the box in its own local (D-165) — inserted
     # after the selected layer, selected and open. A design that had one frame and marks

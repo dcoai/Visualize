@@ -15,7 +15,7 @@ defmodule Visualize.Shape.BandTest do
     %{from: 70, to: 100, state: :degraded}
   ]
 
-  @colours %{ok: "#2a9d8f", down: "#e76f51", degraded: "#e9c46a"}
+  @colors %{ok: "#2a9d8f", down: "#e76f51", degraded: "#e9c46a"}
 
   defp band do
     Band.new()
@@ -23,7 +23,7 @@ defmodule Visualize.Shape.BandTest do
     |> Band.x1(:to)
     |> Band.y(20)
     |> Band.height(12)
-    |> Band.fill(fn d -> @colours[d.state] end)
+    |> Band.fill(fn d -> @colors[d.state] end)
   end
 
   describe "generate/2" do

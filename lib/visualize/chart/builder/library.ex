@@ -15,7 +15,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     typing it (D-97).
 
     The parse is total and forgiving, because a store populated before this existed must keep
-    working: two parts is a category and a name, one part is a name under `Uncategorised`, and
+    working: two parts is a category and a name, one part is a name under `Uncategorized`, and
     an empty sub-category and the literal `none` are the same absent thing.
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Builder.{Place, Store}
 
     @separator ":"
-    @uncategorised "Uncategorised"
+    @uncategorized "Uncategorized"
 
     @typedoc "A stored name pulled apart: its category, its sub-category and its own name."
     @type place :: {String.t(), String.t() | nil, String.t()}
@@ -50,7 +50,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {"Frame", nil, "dense ticks"}
 
         iex> Visualize.Chart.Builder.Library.parse("dark")
-        {"Uncategorised", nil, "dark"}
+        {"Uncategorized", nil, "dark"}
 
         iex> Visualize.Chart.Builder.Library.parse("Frame:aspect:2:1 aspect")
         {"Frame", "aspect", "2:1 aspect"}
@@ -58,9 +58,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec parse(String.t() | atom()) :: place()
     def parse(stored) do
       case stored |> to_string() |> String.split(@separator, parts: 3) do
-        [category, sub, name] -> {blank(category, @uncategorised), absent(sub), name}
-        [category, name] -> {blank(category, @uncategorised), nil, name}
-        [name] -> {@uncategorised, nil, name}
+        [category, sub, name] -> {blank(category, @uncategorized), absent(sub), name}
+        [category, name] -> {blank(category, @uncategorized), nil, name}
+        [name] -> {@uncategorized, nil, name}
       end
     end
 

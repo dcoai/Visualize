@@ -9,7 +9,7 @@ defmodule Visualize.Geo.Clip do
   #
   # Coordinates are `{lon, lat}` in degrees in the clipper's frame: the rotated frame for
   # the antimeridian — after the projection's `rotate`, before `center` and the raw
-  # projection — and for the circle the rotated and centred frame of the clip test
+  # projection — and for the circle the rotated and centered frame of the clip test
   # (spec/07 §1.5), the circle about its origin. d3 works in radians; the port keeps
   # degrees so that a vertex the clip passes through is the very float the projection would
   # have been given without it, and every tolerance d3 states in radians is restated in

@@ -8,7 +8,7 @@ defmodule Visualize.Chart.Refs do
   stack (§3.6) — becomes the entry's body inline, since a style site already takes a node.
   A `{:scale, n}` or `{:source, n}` at a single-valued site — an axis's `scale`, a mark's
   `data`, a mark's `scales.x` — is declared in the design's namespace for the kind under a
-  **synthesised key**, `:"scale:4"`, the word the DOM already uses for the id, and the site
+  **synthesized key**, `:"scale:4"`, the word the DOM already uses for the id, and the site
   is rewritten to that key. A body that is itself a composite is flattened first.
 
   An id the store no longer holds is a **mask** at the site (§19.2, D-100): a style entry

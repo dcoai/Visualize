@@ -10,9 +10,9 @@ defmodule Visualize.Theme.Contract do
   @ramps [:status, :thermal, :diverging, :sequential]
   @roles [:info, :neutral]
 
-  # A hue a reader can name needs this much chroma; below it a colour is a tint.
+  # A hue a reader can name needs this much chroma; below it a color is a tint.
   @chromatic 20
-  # A colour this grey reads as no hue; the built-in midpoints measure 0.0 to 6.3.
+  # A color this gray reads as no hue; the built-in midpoints measure 0.0 to 6.3.
   @neutral 10
   # Each step of a monotonic ramp moves lightness this far: about three just-noticeable
   # differences, so the order is visible on a screen and not only on a meter.
@@ -74,8 +74,8 @@ defmodule Visualize.Theme.Contract do
 
   defp ramp(name, anchors) when is_list(anchors) and length(anchors) >= 2 do
     case parse_all(anchors) do
-      {:ok, colours} -> contract(name, Enum.zip(anchors, colours))
-      {:bad, i, anchor} -> fault(name, "anchor #{i} #{inspect(anchor)} is not a colour")
+      {:ok, colors} -> contract(name, Enum.zip(anchors, colors))
+      {:bad, i, anchor} -> fault(name, "anchor #{i} #{inspect(anchor)} is not a color")
     end
   end
 
@@ -83,14 +83,14 @@ defmodule Visualize.Theme.Contract do
     do: fault(name, "needs at least two anchors, got #{length(anchors)}")
 
   defp ramp(name, other),
-    do: fault(name, "is a list of anchor colours, got #{inspect(other)}")
+    do: fault(name, "is a list of anchor colors, got #{inspect(other)}")
 
   defp parse_all(anchors) do
     anchors
     |> Enum.with_index(1)
     |> Enum.reduce_while({:ok, []}, fn {anchor, i}, {:ok, acc} ->
       case is_binary(anchor) && Color.parse(anchor) do
-        %Color{} = colour -> {:cont, {:ok, [Color.to_hcl(colour) | acc]}}
+        %Color{} = color -> {:cont, {:ok, [Color.to_hcl(color) | acc]}}
         _ -> {:halt, {:bad, i, anchor}}
       end
     end)
@@ -283,10 +283,10 @@ defmodule Visualize.Theme.Contract do
 
   # -- roles --------------------------------------------------------------------------
 
-  defp role(name, colour) do
-    case is_binary(colour) && Color.parse(colour) do
+  defp role(name, color) do
+    case is_binary(color) && Color.parse(color) do
       %Color{} = parsed -> role_contract(name, Color.to_hcl(parsed))
-      _ -> {:error, {:color, name}, "#{inspect(colour)} is not a colour"}
+      _ -> {:error, {:color, name}, "#{inspect(color)} is not a color"}
     end
   end
 
@@ -333,7 +333,7 @@ defmodule Visualize.Theme.Contract do
     min(d, 360 - d)
   end
 
-  # The smallest arc holding every hue: 360° less the widest gap between neighbours.
+  # The smallest arc holding every hue: 360° less the widest gap between neighbors.
   defp spread([]), do: 0
   defp spread([_]), do: 0
 

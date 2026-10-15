@@ -15,7 +15,7 @@ defmodule Visualize.Layout.Hexbin do
 
   alias Visualize.IR.Path
 
-  @typedoc "A non-empty cell: its centre, its count and its points in input order."
+  @typedoc "A non-empty cell: its center, its count and its points in input order."
   @type cell :: %{x: float(), y: float(), count: pos_integer(), points: [{number(), number()}]}
 
   @doc """
@@ -40,7 +40,7 @@ defmodule Visualize.Layout.Hexbin do
   end
 
   @doc """
-  The closed flat-topped hexagon of `radius` at the centre, its first vertex at bearing
+  The closed flat-topped hexagon of `radius` at the center, its first vertex at bearing
   −30° (the upper right), then clockwise on screen.
   """
   @spec hexagon(number(), number(), number()) :: Path.t()

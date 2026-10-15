@@ -2,7 +2,7 @@ defmodule Visualize.Geo.TilesTest do
   @moduledoc """
   The Web-Mercator tile arithmetic of spec/07 §8 (#475), held to the standard slippy-map
   formulas computed independently here: the zoom, the covering set and its offsets for a
-  fixed centre, zoom and size, the alignment of a projected point with its tile, the
+  fixed center, zoom and size, the alignment of a projected point with its tile, the
   wrap, the subdomain rotation, and the projection-aware fit of spec/07 §1.6.
   """
   use ExUnit.Case, async: true
@@ -30,7 +30,7 @@ defmodule Visualize.Geo.TilesTest do
   end
 
   # A Mercator projection whose world is `world` pixels wide, with (lon0, lat0) at the
-  # plot pixel (cx, cy): the centre's longitude shifts the map, its latitude through the
+  # plot pixel (cx, cy): the center's longitude shifts the map, its latitude through the
   # translate, so the projection stays tile-aligned.
   defp view(lon0, lat0, world, {cx, cy}) do
     k = world / @tau
@@ -66,7 +66,7 @@ defmodule Visualize.Geo.TilesTest do
   end
 
   describe "cover/3" do
-    test "the covering set and offsets for a fixed centre, zoom and size" do
+    test "the covering set and offsets for a fixed center, zoom and size" do
       {lon0, lat0, z, {w, h}} = {-0.1276, 51.5072, 12, {640, 480}}
       proj = view(lon0, lat0, 256 * Integer.pow(2, z), {w / 2, h / 2})
 
@@ -109,7 +109,7 @@ defmodule Visualize.Geo.TilesTest do
     end
 
     test "rows stop at the Mercator square, and a column past the antimeridian wraps" do
-      # The world at zoom 1 is 512 px; a 1200 × 900 plot centred on 180° shows it more
+      # The world at zoom 1 is 512 px; a 1200 × 900 plot centered on 180° shows it more
       # than twice across and runs past both poles.
       proj = view(180, 0, 512, {600, 450})
       tiles = Tiles.cover(proj, {1200, 900})
@@ -119,7 +119,7 @@ defmodule Visualize.Geo.TilesTest do
       lefts = tiles |> Enum.filter(&(&1.y == 0)) |> Enum.map(& &1.left)
       assert lefts == Enum.sort(lefts)
       assert Enum.map(Enum.filter(tiles, &(&1.y == 0)), & &1.x) == [1, 0, 1, 0, 1, 0]
-      # Tile 0 starts at the antimeridian, which the centre puts at x = 600.
+      # Tile 0 starts at the antimeridian, which the center puts at x = 600.
       assert Enum.any?(tiles, &(&1.x == 0 and &1.y == 0 and abs(&1.left - 600) < 1.0e-9))
     end
 
@@ -130,7 +130,7 @@ defmodule Visualize.Geo.TilesTest do
       assert_in_delta tile.size, 256 * 1.3, 1.0e-9
     end
 
-    test "a rotation's lambda shifts the map as the centre's longitude does" do
+    test "a rotation's lambda shifts the map as the center's longitude does" do
       by_center = view(30, 20, 256 * 64, {100, 100})
       by_rotate = %{by_center | center: {0, 0}, rotate: {30, 0, 0}}
       assert Tiles.cover(by_center, {200, 200}) == Tiles.cover(by_rotate, {200, 200})
@@ -192,7 +192,7 @@ defmodule Visualize.Geo.TilesTest do
   end
 
   describe "aligned/1" do
-    test "a Mercator projection with no centre latitude and no tilt or roll" do
+    test "a Mercator projection with no center latitude and no tilt or roll" do
       merc = Projection.new(:mercator)
       assert Tiles.aligned(merc) == :ok
       assert Tiles.aligned(Projection.center(merc, 40, 0)) == :ok
@@ -208,7 +208,7 @@ defmodule Visualize.Geo.TilesTest do
   end
 
   describe "Projection.fit/3" do
-    test "the points' projected bounds fill the box on the tighter axis, centred" do
+    test "the points' projected bounds fill the box on the tighter axis, centered" do
       points = [{-0.13, 51.50}, {-0.10, 51.52}, {-0.12, 51.51}]
       proj = Projection.fit(Projection.new(:mercator), [[10, 10], [390, 290]], points)
       assert proj.center == {0, 0}
@@ -220,14 +220,14 @@ defmodule Visualize.Geo.TilesTest do
       {x0, x1} = Enum.min_max(xs)
       {y0, y1} = Enum.min_max(ys)
       # Taller than wide in Mercator pixels at this latitude: the height fills the box,
-      # the width is centred within it.
+      # the width is centered within it.
       assert_in_delta y0, 10, 1.0e-6
       assert_in_delta y1, 290, 1.0e-6
       assert_in_delta (x0 + x1) / 2, 200, 1.0e-6
       assert x0 >= 10 and x1 <= 390
     end
 
-    test "one point keeps the scale and is centred; no point changes nothing" do
+    test "one point keeps the scale and is centered; no point changes nothing" do
       merc = Projection.scale(Projection.new(:mercator), 1000)
       one = Projection.fit(merc, [[0, 0], [100, 50]], [{10, 20}])
       assert one.scale == 1000

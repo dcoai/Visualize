@@ -2,7 +2,7 @@ defmodule Visualize.FeedTest do
   @moduledoc """
   The feed behaviour and what visualize finishes for it (spec/08 §11.1–§11.2, #537,
   D-140): a window and a budget are requests, so a rows-only feed is trimmed and reduced
-  by visualize and a feed that honours them is not touched again.
+  by visualize and a feed that honors them is not touched again.
   """
   use ExUnit.Case, async: true
 
@@ -96,7 +96,7 @@ defmodule Visualize.FeedTest do
       assert Feed.finish(timed, stamped, window: [2, 5]) == timed
     end
 
-    test "a feed that honours the window is not trimmed again" do
+    test "a feed that honors the window is not trimmed again" do
       delivery = Delivery.new(rows(10), window: [1, 10])
       assert Feed.finish(delivery, @schema, supports: [:window], window: [3, 6]) == delivery
     end
@@ -110,7 +110,7 @@ defmodule Visualize.FeedTest do
       assert hd(done.rows).t == 1 and List.last(done.rows).t == 500
     end
 
-    test "a budget-honouring feed is not reduced again, whatever it returned" do
+    test "a budget-honoring feed is not reduced again, whatever it returned" do
       delivery = Delivery.new(rows(500), reduced_by: :feed)
       assert Feed.finish(delivery, @schema, supports: [:budget], budget: 50) == delivery
     end

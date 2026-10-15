@@ -248,7 +248,7 @@ defmodule Visualize.Geo.Delaunay do
     (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
   end
 
-  # The in-circle determinant, normalised by the triangle's orientation so it is
+  # The in-circle determinant, normalized by the triangle's orientation so it is
   # positive exactly when p is strictly inside the circumcircle, whatever the vertex order.
   defp in_circle(coords, a, b, c, p) do
     {ax, ay} = coords[a]

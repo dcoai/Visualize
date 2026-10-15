@@ -576,7 +576,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp rows(%Delivery{} = delivery), do: Delivery.source(delivery)
     defp rows(source), do: source
 
-    # The cells a type fault keeps from being realised (§22.6, D-153), with their faults.
+    # The cells a type fault keeps from being realized (§22.6, D-153), with their faults.
     defp refused(faults) do
       for {[:cells, cell | _], {:type_mismatch, _, _, _, _}} = fault <- faults, reduce: %{} do
         refused -> Map.update(refused, cell, [fault], &(&1 ++ [fault]))

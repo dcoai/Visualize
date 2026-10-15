@@ -309,7 +309,7 @@ defmodule Visualize.Geo.ClipTest do
       behind = %{"type" => "Polygon", "coordinates" => [[[170, 0], [175, 5], [175, 0], [170, 0]]]}
       assert Path.path(Path.new(orthographic()), behind).commands == []
 
-      # The 75° circle about the centre under a 60° clip: it holds the whole clip circle.
+      # The 75° circle about the center under a 60° clip: it holds the whole clip circle.
       around = %{
         "type" => "Polygon",
         "coordinates" => [[[-75, 0], [0, 75], [75, 0], [0, -75], [-75, 0]]]

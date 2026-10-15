@@ -98,10 +98,10 @@ defmodule Visualize.DefectsTest do
     end
   end
 
-  describe "Backend.CanvasBinary colour opacity" do
+  describe "Backend.CanvasBinary color opacity" do
     alias Visualize.Backend.CanvasBinary
 
-    test "atom colours honour opacity on SVG elements" do
+    test "atom colors honor opacity on SVG elements" do
       opaque = Visualize.SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: :red})
 
       faded =
@@ -113,7 +113,7 @@ defmodule Visualize.DefectsTest do
 end
 
 defmodule Visualize.NegativeZeroTest do
-  @moduledoc "D-32: no `d` serialiser prints `-0`."
+  @moduledoc "D-32: no `d` serializer prints `-0`."
   use ExUnit.Case, async: true
 
   alias Visualize.Backend.SVG

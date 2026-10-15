@@ -3,7 +3,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   # The JSON form of a snapshot (spec/15 §12.3): its map form with string keys, stamped
   # `"$version"`. The board is its own JSON form (spec/15 §2.2), each cell's component a
   # design's (spec/14 §11) and the theme a theme node's (spec/14 §9.3), so every document
-  # inside a snapshot is spelt as it is on its own. Values JSON has no form for are the
+  # inside a snapshot is spelled as it is on its own. Values JSON has no form for are the
   # tagged terms of spec/14 §11.2.
   #
   # Rows are written **column by column** — `{"fields": [name, …], "rows": [[value, …],

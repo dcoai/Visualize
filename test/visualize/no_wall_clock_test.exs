@@ -15,7 +15,7 @@ defmodule Visualize.NoWallClockTest do
   Nor does a test wait on the clock (D-148, #520). An `assert_receive` gives up after at
   least `@floor` milliseconds, so its bound says when a defect is given up on and never how
   fast the machine is; a `refute_receive` does not wait at all — absence after a
-  synchronising call is `refute_received`; a `receive … after` waits nothing or at least
+  synchronizing call is `refute_received`; a `receive … after` waits nothing or at least
   the floor; and nothing sleeps. A site that must break one of these is on `@allowed`,
   with its reason. This one is read from the parsed code, so a string or a comment that
   mentions a wait is not one.
@@ -79,7 +79,7 @@ defmodule Visualize.NoWallClockTest do
     assert violations == [],
            "a test waits on the clock (spec/12 §6, D-148). Wait on a message or a count " <>
              "with an `assert_receive` of at least #{@floor} ms; assert absence after a " <>
-             "synchronising call with `refute_received`; drive time with a clock the code " <>
+             "synchronizing call with `refute_received`; drive time with a clock the code " <>
              "takes; or put the site on @allowed with its reason:\n" <>
              Enum.map_join(violations, "\n", &describe_site/1)
 

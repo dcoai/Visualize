@@ -136,7 +136,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A member of a pair — a gradient's centre, `fill.center.1` (§18.6): the element's type,
+    # A member of a pair — a gradient's center, `fill.center.1` (§18.6): the element's type,
     # and the pair's default to start from where the part has none.
     defp descend(%{default: [_, _] = default} = spec, {:list, scalar}, [index], path)
          when is_atom(scalar) do

@@ -1,4 +1,4 @@
-# metresis `status_strip`: pass or fail at a glance — a flag per interval, two fixed colours.
+# metresis `status_strip`: pass or fail at a glance — a flag per interval, two fixed colors.
 %{
   version: 2,
   meta: %{name: "status_strip"},

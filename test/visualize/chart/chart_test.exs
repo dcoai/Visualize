@@ -124,7 +124,7 @@ defmodule Visualize.ChartTest do
 
       assert decoded["frames"]["main"]["scales"]["y"]["unknown"] == nil
 
-      # A text is its string, the hole spelt as it is written (§7.1): no tagged term.
+      # A text is its string, the hole spelled as it is written (§7.1): no tagged term.
       assert decoded["labels"] == [
                %{"anchor" => %{"$axis" => "y"}, "text" => ~S|unit: #{var(:unit)}|}
              ]

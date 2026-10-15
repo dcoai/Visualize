@@ -6,7 +6,7 @@ defmodule Visualize.Hooks.Crosshair do
   `CrosshairHook` never reads the chart's DOM: the server writes the mark's x pixels once,
   as `data-xs`, and the hook finds the nearest one to the pointer by binary search, so the
   same attributes serve a mark drawn as SVG and one the compiler sent to the canvas layer
-  (D-76). `attrs/3` computes them from a realised `Visualize.Chart.Frame`; the hook draws
+  (D-76). `attrs/3` computes them from a realized `Visualize.Chart.Frame`; the hook draws
   in an overlay it appends to `document.body`, so a LiveView patch of the chart never
   removes it, and re-reads the arrays on `updated()`. The overlay is placed over the chart
   itself — the container's first `<svg>` or `<canvas>` — not over the container, whose box

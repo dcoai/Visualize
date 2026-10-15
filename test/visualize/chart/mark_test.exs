@@ -51,7 +51,7 @@ defmodule Visualize.Chart.MarkTest do
     Mark.generate(frame, hd(chart.marks), Keyword.put_new(opts, :sources, @sources))
   end
 
-  # A labelled mark's two parts (spec/14 §5.6, #485): its elements' group, which carries
+  # A labeled mark's two parts (spec/14 §5.6, #485): its elements' group, which carries
   # the mark's style, and the texts of its labels' group beside it.
   defp parts(%Element{
          children: [
@@ -65,7 +65,7 @@ defmodule Visualize.Chart.MarkTest do
 
   defp labels(group), do: group |> parts() |> elem(1)
 
-  # A labelled mark read as one group: its elements' group with the labels after them.
+  # A labeled mark read as one group: its elements' group with the labels after them.
   defp flat(group) do
     {elements, labels} = parts(group)
     %{elements | children: elements.children ++ labels}
@@ -214,7 +214,7 @@ defmodule Visualize.Chart.MarkTest do
       assert median.style.class == "median"
     end
 
-    test ":rose is Shape.Rose over the polar frame's angle scale, about the centre" do
+    test ":rose is Shape.Rose over the polar frame's angle scale, about the center" do
       polar = %{
         kind: :polar,
         margin: %{top: 0, right: 0, bottom: 0, left: 0},
@@ -258,7 +258,7 @@ defmodule Visualize.Chart.MarkTest do
       assert d(path) == Symbol.new() |> Symbol.size(4) |> Symbol.generate()
     end
 
-    test ":arc is Shape.Pie over the values then Shape.Arc, about the plot centre" do
+    test ":arc is Shape.Pie over the values then Shape.Arc, about the plot center" do
       mark = %{type: :arc, channels: %{value: :v}, options: %{inner_radius: 20, pad_angle: 0.1}}
       group = generate(mark)
       arcs = Pie.new() |> Pie.value(& &1.v) |> Pie.pad_angle(0.1) |> Pie.generate(@rows)
@@ -349,7 +349,7 @@ defmodule Visualize.Chart.MarkTest do
   end
 
   describe "channels" do
-    test "a band scale gives edges its start and end and a position its centre" do
+    test "a band scale gives edges its start and end and a position its center" do
       band = %{x: %{kind: :band, domain: ["k0", "k1"]}, y: %{kind: :linear, domain: [0, 10]}}
       frame = Map.put(@frame, :scales, band)
 
@@ -507,7 +507,7 @@ defmodule Visualize.Chart.MarkTest do
   end
 
   describe "paint and style" do
-    test "the paint is the theme's series colour for the mark's position" do
+    test "the paint is the theme's series color for the mark's position" do
       assert generate(%{type: :line, channels: %{x: :t, y: :v}}).style ==
                %{class: "mark mark-line", fill: :none, stroke: "var(--vis-series-1, #3b6fa8)"}
 
@@ -532,7 +532,7 @@ defmodule Visualize.Chart.MarkTest do
              }
     end
 
-    test "a series channel gives one path per series, coloured by the colour scale" do
+    test "a series channel gives one path per series, colored by the color scale" do
       group = generate(%{type: :line, channels: %{x: :t, y: :v, series: :k}})
       [k0, k1] = group.children
       assert k0.style == %{stroke: "var(--vis-series-1, #3b6fa8)"}
@@ -555,7 +555,7 @@ defmodule Visualize.Chart.MarkTest do
              ]
     end
 
-    test "a field binding is bound per element through the colour scale" do
+    test "a field binding is bound per element through the color scale" do
       styles = %{s: %{fill: {:field, :k}, stroke_width: {:field, :v}}}
       group = generate(%{type: :circle, channels: %{x: :t, y: :v}, style: :s}, %{styles: styles})
       refute Map.has_key?(group.style, :fill)
@@ -571,7 +571,7 @@ defmodule Visualize.Chart.MarkTest do
              }
     end
 
-    test "a rect's value reaches the colour scale as its fill" do
+    test "a rect's value reaches the color scale as its fill" do
       [rect | _] =
         generate(%{type: :rect, channels: %{x0: :t, x1: :hi, y0: 0, y1: :v, value: :k}}).children
 
@@ -886,7 +886,7 @@ defmodule Visualize.Chart.MarkTest do
       assert is_binary(Visualize.Backend.Canvas.render_element(group, format: :binary))
     end
 
-    test "double lays a third-width stroke in the fill colour over the first; on a line, the background" do
+    test "double lays a third-width stroke in the fill color over the first; on a line, the background" do
       styles = %{s: %{fill: "#abc", stroke: "#000", stroke_width: 3, stroke_style: :double}}
 
       group =
@@ -964,7 +964,7 @@ defmodule Visualize.Chart.MarkTest do
       assert group.attrs["data-tooltip-event"] == "line_click"
     end
 
-    test "a facet's panel keeps the ordinals of every realised row (D-170)" do
+    test "a facet's panel keeps the ordinals of every realized row (D-170)" do
       facet = %{
         kind: :facet,
         margin: %{top: 0, right: 0, bottom: 0, left: 0},
@@ -1116,7 +1116,7 @@ defmodule Visualize.Chart.MarkTest do
         |> labels()
       end
 
-      # Sector i is centred on its angle, a quarter turn each from 12 o'clock: up, right,
+      # Sector i is centered on its angle, a quarter turn each from 12 o'clock: up, right,
       # down, left. Its label leaves from its rim (v × 10) along the ray, 4 + 15 beyond it;
       # the side gives the anchor.
       texts = labels.(%{text: [{:field, :k}], anchor: :outward, dr: 15})
@@ -1131,10 +1131,10 @@ defmodule Visualize.Chart.MarkTest do
       end
 
       # :radial rotation is the ray's angle; on the left half it flips a half turn and the
-      # text anchors :end so it runs toward the centre. A number is plain degrees.
+      # text anchors :end so it runs toward the center. A number is plain degrees.
       # Sector 1 is at 3 o'clock (ray 0°), sector 3 at 9 o'clock (ray 180°): a radial
       # label reads along the ray on the right and flips a half turn on the left, where it
-      # anchors :end so it runs toward the centre.
+      # anchors :end so it runs toward the center.
       [_, right, _, left] = labels.(%{text: ["!"], anchor: :outward, rotate: :radial})
       assert right.style.text_anchor == :start and left.style.text_anchor == :end
       [{:rotate, deg_r, _, _}] = right.transform.operations
@@ -1239,7 +1239,7 @@ defmodule Visualize.Chart.MarkTest do
     }
 
     # Every type that draws an inline label, in the frame it draws in, stroked by its style.
-    @labelled [
+    @labeled [
       {:line, %{x: :t, y: :v}, :cartesian},
       {:area, %{x: :t, y: :v}, :cartesian},
       {:band, %{x0: :t, x1: :hi, y: :v}, :cartesian},
@@ -1276,7 +1276,7 @@ defmodule Visualize.Chart.MarkTest do
     end
 
     test "no mark's label inherits the mark's stroke, while its elements keep it" do
-      for {type, channels, kind} <- @labelled do
+      for {type, channels, kind} <- @labeled do
         tree = drawn(type, channels, kind, %{})
         paths = label_paths(tree)
         assert paths != [], "#{type} in #{kind}: no labels"
@@ -1305,7 +1305,7 @@ defmodule Visualize.Chart.MarkTest do
     test "a label style that sets a stroke keeps it: a deliberate halo" do
       halo = %{halo: %{stroke: "#000000", stroke_width: 3}}
 
-      for {type, channels, kind} <- @labelled do
+      for {type, channels, kind} <- @labeled do
         label = %{text: [{:field, :k}], anchor: :middle, style: :halo}
         mark = %{type: type, channels: channels, style: :outline, label: label}
         frames = if kind == :polar, do: %{frames: %{main: @label_polar}}, else: %{}
@@ -1329,7 +1329,7 @@ defmodule Visualize.Chart.MarkTest do
       refute svg =~ ~r{<g class="mark-labels"[^>]*stroke}
     end
 
-    test "an unlabelled mark is the one styled group as before, and a labelled one with no rows is still the wrapper" do
+    test "an unlabeled mark is the one styled group as before, and a labeled one with no rows is still the wrapper" do
       plain =
         generate(%{type: :circle, channels: %{x: :t, y: :v}, style: :outline}, %{
           styles: @outlined
@@ -1723,7 +1723,7 @@ defmodule Visualize.Chart.MarkTest do
       texts = labels(group)
       assert length(texts) == 4
       [text | _] = texts
-      # Beyond the outer radius (v = 4 → r(4)), along the sector's centre ray.
+      # Beyond the outer radius (v = 4 → r(4)), along the sector's center ray.
       r = :math.sqrt(text.attrs.x * text.attrs.x + text.attrs.y * text.attrs.y)
       assert r > radius_of(frame, 4)
     end

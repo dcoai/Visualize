@@ -119,7 +119,7 @@ defmodule Visualize.Layout.Partition do
 
       children ->
         # Every child keeps its slot: one whose value is nil or not positive weighs 0 and
-        # receives a zero-width rectangle where it would otherwise sit (d3 behaviour).
+        # receives a zero-width rectangle where it would otherwise sit (d3 behavior).
         total = Enum.reduce(children, 0, fn c, acc -> acc + weight(c) end)
 
         pad = partition.padding

@@ -271,7 +271,7 @@ defmodule Visualize.Chart.Style.Explain do
   # The style laid as the frame lays it, in its parts.
   defp lay(styles, entry, pick), do: Style.compound(styles, entry, pick)
 
-  # The mark's own paint — the theme's series colour for its position — under every
+  # The mark's own paint — the theme's series color for its position — under every
   # contribution, where none gives the paint (spec/14 §5.6).
   defp with_paint(links, kind, {:series, _} = series) when kind in @marks do
     key = if kind in @stroked, do: :stroke, else: :fill

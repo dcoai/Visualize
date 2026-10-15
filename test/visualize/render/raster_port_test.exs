@@ -154,7 +154,7 @@ defmodule Visualize.Render.RasterPortTest do
   end
 
   describe "finding the binary (spec/09 §9.4)" do
-    test "a configured path naming nothing is no rasteriser, whatever the PATH holds" do
+    test "a configured path naming nothing is no rasterizer, whatever the PATH holds" do
       Application.put_env(:visualize, :resvg, "/no/such/dir/resvg")
       refute Raster.available?()
       assert Render.to_png(swatch()) == {:error, :no_rasterizer}

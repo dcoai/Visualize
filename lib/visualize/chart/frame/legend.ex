@@ -1,7 +1,7 @@
 defmodule Visualize.Chart.Frame.Legend do
   @moduledoc false
-  # The legend of a frame (spec/14 §4.5): one entry per tick of the realised scale, a
-  # swatch in the scale's colour beside the value's label, stacked or in rows at one of
+  # The legend of a frame (spec/14 §4.5): one entry per tick of the realized scale, a
+  # swatch in the scale's color beside the value's label, stacked or in rows at one of
   # the eight positions inside the plot area — or, with `inside: false`, in the margin the
   # position names (#136). A top or bottom legend wraps to the plot's width, and in its
   # margin grows that margin to hold its rows (#630, D-169).
@@ -199,30 +199,30 @@ defmodule Visualize.Chart.Frame.Legend do
             "(spec/14 §4.5)"
   end
 
-  defp swatch(colour, i, theme, mode) do
-    if colour?(colour, theme),
-      do: Style.color(colour, theme, mode),
+  defp swatch(color, i, theme, mode) do
+    if color?(color, theme),
+      do: Style.color(color, theme, mode),
       else: Theme.resolve(theme, {:series, i}, mode)
   end
 
-  defp colour?(value, _theme) when is_binary(value), do: true
-  defp colour?({:series, i}, _theme), do: is_integer(i) and i >= 1
-  defp colour?({:ramp, name, t}, _theme), do: name in Theme.ramp_names() and is_number(t)
-  defp colour?({:color, name}, theme), do: name in Theme.color_names(theme)
-  defp colour?(value, _theme) when is_tuple(value), do: Visualize.Color.value?(value)
-  defp colour?(value, theme) when is_atom(value), do: value in Theme.slots(theme)
-  defp colour?(_value, _theme), do: false
+  defp color?(value, _theme) when is_binary(value), do: true
+  defp color?({:series, i}, _theme), do: is_integer(i) and i >= 1
+  defp color?({:ramp, name, t}, _theme), do: name in Theme.ramp_names() and is_number(t)
+  defp color?({:color, name}, theme), do: name in Theme.color_names(theme)
+  defp color?(value, _theme) when is_tuple(value), do: Visualize.Color.value?(value)
+  defp color?(value, theme) when is_atom(value), do: value in Theme.slots(theme)
+  defp color?(_value, _theme), do: false
 
   # An entry's group: the swatch and the label, with the full label as its first child and
   # its `aria-label` when `max_label` cut it (D-169).
-  defp item({value, label, full, colour}, swatch_x, label_x, anchor, fill, at) do
+  defp item({value, label, full, color}, swatch_x, label_x, anchor, fill, at) do
     named = if full, do: [Element.title(full)], else: []
     attrs = if full, do: Map.put(series(value), "aria-label", full), else: series(value)
 
     Element.group(
       named ++
         [
-          Element.rect(swatch_x, 0, @swatch, @swatch, %{fill: colour}),
+          Element.rect(swatch_x, 0, @swatch, @swatch, %{fill: color}),
           Element.text(label,
             x: label_x,
             y: @swatch / 2,
@@ -262,7 +262,7 @@ defmodule Visualize.Chart.Frame.Legend do
   # The title, when given, and the entries as cells in rows no wider than the plot (D-169):
   # each cell as wide as its estimated text (an entry's swatch and gap before it), 8 between
   # cells, a cell that would end past the plot starting the next row 16 below. One row is
-  # placed exactly as the single row was before wrapping; several are each centred on the
+  # placed exactly as the single row was before wrapping; several are each centered on the
   # widest. Returns `{elements, rows, widest row's width}`.
   defp rows(entries, title, font_size, style, plot_width, wrap?, position) do
     fill = Map.take(style, [:fill])

@@ -71,7 +71,7 @@ defmodule Visualize.Chart.Style.Defaults do
   end
 
   @doc false
-  # What a realised frame's containers (`Visualize.Chart.Frame`'s `defaults`) and the
+  # What a realized frame's containers (`Visualize.Chart.Frame`'s `defaults`) and the
   # element's own `defaults` lay for an element of `kind`.
   @spec at(%{defaults: [map() | nil], theme: Visualize.Theme.t()}, map() | nil, atom() | nil) ::
           Inherited.t()

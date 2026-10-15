@@ -129,7 +129,7 @@ defmodule Visualize.Chart.Summary do
   def new(%Applied{chart: chart, sources: sources} = applied) do
     frames =
       applied
-      |> realised()
+      |> realized()
       |> Enum.sort_by(&{&1.z, to_string(&1.name)})
       |> Enum.map(&frame(&1, sources))
 
@@ -202,7 +202,7 @@ defmodule Visualize.Chart.Summary do
   def points(%Applied{sources: sources} = applied) do
     all =
       applied
-      |> realised()
+      |> realized()
       |> Enum.sort_by(&{&1.z, to_string(&1.name)})
       |> Enum.flat_map(&frame_points(&1, sources))
 
@@ -270,8 +270,8 @@ defmodule Visualize.Chart.Summary do
     %{frame: frame, mark: mark, rows: rows}
     |> Channels.pixels()
     |> Enum.map(fn pixel ->
-      with x when is_number(x) <- centre(pixel, :x, :x0, :x1),
-           y when is_number(y) <- centre(pixel, :y, :y1, :y1) do
+      with x when is_number(x) <- center(pixel, :x, :x0, :x1),
+           y when is_number(y) <- center(pixel, :y, :y1, :y1) do
         {left + x, top + y}
       else
         _unplaced -> nil
@@ -279,7 +279,7 @@ defmodule Visualize.Chart.Summary do
     end)
   end
 
-  defp centre(pixel, one, a, b) do
+  defp center(pixel, one, a, b) do
     case {Map.get(pixel, one), Map.get(pixel, a), Map.get(pixel, b)} do
       {v, _, _} when is_number(v) -> v
       {_, v0, v1} when is_number(v0) and is_number(v1) -> (v0 + v1) / 2
@@ -289,10 +289,10 @@ defmodule Visualize.Chart.Summary do
 
   # -- the frame --------------------------------------------------------------------------
 
-  defp realised(%Applied{frames: frames, frame: frame}) when frames == %{} or is_nil(frames),
+  defp realized(%Applied{frames: frames, frame: frame}) when frames == %{} or is_nil(frames),
     do: [frame]
 
-  defp realised(%Applied{frames: frames}), do: Map.values(frames)
+  defp realized(%Applied{frames: frames}), do: Map.values(frames)
 
   defp frame(%Frame{} = frame, sources) do
     marks = for mark <- frame.marks, Map.get(mark, :type) not in @auxiliary, do: mark
@@ -328,7 +328,7 @@ defmodule Visualize.Chart.Summary do
   # The design's name, else the first frame's kind: every chart is named (§21.2).
   defp name(meta, frames) do
     case text_of(Map.get(meta || %{}, :name)) do
-      nil -> frames |> List.first(%{kind: "chart"}) |> Map.fetch!(:kind) |> capitalise()
+      nil -> frames |> List.first(%{kind: "chart"}) |> Map.fetch!(:kind) |> capitalize()
       name -> name
     end
   end
@@ -438,7 +438,7 @@ defmodule Visualize.Chart.Summary do
 
       (layout = Enum.find(steps(mark), &(&1.op in @hierarchies))) && Map.get(layout, :field) ->
         %{
-          label: humanise(layout.field),
+          label: humanize(layout.field),
           read: &Table.get(&1, layout.field),
           scale: nil,
           where: :name
@@ -459,7 +459,7 @@ defmodule Visualize.Chart.Summary do
 
     if field(spec) && (share? or Map.has_key?(frame.scales, scale)) do
       %{
-        label: humanise(field(spec)),
+        label: humanize(field(spec)),
         read: &Channels.reading(ctx, channel, &1),
         scale: if(share?, do: nil, else: scale),
         where: where
@@ -589,7 +589,7 @@ defmodule Visualize.Chart.Summary do
         field(spec) == nil -> nil
         Scales.scale_for(frame.kind, mark, channel) != scale -> nil
         stack(mark) && field(spec) in [:y0, :y1] -> "value"
-        true -> humanise(field(spec))
+        true -> humanize(field(spec))
       end
     end)
   end
@@ -760,11 +760,11 @@ defmodule Visualize.Chart.Summary do
   defp field_name(mark, channel) do
     case field(Map.get(Map.get(mark, :channels, %{}), channel)) do
       nil -> nil
-      field -> humanise(field)
+      field -> humanize(field)
     end
   end
 
-  defp humanise(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
+  defp humanize(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
 
   defp orderable?(value),
     do:
@@ -796,7 +796,7 @@ defmodule Visualize.Chart.Summary do
   # -- sentences --------------------------------------------------------------------------
 
   defp frame_text(frame, many?) do
-    lead = if many? and frame.name, do: "#{capitalise(humanise(frame.name))}: ", else: ""
+    lead = if many? and frame.name, do: "#{capitalize(humanize(frame.name))}: ", else: ""
 
     sentences =
       [series_sentence(frame)] ++
@@ -806,7 +806,7 @@ defmodule Visualize.Chart.Summary do
   end
 
   defp series_sentence(%{kind: kind, series: series, rows: rows, unit: unit}) do
-    kind = capitalise(kind)
+    kind = capitalize(kind)
 
     case series do
       [] -> "#{kind}, #{count(rows, unit)}."
@@ -843,10 +843,10 @@ defmodule Visualize.Chart.Summary do
 
   defp axis_name(_side, :angle), do: "Angle axis"
   defp axis_name(_side, :r), do: "Radius axis"
-  defp axis_name(side, _scale), do: capitalise(Atom.to_string(side)) <> " axis"
+  defp axis_name(side, _scale), do: capitalize(Atom.to_string(side)) <> " axis"
 
   defp extreme_sentence(%{field: field, rows: 1, high: {value, at}}),
-    do: "#{capitalise(field)} #{value}#{at(at)}."
+    do: "#{capitalize(field)} #{value}#{at(at)}."
 
   defp extreme_sentence(%{field: field, high: {hi, hi_at}, low: {lo, lo_at}}),
     do: "Highest #{field} #{hi}#{at(hi_at)}; lowest #{field} #{lo}#{at(lo_at)}."
@@ -857,6 +857,6 @@ defmodule Visualize.Chart.Summary do
   defp words([one]), do: one
   defp words(list), do: Enum.join(Enum.drop(list, -1), ", ") <> " and " <> List.last(list)
 
-  defp capitalise(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
-  defp capitalise(""), do: ""
+  defp capitalize(<<first::utf8, rest::binary>>), do: String.upcase(<<first::utf8>>) <> rest
+  defp capitalize(""), do: ""
 end

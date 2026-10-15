@@ -355,7 +355,7 @@ defmodule Visualize.Layout.Sankey do
   end
 
   # d3's initializeNodeBreadths: one scale `ky` for every column, so a link's width is the
-  # share of its node it occupies; each column is then centred vertically.
+  # share of its node it occupies; each column is then centered vertically.
   defp initialize_breadths(%{sankey: sankey, py: py} = g) do
     ky =
       g.columns
@@ -412,7 +412,7 @@ defmodule Visualize.Layout.Sankey do
 
   defp reorder_links(g, _ids), do: g
 
-  # d3's reorderNodeLinks: after a node moves, the links of its neighbours are re-sorted.
+  # d3's reorderNodeLinks: after a node moves, the links of its neighbors are re-sorted.
   defp reorder_node_links(%{sankey: %{link_sort: nil}} = g, id) do
     node = g.nodes[id]
     sources = Enum.map(node.target_links, &g.links[&1].source)

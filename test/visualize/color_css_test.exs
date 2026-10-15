@@ -43,7 +43,7 @@ defmodule Visualize.ColorCssTest do
       css = Color.resolve(value, theme, :css)
       {r, g, b, a} = CssColor.eval(css)
 
-      # Only a colour inside sRGB is compared channel by channel: outside, a browser
+      # Only a color inside sRGB is compared channel by channel: outside, a browser
       # gamut-maps, which the literal does too, and the evaluator does not.
       assert Enum.all?([r, g, b], &(&1 > -0.5 and &1 < 255.5)),
              "#{css} leaves sRGB: #{inspect({r, g, b})}; choose another value"

@@ -278,6 +278,6 @@ defmodule Visualize.IR.Transform do
     "matrix(#{format_num(a)},#{format_num(b)},#{format_num(c)},#{format_num(d)},#{format_num(e)},#{format_num(f)})"
   end
 
-  # The one number formatter of every serialiser (spec/09 §1.3, D-12, D-32).
+  # The one number formatter of every serializer (spec/09 §1.3, D-12, D-32).
   defp format_num(n), do: Visualize.IR.Path.format_number(n)
 end

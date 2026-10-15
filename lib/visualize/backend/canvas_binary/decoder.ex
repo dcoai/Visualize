@@ -179,7 +179,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
        ),
        do: decode(rest, [{:box, {x, y, w, h}} | acc])
 
-  # The effect (spec/09 §4.3.14, #674): a shadow's radius, offset and colour, or a blur.
+  # The effect (spec/09 §4.3.14, #674): a shadow's radius, offset and color, or a blur.
   defp decode(
          <<0x52, 0x01, r::little-float-32, dx::little-float-32, dy::little-float-32, cr, cg, cb,
            ca, rest::binary>>,

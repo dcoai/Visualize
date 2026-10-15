@@ -388,7 +388,7 @@ defmodule Visualize.Color do
     g = rgb_xyz(g / 255)
     b_val = rgb_xyz(b / 255)
 
-    # The D50-adapted matrix, the inverse of `lab/4`'s; a grey is exactly neutral, a = b = 0.
+    # The D50-adapted matrix, the inverse of `lab/4`'s; a gray is exactly neutral, a = b = 0.
     y = (0.2225045 * r + 0.7168786 * g + 0.0606169 * b_val) / @yn
 
     {x, z} =

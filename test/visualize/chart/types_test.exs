@@ -167,7 +167,7 @@ defmodule Visualize.Chart.TypesTest do
                {:error, [mismatch(@x, :t, :category, :number)]}
     end
 
-    test "a series reaches the colour scale, and so does a field on the style's colour" do
+    test "a series reaches the color scale, and so does a field on the style's color" do
       d =
         design(:linear, :linear)
         |> put_in([:frames, :main, :scales, :color], %{kind: :ordinal})

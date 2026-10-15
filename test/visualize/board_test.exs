@@ -275,7 +275,7 @@ defmodule Visualize.BoardTest do
                 ]}
     end
 
-    test "the grid is not generalised: columns is not a key" do
+    test "the grid is not generalized: columns is not a key" do
       assert Board.validate(%{columns: 24}) == {:error, [{[:columns], :unknown_key}]}
       assert Board.columns() == 12
     end
@@ -480,7 +480,7 @@ defmodule Visualize.BoardTest do
     end
   end
 
-  describe "realise" do
+  describe "realize" do
     test "each cell applied at its box's size, the board's group written where it syncs" do
       board = Board.from_map!(board())
 

@@ -354,7 +354,7 @@ defmodule Visualize.Layout.Force.Simulation do
   @impl true
   def handle_info(:start_simulation, state), do: {:noreply, arm(state)}
 
-  # Only the tick carrying the current tag is live. A tick from a timer cancelled after
+  # Only the tick carrying the current tag is live. A tick from a timer canceled after
   # its message had already reached the mailbox carries an old tag and is ignored, which
   # is what keeps a stop followed by a start on a single chain.
   def handle_info({:tick, tag}, %{running: true, tick_tag: tag} = state) do
@@ -385,7 +385,7 @@ defmodule Visualize.Layout.Force.Simulation do
   defp arm(%{running: true} = state), do: state
   defp arm(state), do: schedule_tick(%{state | running: true})
 
-  # Cancelling may find the message already delivered; the stale tag makes that harmless.
+  # Canceling may find the message already delivered; the stale tag makes that harmless.
   defp disarm(state) do
     if state.tick_ref, do: Process.cancel_timer(state.tick_ref)
     %{state | running: false, tick_ref: nil, tick_tag: nil}

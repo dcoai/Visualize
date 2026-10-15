@@ -168,7 +168,7 @@ defmodule Visualize.Geo.DelaunayTest do
     assert_delaunay(d)
   end
 
-  test "the Voronoi diagram follows: one circumcentre per triangle, cells for every site" do
+  test "the Voronoi diagram follows: one circumcenter per triangle, cells for every site" do
     :rand.seed(:exsss, 7)
     points = for _ <- 1..25, do: {:rand.uniform() * 100, :rand.uniform() * 100}
     v = Voronoi.new(points) |> Voronoi.bounds([0, 0, 100, 100])

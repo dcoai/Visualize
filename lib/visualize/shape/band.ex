@@ -19,7 +19,7 @@ defmodule Visualize.Shape.Band do
         |> Visualize.Shape.Band.x1(fn d -> Visualize.Scale.apply(x_scale, d.to) end)
         |> Visualize.Shape.Band.y(20)
         |> Visualize.Shape.Band.height(12)
-        |> Visualize.Shape.Band.fill(fn d -> colour(d.state) end)
+        |> Visualize.Shape.Band.fill(fn d -> color(d.state) end)
 
       rects = Visualize.Shape.Band.generate(band, states)
 
@@ -76,7 +76,7 @@ defmodule Visualize.Shape.Band do
   @doc """
   Returns one `:rect` element per datum, in data order.
 
-  The rectangle is normalised so `x` is the lesser edge and `width` is non-negative; the
+  The rectangle is normalized so `x` is the lesser edge and `width` is non-negative; the
   style is `%{class: "band"}` plus `fill:` when the fill accessor yields a value.
   """
   @spec generate(t(), Visualize.Data.Table.source()) :: [Element.t()]

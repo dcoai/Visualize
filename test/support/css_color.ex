@@ -46,7 +46,7 @@ defmodule Visualize.Test.CssColor do
     to_rgb(color)
   end
 
-  # A colour while evaluating is `{[l, a, b], alpha}` in OKLab.
+  # A color while evaluating is `{[l, a, b], alpha}` in OKLab.
 
   defp color("var(" <> rest) do
     [_name, rest] = String.split(rest, ",", parts: 2)

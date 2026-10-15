@@ -25,7 +25,7 @@ defmodule Visualize.Layout.HexbinTest do
            ]
   end
 
-  test "the hexagon is six segments closed, at the circumradius from its centre" do
+  test "the hexagon is six segments closed, at the circumradius from its center" do
     path = Hexbin.hexagon(10, 20, @r)
     assert [{:M, _, _} | rest] = path.commands
     assert length(rest) == 6 and List.last(rest) == :Z

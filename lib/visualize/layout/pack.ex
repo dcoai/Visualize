@@ -141,7 +141,7 @@ defmodule Visualize.Layout.Pack do
 
   # ------------------------------------------------------------------
   # packSiblings: circles are `{x, y, r}`; the front chain is a circular doubly linked
-  # list over circle indices kept in two maps. Returns the placed circles (centred on the
+  # list over circle indices kept in two maps. Returns the placed circles (centered on the
   # enclosing circle) and the enclosing radius.
   # ------------------------------------------------------------------
 

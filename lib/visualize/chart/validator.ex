@@ -441,7 +441,7 @@ defmodule Visualize.Chart.Validator do
       else: [{path, {:unsafe, :class}}]
   end
 
-  # A theme needs at least one series colour (spec/08 §7.2).
+  # A theme needs at least one series color (spec/08 §7.2).
   defp check_key(:theme, %{key: :series}, [], path, _ctx), do: [{path, :required}]
 
   # A stored theme's palette entries are style nodes (spec/14 §2.5, #637), a role's `:cue`

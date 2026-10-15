@@ -29,7 +29,7 @@ defmodule Visualize.Geo.Path do
   With a projection, lines and polygons are clipped on the sphere before they are
   projected, as d3-geo clips them (spec/07 §2.2.1, D-127): under a projection with a
   `clip_angle` they are cut where they cross the small circle of that radius about the
-  centre — the orthographic's horizon — a line into several subpaths and a polygon closed
+  center — the orthographic's horizon — a line into several subpaths and a polygon closed
   along the circle, so a globe never closes its land by a chord across the disc; under a
   projection without one they are cut where they cross ±180° of the rotated frame and a
   polygon is closed along the seam and the poles, so a rotated map never joins a ring the
@@ -153,9 +153,9 @@ defmodule Visualize.Geo.Path do
   # ============================================
 
   # A GeoJSON object as the parts a path is drawn from, every vertex projected: a point
-  # (its centre and radius), a line and a ring (their vertices, in order). Lines and
+  # (its center and radius), a line and a ring (their vertices, in order). Lines and
   # polygons are clipped on the sphere first (`clip_parts/3`), so a line may become several
-  # and a polygon's rings are the clipped rings. `render/2` and `path/2` serialise the same
+  # and a polygon's rings are the clipped rings. `render/2` and `path/2` serialize the same
   # parts, and the measures read their vertices.
   defp parts(geo_path, %{"type" => "FeatureCollection", "features" => features}) do
     Enum.flat_map(features, &parts(geo_path, &1))
@@ -247,16 +247,16 @@ defmodule Visualize.Geo.Path do
   defp clipper(%Projection{clip_angle: angle}), do: Circle.new(angle)
 
   # The antimeridian is the rotated frame's, before `center`; the circle is about the
-  # projection's centre, the clip test's frame (spec/07 §1.5), and what it keeps is not
+  # projection's center, the clip test's frame (spec/07 §1.5), and what it keeps is not
   # tested again.
   defp frame(proj, %Circle{}, coords),
-    do: Enum.map(coords, fn [lon, lat | _] -> Projection.centred(proj, lon, lat) end)
+    do: Enum.map(coords, fn [lon, lat | _] -> Projection.centered(proj, lon, lat) end)
 
   defp frame(proj, _clipper, coords),
     do: Enum.map(coords, fn [lon, lat | _] -> Projection.rotated(proj, lon, lat) end)
 
   defp project_frame(proj, %Circle{}, points) do
-    for {lon, lat} <- points, xy = Projection.project_centred(proj, lon, lat), xy != nil, do: xy
+    for {lon, lat} <- points, xy = Projection.project_centered(proj, lon, lat), xy != nil, do: xy
   end
 
   defp project_frame(proj, _clipper, points) do
@@ -315,7 +315,7 @@ defmodule Visualize.Geo.Path do
   # Point Collection
   # ============================================
 
-  # Every projected vertex of the object, a point's centre for a point part.
+  # Every projected vertex of the object, a point's center for a point part.
   defp collect_points(geo_path, geojson), do: geo_path |> parts(geojson) |> parts_points()
 
   defp parts_points(parts) do

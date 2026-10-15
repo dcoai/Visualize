@@ -621,7 +621,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <button
                 type="button"
                 class={"vis-builder-node vis-builder-node-color" <> if(@context == :color, do: " vis-builder-node-open", else: "")}
-                title={if(@context == :color, do: "colour — back to the node's form", else: "colour — the picker for the selected node")}
+                title={if(@context == :color, do: "color — back to the node's form", else: "color — the picker for the selected node")}
                 aria-label="color"
                 aria-pressed={to_string(@context == :color)}
                 phx-click="context"
@@ -650,7 +650,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 :if={@preview? and root(@entry.label) == "frames"}
                 type="button"
                 class="vis-builder-add-frame"
-                title="a new frame, a quarter of the graph at its centre; drag it into place"
+                title="a new frame, a quarter of the graph at its center; drag it into place"
                 phx-click="add_frame"
                 phx-target={@myself}
               >+ frame</button>

@@ -7,9 +7,9 @@ defmodule Visualize.Specs.ForceSimulation do
   `alpha_min`, or not). What is kept exactly: every message the GenServer handles, the
   deferred `:start_simulation` that `init/1` enqueues, and the two kinds of tick message —
   a *live* one from the timer the server is waiting on, and a *stale* one from a timer that
-  was cancelled after its message had already reached the mailbox.
+  was canceled after its message had already reached the mailbox.
 
-  Three constants select the intended behaviour (`true`, the default) or the defect the
+  Three constants select the intended behavior (`true`, the default) or the defect the
   code shipped with; the negative tests in `test/specs/` prove the checker finds each:
 
     * `guarded_deferred_start` — `:start_simulation` does not arm a second timer when a
@@ -70,13 +70,13 @@ defmodule Visualize.Specs.ForceSimulation do
 
   # GenServer.cast(sim, :stop). `Process.cancel_timer/1` either removes the timer or finds
   # its message already delivered, in which case the tick is now stale.
-  action :stop, params: [cancelled: [true, false]] do
+  action :stop, params: [canceled: [true, false]] do
     require ^env_active
-    require live > 0 or cancelled
-    require cancelled or stale < ^max_stale
+    require live > 0 or canceled
+    require canceled or stale < ^max_stale
     running = false
     live = if live > 0, do: live - 1, else: 0
-    stale = if live > 0 and not cancelled, do: stale + 1, else: stale
+    stale = if live > 0 and not canceled, do: stale + 1, else: stale
   end
 
   # GenServer.cast(sim, :restart): alpha back to 1.0, and (defect) an unconditional start.

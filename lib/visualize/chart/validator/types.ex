@@ -12,7 +12,7 @@ defmodule Visualize.Chart.Validator.Types do
   alias Visualize.Theme
 
   @frame_anchors [:title, :subtitle, :caption]
-  @typed_colours [
+  @typed_colors [
     :color,
     :intensity,
     :alpha,
@@ -23,7 +23,7 @@ defmodule Visualize.Chart.Validator.Types do
     :blend,
     :contrast
   ]
-  # The plot's four corners and its centre (spec/14 §6.3, #489).
+  # The plot's four corners and its center (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
 
@@ -154,7 +154,7 @@ defmodule Visualize.Chart.Validator.Types do
 
   # A typed color (spec/14 §3.2, spec/08 §1.9, #664): its shape, its literal operands and
   # every name it reads from the theme's color table.
-  def check(:color, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colours,
+  def check(:color, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colors,
     do: Colors.check(v, path, ctx.colors)
 
   def check(:color, v, path, ctx), do: slot_or(:color, v, path, ctx)
@@ -169,17 +169,17 @@ defmodule Visualize.Chart.Validator.Types do
 
   def check(:counterpart, _v, path, _ctx), do: [{path, {:type, :counterpart}}]
 
-  # A theme's color (spec/08 §7.1, #667): a colour, or the steps it pins of a name.
+  # A theme's color (spec/08 §7.1, #667): a color, or the steps it pins of a name.
   def check(:theme_color, map, path, _ctx) when is_map(map) and not is_struct(map),
     do: Colors.steps(map, path)
 
   def check(:theme_color, v, path, ctx), do: check(:color, v, path, ctx)
 
-  # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
+  # A map of colors (spec/14 §4.3, D-143): each category's color as a style takes one,
   # checked at the category's own path.
   def check(:color_map, map, path, ctx) when is_map(map) and not is_struct(map) do
-    Enum.flat_map(map, fn {category, colour} ->
-      check(:color, colour, path ++ [category], ctx)
+    Enum.flat_map(map, fn {category, color} ->
+      check(:color, color, path ++ [category], ctx)
     end)
   end
 

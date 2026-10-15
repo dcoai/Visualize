@@ -366,7 +366,7 @@ defmodule Visualize.Scale.Color do
   @spec scheme(atom()) :: [String.t()] | nil
   def scheme(name), do: Map.get(@schemes, name)
 
-  @doc "Returns `nil`: a colour scale is not invertible"
+  @doc "Returns `nil`: a color scale is not invertible"
   @impl true
   @spec invert(t(), any()) :: nil
   def invert(%__MODULE__{}, _value), do: nil
@@ -385,12 +385,12 @@ defmodule Visualize.Scale.Color do
   @spec nice(t()) :: t()
   def nice(%__MODULE__{} = scale), do: scale
 
-  @doc "Identity: a colour scale has no padding"
+  @doc "Identity: a color scale has no padding"
   @impl true
   @spec padding(t(), number()) :: t()
   def padding(%__MODULE__{} = scale, _padding), do: scale
 
-  @doc "Returns `0`: a colour scale has no bandwidth"
+  @doc "Returns `0`: a color scale has no bandwidth"
   @impl true
   @spec bandwidth(t()) :: 0
   def bandwidth(%__MODULE__{}), do: 0
@@ -402,7 +402,7 @@ defmodule Visualize.Scale.Color do
 
       :error ->
         raise ArgumentError,
-              "unknown colour scheme #{inspect(name)}; see Visualize.Scale.Color.schemes/0"
+              "unknown color scheme #{inspect(name)}; see Visualize.Scale.Color.schemes/0"
     end
   end
 

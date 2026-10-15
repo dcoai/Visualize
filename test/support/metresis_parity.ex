@@ -157,9 +157,9 @@ defmodule Visualize.MetresisParity do
 
   @doc """
   The units whose conversion here differs from `Metresis.Units`'s, and why: visualize
-  keeps UCUM's definition (D-155). UCUM defines the metre of mercury as 133.3220 kPa
+  keeps UCUM's definition (D-155). UCUM defines the meter of mercury as 133.3220 kPa
   exactly, so `mm[Hg]` is 133.322 Pa and `[in_i'Hg]` 3,386.3788 Pa; metresis wrote the
-  conventional millimetre of mercury, 133.322387415 Pa (13.5951 g/cm³ × 9.80665 m/s²),
+  conventional millimeter of mercury, 133.322387415 Pa (13.5951 g/cm³ × 9.80665 m/s²),
   and an inch of mercury of 3,386.388 Pa. Each differs by under 3 parts per million.
   """
   def conversion_differs, do: %{"mmHg" => 133.322387415, "inHg" => 3386.388}

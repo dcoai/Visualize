@@ -142,7 +142,7 @@ defmodule Visualize.Shape.Stack do
 
   defp generate_rows(%__MODULE__{keys: keys, value: value_fn, order: order, offset: offset}, data) do
     # `series` is a tuple of series in key order; each series is a list of points with
-    # `value` and provisional `y0 = 0`, `y1 = value`, as d3 initialises `[0, value]`.
+    # `value` and provisional `y0 = 0`, `y1 = value`, as d3 initializes `[0, value]`.
     series =
       keys
       |> Enum.map(fn key ->
@@ -286,7 +286,7 @@ defmodule Visualize.Shape.Stack do
   end
 
   # d3's `stackOffsetWiggle` (Byron & Wattenberg's streamgraph baseline): the baseline
-  # moves between columns so as to minimise the weighted change in slope of the layers.
+  # moves between columns so as to minimize the weighted change in slope of the layers.
   defp apply_offset(series, order_ix, :wiggle, n) do
     values =
       order_ix

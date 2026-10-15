@@ -435,7 +435,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
   end
 
   describe "the preview (§22.6)" do
-    test "each cell is realised alone over the pool, its slot bound by its own name" do
+    test "each cell is realized alone over the pool, its slot bound by its own name" do
       html = BuilderFixture.render(opened())
 
       [_, latency] =

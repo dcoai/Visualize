@@ -180,10 +180,10 @@ defmodule Visualize.Geo.Projection do
   Sets the rotation (lambda, phi, gamma), in degrees: d3-geo's `projection.rotate` at
   `[-lambda, phi, gamma]` (spec/07 §1.4).
 
-  - lambda: the central meridian — the longitude turned to the centre (d3's `λ` with the
+  - lambda: the central meridian — the longitude turned to the center (d3's `λ` with the
     opposite sign)
   - phi: d3's `φ`, a tilt toward or away from the viewer — `-20` brings 20° N to the
-    centre of an azimuthal view
+    center of an azimuthal view
   - gamma: d3's `γ`, a roll about the viewing axis
   """
   @spec rotate(t(), number(), number(), number()) :: t()
@@ -227,7 +227,7 @@ defmodule Visualize.Geo.Projection do
   end
 
   @doc false
-  # The rest of `project/3` for a point already in the rotated frame: the centre
+  # The rest of `project/3` for a point already in the rotated frame: the center
   # subtracted, the clip test, the raw projection, scale and translate.
   @spec project_rotated(t(), number(), number()) :: {float(), float()} | nil
   def project_rotated(%__MODULE__{} = proj, lon, lat) do
@@ -250,22 +250,22 @@ defmodule Visualize.Geo.Projection do
   end
 
   @doc false
-  # The point in the rotated and centred frame, `{lon, lat}` degrees: the frame of the
+  # The point in the rotated and centered frame, `{lon, lat}` degrees: the frame of the
   # clip test (spec/07 §1.5), where `Visualize.Geo.Path` clips a projection with a
   # `clip_angle` by its small circle (§2.2.1). With `center` `{0, 0}` it is `rotated/3`.
-  @spec centred(t(), number(), number()) :: {number(), number()}
-  def centred(%__MODULE__{center: {0, 0}} = proj, lon, lat), do: rotated(proj, lon, lat)
+  @spec centered(t(), number(), number()) :: {number(), number()}
+  def centered(%__MODULE__{center: {0, 0}} = proj, lon, lat), do: rotated(proj, lon, lat)
 
-  def centred(%__MODULE__{center: {center_lon, center_lat}} = proj, lon, lat) do
+  def centered(%__MODULE__{center: {center_lon, center_lat}} = proj, lon, lat) do
     {lon, lat} = rotated(proj, lon, lat)
     {normalize_longitude(lon - center_lon), lat - center_lat}
   end
 
   @doc false
-  # A point of the centred frame the clip has kept, through the raw projection, scale and
+  # A point of the centered frame the clip has kept, through the raw projection, scale and
   # translate: the clip was the clip test, so it is not tested again.
-  @spec project_centred(t(), number(), number()) :: {float(), float()} | nil
-  def project_centred(%__MODULE__{} = proj, lon, lat), do: raw(proj, lon, lat)
+  @spec project_centered(t(), number(), number()) :: {float(), float()} | nil
+  def project_centered(%__MODULE__{} = proj, lon, lat), do: raw(proj, lon, lat)
 
   @doc """
   Inverse projection: converts pixel coordinates (x, y) to geographic (lon, lat).
@@ -324,8 +324,8 @@ defmodule Visualize.Geo.Projection do
   The projection's outline as a closed list of `{x, y}` pixel points (spec/07 §1.6): the
   sphere of d3-geo's `{type: "Sphere"}`.
 
-  With a `clip_angle` it is the small circle at that angular distance from the centre,
-  taken in the rotated and centred frame so `rotate` and `center` turn the globe under it,
+  With a `clip_angle` it is the small circle at that angular distance from the center,
+  taken in the rotated and centered frame so `rotate` and `center` turn the globe under it,
   at 360 bearings and projected without the clip test; without one it is the map's edge —
   the antimeridian on either side and the two poles, sampled every degree, at latitude ±85
   for the Mercators and ±90 otherwise. A point the raw projection cannot place is dropped.
@@ -339,7 +339,7 @@ defmodule Visualize.Geo.Projection do
     |> close()
   end
 
-  # The small circle of radius `clip_angle` about the centre, by bearing.
+  # The small circle of radius `clip_angle` about the center, by bearing.
   defp outline(%{clip_angle: c} = _proj) when is_number(c) and c < 180 do
     c = c * @deg_to_rad
 
@@ -362,7 +362,7 @@ defmodule Visualize.Geo.Projection do
       Enum.map(179..-179//-1, &{&1, -top})
   end
 
-  # The raw projection of a point already rotated and centred, scaled and translated.
+  # The raw projection of a point already rotated and centered, scaled and translated.
   defp raw(proj, lon, lat) do
     case family(proj.type).project(proj.type, lon, lat, proj) do
       nil ->
@@ -418,10 +418,10 @@ defmodule Visualize.Geo.Projection do
 
   The points are projected at scale 150 and translate `{0, 0}`, and `scale` and
   `translate` are set so their projected bounds fill the pixel box
-  `[[x0, y0], [x1, y1]]` on the tighter axis and are centred in it. `center`, `rotate`,
+  `[[x0, y0], [x1, y1]]` on the tighter axis and are centered in it. `center`, `rotate`,
   `clip_angle` and `parallels` are untouched, so a Mercator projection stays
   Web-Mercator. An axis along which the points have no extent does not bound the
-  scale; with no extent on either the scale is kept and the point is centred; with no
+  scale; with no extent on either the scale is kept and the point is centered; with no
   projectable point the projection is returned unchanged.
 
   ## Examples
@@ -538,7 +538,7 @@ defmodule Visualize.Geo.Projection do
   defp apply_inverse_rotation(lon, lat, {0, 0, 0}), do: {lon, lat}
 
   # d3's inverse of a composed rotation undoes it in reverse (src/compose.js:8–10, D-44):
-  # `rotationPhiGamma.invert`, then `lambda` added back and normalised.
+  # `rotationPhiGamma.invert`, then `lambda` added back and normalized.
   defp apply_inverse_rotation(lon, lat, {lambda, phi, gamma}) do
     {lon_rad, lat_rad} =
       if phi != 0 or gamma != 0 do
@@ -574,7 +574,7 @@ defmodule Visualize.Geo.Projection do
     {cos(p), sin(p), cos(g), sin(g)}
   end
 
-  # `rotationLambda`'s normalisation (src/rotation.js:21): beyond ±π, less the nearest
+  # `rotationLambda`'s normalization (src/rotation.js:21): beyond ±π, less the nearest
   # whole turn, rounded as JavaScript's `Math.round` rounds a half (up).
   defp normalize_radians(lambda) when abs(lambda) > @pi_rad,
     do: lambda - Float.floor(lambda / (2 * @pi_rad) + 0.5) * 2 * @pi_rad
@@ -590,8 +590,8 @@ defmodule Visualize.Geo.Projection do
   defp normalize_longitude(lon) when lon < -180, do: normalize_longitude(lon + 360)
   defp normalize_longitude(lon), do: lon
 
-  # A point is clipped when its angular distance from the projection centre
-  # exceeds the clip angle. `lon` and `lat` are already rotated and centred, in degrees.
+  # A point is clipped when its angular distance from the projection center
+  # exceeds the clip angle. `lon` and `lat` are already rotated and centered, in degrees.
   defp clipped?(%{clip_angle: nil}, _lon, _lat), do: false
 
   defp clipped?(%{clip_angle: clip_angle}, lon, lat) do

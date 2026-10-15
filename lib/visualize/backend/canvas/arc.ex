@@ -2,8 +2,8 @@ defmodule Visualize.Backend.Canvas.Arc do
   @moduledoc """
   Converts an SVG arc command to a Canvas `ellipse` call.
 
-  Canvas draws arcs from a centre, radii and two angles; SVG describes them by their end
-  points, radii, rotation and two flags. This is the endpoint-to-centre conversion of the
+  Canvas draws arcs from a center, radii and two angles; SVG describes them by their end
+  points, radii, rotation and two flags. This is the endpoint-to-center conversion of the
   SVG specification (implementation notes §B.2.4), the same maths the browser hooks used
   to carry, done once on the server so every Canvas output format is executable
   (spec/09 §3.3.2, D-37).
@@ -54,7 +54,7 @@ defmodule Visualize.Backend.Canvas.Arc do
     x1p_sq = x1p * x1p
     y1p_sq = y1p * y1p
 
-    # Step 2: the centre in that frame.
+    # Step 2: the center in that frame.
     sq = (rx_sq * ry_sq - rx_sq * y1p_sq - ry_sq * x1p_sq) / (rx_sq * y1p_sq + ry_sq * x1p_sq)
     root = :math.sqrt(max(sq, 0.0))
     coef = if large != sweep, do: root, else: -root

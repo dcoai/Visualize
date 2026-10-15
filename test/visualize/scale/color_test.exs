@@ -1,5 +1,5 @@
 defmodule Visualize.Scale.ColorTest do
-  @moduledoc "Colour scale defects from #13 (spec/03 §13.2, D-17)."
+  @moduledoc "Color scale defects from #13 (spec/03 §13.2, D-17)."
   use ExUnit.Case, async: true
 
   alias Visualize.Scale
@@ -8,7 +8,7 @@ defmodule Visualize.Scale.ColorTest do
   @hex ~r/^#[0-9a-f]{6}$/
 
   test "an unknown scheme raises instead of silently becoming :blues" do
-    assert_raise ArgumentError, ~r/unknown colour scheme :nope/, fn -> Scale.sequential(:nope) end
+    assert_raise ArgumentError, ~r/unknown color scheme :nope/, fn -> Scale.sequential(:nope) end
     assert_raise ArgumentError, ~r/schemes\/0/, fn -> Scale.diverging(:nope) end
     assert_raise ArgumentError, fn -> Scale.sequential(:blues) |> Scale.range(:nope) end
   end
@@ -19,7 +19,7 @@ defmodule Visualize.Scale.ColorTest do
     end
   end
 
-  test "an unclamped value beyond the domain still yields a well-formed colour" do
+  test "an unclamped value beyond the domain still yields a well-formed color" do
     scale = Scale.sequential(:blues) |> Scale.domain([0, 1]) |> Scale.clamp(false)
     assert Scale.apply(scale, 3) =~ @hex
     assert Scale.apply(scale, -2) =~ @hex

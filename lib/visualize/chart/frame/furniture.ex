@@ -1,9 +1,9 @@
 defmodule Visualize.Chart.Frame.Furniture do
   @moduledoc false
   # The axes and the grid of a frame (spec/14 §4.4, §4.6): each axis a `Visualize.Axis`
-  # on the realised scale, placed at its side of the plot area; the grid one hidden group
+  # on the realized scale, placed at its side of the plot area; the grid one hidden group
   # of lines at the tick positions behind the axes; and, in a polar frame, rings and
-  # spokes drawn from the plot centre.
+  # spokes drawn from the plot center.
 
   alias Visualize.{Axis, Format, Quantity, Scale}
   alias Visualize.Chart.Frame
@@ -32,7 +32,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   @doc false
-  # One group at the plot centre holding the polar grid, the marks given, and the ring
+  # One group at the plot center holding the polar grid, the marks given, and the ring
   # and spoke axes; an axis on any other scale draws as a cartesian one. Every axis keeps
   # its position among `axes` whichever way it is drawn, so its path is the design's.
   @spec polar(map(), atom(), [Element.t()], boolean()) :: [Element.t()]
@@ -49,7 +49,7 @@ defmodule Visualize.Chart.Frame.Furniture do
             |> polar_axis(node, mode)
             |> Frame.stamp([:frames, frame.name, :axes, i], paths?)
 
-    [centred(frame, polar_grid(frame, mode) ++ marks ++ rings)] ++
+    [centered(frame, polar_grid(frame, mode) ++ marks ++ rings)] ++
       grid(%{frame | axes: Enum.map(other, &elem(&1, 0))}, mode) ++
       axes(frame, other, mode, paths?)
   end
@@ -90,14 +90,14 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   @doc false
-  # A ring (on `angle`) or a spoke (on `r`) axis about the plot centre.
+  # A ring (on `angle`) or a spoke (on `r`) axis about the plot center.
   @spec polar_axis(map(), map(), atom()) :: Element.t()
   def polar_axis(frame, node, mode), do: polar_axis(frame, node, axis(frame, node), mode)
 
   @doc false
-  # The group at the plot centre that holds a polar frame's grid, marks and polar axes.
-  @spec centred(map(), [Element.t()]) :: Element.t()
-  def centred(frame, children) do
+  # The group at the plot center that holds a polar frame's grid, marks and polar axes.
+  @spec centered(map(), [Element.t()]) :: Element.t()
+  def centered(frame, children) do
     Element.group(children,
       style: %{class: "polar"},
       transform: Transform.translate(frame.plot.width / 2, frame.plot.height / 2)
@@ -105,7 +105,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   @doc false
-  # The `Visualize.Axis` an axis node describes over the frame's realised scale. What the
+  # The `Visualize.Axis` an axis node describes over the frame's realized scale. What the
   # node leaves out is derived (§4.4, D-134): the count from the axis's length, the format
   # from the scale's domain at that count — in the display unit of its measure when it has
   # one (D-138), under the frame's unit system, its ticks then round numbers in that unit
@@ -263,7 +263,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   defp title_text(_frame, %{measure: nil}), do: nil
 
   defp title_text(frame, %{measure: measure} = node) do
-    labelled? = Enum.any?(frame.labels, &(&1.anchor == {:axis, node.scale}))
+    labeled? = Enum.any?(frame.labels, &(&1.anchor == {:axis, node.scale}))
     scale = Map.fetch!(frame.scales, node.scale)
 
     ticks_say_it? =
@@ -271,7 +271,7 @@ defmodule Visualize.Chart.Frame.Furniture do
         Quantity.suffix(Quantity.display_unit(scale.domain, measure, system: frame.system)) !=
           ""
 
-    if labelled? or ticks_say_it?, do: nil, else: Quantity.label(measure)
+    if labeled? or ticks_say_it?, do: nil, else: Quantity.label(measure)
   end
 
   defp title_text(_frame, _node), do: nil
@@ -430,7 +430,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     end
   end
 
-  # A spoke's inner end: the centre itself, printed as the integer it was, when the
+  # A spoke's inner end: the center itself, printed as the integer it was, when the
   # band starts there — the full-turn output stays byte for byte.
   defp inner_end(r0, _ux, _uy) when r0 == 0, do: {0, 0}
   defp inner_end(r0, ux, uy), do: {crisp(r0 * ux), crisp(r0 * uy)}

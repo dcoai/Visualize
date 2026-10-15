@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Applied do
   `%Visualize.Chart{}` — no variable and no schema fact anywhere in it, `vars` empty, the
   slot declarations kept as the data contract; `sources` are the bound sources by slot
   name, each as the pool gave it (a delivery as the source it carries); `frame` is the
-  `%Visualize.Chart.Frame{}` realised over them, whose `Visualize.Chart.Frame.scales/1` is
+  `%Visualize.Chart.Frame{}` realized over them, whose `Visualize.Chart.Frame.scales/1` is
   the escape hatch, and `frames` every frame by name. `schemas`, `versions` and `cache`
   are what the schema step found (§7.4): the schema of each slot that has one, the
   schema version each slot's delivery named, and the schema cache with whatever

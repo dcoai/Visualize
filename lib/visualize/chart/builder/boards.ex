@@ -24,7 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @new_w 4
     @new_h 2
 
-    # The width a preview is realised at: the runtime's default (spec/15 §6).
+    # The width a preview is realized at: the runtime's default (spec/15 §6).
     @width 1200
     # The fault panel's box: the cell-state drawing is responsive, so this is its aspect.
     @fault_size {600, 240}
@@ -322,7 +322,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the preview (§22.6) -------------------------------------------------------------------
 
     @doc """
-    Each cell realised alone (spec/14 §22.6): `Visualize.Board.realize/4` of a board holding
+    Each cell realized alone (spec/14 §22.6): `Visualize.Board.realize/4` of a board holding
     that one cell and the board's shared state, at a container width of 1200, so one cell
     that cannot apply leaves every other drawn. `%{cell => {:ok, svg} | {:error, lines}}`,
     the chart a responsive root titled with the cell's title, the faults in
@@ -335,7 +335,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`, as
         `Visualize.Board.realize/4` takes it: the schema of a slot's feed
       * `:refused` - each cell the binding's type check refused, by its name, with its
-        faults (D-153): it is not realised, and is drawn as the fault panel
+        faults (D-153): it is not realized, and is drawn as the fault panel
 
     A cell whose binding has the wrong type — refused, or reporting a `{:type_mismatch, …}`
     from application — is `{:fault, svg, lines}`: the board runtime's cell-state panel of
@@ -359,7 +359,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
             :error ->
               alone = %{board | cells: %{name => cell}}
-              realised(alone, name, cell, fetch, Map.get(pools, name, %{}), shared, theme)
+              realized(alone, name, cell, fetch, Map.get(pools, name, %{}), shared, theme)
           end
 
         {name, drawn}
@@ -368,7 +368,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The cell applied alone and drawn; one whose application reports a type fault is the
     # fault panel, any other fault its lines.
-    defp realised(alone, name, cell, fetch, pool, shared, theme) do
+    defp realized(alone, name, cell, fetch, pool, shared, theme) do
       case Board.realize(alone, fetch, %{name => pool}, shared) do
         {:ok, %{^name => applied}, _cache} ->
           {:ok,

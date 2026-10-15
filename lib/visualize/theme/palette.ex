@@ -14,13 +14,13 @@ defmodule Visualize.Theme.Palette do
   @modifiers [:bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
   @text_furniture @furniture -- [:grid]
 
-  # The parts that carry hue: a paint's colour, which everything else an entry says is
+  # The parts that carry hue: a paint's color, which everything else an entry says is
   # visible without.
   @paints [:fill, :stroke]
   @size_slots [:font_size, :label_size, :title_size]
 
   # The ten style series: seven symbols against five dashes, so no two share both and every
-  # neighbour, the last beside the first included, differs in its symbol.
+  # neighbor, the last beside the first included, differs in its symbol.
   @symbols [:circle, :square, :triangle, :diamond, :cross, :star, :wye]
   @dashes [nil, "8 3", "3 3", "8 3 3 3", "1 3"]
 
@@ -56,7 +56,7 @@ defmodule Visualize.Theme.Palette do
                  focused: %{
                    stroke: %{type: :solid, color: {:color, :text}, width: 2, dash: "4 2"}
                  },
-                 # Heavier only (#638): no colour of its own to paint over a stroked mark's.
+                 # Heavier only (#638): no color of its own to paint over a stroked mark's.
                  selected: %{stroke: %{width: 2}},
                  active: %{stroke: %{type: :solid, color: {:color, :text}, width: 3}},
                  disabled: %{opacity: 0.4, stroke: %{dash: "2 2"}},
@@ -107,7 +107,7 @@ defmodule Visualize.Theme.Palette do
   @spec builtin() :: %{atom() => map()}
   def builtin, do: @builtin
 
-  # The print theme's role fills (spec/08 §7.2, #673): hatches of the role's colour, so a
+  # The print theme's role fills (spec/08 §7.2, #673): hatches of the role's color, so a
   # role keeps its meaning on a grayscale copy; `:neutral` stays solid.
   @hatches %{
     good: %{pattern: :lines, angle: 45},
@@ -235,7 +235,7 @@ defmodule Visualize.Theme.Palette do
       for name <- styles |> Map.keys() |> Enum.reject(&(&1 in known)) |> Enum.sort(),
           do: {{:style, name}, unknown(name, own)}
 
-    entries ++ neighbours(styles, own) ++ unknown
+    entries ++ neighbors(styles, own) ++ unknown
   end
 
   # -- one entry ------------------------------------------------------------------------
@@ -318,13 +318,13 @@ defmodule Visualize.Theme.Palette do
   end
 
   defp group(:grid, entry) do
-    case colour(entry, :stroke) do
+    case color(entry, :stroke) do
       value when value in [nil, :none, false, true] ->
         {:error,
          "the grid must resolve a stroke, a color other than :none; got stroke.color: " <>
            inspect(value)}
 
-      _colour ->
+      _color ->
         :ok
     end
   end
@@ -362,14 +362,14 @@ defmodule Visualize.Theme.Palette do
     end
   end
 
-  # A style series' contract is between neighbours, so it is checked over the whole series.
+  # A style series' contract is between neighbors, so it is checked over the whole series.
   defp group(_series, _entry), do: :ok
 
-  # The colour a paint part gives, `nil` when it gives none.
-  defp colour(entry, part) do
+  # The color a paint part gives, `nil` when it gives none.
+  defp color(entry, part) do
     case Map.get(entry, part) do
       %{type: :none} -> :none
-      %{color: colour} -> colour
+      %{color: color} -> color
       _none -> nil
     end
   end
@@ -409,9 +409,9 @@ defmodule Visualize.Theme.Palette do
   # -- the series -----------------------------------------------------------------------
 
   # Each style series entry beside the next, the last beside the first, since `{:style, i}`
-  # cycles: they differ in something besides the colours of their fill and stroke. One
-  # entry is its own neighbour.
-  defp neighbours(styles, own) do
+  # cycles: they differ in something besides the colors of their fill and stroke. One
+  # entry is its own neighbor.
+  defp neighbors(styles, own) do
     pairs =
       case own do
         [] -> []
@@ -423,10 +423,10 @@ defmodule Visualize.Theme.Palette do
         {:ok, entry_a} <- [compose(styles, a)],
         {:ok, entry_b} <- [compose(styles, b)],
         hueless(entry_a) == hueless(entry_b),
-        do: {{:style, b}, neighbour(a, b)}
+        do: {{:style, b}, neighbor(a, b)}
   end
 
-  # An entry with the colours of its paints taken out: what it says without hue.
+  # An entry with the colors of its paints taken out: what it says without hue.
   defp hueless(entry) do
     Map.new(entry, fn
       {part, %{} = paint} when part in @paints and not is_struct(paint) ->
@@ -437,12 +437,12 @@ defmodule Visualize.Theme.Palette do
     end)
   end
 
-  defp neighbour(a, a),
+  defp neighbor(a, a),
     do:
       "a style series of one entry has itself for a neighbor and keeps no categories apart " <>
         "without hue; give the theme at least two"
 
-  defp neighbour(a, b),
+  defp neighbor(a, b),
     do:
       "neighboring style series must differ in something besides the colors of fill and " <>
         "stroke (a dash, a marker, a weight), but #{inspect(a)} and #{inspect(b)} differ " <>

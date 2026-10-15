@@ -14,7 +14,7 @@ defmodule Visualize.Board.Export do
     live, and its chart's own SVG **embedded byte for byte** as the cell draws it
     (`Visualize.Board.Snapshot.views/2`). A cell with no chart — loading, down, crashed —
     is its state's panel, the one the board component draws.
-  - **`png/2`** is that document rasterised by `Visualize.Render.to_png/2`, with every
+  - **`png/2`** is that document rasterized by `Visualize.Render.to_png/2`, with every
     theme reference resolved to the literal it carries (`literal/1`), since resvg reads no
     CSS custom property.
   - **`pages/2`** lays the board out on paper — A4 or Letter, portrait or landscape — in
@@ -105,7 +105,7 @@ defmodule Visualize.Board.Export do
   end
 
   @doc """
-  The board as a PNG (spec/15 §12.1): `svg/2` with `resolve: :literal`, rasterised by
+  The board as a PNG (spec/15 §12.1): `svg/2` with `resolve: :literal`, rasterized by
   `Visualize.Render.to_png/2`. `{:ok, png, warnings}` or `{:error, reason}`, as `to_png/2`
   answers. The options are `svg/2`'s, `:generators` and `:assigns` among them, and
   `to_png/2`'s `:scale`, `:background`,
@@ -131,7 +131,7 @@ defmodule Visualize.Board.Export do
   shares a row with one outside it, so a band is the least that can be moved without
   cutting a cell. Bands are placed down the page, a gap apart, and a band that does not
   fit below the last starts the next page. A band taller than a whole page is scaled down
-  to fit one, its width with it, and centred. No cell is ever split, and every box is
+  to fit one, its width with it, and centered. No cell is ever split, and every box is
   inside the page's margins, below the header.
 
   ## Options
@@ -290,7 +290,7 @@ defmodule Visualize.Board.Export do
     end
   end
 
-  # -- literal colours ----------------------------------------------------------------------------
+  # -- literal colors ----------------------------------------------------------------------------
 
   @doc """
   An SVG with every CSS custom-property reference replaced by the fallback it carries

@@ -184,7 +184,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc """
     Which entry supplied each key of the resolved style (spec/14 §18.19), by its path: a
     whole element's key by its key, a part's by `part.key` — one part is often several
-    entries' (a stroke's colour from `series`, its width from `local`).
+    entries' (a stroke's color from `series`, its width from `local`).
 
     A resolved style is a cascade, so a value belongs to the last entry that set it. This is
     `Visualize.Chart.explain/1`'s question asked at a site: which style said this.

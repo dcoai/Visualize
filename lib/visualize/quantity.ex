@@ -354,12 +354,12 @@ defmodule Visualize.Quantity do
   end
 
   @doc """
-  The tick formatter of a realised scale in a measure (spec/05 §4.3): each tick scaled
+  The tick formatter of a realized scale in a measure (spec/05 §4.3): each tick scaled
   into the display unit, written by `Visualize.Format.Auto`'s notation of the scaled
   domain, then followed by the unit's symbol. A log or symlog scale gives each tick its
   own display unit; any other scale but the numeric ones is
   `Visualize.Format.Auto.formatter/2`, the measure unused. A value `ticks/3` placed for
-  the same count and system is labelled with the round number it came from, so the round
+  the same count and system is labeled with the round number it came from, so the round
   trip through the data's unit never shows. Raises `ArgumentError` for a measure
   `resolve/1` refuses.
 
@@ -387,7 +387,7 @@ defmodule Visualize.Quantity do
         scaled = for d <- domain, is_number(d), do: scale(d, unit, display)
         number = Format.Auto.number(notation(quantity, scaled, opts), opts)
         suffix = suffix(display)
-        # The values `ticks/3` placed, each labelled with the round number it came from.
+        # The values `ticks/3` placed, each labeled with the round number it came from.
         rounds = Map.new(round_ticks(scale, unit, display, Keyword.get(opts, :count, 10)))
 
         fn
@@ -439,7 +439,7 @@ defmodule Visualize.Quantity do
   def ticks(scale, measure), do: ticks(scale, measure, [])
 
   @doc """
-  The tick values of a realised scale in a measure when its display unit is not its unit
+  The tick values of a realized scale in a measure when its display unit is not its unit
   (spec/05 §4.3, D-156): round numbers in the display unit — `Visualize.Scale.ticks/2` of
   the domain converted into it — each converted back into the data's unit to be placed.
   `nil` when the display unit is the unit, for a measure with no unit and for a

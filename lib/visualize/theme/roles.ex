@@ -44,8 +44,8 @@ defmodule Visualize.Theme.Roles do
 
   defp missing(entry, names) do
     for part <- @paints,
-        colour = colour(entry, part),
-        name <- Typed.names(colour),
+        color = color(entry, part),
+        name <- Typed.names(color),
         not MapSet.member?(names, name),
         uniq: true,
         do: name
@@ -58,13 +58,13 @@ defmodule Visualize.Theme.Roles do
 
     for {role, entry} <- roles,
         part <- @paints,
-        colour = colour(entry, part),
-        computable?(colour),
+        color = color(entry, part),
+        computable?(color),
         {floor, rule} = rule(entry, part),
-        ratio = Color.contrast(over(colour, theme, background), background),
+        ratio = Color.contrast(over(color, theme, background), background),
         ratio < floor do
       {{:style, role},
-       "#{part} #{inspect(colour)} is #{ratio(ratio)}:1 against #{Color.to_hex(background)}; " <>
+       "#{part} #{inspect(color)} is #{ratio(ratio)}:1 against #{Color.to_hex(background)}; " <>
          "a role style's #{rule}"}
     end
   end
@@ -76,9 +76,9 @@ defmodule Visualize.Theme.Roles do
   defp rule(_entry, _part),
     do: {@non_text, "paint must reach 3:1 (WCAG 1.4.11, non-text contrast)"}
 
-  # The colour as it is seen: laid over the background when translucent.
-  defp over(colour, theme, background) do
-    %Color{r: r, g: g, b: b, opacity: a} = Color.parse(Color.resolve(colour, theme, :literal))
+  # The color as it is seen: laid over the background when translucent.
+  defp over(color, theme, background) do
+    %Color{r: r, g: g, b: b, opacity: a} = Color.parse(Color.resolve(color, theme, :literal))
     mix = fn x, y -> x * a + y * (1 - a) end
     Color.rgb(mix.(r, background.r), mix.(g, background.g), mix.(b, background.b))
   end
@@ -88,9 +88,9 @@ defmodule Visualize.Theme.Roles do
   defp apart(roles, theme) do
     painted =
       for {role, entry} <- roles,
-          colour = colour(entry, :fill) || colour(entry, :stroke),
-          computable?(colour),
-          do: {role, colour, Color.to_oklab(Color.parse(Color.resolve(colour, theme, :literal)))}
+          color = color(entry, :fill) || color(entry, :stroke),
+          computable?(color),
+          do: {role, color, Color.to_oklab(Color.parse(Color.resolve(color, theme, :literal)))}
 
     for {{a, ca, la}, i} <- Enum.with_index(painted),
         {{b, cb, lb}, j} <- Enum.with_index(painted),
@@ -133,23 +133,23 @@ defmodule Visualize.Theme.Roles do
 
   # -- reading an entry -----------------------------------------------------------------
 
-  # The colour a solid or a hatched paint part gives, `nil` for none, a gradient or `:none`.
-  defp colour(entry, part) do
+  # The color a solid or a hatched paint part gives, `nil` for none, a gradient or `:none`.
+  defp color(entry, part) do
     case Map.get(entry, part) do
-      %{type: :solid, color: colour} -> colour
-      # A hatch's lines are its colour, held to the same ratios (#673).
-      %{type: :hatch, color: colour} -> colour
-      %{color: colour} = paint when not is_map_key(paint, :type) -> colour
+      %{type: :solid, color: color} -> color
+      # A hatch's lines are its color, held to the same ratios (#673).
+      %{type: :hatch, color: color} -> color
+      %{color: color} = paint when not is_map_key(paint, :type) -> color
       _other -> nil
     end
   end
 
-  # A colour the check can compute: a typed color or a literal `Visualize.Color.parse/1`
+  # A color the check can compute: a typed color or a literal `Visualize.Color.parse/1`
   # reads — not a field binding, a variable or a CSS word such as `currentColor`.
-  defp computable?(colour) when is_binary(colour), do: Typed.unreadable({:alpha, colour, 1}) == []
-  defp computable?({:series, _} = colour), do: Typed.value?(colour)
-  defp computable?(colour) when is_tuple(colour), do: Typed.value?(colour)
-  defp computable?(_colour), do: false
+  defp computable?(color) when is_binary(color), do: Typed.unreadable({:alpha, color, 1}) == []
+  defp computable?({:series, _} = color), do: Typed.value?(color)
+  defp computable?(color) when is_tuple(color), do: Typed.value?(color)
+  defp computable?(_color), do: false
 
   defp ratio(r), do: :erlang.float_to_binary(Float.floor(r * 100) / 100, decimals: 2)
 

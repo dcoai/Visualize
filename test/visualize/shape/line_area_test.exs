@@ -111,7 +111,7 @@ defmodule Visualize.Shape.LineAreaTest do
       assert LineNx.generate_path([0, 1, 2], [0, 1, 0]) |> SVG.path_data() == "M0,0L1,1L2,0"
     end
 
-    test "a step curve is honoured on the scaled points" do
+    test "a step curve is honored on the scaled points" do
       d =
         LineNx.generate_path([0, 1, 2], [0, 1, 0],
           x_range: {0, 20},

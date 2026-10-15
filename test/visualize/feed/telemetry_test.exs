@@ -2,7 +2,7 @@ defmodule Visualize.Feed.TelemetryTest do
   @moduledoc """
   `Visualize.Feed.Telemetry` (spec/08 §11.6, #537, D-140) under real `:telemetry.execute/3`
   calls and real `Telemetry.Metrics` definitions: a schema from the definitions, one feed
-  per metric, a window honoured, pushes with the schema first, and calls that answer
+  per metric, a window honored, pushes with the schema first, and calls that answer
   values when the collector is gone.
   """
   use ExUnit.Case, async: true
@@ -290,7 +290,7 @@ defmodule Visualize.Feed.TelemetryTest do
   end
 
   describe "the window and retention" do
-    test "a window of DateTimes is honoured; a fetch before the kept rows is capped", context do
+    test "a window of DateTimes is honored; a fetch before the kept rows is capped", context do
       p = prefix(context)
       server = start([last_value("#{p}.gauge.value")], keep: 3)
       feed = Telemetry.feed(server, "#{p}.gauge.value")

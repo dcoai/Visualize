@@ -3,7 +3,7 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
   The canvas hooks executed under node against the recording DOM stub (spec/12 §6, #458):
   each scenario pins a defect that shipped green while the hooks were only read as text —
   the #456 resize of both hooks, the #270 decode of the current record types, `data-frame`
-  filtering (#432) and acknowledgements (D-107) — and the crosshair's markers held to the
+  filtering (#432) and acknowledgments (D-107) — and the crosshair's markers held to the
   drawing under the pointer, not to the container's box (#507).
   """
   use ExUnit.Case, async: true
@@ -255,7 +255,7 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
     end
   end
 
-  describe "acknowledgements (D-107)" do
+  describe "acknowledgments (D-107)" do
     for {hook, event, payload} <- [
           {"CanvasBinaryChart", "canvas_update", "{binary: BIN + ''}"},
           {"CanvasIncrementalChart", "canvas_incremental",
@@ -889,7 +889,7 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
   end
 
   describe "the crosshair sits on the drawing (#507, spec/10 §13.3)" do
-    # Three smooth series over 24 hours, as /interaction draws them, realised at `size`:
+    # Three smooth series over 24 hours, as /interaction draws them, realized at `size`:
     # the crosshair's attributes as a dataset, and each series' vertices in chart units.
     defp drawn(size) do
       rows =

@@ -47,7 +47,7 @@ defmodule Visualize.Chart.BuildTest do
       end
     end
 
-    test "a misspelt style key" do
+    test "a misspelled style key" do
       assert_raise ArgumentError, ~r/:stoke_width is not a key of a :style node/, fn ->
         style(:series, stoke_width: 2)
       end

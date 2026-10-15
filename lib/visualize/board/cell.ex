@@ -349,7 +349,7 @@ defmodule Visualize.Board.Cell do
     at = System.monotonic_time(:millisecond)
     {svg, compiled} = Draw.step(state.compiled, sources, at, state)
 
-    {attrs, pickable} = Draw.realised(state.applied, sources, state.theme, state.size)
+    {attrs, pickable} = Draw.realized(state.applied, sources, state.theme, state.size)
 
     %{
       state

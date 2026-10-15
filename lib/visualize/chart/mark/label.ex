@@ -106,7 +106,7 @@ defmodule Visualize.Chart.Mark.Label do
     anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)
     dy = Map.get(label, :dy, 0)
-    centre = centre(ctx)
+    center = center(ctx)
 
     {x, y, baseline, text_anchor} =
       case anchor do
@@ -114,7 +114,7 @@ defmodule Visualize.Chart.Mark.Label do
           Polar.place(
             polar,
             {px, py},
-            centre,
+            center,
             Map.get(shape, :radii),
             @inset + Map.get(label, :dr, 0)
           )
@@ -126,14 +126,14 @@ defmodule Visualize.Chart.Mark.Label do
     attrs = %{x: x + dx, y: y + dy} |> put_unless_nil(:dy, baseline)
 
     {rotation, text_anchor} =
-      Polar.rotation(Map.get(label, :rotate), {x + dx, y + dy}, centre, text_anchor)
+      Polar.rotation(Map.get(label, :rotate), {x + dx, y + dy}, center, text_anchor)
 
     base = %{class: class, text_anchor: text_anchor}
 
     # The text fitted to the element's own width (spec/14 §5.5, #138), and on a rectangle
     # it sits on to the element's height (#497), or nothing.
     fit = Map.get(label, :fit, Schema.default(:mark_label, :fit))
-    width = extent(shape, {x + dx, y + dy}, centre)
+    width = extent(shape, {x + dx, y + dy}, center)
     font_size = font_size(style_node, frame.theme)
 
     case fit(fit, content, width, font_size) |> held(fit, bounds, anchor, font_size) do
@@ -154,7 +154,7 @@ defmodule Visualize.Chart.Mark.Label do
   defp box({_x, _y, w, h}, _frame), do: {w, h}
   defp box(_bounds, frame), do: {frame.plot.width, frame.plot.height}
 
-  # Every colour key the label's style writes as `:contrast`, inked against the colour under
+  # Every color key the label's style writes as `:contrast`, inked against the color under
   # the label rather than the background `Style.resolve/3` assumed (spec/14 §5.5, D-123).
   defp inked(style, style_node, under, theme) do
     Enum.reduce([:fill, :stroke], style, fn key, acc ->
@@ -165,7 +165,7 @@ defmodule Visualize.Chart.Mark.Label do
   end
 
   @doc false
-  # The children with the colour under each one's label as `:under`, read from its bound
+  # The children with the color under each one's label as `:under`, read from its bound
   # element, when the label's style inks by `:contrast`; the children as they are otherwise.
   @spec under([map()], [Element.t()], map()) :: [map()]
   def under(children, _bound, %{label: nil}), do: children
@@ -194,7 +194,7 @@ defmodule Visualize.Chart.Mark.Label do
     do: Enum.any?([:fill, :stroke], &(Map.get(node, &1) in [:contrast, {:contrast, :under}]))
 
   @doc false
-  # The colour under a mark's label (spec/14 §5.5, D-123): the fill its element is drawn
+  # The color under a mark's label (spec/14 §5.5, D-123): the fill its element is drawn
   # with — the element's own once bound, else the mark group's — as a literal, composited
   # over the theme's background by its `fill_opacity` × `opacity`; `nil` when the element
   # has no fill or one `Visualize.Color.parse/1` does not read.
@@ -203,7 +203,7 @@ defmodule Visualize.Chart.Mark.Label do
     group =
       case paint do
         {:fill, {:field, _}} -> Map.get(static, :fill)
-        {:fill, colour} -> colour
+        {:fill, color} -> color
         {:stroke, _} -> Map.get(static, :fill)
       end
 
@@ -211,12 +211,12 @@ defmodule Visualize.Chart.Mark.Label do
       nil ->
         nil
 
-      colour ->
+      color ->
         alpha =
           opacity(Map.get(style, :fill_opacity, Map.get(static, :fill_opacity))) *
-            opacity(Map.get(style, :opacity, Map.get(static, :opacity))) * colour.opacity
+            opacity(Map.get(style, :opacity, Map.get(static, :opacity))) * color.opacity
 
-        over(colour, alpha, parse(frame.theme.background))
+        over(color, alpha, parse(frame.theme.background))
     end
   end
 
@@ -239,21 +239,21 @@ defmodule Visualize.Chart.Mark.Label do
   defp opacity(n) when is_number(n), do: min(max(n, 0), 1)
   defp opacity(_absent), do: 1
 
-  defp over(colour, alpha, background) when alpha >= 1 or background == nil,
-    do: %{colour | opacity: 1.0}
+  defp over(color, alpha, background) when alpha >= 1 or background == nil,
+    do: %{color | opacity: 1.0}
 
-  defp over(colour, alpha, background),
-    do: %{Color.interpolate_rgb(background, colour, alpha) | opacity: 1.0}
+  defp over(color, alpha, background),
+    do: %{Color.interpolate_rgb(background, color, alpha) | opacity: 1.0}
 
   # The width an element offers its label: a rectangle's, a circle's diameter, a sector's
   # arc length at the label's own radius; `nil` for a type with no extent.
-  defp extent(%{bounds: {_x, _y, w, _h}}, _point, _centre), do: w
-  defp extent(%{extent: w}, _point, _centre), do: w
+  defp extent(%{bounds: {_x, _y, w, _h}}, _point, _center), do: w
+  defp extent(%{extent: w}, _point, _center), do: w
 
   defp extent(%{span: span}, {x, y}, {cx, cy}),
     do: span * :math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy))
 
-  defp extent(_shape, _point, _centre), do: nil
+  defp extent(_shape, _point, _center), do: nil
 
   # The characters that fit a width: the inverse of `Text.width/2`, the estimate the
   # legend's layout makes too (§4.5).
@@ -293,15 +293,15 @@ defmodule Visualize.Chart.Mark.Label do
     end
   end
 
-  # The centre a polar anchor and a polar rotation are about (spec/14 §5.5): the group's
-  # origin for a centred mark or in a polar frame, the plot's middle otherwise.
-  @centred [:rose, :arc, :needle]
+  # The center a polar anchor and a polar rotation are about (spec/14 §5.5): the group's
+  # origin for a centered mark or in a polar frame, the plot's middle otherwise.
+  @centered [:rose, :arc, :needle]
   # A needle's label sits beyond its tip (spec/14 §5.2, #392); every other mark's above.
   defp default_anchor(%{type: :needle}), do: :outward
   defp default_anchor(_ctx), do: Schema.default(:mark_label, :anchor)
 
-  defp centre(%{type: type, frame: %{kind: kind, plot: plot}}) do
-    if type in @centred or kind == :polar, do: {0, 0}, else: {plot.width / 2, plot.height / 2}
+  defp center(%{type: type, frame: %{kind: kind, plot: plot}}) do
+    if type in @centered or kind == :polar, do: {0, 0}, else: {plot.width / 2, plot.height / 2}
   end
 
   # The outward direction of an anchor (spec/14 §5.5): the side the label sits on.

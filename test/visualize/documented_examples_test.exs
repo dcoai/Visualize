@@ -5,7 +5,7 @@ defmodule Visualize.DocumentedExamplesTest do
 
   `Visualize.IR.Element`'s example never compiled — no test file named the module, so the
   syntax error in its expected value was never executed (#90). D-90 gated the IR
-  neighbourhood on it and said the same scan over the whole library would fail; it did, on
+  neighborhood on it and said the same scan over the whole library would fail; it did, on
   ten modules, three of whose examples were wrong (#118). This holds the library to
   running what it documents, so an un-run example cannot return.
   """

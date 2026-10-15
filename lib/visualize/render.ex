@@ -130,7 +130,7 @@ defmodule Visualize.Render do
   end
 
   @doc """
-  Rasterises a chart to a PNG through the resvg command-line tool, run as a port (spec/09
+  Rasterizes a chart to a PNG through the resvg command-line tool, run as a port (spec/09
   §9, D-121).
 
   The input is a whole document: a root `Visualize.IR.Element` (`Visualize.IR.Element.root/3`,
@@ -160,7 +160,7 @@ defmodule Visualize.Render do
 
     * `:scale` - the device pixel ratio, a positive number (default `1`); the PNG is the
       root's width and height times it
-    * `:background` - a CSS colour painted under the document (default `nil`: transparent)
+    * `:background` - a CSS color painted under the document (default `nil`: transparent)
     * `:font_dirs` - directories whose fonts are loaded (default `[]`)
     * `:system_fonts` - whether the system fonts are loaded as well (default `true`)
     * `:generic_families` - the family each generic keyword names, over `:serif`,

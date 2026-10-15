@@ -4,8 +4,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The context panel as the picker for the selected field (spec/14 §19.10).
 
     A field is selected by clicking into it, and the panel shows the control its *type*
-    deserves at a size the form cannot afford: a colour's patches above its picker, each
-    patch draggable onto any colour well of the form (`drop_color`), a font's
+    deserves at a size the form cannot afford: a color's patches above its picker, each
+    patch draggable onto any color well of the form (`drop_color`), a font's
     faces in their own face, an enum's glyphs, a reference's local keys and library
     entries, a ranged number's slider. Every control here writes through the same `edit`
     the form does, under the same names — `key`, `key.slot`, `key.range`, `key.var` — so
@@ -51,11 +51,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:groups, :list,
       default: [],
-      doc: "the theme's color table by name, grouped by use: `{group, [{name, colour}]}`"
+      doc: "the theme's color table by name, grouped by use: `{group, [{name, color}]}`"
     )
 
     attr(:theme, :any, default: nil, doc: "the theme a chain's steps are previewed through")
-    attr(:recent, :list, default: [], doc: "the colour literals the design already uses")
+    attr(:recent, :list, default: [], doc: "the color literals the design already uses")
     attr(:refs, :map, default: %{}, doc: "the names and ids a reference may take, by kind")
     attr(:entries, :list, default: [], doc: "the library's entries, for a reference's names")
     attr(:target, :any, default: nil, doc: "the `phx-target` of the panel's events")
@@ -97,7 +97,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
        phx-submit="submitted">
         <h3 class="vis-builder-context-title">{@key || "color"}</h3>
         <p :if={@off?} class="vis-builder-context-note">
-          click a colour well to set it here, or drag a patch onto any well
+          click a color well to set it here, or drag a patch onto any well
         </p>
         <p :if={!@off?} class="vis-builder-picker-reads">{reads(@value)}</p>
 
@@ -117,10 +117,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <summary class="vis-builder-color-group-title">{group}</summary>
               <div class="vis-builder-swatches" role="radiogroup" aria-label={group}>
                 <label
-                  :for={{name, colour} <- names}
+                  :for={{name, color} <- names}
                   class={"vis-builder-swatch" <> if(@word == name, do: " vis-builder-swatch-on", else: "")}
-                  title={"#{name} · #{colour || "not in this theme"}"}
-                  style={"--vis-builder-swatch: #{colour || "transparent"}"}
+                  title={"#{name} · #{color || "not in this theme"}"}
+                  style={"--vis-builder-swatch: #{color || "transparent"}"}
                   draggable="true"
                   data-builder-color={name}
                 >
@@ -135,32 +135,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 </label>
               </div>
             </details>
-            <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colours in this chart">
+            <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colors in this chart">
               <label
-                :for={colour <- @recent}
-                class={"vis-builder-swatch" <> if(@value == colour, do: " vis-builder-swatch-on", else: "")}
-                title={colour}
-                style={"--vis-builder-swatch: #{colour}"}
+                :for={color <- @recent}
+                class={"vis-builder-swatch" <> if(@value == color, do: " vis-builder-swatch-on", else: "")}
+                title={color}
+                style={"--vis-builder-swatch: #{color}"}
                 draggable="true"
-                data-builder-color={colour}
+                data-builder-color={color}
               >
-                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
+                <input type="radio" name={@key} value={color} checked={@value == color} disabled={@off?} aria-label={color} />
               </label>
             </div>
             <div class="vis-builder-hues" role="radiogroup" aria-label="hues">
               <label
-                :for={colour <- @hues}
-                class={"vis-builder-hue" <> if(@value == colour, do: " vis-builder-hue-on", else: "")}
-                title={colour}
-                style={"--vis-builder-swatch: #{colour}"}
+                :for={color <- @hues}
+                class={"vis-builder-hue" <> if(@value == color, do: " vis-builder-hue-on", else: "")}
+                title={color}
+                style={"--vis-builder-swatch: #{color}"}
                 draggable="true"
-                data-builder-color={colour}
+                data-builder-color={color}
               >
-                <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
+                <input type="radio" name={@key} value={color} checked={@value == color} disabled={@off?} aria-label={color} />
               </label>
             </div>
             <label class="vis-builder-picker-row">
-              <span class="vis-builder-control-label">any colour</span>
+              <span class="vis-builder-control-label">any color</span>
               <input type="color" name={@key} class="vis-builder-color" value={hex(@value)} disabled={@off?} />
             </label>
           <% :font -> %>
@@ -350,7 +350,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc """
     The face the panel shows a field with, from its key and type (spec/14 §19.10): a
-    colour, a font, a drawn enum's glyphs, an enum's words, a reference, a ranged number,
+    color, a font, a drawn enum's glyphs, an enum's words, a reference, a ranged number,
     or a plain box.
 
         iex> Visualize.Chart.Builder.Picker.face(%{key: :fill, spec: %{type: :color, range: nil}})
@@ -446,7 +446,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp faces(value) when is_binary(value) and value not in @faces, do: [value | @faces]
     defp faces(_value), do: @faces
 
-    # Twelve hues at three lightnesses, as hex: a wheel laid flat, enough to pick a colour
+    # Twelve hues at three lightnesses, as hex: a wheel laid flat, enough to pick a color
     # by eye and then tune it in the picker below.
     defp hues do
       for l <- [0.72, 0.5, 0.3], h <- Enum.map(0..11, &(&1 * 30)), do: hsl_hex(h, 0.65, l)
@@ -488,7 +488,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp word(_value), do: nil
 
-    defp hex("#" <> _ = colour), do: colour
+    defp hex("#" <> _ = color), do: color
     defp hex(_other), do: nil
 
     defp shown(nil), do: nil

@@ -2,7 +2,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
   @moduledoc """
   The binary encoder against its own contract (spec/09 §4; D-36): the compact record only
   for a polyline, an exact command count with smooth curves expanded, transforms folded in
-  SVG order, colours through `Visualize.Color.parse/1` — with a decoder written from the
+  SVG order, colors through `Visualize.Color.parse/1` — with a decoder written from the
   specification as the round-trip witness.
   """
   use ExUnit.Case, async: true
@@ -288,7 +288,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
                {:translate_scale, {1.0, 2.0, 3.0, 4.0}}
     end
 
-    test "rotate about a centre, skew and matrix fold into the full matrix" do
+    test "rotate about a center, skew and matrix fold into the full matrix" do
       assert_matrix(
         matrix_of(Transform.new() |> Transform.rotate(90, 10, 10)),
         {0, 1, -1, 0, 20, 0}
@@ -316,7 +316,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
     end
   end
 
-  describe "colours" do
+  describe "colors" do
     defp fill_of(style) do
       [:save, {:style, %{fill: fill}} | _] =
         Decoder.decode(CanvasBinary.encode_element!(Element.rect(0, 0, 1, 1, style)))
@@ -332,10 +332,10 @@ defmodule Visualize.Backend.CanvasBinaryTest do
       assert fill_of(%{fill: "#fff"}) == {255, 255, 255, 255}
       assert fill_of(%{fill: "#ff000080"}) == {255, 0, 0, 128}
       assert fill_of(%{fill: "hsl(0, 100%, 50%)"}) == {255, 0, 0, 255}
-      assert fill_of(%{fill: "not a colour"}) == {0, 0, 0, 255}
+      assert fill_of(%{fill: "not a color"}) == {0, 0, 0, 255}
     end
 
-    test "the SVG element encoder resolves names and honours the opacity attribute" do
+    test "the SVG element encoder resolves names and honors the opacity attribute" do
       element =
         SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: "steelblue", opacity: 0.5})
 

@@ -377,9 +377,9 @@ defmodule Visualize.Shape.Arc do
     end
   end
 
-  # d3-shape's `cornerTangents`: the centre of the corner circle of radius `rc` tangent to
+  # d3-shape's `cornerTangents`: the center of the corner circle of radius `rc` tangent to
   # the ring of radius `r1` and to the sector edge from (x0, y0) to (x1, y1), with the two
-  # tangent points expressed as offsets from that centre (`x01,y01` on the edge, `x11,y11`
+  # tangent points expressed as offsets from that center (`x01,y01` on the edge, `x11,y11`
   # on the ring).
   defp corner_tangents(x0, y0, x1, y1, r1, rc, cw) do
     x01 = x0 - x1

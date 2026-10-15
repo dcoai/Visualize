@@ -238,7 +238,7 @@ defmodule Visualize.Chart.Mark.Styled do
     {Map.new(static), Map.new(bound)}
   end
 
-  # The paint: the style's value for the paint key, else the theme's series colour for
+  # The paint: the style's value for the paint key, else the theme's series color for
   # the mark's position (spec/14 §5.6). A `{:field, f}` there is bound per element.
   defp paint(type, style_node, index, theme, mode) do
     key = if type in @stroked, do: :stroke, else: :fill

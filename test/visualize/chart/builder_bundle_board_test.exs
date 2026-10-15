@@ -164,7 +164,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       on = %{board(src) | vars: %{look: :dark}}
       refute src.ocean in Enum.map(Bundle.export_board(src.store, on, :m).entries, & &1.id)
 
-      elsewhere = %{board(src) | vars: %{look: :harbour}}
+      elsewhere = %{board(src) | vars: %{look: :harbor}}
       refute src.ocean in Enum.map(Bundle.export_board(src.store, elsewhere, :m).entries, & &1.id)
     end
 
@@ -180,7 +180,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
   end
 
   describe "import" do
-    test "into an empty store realises the same board" do
+    test "into an empty store realizes the same board" do
       src = source()
       board = board(src)
       bundle = Bundle.export_board(src.store, board, :metresis)

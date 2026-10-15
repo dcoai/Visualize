@@ -202,7 +202,7 @@ defmodule Visualize.Hooks.CrosshairTest do
       assert js =~ "if (this.markers.length !== this.ys.length) {"
     end
 
-    test "the nearest x is a binary search taking the lower of two equidistant neighbours" do
+    test "the nearest x is a binary search taking the lower of two equidistant neighbors" do
       js = Crosshair.js_hook()
       assert js =~ "const mid = (lo + hi) >> 1;"
       assert js =~ "if (lo > 0 && x - xs[lo - 1] <= xs[lo] - x) return lo - 1;"

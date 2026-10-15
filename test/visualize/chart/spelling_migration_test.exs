@@ -1,7 +1,7 @@
 defmodule Visualize.Chart.SpellingMigrationTest do
   # #642 (spec/14 §9, §11.2, D-183): a stored document that holds a name this library
-  # spelled in British English before — the `:colour_safe` theme, the `$colours` tag, a
-  # version 2 paint's `centre` and a stop's `colour` — reads as the same document written in
+  # spelled in British English before — the `:color_safe` theme, the `$colors` tag, a
+  # version 2 paint's `center` and a stop's `color` — reads as the same document written in
   # the American names, and draws byte for byte as it.
   use ExUnit.Case, async: true
 
@@ -72,7 +72,7 @@ defmodule Visualize.Chart.SpellingMigrationTest do
     assert ChartTheme.from_map(%{theme: @old_theme}) == {:ok, Theme.color_safe()}
   end
 
-  test "a stored `$colours` range reads as `$colors` and draws the same" do
+  test "a stored `$colors` range reads as `$colors` and draws the same" do
     chart = Chart.from_map!(design(:default, @range, @style))
     {:ok, json} = Chart.to_json(chart)
     assert json =~ ~s("$colors":)
@@ -82,7 +82,7 @@ defmodule Visualize.Chart.SpellingMigrationTest do
     assert {:ok, ^chart} = Chart.from_json(old_json)
   end
 
-  test "a version 2 paint's `centre` and a stop's `colour` draw as version 3's words" do
+  test "a version 2 paint's `center` and a stop's `color` draw as version 3's words" do
     gradient = fn center_key, color_key ->
       %{
         :kind => :radial,

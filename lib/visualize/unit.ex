@@ -22,7 +22,7 @@ defmodule Visualize.Unit do
   not read; the table grows by proposal.
 
   A code has a dimension and an exact factor to its base (the second, the byte, the
-  metre, the gram, the kelvin, the radian, the coulomb): a rational, times a power of π
+  meter, the gram, the kelvin, the radian, the coulomb): a rational, times a power of π
   for a code holding the degree. So values scale between two codes of one dimension —
   1,500 `ms` is 1.5 `s` — and convert exactly, `value × scale + offset` (`conversion/2`).
   `Cel` and `[degF]` are UCUM's affine special units, scales with an offset: they have no

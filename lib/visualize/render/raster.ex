@@ -86,7 +86,7 @@ defmodule Visualize.Render.Raster do
     case to_png(input, opts, available) do
       {:ok, png, []} -> png
       {:ok, _png, warnings} -> raise "PNG drawn with warnings: #{inspect(warnings)}"
-      {:error, reason} -> raise "Failed to rasterise to PNG: #{inspect(reason)}"
+      {:error, reason} -> raise "Failed to rasterize to PNG: #{inspect(reason)}"
     end
   end
 
@@ -394,5 +394,5 @@ defmodule Visualize.Render.Raster do
   defp background!(background) when is_nil(background) or is_binary(background), do: background
 
   defp background!(background),
-    do: raise(ArgumentError, ":background must be a colour string, got: #{inspect(background)}")
+    do: raise(ArgumentError, ":background must be a color string, got: #{inspect(background)}")
 end

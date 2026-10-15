@@ -66,14 +66,14 @@ defmodule Visualize.Scale.ProtocolTest do
     end
   end
 
-  test "discrete and discretising scales answer nil from invert/2" do
+  test "discrete and discretizing scales answer nil from invert/2" do
     for name <- ~w(ordinal band quantize quantile threshold sequential diverging) do
       {_, scale, _, _} = Enum.find(scales(), &(elem(&1, 0) == name))
       assert Scale.invert(scale, 0.5) == nil, name
     end
   end
 
-  test "discretising scales tick at their thresholds" do
+  test "discretizing scales tick at their thresholds" do
     quantize = Scale.quantize() |> Scale.domain([0, 100]) |> Scale.range([:a, :b, :c, :d])
     assert Scale.ticks(quantize) == [25.0, 50.0, 75.0]
 
@@ -123,7 +123,7 @@ defmodule Visualize.Scale.ProtocolTest do
     end
   end
 
-  test "a diverging colour scale ticks over its whole domain" do
+  test "a diverging color scale ticks over its whole domain" do
     scale = Scale.diverging(:rdbu) |> Scale.domain([-10, 0, 10])
     assert Scale.ticks(scale, 5) == [-10.0, -5.0, 0.0, 5.0, 10.0]
   end

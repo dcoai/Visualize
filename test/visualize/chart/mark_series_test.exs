@@ -2,7 +2,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
   @moduledoc """
   The `series` channel on every mark that draws rows (spec/14 §5.2, §5.6, D-126, #508):
   each element and each label a series draws carries its `data-series` and is painted in
-  the series' colour, anything more specific wins the paint, and a mark without the
+  the series' color, anything more specific wins the paint, and a mark without the
   channel — or a row whose reading is `nil` — names no series.
   """
   use ExUnit.Case, async: true
@@ -49,7 +49,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
 
   defp series(%Element{attrs: attrs}), do: Map.get(attrs, "data-series")
 
-  # The series colour of the frame's ordinal colour scale, as the legend paints it.
+  # The series color of the frame's ordinal color scale, as the legend paints it.
   defp slot(1), do: "var(--vis-series-1, #3b6fa8)"
   defp slot(2), do: "var(--vis-series-2, #d9730d)"
 
@@ -134,7 +134,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
   end
 
   describe "the series' paint" do
-    test "a series' points take its line's colour" do
+    test "a series' points take its line's color" do
       line = generate(%{type: :line, channels: %{x: :t, y: :v, series: :k}})
       circle = generate(%{type: :circle, channels: %{x: :t, y: :v, series: :k}})
 
@@ -145,7 +145,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
                Enum.map(~w(k0 k1 k0 k1), &{&1, strokes[&1]})
     end
 
-    test "without a colour scale the series' position among the mark's series is its slot" do
+    test "without a color scale the series' position among the mark's series is its slot" do
       group =
         generate(%{type: :symbol, channels: %{x: :t, y: :v, series: :k}}, %{
           frames: %{
@@ -167,7 +167,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
           %{styles: %{red: %{fill: {:field, :c}}}}
         )
 
-      # The binding reads one value, the colour scale's third member, for every point.
+      # The binding reads one value, the color scale's third member, for every point.
       assert Enum.map(bound.children, & &1.style.fill) ==
                List.duplicate("var(--vis-series-3, #c8373b)", 4)
 
@@ -177,7 +177,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
           channels: %{x0: :t, x1: :t, y0: 0, y1: :v, value: :c, series: :k}
         })
 
-      # The value's one colour on every rectangle, not the series' two in turn.
+      # The value's one color on every rectangle, not the series' two in turn.
       assert [fill] = rect.children |> Enum.map(& &1.style.fill) |> Enum.uniq()
       assert is_binary(fill)
 
@@ -185,7 +185,7 @@ defmodule Visualize.Chart.MarkSeriesTest do
       assert Enum.all?(text.children, &(&1.style.fill == "var(--vis-text, #333333)"))
     end
 
-    test "a rule's line and an x-band's rectangle take the series' colour inside the group" do
+    test "a rule's line and an x-band's rectangle take the series' color inside the group" do
       rule = generate(%{type: :rule, channels: %{x: :t, series: :k}})
 
       assert Enum.map(rule.children, fn %Element{children: [line | _]} -> line.style.stroke end) ==

@@ -31,7 +31,7 @@ defmodule Visualize.Chart.Compiled.Regions do
           static: [Element.t()] | nil
         }
 
-  @typedoc "The frame's drawing order: regions, and a centred group of regions (polar)."
+  @typedoc "The frame's drawing order: regions, and a centered group of regions (polar)."
   @type layout :: [region() | {:centered, [region()]}]
 
   @polar_scales [:angle, :r]
@@ -80,7 +80,7 @@ defmodule Visualize.Chart.Compiled.Regions do
   end
 
   @doc false
-  # The scales a mark reads, through its channels and a `{:field, f}` on a colour key of
+  # The scales a mark reads, through its channels and a `{:field, f}` on a color key of
   # its style (spec/14 §4.3).
   @spec mark_scales(Chart.t(), map()) :: [atom()]
   def mark_scales(%Chart{styles: styles} = chart, mark) do
@@ -94,13 +94,13 @@ defmodule Visualize.Chart.Compiled.Regions do
 
     style = Map.get(styles, Map.get(mark, :style), %{})
 
-    colours =
+    colors =
       for key <- [:fill, :stroke],
           match?({:field, _}, Map.get(style, key)),
-          do: Scales.colour_scale(mark)
+          do: Scales.color_scale(mark)
 
     declared = Map.keys(Map.get(node, :scales, %{}))
-    Enum.uniq(channels ++ colours) |> Enum.filter(&(&1 in declared))
+    Enum.uniq(channels ++ colors) |> Enum.filter(&(&1 in declared))
   end
 
   # -- layout ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ defmodule Visualize.Chart.Compiled.Regions do
   # -- builders -------------------------------------------------------------------------
 
   # A mark's group as the frame builds it (spec/14 §4.7, §12.4, #356): its paints
-  # resolved for the mode — `url(#id)` in `:css`, the first stop's colour in `:literal` —
+  # resolved for the mode — `url(#id)` in `:css`, the first stop's color in `:literal` —
   # and its texts' lines split.
   defp builder({:mark, i}, _kind, _axes) do
     fn frame, sources, mode ->

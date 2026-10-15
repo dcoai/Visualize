@@ -431,13 +431,13 @@ defmodule Visualize.IR.Path do
     angle =
       if big_r == 0,
         do: rot,
-        else: normalise_degrees((:math.atan2(h, e) + :math.atan2(g, f)) / 2 * 180 / :math.pi())
+        else: normalize_degrees((:math.atan2(h, e) + :math.atan2(g, f)) / 2 * 180 / :math.pi())
 
     {big_q + big_r, abs(big_q - big_r), angle, new_sweep}
   end
 
   # An ellipse's axis angle is defined modulo a half turn; canonical form is `[0, 180)`.
-  defp normalise_degrees(deg) do
+  defp normalize_degrees(deg) do
     r = :math.fmod(deg, 180.0)
     if r < 0, do: r + 180.0, else: r
   end
@@ -447,7 +447,7 @@ defmodule Visualize.IR.Path do
   end
 
   # ============================================================
-  # Normalisation
+  # Normalization
   # ============================================================
 
   @doc """
@@ -667,7 +667,7 @@ defmodule Visualize.IR.Path do
   defp format_num(n), do: format_number(n)
 
   @doc """
-  The number formatter every serialiser shares (D-12, D-32): an integer verbatim; a float
+  The number formatter every serializer shares (D-12, D-32): an integer verbatim; a float
   with at most four decimals, trailing zeros and point trimmed, never in exponent notation,
   and never `-0`.
 

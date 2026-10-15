@@ -4,7 +4,7 @@ defmodule Visualize.Backend.PaintTest do
   drawn by SVG, by the `:json` and `:js` canvas commands and by the version 2 binary
   stream. The canvas outputs are replayed by the hooks under node and the gradients they
   build are compared with each other; the one the binary hook builds is then evaluated at
-  pixel centres and compared with resvg's raster of the SVG, which draws the
+  pixel centers and compared with resvg's raster of the SVG, which draws the
   `objectBoundingBox` gradient as a browser does.
   """
   use ExUnit.Case, async: true
@@ -20,7 +20,7 @@ defmodule Visualize.Backend.PaintTest do
   @stops [{0.0, "#d62728", 1}, {0.5, "#ffbf00", 1}, {1.0, "#1f77b4", 1}]
 
   # A linear gradient at 45° — the case SVG skews on a box that is not square — and a
-  # radial one off centre.
+  # radial one off center.
   defp linear, do: paint("lin", :linear, angle(45))
   defp radial, do: paint("rad", :radial, %{cx: 0.3, cy: 0.4, r: 0.6})
 
@@ -279,8 +279,8 @@ defmodule Visualize.Backend.PaintTest do
     # Both node and resvg: `--only js` must not select it where resvg is absent (test_helper).
     @describetag :js_resvg
 
-    # One 4:1 bar of each paint on a white page: resvg rasterises the SVG, and the gradient
-    # the binary hook built is evaluated at each pixel's centre inside the bar.
+    # One 4:1 bar of each paint on a white page: resvg rasterizes the SVG, and the gradient
+    # the binary hook built is evaluated at each pixel's center inside the bar.
     test "a skewed linear gradient and an elliptical radial one" do
       for fill <- [linear(), radial()] do
         box = {20, 30, 200, 50}
@@ -305,7 +305,7 @@ defmodule Visualize.Backend.PaintTest do
       end
     end
 
-    # The colour of a canvas gradient at a user point: its parameter `t` clamped to 0..1 and
+    # The color of a canvas gradient at a user point: its parameter `t` clamped to 0..1 and
     # the stops interpolated in sRGB (every stop opaque, so premultiplication is moot).
     defp evaluate("createLinearGradient", [x0, y0, x1, y1], stops, nil, {px, py}) do
       {ex, ey} = {x1 - x0, y1 - y0}
@@ -538,7 +538,7 @@ defmodule Visualize.Backend.PaintTest do
     end
   end
 
-  # -- the shadow's offset and colour (#674) ---------------------------------------------
+  # -- the shadow's offset and color (#674) ---------------------------------------------
 
   describe "a shadow's offset and color (spec/14 §3.1, §2.7, spec/09 §3.3.3, §4.3.14, #674)" do
     defp shadow_design(effect) do
@@ -569,7 +569,7 @@ defmodule Visualize.Backend.PaintTest do
       Frame.generate(frame, sources: %{s: rows}, resolve: mode)
     end
 
-    test "SVG: a plain shadow keeps its filter; an offset and a colour key a filter of their own" do
+    test "SVG: a plain shadow keeps its filter; an offset and a color key a filter of their own" do
       plain = shadow_tree(%{type: :shadow}, :literal) |> Visualize.Render.to_string()
       assert plain =~ ~s(<filter id="vis-effect-shadow-3">)
       assert plain =~ ~s(<feDropShadow dx="1.5" dy="1.5" flood-opacity="0.35" stdDeviation="3"/>)

@@ -198,7 +198,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A paint's type (§18.6, D-178): no paint, a solid, a gradient down the square, one out
-    # from its centre, hatching, a paint the design names. A gradient is drawn as
+    # from its center, hatching, a paint the design names. A gradient is drawn as
     # translucent bands, not a paint server: a glyph is shown once per choice in one HTML
     # document, so an id would repeat (#471); hatching is lines, not a pattern, for the same
     # reason.

@@ -57,7 +57,7 @@ defmodule Visualize.Chart.ExampleTest do
     assert Chart.to_map(chart) == Map.merge(Visualize.Chart.Migration.canonical(design), defaults)
     {:ok, json} = Chart.to_json(chart)
     assert Chart.from_json(json) == {:ok, chart}
-    # A text travels as its string, with its holes spelt as they are written (§7.1, §11).
+    # A text travels as its string, with its holes spelled as they are written (§7.1, §11).
     assert json =~ ~S|#{field(:sha)}|
     assert json =~ ~S|#{var(:unit)}|
     assert json =~ ~s({"$axis":"y"})

@@ -152,7 +152,7 @@ defmodule Visualize.Chart.StylePartsTest do
                %{effect: %{type: :blur}}
     end
 
-    test "no paint is a type too: a partial part keeps it, a colour replaces it" do
+    test "no paint is a type too: a partial part keeps it, a color replaces it" do
       outline = %{fill: :none}
 
       assert Style.merge(outline, %{fill: %{opacity: 0.5}}) == %{

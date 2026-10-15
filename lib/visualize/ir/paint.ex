@@ -7,7 +7,7 @@ defmodule Visualize.IR.Paint do
   `url(#id)` and the producer puts `definition/1` in a `:defs` — and `geometry` is in the
   units of the element's bounding box, `0` to `1` across it (SVG's `objectBoundingBox`):
   `%{x1, y1, x2, y2}` for a `:linear` gradient, the line it runs along, and `%{cx, cy, r}`
-  for a `:radial` one, centred at its focus. `stops` are `{at, colour, opacity}` in `at`
+  for a `:radial` one, centered at its focus. `stops` are `{at, color, opacity}` in `at`
   order. A canvas builds the paint over each element's tight bounding box, `bounds/1`
   (spec/09 §3.3.3).
 
@@ -47,7 +47,7 @@ defmodule Visualize.IR.Paint do
   The `:linear_gradient` or `:radial_gradient` element that defines the paint under its
   id, in `objectBoundingBox` units, with one `:stop` per stop; for a hatch, its `:pattern`:
   a tile of its spacing in user units, turned by its angle, holding its background and,
-  centred, its line, its two lines or its dot (spec/14 §2.7, #673).
+  centered, its line, its two lines or its dot (spec/14 §2.7, #673).
   """
   @spec definition(t()) :: Element.t()
   def definition(%__MODULE__{id: id, type: :linear, geometry: g} = paint) do
@@ -106,23 +106,23 @@ defmodule Visualize.IR.Paint do
   end
 
   defp stop_elements(%__MODULE__{stops: stops}) do
-    for {at, colour, opacity} <- stops,
-        do: Element.stop("#{round(at * 100)}%", colour, opacity: opacity)
+    for {at, color, opacity} <- stops,
+        do: Element.stop("#{round(at * 100)}%", color, opacity: opacity)
   end
 
   @doc false
-  # The colour a canvas fills a text with: the first stop's (spec/09 §3.3.3).
-  @spec first_colour(t()) :: String.t()
-  def first_colour(%__MODULE__{stops: [{_at, colour, _opacity} | _]}), do: colour
-  def first_colour(%__MODULE__{type: :hatch, color: colour}), do: colour
+  # The color a canvas fills a text with: the first stop's (spec/09 §3.3.3).
+  @spec first_color(t()) :: String.t()
+  def first_color(%__MODULE__{stops: [{_at, color, _opacity} | _]}), do: color
+  def first_color(%__MODULE__{type: :hatch, color: color}), do: color
 
   @doc false
-  # A stop as RGBA bytes, its opacity multiplied into the alpha; a colour
+  # A stop as RGBA bytes, its opacity multiplied into the alpha; a color
   # `Visualize.Color.parse/1` cannot read is opaque black (spec/09 §4.6).
   @spec rgba(stop()) :: {0..255, 0..255, 0..255, 0..255}
-  def rgba({_at, colour, opacity}) do
+  def rgba({_at, color, opacity}) do
     {r, g, b, a} =
-      case Color.parse(colour) do
+      case Color.parse(color) do
         %Color{} = parsed -> Color.to_rgba(parsed)
         nil -> {0, 0, 0, 1.0}
       end
@@ -131,10 +131,10 @@ defmodule Visualize.IR.Paint do
   end
 
   @doc false
-  # A colour as a canvas takes it, `rgba(r,g,b,a)`; one it cannot read is opaque black.
-  @spec canvas_colour(String.t()) :: String.t()
-  def canvas_colour(colour) do
-    {r, g, b, a} = rgba({0, colour, 1})
+  # A color as a canvas takes it, `rgba(r,g,b,a)`; one it cannot read is opaque black.
+  @spec canvas_color(String.t()) :: String.t()
+  def canvas_color(color) do
+    {r, g, b, a} = rgba({0, color, 1})
     "rgba(#{r},#{g},#{b},#{Path.format_number(a / 255)})"
   end
 
@@ -142,7 +142,7 @@ defmodule Visualize.IR.Paint do
   # The stops as a canvas takes them, `[[at, "rgba(r,g,b,a)"]]` (spec/09 §3.3.3).
   @spec canvas_stops(t()) :: [[number() | String.t()]]
   def canvas_stops(%__MODULE__{stops: stops}) do
-    for {at, _colour, _opacity} = stop <- stops do
+    for {at, _color, _opacity} = stop <- stops do
       {r, g, b, a} = rgba(stop)
       [at, "rgba(#{r},#{g},#{b},#{Path.format_number(a / 255)})"]
     end

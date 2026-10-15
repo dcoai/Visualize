@@ -1,6 +1,6 @@
 defmodule Visualize.Color.VisionTest do
   @moduledoc """
-  Colour-vision simulation (spec/08 §1.8, D-139): Machado, Oliveira and Fernandes (2009)
+  Color-vision simulation (spec/08 §1.8, D-139): Machado, Oliveira and Fernandes (2009)
   at severity 1.0, over linear sRGB.
   """
   use ExUnit.Case, async: true
@@ -34,16 +34,16 @@ defmodule Visualize.Color.VisionTest do
            ]
   end
 
-  test "every row sums to one, which is what fixes the greys" do
+  test "every row sums to one, which is what fixes the grays" do
     for deficiency <- Vision.deficiencies(), row <- Vision.matrix(deficiency) do
       assert_in_delta Enum.sum(row), 1.0, 1.0e-5
     end
   end
 
-  property "a grey is its own simulation under every deficiency" do
+  property "a gray is its own simulation under every deficiency" do
     check all(v <- integer(0..255), deficiency <- member_of(Vision.deficiencies())) do
-      grey = Color.rgb(v, v, v)
-      assert Color.to_rgb(Vision.simulate(grey, deficiency)) == {v, v, v}
+      gray = Color.rgb(v, v, v)
+      assert Color.to_rgb(Vision.simulate(gray, deficiency)) == {v, v, v}
     end
   end
 
@@ -61,7 +61,7 @@ defmodule Visualize.Color.VisionTest do
     good = "#4ca34b"
     bad = "#c23238"
 
-    hue = fn colour -> colour |> Color.parse() |> Color.to_hcl() |> Map.fetch!(:h) end
+    hue = fn color -> color |> Color.parse() |> Color.to_hcl() |> Map.fetch!(:h) end
     arc = fn a, b -> min(abs(a - b), 360 - abs(a - b)) end
 
     for deficiency <- [:protanopia, :deuteranopia] do
@@ -72,7 +72,7 @@ defmodule Visualize.Color.VisionTest do
     assert arc.(hue.(hex(good, :tritanopia)), hue.(hex(bad, :tritanopia))) > 90
   end
 
-  test "the colour-safe status keeps its ends further apart than the default's" do
+  test "the color-safe status keeps its ends further apart than the default's" do
     distance = fn theme, deficiency ->
       [a, b] =
         for role <- [:good, :bad] do
@@ -92,17 +92,17 @@ defmodule Visualize.Color.VisionTest do
     end
   end
 
-  test ":none is the colour, the opacity is kept, and an unknown deficiency is refused" do
-    colour = Color.rgb(12, 200, 99, 0.5)
-    assert Vision.simulate(colour, :none) == colour
-    assert Vision.simulate(colour, :deuteranopia).opacity == 0.5
+  test ":none is the color, the opacity is kept, and an unknown deficiency is refused" do
+    color = Color.rgb(12, 200, 99, 0.5)
+    assert Vision.simulate(color, :none) == color
+    assert Vision.simulate(color, :deuteranopia).opacity == 0.5
 
     assert_raise ArgumentError, ~r/:achromatopsia is not a deficiency/, fn ->
-      Vision.simulate(colour, :achromatopsia)
+      Vision.simulate(color, :achromatopsia)
     end
   end
 
-  test "recolor rewrites every colour literal of a text and nothing else" do
+  test "recolor rewrites every color literal of a text and nothing else" do
     svg =
       ~s|<g fill="#ff0000" style="stroke: #f00"><rect fill="url(#bad)" id="abc"/><text>#ff0000</text></g>|
 

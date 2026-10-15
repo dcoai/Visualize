@@ -79,7 +79,7 @@ defmodule Visualize.ColorTypedTest do
     |> then(&mul(@lms_oklab, &1))
   end
 
-  # OKLab to sRGB channels in 0..255, asserting the colour is in the gamut: a reference
+  # OKLab to sRGB channels in 0..255, asserting the color is in the gamut: a reference
   # value is only compared where no gamut mapping stands between the two.
   defp ref_rgb(lab) do
     rgb =
@@ -200,7 +200,7 @@ defmodule Visualize.ColorTypedTest do
       end
     end
 
-    test "white is L 1 and a grey has no chroma" do
+    test "white is L 1 and a gray has no chroma" do
       assert_in_delta Color.to_oklab(Color.parse("#ffffff")).l, 1.0, 1.0e-6
       assert_in_delta Color.to_oklch(Color.parse("#808080")).c, 0.0, 1.0e-6
     end

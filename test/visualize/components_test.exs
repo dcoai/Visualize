@@ -123,7 +123,7 @@ defmodule Visualize.ComponentsTest do
     test "#{name} renders the frame alone with no data" do
       svg = render_case(Keyword.fetch!(empty(), unquote(name)))
       assert File.read!(Path.join(@dir, "#{unquote(name)}_empty.svg")) == svg
-      # The axes are paths too; a mark is a rect, a circle, or a path in the mark colour.
+      # The axes are paths too; a mark is a rect, a circle, or a path in the mark color.
       assert svg =~ "<svg"
       refute svg =~ "<rect"
       refute svg =~ "<circle"
@@ -133,7 +133,7 @@ defmodule Visualize.ComponentsTest do
   end
 
   # The lines of an SVG that are neither blank nor a label.
-  defp unlabelled(svg) do
+  defp unlabeled(svg) do
     svg
     |> String.split("\n")
     |> Enum.reject(&(String.trim(&1) == "" or String.starts_with?(String.trim(&1), "<text")))
@@ -144,8 +144,8 @@ defmodule Visualize.ComponentsTest do
     golden = File.read!(Path.join(@dir, "pie_chart.svg"))
     assert golden =~ "<text"
 
-    assert unlabelled(golden) ==
-             unlabelled(render_component(component, Map.put(assigns, :show_labels, false)))
+    assert unlabeled(golden) ==
+             unlabeled(render_component(component, Map.put(assigns, :show_labels, false)))
   end
 
   test "every chart component has a golden and an empty-data golden" do
@@ -234,7 +234,7 @@ defmodule Visualize.ComponentsTest do
       assert relit == light
     end
 
-    test "an explicit colour assign is used as given; a label on a slice is inked by contrast" do
+    test "an explicit color assign is used as given; a label on a slice is inked by contrast" do
       svg = render_case(Keyword.fetch!(cases(), :line_chart_points))
       pie = render_case(Keyword.fetch!(cases(), :pie_chart))
 
@@ -263,7 +263,7 @@ defmodule Visualize.ComponentsTest do
   end
 
   describe "colors" do
-    test "a colour list is used as given and cycled" do
+    test "a color list is used as given and cycled" do
       svg =
         render_component(&Components.pie_chart/1, %{
           data: @categories,
@@ -299,7 +299,7 @@ defmodule Visualize.ComponentsTest do
       end
     end
 
-    test "an empty colour list is an ArgumentError" do
+    test "an empty color list is an ArgumentError" do
       assert_raise ArgumentError, fn ->
         render_component(&Components.pie_chart/1, %{
           data: @categories,
@@ -388,12 +388,12 @@ defmodule Visualize.ComponentsTest do
     test "pie labels are drawn only with show_labels and a label accessor" do
       name = fn d -> d.name end
       base = %{data: @categories, value: fn d -> d.value end}
-      labelled = Map.put(base, :label, name)
-      hidden = Map.put(labelled, :show_labels, false)
+      labeled = Map.put(base, :label, name)
+      hidden = Map.put(labeled, :show_labels, false)
 
       refute render_component(&Components.pie_chart/1, base) =~ "<text"
       refute render_component(&Components.pie_chart/1, hidden) =~ "<text"
-      assert render_component(&Components.pie_chart/1, labelled) =~ ">a</text>"
+      assert render_component(&Components.pie_chart/1, labeled) =~ ">a</text>"
     end
   end
 end

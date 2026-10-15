@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Build do
   Every function here returns a *fragment* — a design map carrying the keys that one
   function sets and no others — and the pipe is `Visualize.Chart.compose/2`: a design is
   the fold of its fragments, which is `Visualize.Chart.compose/1` over the list. Nothing
-  validates, defaults or realises anything, so the fold is a fragment too and becomes a
+  validates, defaults or realizes anything, so the fold is a fragment too and becomes a
   chart through `Visualize.Chart.from_map/1` or an applied chart through
   `Visualize.Chart.apply/2`, which is where it must validate.
 

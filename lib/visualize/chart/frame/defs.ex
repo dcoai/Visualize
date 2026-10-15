@@ -46,7 +46,7 @@ defmodule Visualize.Chart.Frame.Defs do
   end
 
   # One filter per distinct effect any style in the tree carries: its type and radius, and a
-  # shadow's offset and colour (spec/14 §2.7, #674).
+  # shadow's offset and color (spec/14 §2.7, #674).
   defp filters(tree) do
     tree
     |> effects()
@@ -114,8 +114,8 @@ defmodule Visualize.Chart.Frame.Defs do
   defp value(value, _defs, _prefix, _theme, _mode), do: value
 
   @doc false
-  # A paint's first stop's colour, a literal (spec/14 §5.5): the one colour that stands for
-  # a gradient where one colour must — what a label's ink is chosen against; `nil` for an
+  # A paint's first stop's color, a literal (spec/14 §5.5): the one color that stands for
+  # a gradient where one color must — what a label's ink is chosen against; `nil` for an
   # undeclared name.
   @spec literal(atom() | String.t(), map()) :: String.t() | nil
   def literal(name, %{defs: defs, theme: theme}) do
@@ -130,7 +130,7 @@ defmodule Visualize.Chart.Frame.Defs do
 
       {:ok, node} ->
         [first | _] = stops(node)
-        Style.color(colour(first), theme, :literal)
+        Style.color(color(first), theme, :literal)
 
       :error ->
         nil
@@ -140,7 +140,7 @@ defmodule Visualize.Chart.Frame.Defs do
   # -- the paint --------------------------------------------------------------------------
 
   # The node as the paint every backend draws: its geometry in box units derived from the
-  # words a person wrote (spec/14 §2.7), its stops' colours resolved for the mode.
+  # words a person wrote (spec/14 §2.7), its stops' colors resolved for the mode.
   defp paint(%{type: :hatch} = node, id, theme, mode) do
     size = fn key ->
       Units.resolve(Map.get(node, key, Schema.default(:paint, key)), %{em: theme.font_size})
@@ -169,7 +169,7 @@ defmodule Visualize.Chart.Frame.Defs do
   defp paint(node, id, theme, mode) do
     stops =
       for stop <- stops(node) do
-        {Map.fetch!(stop, :at) * 1.0, Style.color(colour(stop), theme, mode),
+        {Map.fetch!(stop, :at) * 1.0, Style.color(color(stop), theme, mode),
          Map.get(stop, :opacity, Schema.default(:stop, :opacity))}
       end
 
@@ -194,7 +194,7 @@ defmodule Visualize.Chart.Frame.Defs do
     end
   end
 
-  defp colour(stop), do: unvar(Map.fetch!(stop, :color))
+  defp color(stop), do: unvar(Map.fetch!(stop, :color))
 
   defp unvar(%Var{name: name}), do: Style.unresolved!(name)
   defp unvar(value), do: value

@@ -103,7 +103,7 @@ defmodule Visualize.Data.Table do
   @doc """
   The accessor `fn row -> get(row, name) end`, for a shape's `x`/`y` setters.
 
-  A function is returned unchanged, so a generator can normalise any accessor form
+  A function is returned unchanged, so a generator can normalize any accessor form
   through this one call.
   """
   @spec accessor(name() | (row() -> term())) :: (row() -> term())

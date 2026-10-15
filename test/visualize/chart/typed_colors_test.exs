@@ -70,7 +70,7 @@ defmodule Visualize.Chart.TypedColorsTest do
                alpha(blend([color(:red), intensity(color(:blue), 0.5)]), 0.5)
     end
 
-    test "a map of colours, a gradient's stops and a stored version 2 design are typed" do
+    test "a map of colors, a gradient's stops and a stored version 2 design are typed" do
       v2 = %{
         version: 2,
         frames: %{
@@ -148,13 +148,13 @@ defmodule Visualize.Chart.TypedColorsTest do
                Validator.validate(design(%{fill: color(:brand)}, %{theme: theme}))
     end
 
-    test "a transform of the wrong shape or an unreadable literal operand is no colour" do
+    test "a transform of the wrong shape or an unreadable literal operand is no color" do
       for bad <- [{:alpha, color(:red), 2}, {:blend, []}, alpha("currentColor", 0.5)] do
         assert {:error, [{[:styles, :s, :fill, :color], {:type, :color}}]} =
                  Validator.validate(design(%{fill: bad}))
       end
 
-      # A literal that is the whole colour is CSS's, as written, and is never computed.
+      # A literal that is the whole color is CSS's, as written, and is never computed.
       assert :ok = Validator.validate(design(%{fill: "currentColor"}))
     end
   end
@@ -238,7 +238,7 @@ defmodule Visualize.Chart.TypedColorsTest do
       assert Theme.resolve(theme, :bad, :css) == "var(--vis-bad, #b92931)"
     end
 
-    test "an anchor that names no colour string breaks the ramp's contract" do
+    test "an anchor that names no color string breaks the ramp's contract" do
       assert_raise ArgumentError, ~r/ramp :status breaks its contract: anchor 3/, fn ->
         Theme.new(colors: %{red: {:ramp, :status, 1}})
       end
