@@ -138,8 +138,15 @@ defmodule Visualize.ThemeTest do
       assert css =~ "\n  --vis-font-family: sans-serif;\n"
       assert css =~ "\n  --vis-title-size: 16px;\n"
       # Then the theme's own color names that are not slots, in name order (#663).
-      assert String.ends_with?(css, "  --vis-green: #4f924c;\n  --vis-red: #ff8f8a;\n}\n")
-      assert length(String.split(css, "\n  --vis-")) == 1 + length(Theme.slots(Theme.dark())) + 5
+      [rule, forced] = String.split(css, "@media (forced-colors: active) {\n")
+      assert String.ends_with?(rule, "  --vis-green: #4f924c;\n  --vis-red: #ff8f8a;\n}\n")
+      assert length(String.split(rule, "\n  --vis-")) == 1 + length(Theme.slots(Theme.dark())) + 5
+
+      # High-contrast mode: the furniture as the user's system colors (#665).
+      assert forced ==
+               "  .vis-theme-dark {\n    --vis-text: CanvasText;\n    --vis-axis: CanvasText;\n" <>
+                 "    --vis-background: Canvas;\n    --vis-surface: Canvas;\n" <>
+                 "    --vis-grid: GrayText;\n  }\n}\n"
     end
   end
 

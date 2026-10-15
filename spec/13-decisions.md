@@ -1941,3 +1941,13 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - At render a bare atom met in a color position (a scale's range, a component) is still read as a name, so nothing that builds colors in code breaks.
 
 *Rejected:* reporting a bare atom in a color position as a fault, as the proposal first had it. After #649 a `fill` can only hold a paint, so the atom has one meaning; refusing it would break every stored design for a spelling the library can rewrite. *Rejected:* keeping `:contrast` as a reserved word beside `:none`. `contrast(c)` over a chosen color is the general form, and one value with an operand reads better than a word and a function.
+
+**Amended by #665** (work item 4 of #650). **In `:css` mode a transform is written as CSS.**
+- `intensity` and `blend` become `color-mix(in oklab, …)`, a blend of three or more nested.
+- `alpha`, `lighten`, `darken` and `saturate` become relative `oklch(from … )`.
+- Every operand is written in its own `:css` form, so a stylesheet's theme switch carries through every derived color without a re-render.
+- The contrast ink stays a literal (D-123).
+- The literal a browser computes for the CSS is the literal `:literal` mode computes. An evaluator written from the CSS specifications alone holds the two together.
+- **`stylesheet/1` respects forced colors.** An `@media (forced-colors: active)` block maps the furniture to the user's system colors (`CanvasText`, `Canvas`, `GrayText`). In that mode a browser forces data fills and strokes itself, and a role still reads without hue by its dash and marker.
+
+*Rejected:* writing the forced-colors block into every chart's SVG. A declaration on the `<svg>` beats an ancestor's theme class (D-55), so the block belongs with the stylesheet the host includes. *Rejected:* `@supports` fallbacks to the literal inside the SVG. A presentation attribute cannot carry two values, and the browsers that lack relative colors predate 2023.

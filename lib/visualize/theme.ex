@@ -823,7 +823,25 @@ defmodule Visualize.Theme do
         "  #{property(slot)}: #{css_value(kind, value)};"
       end
 
-    ".vis-theme-#{name} {\n" <> Enum.join(lines, "\n") <> "\n}\n"
+    ".vis-theme-#{name} {\n" <> Enum.join(lines, "\n") <> "\n}\n" <> forced_colors(name)
+  end
+
+  # In high-contrast mode the furniture is the user's system colors (spec/08 §7.3, #665):
+  # what the chart draws from the theme agrees with the palette the browser forces, and a
+  # color derived in CSS from one of these follows it.
+  @forced [
+    text: "CanvasText",
+    axis: "CanvasText",
+    background: "Canvas",
+    surface: "Canvas",
+    grid: "GrayText"
+  ]
+
+  defp forced_colors(name) do
+    lines =
+      Enum.map_join(@forced, "\n", fn {slot, system} -> "    #{css_name(slot)}: #{system};" end)
+
+    "@media (forced-colors: active) {\n  .vis-theme-#{name} {\n" <> lines <> "\n  }\n}\n"
   end
 
   defp value(theme, slot) when slot in @colour_slots, do: {:colour, Map.fetch!(theme, slot)}
