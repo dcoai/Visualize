@@ -13,8 +13,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Selection, only: [aimed: 2, opened: 2, position: 1, select: 2]
     import Visualize.Chart.Builder.Writes, only: [owned: 3]
 
-    alias Visualize.Chart.Builder.{Editor, Stack}
-    alias Visualize.Chart.Schema
+    alias Visualize.Chart.Builder.{Editor, FormSchema, Stack}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -127,7 +126,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("facet", %{"facet" => facet}, socket) do
       %{entry: entry} = editing(socket.assigns)
-      facets = Enum.map(Schema.describe(entry.kind), & &1.facet)
+      facets = Enum.map(FormSchema.describe(entry.kind), & &1.facet)
       {:noreply, assign(socket, facet: Enum.find(facets, &(to_string(&1) == facet)), field: nil)}
     end
 
@@ -142,7 +141,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       stop? = is_binary(key) and String.starts_with?(key, "fill.stop.")
 
-      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == key)) do
+      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == key)) do
         nil when stop? ->
           :colour
 

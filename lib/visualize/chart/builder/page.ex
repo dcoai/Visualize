@@ -16,8 +16,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.Editor
-    alias Visualize.Chart.{Schema, Var}
+    alias Visualize.Chart.Builder.{Editor, FormSchema}
+    alias Visualize.Chart.Var
 
     @facets [:binding, :channel, :geometry, :style, :content]
 
@@ -267,7 +267,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec sections(map()) :: [map()]
     def sections(%{kind: :frame} = page) do
       node = page.node
-      specs = Schema.describe(:frame)
+      specs = FormSchema.describe(:frame)
 
       parts =
         for spec <- specs,
@@ -345,7 +345,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def sections(page) do
-      specs = Schema.describe(page.kind)
+      specs = FormSchema.describe(page.kind)
       node = page.node || %{}
 
       for facet <- @facets, own = Enum.filter(specs, &(&1.facet == facet)), own != [] do

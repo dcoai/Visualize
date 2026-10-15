@@ -105,10 +105,19 @@ defmodule Visualize.ChartTest do
       decoded = Jason.decode!(json)
 
       assert decoded["vars"] == %{"unit" => %{"default" => %{"$atom" => "pct"}}}
-      assert decoded["styles"]["s"]["stroke"] == %{"$series" => 3}
-      assert decoded["styles"]["s"]["fill"] == %{"$field" => "sha"}
+
+      assert decoded["styles"]["s"]["stroke"] == %{
+               "type" => "solid",
+               "color" => %{"$series" => 3}
+             }
+
+      assert decoded["styles"]["s"]["fill"] == %{
+               "type" => "solid",
+               "color" => %{"$field" => "sha"}
+             }
+
       assert decoded["styles"]["s"]["opacity"] == 0.5
-      assert decoded["styles"]["t"]["fill"] == "none"
+      assert decoded["styles"]["t"]["fill"] == %{"type" => "none"}
 
       assert decoded["frames"]["main"]["scales"]["x"]["domain"] ==
                [%{"$time" => "2026-09-08T00:00:00Z"}, "auto"]

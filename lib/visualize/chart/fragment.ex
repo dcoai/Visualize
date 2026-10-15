@@ -353,7 +353,7 @@ defmodule Visualize.Chart.Fragment do
 
       iex> {:ok, json} = Visualize.Chart.Fragment.to_json(%{theme: %{axis: "#666666"}})
       iex> Visualize.Chart.Fragment.read_json(json)
-      {:ok, %{theme: %{axis: "#666666"}}, 2}
+      {:ok, %{theme: %{axis: "#666666"}}, 3}
   """
   @spec read_json(String.t(), keyword()) ::
           {:ok, map(), pos_integer()}

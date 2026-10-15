@@ -82,7 +82,7 @@ defmodule Visualize.Chart.ApplyTest do
 
       assert Enum.at(a.chart.labels, 0).text == "Uptime — mg/hr"
       assert Enum.at(b.chart.labels, 0).text == "Uptime — %"
-      assert a.chart.styles.series.stroke == :series_1
+      assert a.chart.styles.series.stroke.color == :series_1
       assert a.chart.meta.description == "Uptime in mg/hr"
 
       svg_a = Chart.render(a)
@@ -306,7 +306,7 @@ defmodule Visualize.Chart.ApplyTest do
                vars: %{unit: "%", w: "thick"},
                size: {300, 200}
              ) ==
-               {:error, [{[:styles, :series, :stroke_width], {:type, :size}}]}
+               {:error, [{[:styles, :series, :stroke, :width], {:type, :size}}]}
     end
 
     test "a variable in a transform, a channel, a slot and an option resolves" do

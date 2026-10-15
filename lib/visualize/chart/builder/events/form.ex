@@ -24,8 +24,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ]
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Editor, Fills, Params, Stack}
-    alias Visualize.Chart.{Fragment, Schema, Use, Var}
+    alias Visualize.Chart.Builder.{Editor, Fills, FormSchema, Params, Stack}
+    alias Visualize.Chart.{Fragment, Use, Var}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -218,7 +218,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       typed = Map.get(params, "value") || Map.get(params, "#{field}.add") || ""
 
       with %{key: key, type: {:list, scalar}} <-
-             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
            {:ok, item} <- Editor.parse(scalar, typed) do
         list = if(is_map(node), do: Map.get(node, key, []), else: []) ++ [item]
         {:noreply, socket |> update_layer(entry.path, key, {:ok, list}) |> assign(:notice, nil)}
@@ -232,7 +232,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{entry: entry, editing: node} = editing(socket.assigns)
 
       with %{key: key, type: {:list, _}} <-
-             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
            list when is_list(list) <- is_map(node) && Map.get(node, key) do
         rest = List.delete_at(list, position(index))
         write = if rest == [], do: :error, else: {:ok, rest}
@@ -348,7 +348,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp picked(socket, entry, field, params) do
       %{editing: node} = editing(socket.assigns)
 
-      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
         %{key: key, type: {:list, _}} ->
           ticked =
             params |> Map.get(field <> ".pick", []) |> List.wrap() |> Enum.map(&String.to_atom/1)
@@ -464,7 +464,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def restacked(socket, change) do
       %{entry: entry, editing: node} = editing(socket.assigns)
 
-      case Schema.key(entry.kind, :style) do
+      case FormSchema.key(entry.kind, :style) do
         nil ->
           socket
 

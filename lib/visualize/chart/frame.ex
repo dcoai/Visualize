@@ -41,6 +41,7 @@ defmodule Visualize.Chart.Frame do
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
   alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
+  alias Visualize.Chart.Style.Parts
   alias Visualize.Chart.Transform.Force
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -242,13 +243,34 @@ defmodule Visualize.Chart.Frame do
       theme: theme,
       styles: styles,
       design_styles: chart.styles,
-      defs: chart.defs,
+      defs: Map.merge(chart.defs, inline_paints(chart, styles)),
       now: now,
       schemas: schemas,
       system: system,
       forces: forces
     }
   end
+
+  # The gradients the design's styles write inline (spec/14 §3.2, D-172), held beside the
+  # declared paints so the frame draws both alike: the named styles, the palette among
+  # them, and every style node written at a site — a mark's and its label's, a label's, an
+  # axis's and a legend's.
+  defp inline_paints(chart, styles) do
+    sites =
+      Enum.flat_map(chart.marks, fn mark ->
+        stack(mark) ++ stack(Map.get(mark, :label))
+      end) ++
+        Enum.flat_map(chart.labels, &stack/1) ++
+        Enum.flat_map(Map.values(chart.frames || %{}), fn frame ->
+          Enum.flat_map(List.wrap(Map.get(frame, :axes)), &stack/1) ++
+            stack(Map.get(frame, :legend))
+        end)
+
+    Parts.inline_paints(Map.values(styles) ++ sites)
+  end
+
+  defp stack(%{style: stack}) when is_map(stack) or is_list(stack), do: List.wrap(stack)
+  defp stack(_node), do: []
 
   @doc "The realised scales by name: the escape hatch (spec/14 §4.3)."
   @spec scales(t()) :: %{atom() => struct()}

@@ -12,7 +12,7 @@ defmodule Visualize.Chart.MigrationTest do
   end
 
   test "a version this library does not write is an error at [:version]" do
-    assert Migration.migrate(%{version: 3}) == {:error, [{[:version], {:newer_schema, 3, 2}}]}
+    assert Migration.migrate(%{version: 4}) == {:error, [{[:version], {:newer_schema, 4, 3}}]}
     assert Migration.migrate(%{version: 0}) == {:error, [{[:version], {:unsupported_version, 0}}]}
     assert Migration.migrate(%{version: "1"}) == {:error, [{[:version], {:type, :integer}}]}
     assert Migration.migrate(%{}) == {:error, [{[:version], :required}]}
@@ -37,7 +37,7 @@ defmodule Visualize.Chart.MigrationTest do
 
     test "decodes typed and migrates: the frame is frames.main, its values atoms, its size gone" do
       assert {:ok, chart} = Visualize.Chart.from_json(Jason.encode!(@v1))
-      assert chart.version == 2
+      assert chart.version == 3
       assert %{kind: :cartesian, scales: %{x: %{kind: :time}}} = chart.frames.main
       assert [%{scale: :x, side: :bottom, ticks: 5}] = chart.frames.main.axes
       refute Map.has_key?(chart.frames.main, :size)

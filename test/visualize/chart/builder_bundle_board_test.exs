@@ -247,13 +247,13 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       bundle = Bundle.export_board(src.store, board(src), :metresis)
       {_m, agent} = to = Memory.start()
 
-      newer = put_in(bundle.provenance.schema, 3)
+      newer = put_in(bundle.provenance.schema, 4)
 
       assert Bundle.import_board(to, %{newer | board: :unreadable}) ==
-               {:error, [{[:provenance, :schema], {:newer_schema, 3, 2}}]}
+               {:error, [{[:provenance, :schema], {:newer_schema, 4, 3}}]}
 
-      assert Bundle.import_board(to, %{bundle | board: %{bundle.board | version: 3}}) ==
-               {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      assert Bundle.import_board(to, %{bundle | board: %{bundle.board | version: 4}}) ==
+               {:error, [{[:version], {:newer_schema, 4, 3}}]}
 
       assert Memory.ids(agent) == []
     end

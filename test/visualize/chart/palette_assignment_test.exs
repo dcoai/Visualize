@@ -30,7 +30,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
   defp design(mark, extra \\ %{}) do
     Map.merge(
       %{
-        version: 2,
+        version: 3,
         sources: %{hosts: %{fields: [:t, :v, :health, :load, :host]}},
         frames: %{
           main: %{

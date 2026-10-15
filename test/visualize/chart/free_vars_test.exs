@@ -205,7 +205,7 @@ defmodule Visualize.Chart.FreeVarsTest do
       }
 
       assert Chart.apply(design, vars: %{opts: %{stroke: Chart.var(:deep)}}) ==
-               {:error, [{[:styles, :s, :stroke], {:undeclared, :var, :deep}}]}
+               {:error, [{[:styles, :s, :stroke, :color], {:undeclared, :var, :deep}}]}
     end
   end
 

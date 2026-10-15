@@ -60,10 +60,15 @@ defmodule Visualize.Chart.Schema do
     :var,
     :theme,
     :style,
-    :curve_opts,
-    :label,
-    :gradient,
+    :paint,
+    :stroke,
+    :font,
+    :text_layout,
+    :effect,
+    :marker,
+    :curve,
     :stop,
+    :label,
     :layout,
     :interaction
   ]
@@ -112,6 +117,10 @@ defmodule Visualize.Chart.Schema do
   @weights [:light, :normal, :medium, :bold]
   @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
   @builtin_styles [:axis, :grid, :label, :title]
+  # The flat style of every earlier version (spec/14 §9, D-172): no design is stored in it,
+  # but the migration reads it by these types and the builder's form edits it until #655.
+  # `:gradient` is the library's kind for a stored paint (spec/14 §19.2), read as a `:paint`.
+  @hidden_kinds [:flat_style, :curve_opts, :gradient]
   @column_types [:time, :number, :category, :text]
 
   @doc "Every node kind of spec/14 §1.2, the design first."
@@ -123,6 +132,7 @@ defmodule Visualize.Chart.Schema do
   def describe(kind) when kind in @design_kinds, do: design_node(kind)
   def describe(kind) when kind in @frame_kinds, do: Frame.describe(kind)
   def describe(kind) when kind in @mark_kinds, do: Mark.describe(kind)
+  def describe(kind) when kind in @hidden_kinds, do: design_node(kind)
 
   def describe(kind) do
     raise ArgumentError, "not a node kind of the design schema: #{inspect(kind)}"
@@ -223,12 +233,13 @@ defmodule Visualize.Chart.Schema do
   end
 
   @doc """
-  The group a key is shown under, or `nil` (spec/14 §14.2).
+  The group a key is shown under, or `nil` (spec/14 §14.2). The flat style the builder's
+  form edits groups its keys; a style in parts is grouped by its parts (D-172).
 
-      iex> Visualize.Chart.Schema.group(:style, :stroke_linecap)
+      iex> Visualize.Chart.Schema.group(:flat_style, :stroke_linecap)
       :stroke
 
-      iex> Visualize.Chart.Schema.group(:style, :extends)
+      iex> Visualize.Chart.Schema.group(:flat_style, :extends)
       nil
   """
   @spec group(atom(), atom()) :: group() | nil
@@ -242,7 +253,7 @@ defmodule Visualize.Chart.Schema do
   @doc """
   The groups a node kind's keys carry, once each, in table order (spec/14 §14.2).
 
-      iex> Visualize.Chart.Schema.groups(:style)
+      iex> Visualize.Chart.Schema.groups(:flat_style)
       [:fill, :stroke, :font, :position, :effects]
 
       iex> Visualize.Chart.Schema.groups(:mark)
@@ -293,7 +304,7 @@ defmodule Visualize.Chart.Schema do
       spec(:vars, {:map, {:node, :var}}, :binding, default: %{}, merge: :union),
       spec(:theme, {:one_of, [:name, {:node, :theme}]}, :style, default: :default),
       spec(:styles, {:map, {:node, :style}}, :style, default: %{}, merge: :union),
-      spec(:defs, {:map, {:node, :gradient}}, :style, default: %{}, merge: :union),
+      spec(:defs, {:map, {:node, :paint}}, :style, default: %{}, merge: :union),
       # The grid the frames are placed on, in place of arithmetic (spec/14 §2.8, #384).
       spec(:layout, {:node, :layout}, :geometry, default: %{}),
       # How the chart behaves beside others on a page: its sync group (spec/14 §2.9, #466).
@@ -341,22 +352,72 @@ defmodule Visualize.Chart.Schema do
 
   defp design_node(:var), do: [spec(:default, :term, :binding)]
 
-  # A paint (spec/14 §2.7): a gradient in the words a person uses; the geometry is derived.
-  defp design_node(:gradient) do
-    [
-      spec(:kind, {:enum, [:linear, :radial]}, :style, required: true),
-      spec(:stops, {:list, {:node, :stop}}, :style, required: true),
-      spec(:angle, :number, :geometry, default: 180, range: {0, 360, 15}),
-      spec(:centre, {:list, :number}, :geometry, default: [0.5, 0.5]),
-      spec(:radius, :number, :geometry, default: 0.5, range: {0, 1, 0.05})
-    ]
+  # A paint (spec/14 §2.7, §3.2, D-172): what an area is filled with or a line drawn with,
+  # in the words a person uses — a type, then a colour or stops and a gradient's geometry,
+  # then an opacity. A `fill`, a `stroke` and a `defs` entry are each one.
+  defp design_node(:paint), do: paint_keys()
+  defp design_node(:gradient), do: paint_keys()
+
+  # A stroke is a paint with the line it draws.
+  defp design_node(:stroke) do
+    paint_keys() ++
+      [
+        spec(:width, :size, :style, range: {0, 20, 0.5}),
+        spec(:dash, {:one_of, [:string, {:list, :number}]}, :style),
+        spec(:join, {:enum, [:miter, :round, :bevel]}, :style),
+        spec(:cap, {:enum, [:butt, :round, :square]}, :style),
+        spec(:placement, {:enum, [:center, :inside, :outside, :double]}, :style)
+      ]
   end
 
   defp design_node(:stop) do
     [
-      spec(:offset, :number, :style, required: true, range: {0, 1, 0.05}),
-      spec(:colour, :colour, :style, required: true),
+      spec(:at, :number, :style, required: true, range: {0, 1, 0.05}),
+      spec(:color, :colour, :style, required: true),
       spec(:opacity, :size, :style, default: 1, range: {0, 1, 0.05})
+    ]
+  end
+
+  defp design_node(:font) do
+    [
+      spec(:family, :font, :style),
+      spec(:size, :size, :style, range: {6, 72, 1}),
+      spec(:weight, {:one_of, [:integer, {:enum, @weights}]}, :style),
+      spec(:style, {:enum, [:normal, :italic]}, :style),
+      spec(:line_height, :number, :style, range: {0.8, 3, 0.1})
+    ]
+  end
+
+  # Where a text sits on its point (spec/14 §6.3, §5.5): the flat keys' `text_anchor`,
+  # `vertical_align`, `margin_x`/`margin_y` and `text_angle`.
+  defp design_node(:text_layout) do
+    [
+      spec(:anchor, {:enum, [:start, :middle, :end]}, :style),
+      spec(:baseline, {:enum, [:top, :middle, :baseline, :bottom]}, :style),
+      spec(:offset, {:list, :number}, :style),
+      spec(:angle, :number, :style, range: {-180, 180, 5})
+    ]
+  end
+
+  defp design_node(:effect) do
+    [
+      spec(:type, {:enum, [:none, :shadow, :blur]}, :style),
+      spec(:radius, :size, :style, range: {0, 20, 0.5})
+    ]
+  end
+
+  defp design_node(:marker) do
+    [
+      spec(:shape, {:enum, @symbol_types}, :style),
+      spec(:size, :size, :style)
+    ]
+  end
+
+  defp design_node(:curve) do
+    [
+      spec(:type, {:enum, @curve_types}, :style),
+      spec(:tension, :number, :style),
+      spec(:alpha, :number, :style)
     ]
   end
 
@@ -385,7 +446,26 @@ defmodule Visualize.Chart.Schema do
     ]
   end
 
+  # A style in its parts (spec/14 §3.1, D-172).
   defp design_node(:style) do
+    [
+      spec(:extends, {:ref, :style}, :style),
+      spec(:fill, {:node, :paint}, :style),
+      spec(:stroke, {:node, :stroke}, :style),
+      spec(:font, {:node, :font}, :style),
+      spec(:text, {:node, :text_layout}, :style),
+      spec(:effect, {:node, :effect}, :style),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:blend, {:enum, @blends}, :style),
+      spec(:marker, {:node, :marker}, :style),
+      spec(:curve, {:node, :curve}, :style),
+      spec(:class, :string, :style)
+    ]
+  end
+
+  # The flat style every earlier version wrote, one key per element attribute (spec/14 §9,
+  # D-172), in the groups the builder's form shows them in.
+  defp design_node(:flat_style) do
     [
       spec(:extends, {:ref, :style}, :style),
       spec(:fill, :colour, :style, group: :fill),
@@ -443,6 +523,22 @@ defmodule Visualize.Chart.Schema do
       spec(:rotate, Mark.rotate_type(), :geometry),
       spec(:id, :name, :content),
       spec(:frame, {:ref, :frame}, :binding)
+    ]
+  end
+
+  # A paint's keys: `type` decides which of the others it reads — a colour for `:solid`,
+  # stops and geometry for `:linear` and `:radial`, a `defs` name for `:paint` — and
+  # `opacity` is every type's. `:none` is no paint.
+  defp paint_keys do
+    [
+      spec(:type, {:enum, [:none, :solid, :linear, :radial, :paint]}, :style),
+      spec(:color, :colour, :style),
+      spec(:stops, {:list, {:node, :stop}}, :style),
+      spec(:angle, :number, :geometry, default: 180, range: {0, 360, 15}),
+      spec(:center, {:list, :number}, :geometry, default: [0.5, 0.5]),
+      spec(:radius, :number, :geometry, default: 0.5, range: {0, 1, 0.05}),
+      spec(:name, {:ref, :paint}, :style),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05})
     ]
   end
 end

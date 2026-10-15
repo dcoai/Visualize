@@ -57,6 +57,37 @@ release it merely follows.
 
 ### Changed
 
+- **A style is written in compound parts; designs are schema version 3** (#657, #649, D-172).
+  A style holds `fill`, `stroke`, `font`, `text`, `effect`, `marker` and `curve` as parts, beside
+  `opacity`, `blend` and `class`:
+  `%{fill: %{type: :solid, color: :bad, opacity: 0.8}, stroke: %{color: :bad, width: 2, dash: [4, 2]}, font: %{size: 12, weight: :bold}}`.
+  `fill` and `stroke` are paints — `type` `:none`, `:solid`, `:linear`, `:radial` or `:paint`
+  (a gradient under `defs`) — so a gradient can now be written in place:
+  `fill: %{type: :linear, color: [:series_1, "#fff"], angle: 90}`. Short forms still work
+  (`fill: :red`, `fill: :none`, `fill: {:paint, :fade}`, `curve: :step`). `extends:` and a
+  stack merge a part key by key, so `%{extends: :warning, stroke: %{width: 3}}` keeps the
+  warning stroke's colour and dash; a part whose `type` changes is replaced, keeping its
+  opacity and a stroke's line. **Nothing to migrate**: the flat keys of earlier versions
+  (`stroke_width`, `fill_opacity`, `font_size`, `symbol`, `curve_opts`, …) are read as the parts
+  they mean everywhere a style is read — a stored design, JSON, a design built in your code, a
+  theme's `styles:`, `Visualize.Chart.Build.style/3` — and the 2 → 3 migration rewrites stored
+  designs. Gradients under `defs` take the same words: `type`, `center`, and stops of
+  `%{at, color, opacity}` (`kind`, `centre`, `offset` and `colour` are read as these).
+  `Visualize.Chart.Build.gradient/3` writes them. Charts render as before; a declared
+  gradient's SVG id prefix changes once, being a hash of `defs`.
+- **The theme palette is written in parts, and gains modifiers** (#657, D-172).
+  `Visualize.Theme.style/2` answers an entry in parts (`%{stroke: %{width: 2}}` for
+  `:selected`). New palette names `:bold`, `:italic`, `:thin`, `:thick`, `:dashed`, `:dotted`
+  and `:outline` each change one thing, to stack on a look: `style: [:bad, :outline]` is the
+  bad look's dashed outline with no fill. A role's cue is `:cue` on `stroke.dash` and
+  `marker.shape`; contract messages name the part (`fill.color must be :bad or absent`).
+- **New in `Visualize.Chart.Style`**: `normalize/1` (any spelling to the stored parts),
+  `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
+  `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and
+  `flat_type/1`; boards, themes and fragments are stamped version 3, and a version 2 document
+  still reads. A validation fault in a flat key is reported at the part it means:
+  `stroke_width: "thick"` at `[…, :stroke, :width]`.
+
 - **A board's selection is drawn with the palette's `:selected` and `:muted`** (#638, D-171).
   The data that hold the selection are drawn `:selected` and the rest `:muted`, through a field
   entry that ends each data mark's style stack and names the state, so a component restyles its board's selection by declaring

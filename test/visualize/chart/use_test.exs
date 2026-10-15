@@ -401,7 +401,7 @@ defmodule Visualize.Chart.UseTest do
 
     test "a document decomposes into sites, one kind each, and flattens back to itself" do
       document = %{
-        version: 2,
+        version: 3,
         theme: :dark,
         meta: %{name: "Uptime"},
         styles: %{series: %{stroke: "#111"}, faint: %{opacity: 0.4}},

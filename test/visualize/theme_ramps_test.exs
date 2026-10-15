@@ -231,7 +231,7 @@ defmodule Visualize.ThemeRampsTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 2,
+          version: 3,
           sources: %{states: %{fields: [:from, :to, :state]}},
           frames: %{main: %{kind: :cartesian, scales: scales}}
         },
@@ -311,7 +311,7 @@ defmodule Visualize.ThemeRampsTest do
 
   defp status_design(range) do
     %{
-      version: 2,
+      version: 3,
       sources: %{states: %{fields: [:from, :to, :state]}},
       styles: %{by_state: %{fill: {:field, :state}}},
       frames: %{
@@ -370,7 +370,7 @@ defmodule Visualize.ThemeRampsTest do
       end
 
       for fill <- [{:ramp, :heat, 0.3}, {:ramp, :status, 2}] do
-        assert {:error, [{[:styles, :by_state, :fill], {:type, :colour}}]} =
+        assert {:error, [{[:styles, :by_state, :fill, :color], {:type, :colour}}]} =
                  Validator.validate(put_in(design, [:styles, :by_state, :fill], fill))
       end
 

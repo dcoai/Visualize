@@ -452,16 +452,16 @@ defmodule Visualize.Chart.FrameTest do
   describe "paints (spec/14 §2.7, §3.2)" do
     @defs %{
       fade: %{
-        kind: :linear,
+        type: :linear,
         stops: [
-          %{offset: 0, colour: :series_1, opacity: 0.8},
-          %{offset: 1, colour: "#fff", opacity: 0.1}
+          %{at: 0, color: :series_1, opacity: 0.8},
+          %{at: 1, color: "#fff", opacity: 0.1}
         ]
       },
       glow: %{
-        kind: :radial,
-        stops: [%{offset: 0, colour: "#ff0"}, %{offset: 1, colour: "#f00"}],
-        centre: [0.3, 0.4],
+        type: :radial,
+        stops: [%{at: 0, color: "#ff0"}, %{at: 1, color: "#f00"}],
+        center: [0.3, 0.4],
         radius: 0.6
       }
     }
@@ -548,14 +548,63 @@ defmodule Visualize.Chart.FrameTest do
       assert a != b
 
       design = %{
-        version: 2,
+        version: 3,
         defs: @defs,
         styles: %{wash: %{fill: {:paint, :nope}}},
         frames: %{main: %{kind: :cartesian}}
       }
 
       assert Visualize.Chart.Validator.validate(design) ==
-               {:error, [{[:styles, :wash, :fill], {:undeclared, :paint, :nope}}]}
+               {:error, [{[:styles, :wash, :fill, :name], {:undeclared, :paint, :nope}}]}
+    end
+
+    test "a gradient of version 2's words reads as the paint it is (D-172)" do
+      old = %{
+        fade: %{
+          kind: :linear,
+          stops: [
+            %{offset: 0, colour: :series_1, opacity: 0.8},
+            %{offset: 1, colour: "#fff", opacity: 0.1}
+          ]
+        },
+        glow: %{
+          kind: :radial,
+          stops: [%{offset: 0, colour: "#ff0"}, %{offset: 1, colour: "#f00"}],
+          centre: [0.3, 0.4],
+          radius: 0.6
+        }
+      }
+
+      assert painted(old).defs == @defs
+    end
+
+    test "a gradient written inline is drawn from the frame's defs, keyed by what it draws" do
+      fill = %{type: :linear, color: [:series_1, "#fff"], angle: 90, opacity: 0.5}
+      frame = Frame.new(painted(%{}, fill), sources: %{primary: @rows}, size: @size)
+
+      css = Frame.generate(frame, sources: %{primary: @rows}, size: @size)
+      [defs | _] = css.children
+      [gradient] = defs.children
+      assert gradient.type == :linear_gradient
+      assert %{x1: +0.0, y1: 0.5, x2: 1.0, y2: 0.5} = gradient.attrs
+
+      mark = Enum.find(css.children, &(&1.style[:class] == "mark mark-area"))
+      assert mark.style.fill == "url(##{gradient.attrs.id})"
+      assert mark.style.fill_opacity == 0.5
+
+      # The same gradient written twice is one definition; a canvas draws its first stop.
+      twice = painted(%{}, fill) |> Map.update!(:marks, &(&1 ++ &1))
+
+      css =
+        twice
+        |> Frame.new(sources: %{primary: @rows}, size: @size)
+        |> Frame.generate(sources: %{primary: @rows})
+
+      assert [%{children: [_one]} | _] = css.children
+
+      literal = Frame.generate(frame, sources: %{primary: @rows}, resolve: :literal)
+      mark = Enum.find(literal.children, &(&1.style[:class] == "mark mark-area"))
+      assert mark.style.fill == "#3b6fa8"
     end
   end
 
@@ -1484,7 +1533,7 @@ defmodule Visualize.Chart.FrameTest do
       }
 
       chart = Chart.from_map!(old)
-      assert chart.version == 2
+      assert chart.version == 3
       assert chart.frames == %{main: %{kind: :cartesian, margin: %{top: 1}}}
     end
   end

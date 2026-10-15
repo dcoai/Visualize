@@ -11,7 +11,7 @@ defmodule Visualize.Chart.Validator do
 
   ## Examples
 
-      iex> Visualize.Chart.Validator.validate(%{version: 2})
+      iex> Visualize.Chart.Validator.validate(%{version: 3})
       {:error, [{[:frames], :required}]}
       iex> Visualize.Chart.Validator.format({[:marks, 1, :channels, :y], :required})
       "marks[1].channels.y: is required"
@@ -83,10 +83,15 @@ defmodule Visualize.Chart.Validator do
   # The plot's four corners and its centre (spec/14 §6.3, #489).
   @frame_points [:top_left, :top_right, :bottom_left, :bottom_right, :center]
   @not_names [nil, true, false]
+  # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
+  @style_kinds [:style, :paint, :stroke, :font, :text_layout, :effect, :marker, :curve]
 
   @doc "`:ok`, or every fault of the design ordered by path."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
   def validate(map) when is_map(map) and not is_struct(map) do
+    # Read in the shape this library writes: a style's flat keys are its parts (§3.1, §9).
+    map = Migration.parts(map, :design)
+
     case node(:design, map, [], context(map)) ++ cycles(map) ++ Domain.faults(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
@@ -161,9 +166,15 @@ defmodule Visualize.Chart.Validator do
   # required of it; required-ness is a property of the design it is flattened into.
   defp as_kind(kind, body) do
     case Schema.key(:design, kind) do
-      nil when is_map(body) and not is_struct(body) -> node(kind, body, [kind], open_context())
-      nil -> [{[kind], {:type, {:node, kind}}}]
-      spec -> check_key(:design, spec, body, [kind], open_context())
+      nil when is_map(body) and not is_struct(body) ->
+        node(kind, Migration.parts(body, kind), [kind], open_context())
+
+      nil ->
+        [{[kind], {:type, {:node, kind}}}]
+
+      spec ->
+        body = Map.fetch!(Migration.parts(%{kind => body}, :design), kind)
+        check_key(:design, spec, body, [kind], open_context())
     end
   end
 
@@ -700,7 +711,7 @@ defmodule Visualize.Chart.Validator do
 
   # A style value may be a channel binding for any key (spec/14 §3.2); the version must
   # be the one this library writes (spec/14 §9).
-  defp check_key(:style, _spec, {:field, _} = ref, path, ctx),
+  defp check_key(kind, _spec, {:field, _} = ref, path, ctx) when kind in @style_kinds,
     do: check(:field_ref, ref, path, ctx)
 
   defp check_key(:design, %{key: :version}, v, path, _ctx) when is_integer(v) do
@@ -709,6 +720,18 @@ defmodule Visualize.Chart.Validator do
       v > Migration.current() -> [{path, {:newer_schema, v, Migration.current()}}]
       true -> [{path, {:unsupported_version, v}}]
     end
+  end
+
+  # A paint under `defs` is a gradient (spec/14 §2.7, D-172): its `type` and `stops` are
+  # required there, where a part of a style may leave them to what it is laid on.
+  defp check_key(:design, %{key: :defs} = spec, defs, path, ctx)
+       when is_map(defs) and not is_struct(defs) do
+    gradients =
+      for {name, paint} <- defs, is_map(paint) and not is_struct(paint), at = path ++ [name] do
+        gradient(paint, at)
+      end
+
+    check(spec.type, defs, path, ctx) ++ List.flatten(gradients)
   end
 
   # A theme needs at least one series colour (spec/08 §7.2).
@@ -885,6 +908,32 @@ defmodule Visualize.Chart.Validator do
   defp check(:boolean, v, _path, _ctx) when is_boolean(v), do: []
   defp check(:string, v, _path, _ctx) when is_binary(v), do: []
   defp check(type, _v, path, _ctx), do: [{path, {:type, type}}]
+
+  # A declared paint's own faults beside its keys' types: no type, a type that is not a
+  # gradient, no stops (spec/14 §2.7). A variable stands for what application gives.
+  defp gradient(paint, path) do
+    type =
+      case Map.fetch(paint, :type) do
+        :error ->
+          [{path ++ [:type], :required}]
+
+        {:ok, %Var{}} ->
+          []
+
+        {:ok, t} when t in [:linear, :radial] ->
+          []
+
+        # A paint's other types are named here; anything else is the paint's own enum fault.
+        {:ok, t} when t in [:none, :solid, :paint] ->
+          [{path ++ [:type], {:enum, [:linear, :radial]}}]
+
+        {:ok, _other} ->
+          []
+      end
+
+    stops = if Map.has_key?(paint, :stops), do: [], else: [{path ++ [:stops], :required}]
+    type ++ stops
+  end
 
   defp text_part(part, _path, _ctx) when is_binary(part), do: []
   defp text_part(%Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)

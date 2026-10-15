@@ -25,11 +25,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Writes, only: [at: 2, owned: 3, pool: 1]
 
     alias Visualize.{Chart, Theme}
-    alias Visualize.Chart.{Fragment, Schema, Use, Validator}
+    alias Visualize.Chart.{Fragment, Use, Validator}
 
     alias Visualize.Chart.Builder.{
       Axes,
       Editor,
+      FormSchema,
       Modes,
       Palette,
       Preview,
@@ -204,7 +205,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       spec =
         field &&
           Enum.find(
-            Schema.describe(entry.kind),
+            FormSchema.describe(entry.kind),
             &(to_string(&1.key) == field and &1.type == :colour)
           )
 
@@ -231,7 +232,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       with {index, ""} <- Integer.parse(i),
            {:paint, name} <- is_map(node) && Map.get(node, :fill),
            %{stops: stops} when is_list(stops) <- get_in(design, [:defs, name]),
-           %{colour: colour} <- Enum.at(stops, index) do
+           %{color: colour} <- Enum.at(stops, index) do
         %{colour: colour}
       else
         _other -> nil
@@ -497,7 +498,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp style_site(entry, node) do
-      case Schema.key(entry.kind, :style) do
+      case FormSchema.key(entry.kind, :style) do
         nil ->
           nil
 

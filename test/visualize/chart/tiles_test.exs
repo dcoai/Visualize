@@ -38,7 +38,7 @@ defmodule Visualize.Chart.TilesTest do
   # A basemap under a track, the view fitted to the track; the track is declared first.
   defp design(marks \\ nil, projection \\ nil) do
     %{
-      version: 2,
+      version: 3,
       sources: %{track: %{fields: [:lon, :lat]}},
       frames: %{
         main: %{

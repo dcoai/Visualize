@@ -302,14 +302,23 @@ Contract: [spec/14 §4.4](https://github.com/dcoai/Visualize/blob/main/spec/14-d
 
 A colour, a font or a curve lives in a **style** and nowhere else. `style/2` declares a
 named style under `styles`, and a mark, axis, legend or label refers to it with
-`style:`. A style value can be a literal (`"#3b6fa8"`, `2`), a **theme slot**
-(`:series_1`, `:axis`, `:background`, `:font_size`), `{:field, f}` read per datum (a
-colour through the `color` scale), a variable, a gradient (`paint/1` of a `gradient/3`),
-or `:contrast` for text that stays readable on whatever it sits on.
+`style:`. A style is written in **parts**: `fill` and `stroke` (each a paint: a `type`,
+then a `color` or gradient stops, then an `opacity`; a stroke adds its `width`, `dash`,
+`join`, `cap` and `placement`), `font`, `text`, `effect`, `marker` and `curve`, beside
+`opacity`, `blend` and `class` for the whole element. `fill: :series_1` is short for
+`fill: %{type: :solid, color: :series_1}`, and `:none` is no paint. A value inside a part
+can be a literal (`"#3b6fa8"`, `2`), a **theme slot** (`:series_1`, `:axis`,
+`:background`, `:font_size`), `{:field, f}` read per datum (a colour through the `color`
+scale), a variable, or `:contrast` for text that stays readable on whatever it sits on. A
+fill can be a gradient written in place (`%{type: :linear, color: [a, b]}`) or one declared
+once with `gradient/3` and named with `paint/1`.
 
 - `extends:` derives one style from another, such as a built-in (`:axis`, `:grid`,
-  `:label`, `:title`).
-- `style: [:series, :emphasis]` stacks styles at one site, the later winning.
+  `:label`, `:title`). The parent's parts are kept key by key: `%{extends: :axis, stroke:
+  %{width: 2}}` keeps the axis stroke's colour.
+- `style: [:series, :emphasis]` stacks styles at one site, the later winning, part by part.
+  The theme's modifiers (`:bold`, `:italic`, `:thin`, `:thick`, `:dashed`, `:dotted`,
+  `:outline`) each change one thing, to stack on a look: `[:bad, :outline]`.
 - `theme/1` names the theme (`:default` or `:dark`) or gives one inline. Slots render as CSS
   custom properties in SVG (`var(--vis-series-1, …)`), so a stylesheet can re-theme a page,
   and as literal colours on a canvas.
@@ -322,8 +331,8 @@ import Visualize.Chart.Build
     chart(),
     theme(:dark),
     source(:uptime, [:t, :v]),
-    style(:series, stroke: :series_2, stroke_width: 2, curve: :monotone_x),
-    style(:heavy_title, extends: :title, font_size: 20),
+    style(:series, stroke: %{color: :series_2, width: 2}, curve: :monotone_x),
+    style(:heavy_title, extends: :title, font: %{size: 20}),
     gradient(:fade, :linear, stops: [{0, :series_2, 0.6}, {1, :series_2, 0}]),
     style(:under, fill: paint(:fade), stroke: :none),
     cartesian(),
@@ -421,12 +430,12 @@ events = [
     line(:load, %{x: :t, y: :v, series: :host}),
     rule(filter(from(:events), :ends, test: :absent), %{x: :at},
       scales: %{color: :severity},
-      style: %{stroke: {:field, :severity}, stroke_dasharray: [3, 3]},
+      style: %{stroke: %{color: {:field, :severity}, dash: [3, 3]}},
       label: %{text: "\#{field(:title)}"}
     ),
     x_band(filter(from(:events), :ends, test: :present), %{x0: :at, x1: :ends},
       scales: %{color: :severity},
-      style: %{fill: {:field, :severity}, fill_opacity: 0.15}
+      style: %{fill: %{color: {:field, :severity}, opacity: 0.15}}
     ),
     rule(:limits, %{y: :value}, scales: %{color: :severity}, style: %{stroke: {:field, :severity}})
   ])
@@ -474,12 +483,12 @@ There are two ways to merge fragments, and they differ on purpose:
 ```elixir
 import Visualize.Chart.Build
 
-{:ok, house} = Visualize.Chart.compose([theme(:dark), style(:series, stroke_width: 1)])
-{:ok, panel} = Visualize.Chart.compose([style(:series, stroke_width: 3), axis(:x, :bottom, ticks: 8)])
+{:ok, house} = Visualize.Chart.compose([theme(:dark), style(:series, stroke: %{width: 1})])
+{:ok, panel} = Visualize.Chart.compose([style(:series, stroke: %{width: 3}), axis(:x, :bottom, ticks: 8)])
 
 # The union refuses the second :series; the cascade takes the higher layer's word.
 {:error, [{[:styles, :series], :conflict}]} = Visualize.Chart.compose(house, panel)
-%{stroke_width: 3} = Visualize.Chart.stack([house, panel]).styles.series
+%{stroke: %{width: 3}} = Visualize.Chart.stack([house, panel]).styles.series
 
 Visualize.Chart.explain([{:house, house}, {:panel, panel}])
 ```
@@ -511,7 +520,7 @@ through any lookup function into a flat design:
 ```elixir
 alias Visualize.Chart.Use
 
-store = %{{:design, 1} => design, {:style, 1} => %{styles: %{series: %{stroke_width: 4}}}}
+store = %{{:design, 1} => design, {:style, 1} => %{styles: %{series: %{stroke: %{width: 4}}}}}
 uses = [Use.new({:design, 1}), %Use{id: {:use, 2}, ref: {:style, 1}}]
 composite = %{composite: %{uses: uses, vars: %{}}}
 

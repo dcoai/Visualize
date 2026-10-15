@@ -2734,10 +2734,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert defs_of(s) == %{
                series_fill: %{
-                 kind: :linear,
+                 type: :linear,
                  stops: [
-                   %{offset: 0, colour: "#abcdef", opacity: 0.8},
-                   %{offset: 1, colour: "#abcdef", opacity: 0.1}
+                   %{at: 0, color: "#abcdef", opacity: 0.8},
+                   %{at: 1, color: "#abcdef", opacity: 0.1}
                  ]
                }
              }
@@ -2816,8 +2816,8 @@ defmodule Visualize.Chart.BuilderTest do
       assert gradient.angle == 90
 
       assert gradient.stops == [
-               %{offset: 0, colour: "#123456", opacity: 0.8},
-               %{offset: 1, colour: :axis, opacity: 0.1}
+               %{at: 0, color: "#123456", opacity: 0.8},
+               %{at: 1, color: :axis, opacity: 0.1}
              ]
 
       # A stop well selected opens the chooser on that stop.
@@ -2831,7 +2831,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, radial} =
         Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "radial"}, s)
 
-      assert defs_of(radial).series_fill.kind == :radial and
+      assert defs_of(radial).series_fill.type == :radial and
                defs_of(radial).series_fill.stops == gradient.stops
 
       {:noreply, radial} =
@@ -2841,7 +2841,7 @@ defmodule Visualize.Chart.BuilderTest do
           radial
         )
 
-      assert defs_of(radial).series_fill.centre == [0.5, 0.25]
+      assert defs_of(radial).series_fill.center == [0.5, 0.25]
       assert BuilderFixture.render(radial) =~ ~s(name="fill.centre.y")
 
       {:noreply, solid} =
@@ -2879,7 +2879,7 @@ defmodule Visualize.Chart.BuilderTest do
       [style, gradient] = s.assigns.uses
       assert style.local == %{style: %{stroke: "#000", fill: {:paint, :thick_fill}}}
       assert gradient.key == :thick_fill
-      assert gradient.local.gradient.kind == :linear
+      assert gradient.local.gradient.type == :linear
       assert s.assigns.labels[gradient.id] == "gradient thick_fill"
 
       {:noreply, s} =
@@ -3351,7 +3351,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a tab of another layer's root is marked too, since the need is the design's", %{} do
       layers = [
-        {:house, %{version: 2, frames: %{main: %{kind: :cartesian}}}},
+        {:house, %{version: 3, frames: %{main: %{kind: :cartesian}}}},
         {:panel, %{marks: [%{id: :m, type: :line}]}}
       ]
 
@@ -3719,8 +3719,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert BuilderFixture.layers(s) ==
                [
-                 {"House", %{version: 2, frames: %{main: %{kind: :cartesian}}}},
-                 {"1", %{version: 2, frames: %{main: %{kind: :cartesian}}}}
+                 {"House", %{version: 3, frames: %{main: %{kind: :cartesian}}}},
+                 {"1", %{version: 3, frames: %{main: %{kind: :cartesian}}}}
                ]
     end
   end
@@ -5762,7 +5762,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
       assert BuilderFixture.layers(linked) ==
-               layers ++ [{"baseline", %{version: 2, frames: %{main: %{kind: :cartesian}}}}]
+               layers ++ [{"baseline", %{version: 3, frames: %{main: %{kind: :cartesian}}}}]
 
       assert %Use{ref: {:composite, 1}} = List.last(linked.assigns.uses)
       assert linked.assigns.notice == nil
@@ -5773,7 +5773,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The group reads as what it flattens to, a design-level composite's version with it.
       assert BuilderFixture.layers(added) ==
-               layers ++ [{"baseline", %{version: 2, frames: %{main: %{kind: :cartesian}}}}]
+               layers ++ [{"baseline", %{version: 3, frames: %{main: %{kind: :cartesian}}}}]
 
       group = List.last(added.assigns.uses)
       assert Stack.group?(group)

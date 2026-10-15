@@ -1,9 +1,11 @@
 defmodule Visualize.Chart.Frame.Defs do
   @moduledoc false
   # The frame's `defs` (spec/14 §2.7, §3.2): one element first in the frame's group
-  # holding every gradient the design declares and one filter per effect the tree uses,
-  # and every `{:paint, name}` in the tree's styles resolved — `url(#id)` for the SVG
-  # output, the first stop's colour for a canvas.
+  # holding every gradient the design declares or a style writes inline, and one filter
+  # per effect the tree uses, and every `{:paint, name}` in the tree's styles resolved —
+  # `url(#id)` for the SVG output, the first stop's colour for a canvas. A gradient written
+  # inline is held under the name `Visualize.Chart.Style.Parts.paint_name/1` gives it, a
+  # string, beside the declared ones (D-172).
 
   alias Visualize.Chart.{Schema, Style, Var}
   alias Visualize.IR.Element
@@ -86,7 +88,7 @@ defmodule Visualize.Chart.Frame.Defs do
   @doc false
   # A paint's colour as a canvas draws it — its first stop's, a literal (spec/14 §3.2) — for
   # what reads the colour an element is filled with (§5.5); `nil` for an undeclared name.
-  @spec literal(atom(), map()) :: String.t() | nil
+  @spec literal(atom() | String.t(), map()) :: String.t() | nil
   def literal(name, %{defs: defs, theme: theme}) do
     case Map.fetch(defs, name) do
       {:ok, node} ->
@@ -104,15 +106,15 @@ defmodule Visualize.Chart.Frame.Defs do
     stops =
       for stop <- stops(node) do
         Element.stop(
-          "#{round(Map.fetch!(stop, :offset) * 100)}%",
+          "#{round(Map.fetch!(stop, :at) * 100)}%",
           Style.colour(colour(stop), theme, mode),
           opacity: Map.get(stop, :opacity, Schema.default(:stop, :opacity))
         )
       end
 
-    case Map.fetch!(node, :kind) do
+    case Map.fetch!(node, :type) do
       :linear ->
-        angle = Map.get(node, :angle, Schema.default(:gradient, :angle)) * :math.pi() / 180
+        angle = Map.get(node, :angle, Schema.default(:paint, :angle)) * :math.pi() / 180
         {sx, cx} = {:math.sin(angle) / 2, :math.cos(angle) / 2}
 
         id
@@ -126,8 +128,8 @@ defmodule Visualize.Chart.Frame.Defs do
         |> Element.set_attrs(%{gradient_units: "objectBoundingBox"})
 
       :radial ->
-        [cx, cy] = Map.get(node, :centre, Schema.default(:gradient, :centre))
-        r = Map.get(node, :radius, Schema.default(:gradient, :radius))
+        [cx, cy] = Map.get(node, :center, Schema.default(:paint, :center))
+        r = Map.get(node, :radius, Schema.default(:paint, :radius))
 
         id
         |> Element.radial_gradient(cx: cx, cy: cy, r: r, fx: cx, fy: cy, stops: stops)
@@ -138,12 +140,12 @@ defmodule Visualize.Chart.Frame.Defs do
   defp stops(node) do
     case Map.fetch!(node, :stops) do
       %Var{name: name} -> Style.unresolved!(name)
-      stops -> Enum.sort_by(stops, &Map.fetch!(&1, :offset))
+      stops -> Enum.sort_by(stops, &Map.fetch!(&1, :at))
     end
   end
 
   defp colour(stop) do
-    case Map.fetch!(stop, :colour) do
+    case Map.fetch!(stop, :color) do
       %Var{name: name} -> Style.unresolved!(name)
       colour -> colour
     end
@@ -159,6 +161,6 @@ defmodule Visualize.Chart.Frame.Defs do
   def prefix(defs), do: defs |> :erlang.phash2() |> Integer.to_string(36) |> String.downcase()
 
   @doc false
-  @spec id(String.t(), atom()) :: String.t()
+  @spec id(String.t(), atom() | String.t()) :: String.t()
   def id(prefix, name), do: "vis-paint-#{prefix}-#{name}"
 end

@@ -1464,9 +1464,9 @@ defmodule Visualize.Chart.MarkTest do
         )
 
       {:ok, json} = Chart.to_json(chart)
-      assert json =~ ~s("fill":"contrast")
+      assert json =~ ~s("fill":{"color":"contrast","type":"solid"})
       assert {:ok, back} = Chart.from_json(json)
-      assert back.styles.ink.fill == :contrast
+      assert back.styles.ink.fill == %{type: :solid, color: :contrast}
 
       # A built-in theme, whose slots the validator checks, accepts it: it is not a slot.
       on_dark = fn fill ->

@@ -74,11 +74,11 @@ defmodule Visualize.Chart.ThemeDocumentTest do
 
   describe "reading under the version policy (§9.1)" do
     test "a newer document is refused by name before a key is read" do
-      assert Document.from_map(%{version: 3, theme: %{nonsense: 1}}) ==
-               {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      assert Document.from_map(%{version: 4, theme: %{nonsense: 1}}) ==
+               {:error, [{[:version], {:newer_schema, 4, 3}}]}
 
-      assert Document.from_json(~s({"$version": 3, "theme": {"never_an_atom_4c1": 1}})) ==
-               {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      assert Document.from_json(~s({"$version": 4, "theme": {"never_an_atom_4c1": 1}})) ==
+               {:error, [{[:version], {:newer_schema, 4, 3}}]}
     end
 
     test "an older document migrates" do
@@ -144,7 +144,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
   describe "Fragment.read_json/2" do
     test "returns the stamp, and the current version for an unstamped document" do
       assert Fragment.read_json(~s({"$version": 1, "theme": {}})) == {:ok, %{theme: %{}}, 1}
-      assert Fragment.read_json(~s({"theme": {}})) == {:ok, %{theme: %{}}, 2}
+      assert Fragment.read_json(~s({"theme": {}})) == {:ok, %{theme: %{}}, 3}
     end
   end
 end

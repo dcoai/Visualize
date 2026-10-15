@@ -51,6 +51,7 @@ defmodule Visualize.Chart.Build do
   """
 
   alias Visualize.Chart.{Migration, Schema, Var}
+  alias Visualize.Chart.Style.Parts
 
   @typedoc "A design map carrying the keys one builder function sets (spec/14 §16.1)."
   @type fragment :: %{optional(atom()) => term()}
@@ -114,11 +115,21 @@ defmodule Visualize.Chart.Build do
   @doc """
   One named style under `styles` (spec/14 §3.1).
 
-  `keys` and `opts` are both style keys, `opts` merged over `keys`; every one is checked.
+  `keys` and `opts` are both style keys, `opts` merged over `keys`; every one is checked. A
+  style is written in its parts — `fill:`, `stroke:`, `font:` — or in the flat keys of an
+  earlier version, which are moved into their parts (spec/14 §9, D-172).
+
+      iex> Visualize.Chart.Build.style(:series, stroke: %{color: :series_1, width: 2})
+      %{styles: %{series: %{stroke: %{type: :solid, color: :series_1, width: 2}}}}
+      iex> Visualize.Chart.Build.style(:series, stroke: :series_1, stroke_width: 2)
+      %{styles: %{series: %{stroke: %{type: :solid, color: :series_1, width: 2}}}}
   """
   @spec style(atom(), opts(), opts()) :: fragment()
   def style(name, keys, opts) do
-    %{styles: %{name => node(:style, %{}, Map.merge(Map.new(keys), Map.new(opts)))}}
+    given = Map.merge(Map.new(keys), Map.new(opts))
+    flat = Map.take(given, Parts.flat_keys())
+    node = node(:style, %{}, Map.drop(given, Map.keys(flat)))
+    %{styles: %{name => Parts.normalize(Map.merge(node, flat))}}
   end
 
   @doc "As `gradient/3` with no options."
@@ -126,21 +137,22 @@ defmodule Visualize.Chart.Build do
   def gradient(name, kind), do: gradient(name, kind, [])
 
   @doc """
-  One named paint under `defs` (spec/14 §2.7): a gradient of the kind, `opts` its remaining
-  keys. `stops:` takes `%{offset, colour, opacity}` maps, or `{offset, colour}` and
-  `{offset, colour, opacity}` tuples, which read as the maps.
+  One named paint under `defs` (spec/14 §2.7): a gradient of the type, `opts` its remaining
+  keys. `stops:` takes `%{at, color, opacity}` maps, or `{at, color}` and
+  `{at, color, opacity}` tuples, which read as the maps.
 
       iex> Visualize.Chart.Build.gradient(:area, :linear, stops: [{0, :series_1, 0.8}, {1, :series_1, 0.1}])
-      %{defs: %{area: %{kind: :linear, stops: [%{offset: 0, colour: :series_1, opacity: 0.8}, %{offset: 1, colour: :series_1, opacity: 0.1}]}}}
+      %{defs: %{area: %{type: :linear, stops: [%{at: 0, color: :series_1, opacity: 0.8}, %{at: 1, color: :series_1, opacity: 0.1}]}}}
   """
   @spec gradient(atom(), :linear | :radial, opts()) :: fragment()
-  def gradient(name, kind, opts) do
+  def gradient(name, type, opts) do
     opts = opts |> Map.new() |> Map.update(:stops, [], fn stops -> Enum.map(stops, &stop/1) end)
-    %{defs: %{name => node(:gradient, %{kind: kind}, opts)}}
+    paint = Parts.paint(Map.put(opts, :type, type))
+    %{defs: %{name => node(:paint, %{}, paint)}}
   end
 
-  defp stop({offset, colour}), do: %{offset: offset, colour: colour}
-  defp stop({offset, colour, opacity}), do: %{offset: offset, colour: colour, opacity: opacity}
+  defp stop({at, color}), do: %{at: at, color: color}
+  defp stop({at, color, opacity}), do: %{at: at, color: color, opacity: opacity}
   defp stop(%{} = stop), do: stop
 
   @doc """

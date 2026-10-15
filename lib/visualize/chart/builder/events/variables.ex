@@ -13,8 +13,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Selection, only: [aimed: 2, row_use: 2]
     import Visualize.Chart.Builder.Writes, only: [locked_notice: 2, update_layer: 4]
 
-    alias Visualize.Chart.{Builder, Fragment, Schema, Use}
-    alias Visualize.Chart.Builder.{Editor, Params, Stack, Variables}
+    alias Visualize.Chart.{Builder, Fragment, Use}
+    alias Visualize.Chart.Builder.{Editor, FormSchema, Params, Stack, Variables}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -52,7 +52,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{entry: entry, layers: layers, design: design} = editing(socket.assigns)
 
       with %{key: key, type: type} when type != :text <-
-             Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)),
+             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
            {:ok, var} <- Editor.variable(name),
            :ok <- fits(Variables.list(layers, design), var.name, element(type), key) do
         case type do
@@ -100,7 +100,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       socket = aimed(socket, params)
       %{entry: entry} = editing(socket.assigns)
 
-      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
         nil -> {:noreply, socket}
         %{key: key} -> {:noreply, update_layer(socket, entry.path, key, :error)}
       end
@@ -116,7 +116,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       stop? = String.starts_with?(field, "fill.stop.")
 
-      case Enum.find(Schema.describe(kind), &(to_string(&1.key) == field)) do
+      case Enum.find(FormSchema.describe(kind), &(to_string(&1.key) == field)) do
         %{type: :colour} ->
           control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
           Builder.handle_event(edit, %{"_target" => [control], control => colour}, socket)
@@ -144,7 +144,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       socket = aimed(socket, params)
       %{entry: entry, editing: node, layers: layers, design: design} = editing(socket.assigns)
 
-      case Enum.find(Schema.describe(entry.kind), &(to_string(&1.key) == field)) do
+      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
         %{key: key} when is_map(node) and is_map_key(node, key) ->
           name = fresh_name(key, Variables.list(layers, design))
 
@@ -243,7 +243,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp first_fit(kind, vars, name) do
       typed = Enum.find(vars, &(&1.name == name))
 
-      Enum.find(Schema.describe(kind), fn spec ->
+      Enum.find(FormSchema.describe(kind), fn spec ->
         typed == nil or typed.type == nil or typed.type == spec.type
       end)
     end

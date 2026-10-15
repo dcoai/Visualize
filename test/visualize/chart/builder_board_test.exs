@@ -133,7 +133,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
                {:error, [{[:board, :cells, :latency], {:overlap, :errors}}]}
 
       assert Validator.validate(%{board: %{version: 9}}, :board) ==
-               {:error, [{[:board, :version], {:newer_schema, 9, 2}}]}
+               {:error, [{[:board, :version], {:newer_schema, 9, 3}}]}
     end
 
     test "a board fragment round-trips through the fragment's JSON, its own stamp inside" do
@@ -146,11 +146,11 @@ defmodule Visualize.Chart.BuilderBoardTest do
       fragment = %{board: Board.to_map(board)}
 
       assert {:ok, json} = Fragment.to_json(fragment)
-      assert %{"$version" => 2, "board" => %{"$version" => 2}} = Jason.decode!(json)
+      assert %{"$version" => 3, "board" => %{"$version" => 3}} = Jason.decode!(json)
       assert Fragment.from_json(json) == {:ok, fragment}
 
-      newer = String.replace(json, ~s("board":{"$version":2), ~s("board":{"$version":7))
-      assert Fragment.from_json(newer) == {:error, {:newer_schema, 7, 2}}
+      newer = String.replace(json, ~s("board":{"$version":3), ~s("board":{"$version":7))
+      assert Fragment.from_json(newer) == {:error, {:newer_schema, 7, 3}}
     end
 
     test "the board value round-trips through the store" do

@@ -34,7 +34,7 @@ defmodule Visualize.Chart.LatestTest do
 
   defp design(latest \\ true) do
     %{
-      version: 2,
+      version: 3,
       sources: %{cars: %{fields: [:t, :car, :x, :y]}},
       frames: %{
         main: %{

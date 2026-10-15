@@ -13,7 +13,7 @@ defmodule Visualize.Chart.ValidatorTest do
 
   # Every node kind present once, every reference resolving.
   @full %{
-    version: 2,
+    version: 3,
     meta: %{name: "Full", description: ["all ", var(:unit)]},
     sources: %{primary: %{fields: [:t, :v, :sha], default: :main}, other: %{fields: [:w]}},
     vars: %{unit: %{default: "%"}, accent: %{}},
@@ -31,19 +31,24 @@ defmodule Visualize.Chart.ValidatorTest do
     },
     styles: %{
       series: %{
-        stroke: var(:accent),
-        stroke_width: 2,
-        curve: :catmull_rom,
-        curve_opts: %{alpha: 0.5},
-        fill: {:field, :sha}
+        stroke: %{type: :solid, color: var(:accent), width: 2, dash: [4, 2]},
+        curve: %{type: :catmull_rom, alpha: 0.5},
+        fill: %{type: :solid, color: {:field, :sha}}
       },
-      muted: %{stroke: :axis, opacity: 0.6, font_family: :font_family, symbol: :star},
-      wash: %{fill: {:paint, :fade}}
+      muted: %{
+        stroke: %{type: :solid, color: :axis},
+        opacity: 0.6,
+        font: %{family: :font_family, size: :label_size},
+        marker: %{shape: :star, size: 64},
+        text: %{anchor: :middle, offset: [2, 0]},
+        effect: %{type: :shadow, radius: 3}
+      },
+      wash: %{fill: %{type: :paint, name: :fade}}
     },
     defs: %{
       fade: %{
-        kind: :linear,
-        stops: [%{offset: 0, colour: :series_1, opacity: 0.8}, %{offset: 1, colour: "#fff"}],
+        type: :linear,
+        stops: [%{at: 0, color: :series_1, opacity: 0.8}, %{at: 1, color: "#fff"}],
         angle: 180
       }
     },
@@ -139,9 +144,14 @@ defmodule Visualize.Chart.ValidatorTest do
     var: [:vars, :unit],
     theme: [:theme],
     style: [:styles, :series],
-    gradient: [:defs, :fade],
+    paint: [:defs, :fade],
+    stroke: [:styles, :series, :stroke],
+    curve: [:styles, :series, :curve],
+    font: [:styles, :muted, :font],
+    marker: [:styles, :muted, :marker],
+    text_layout: [:styles, :muted, :text],
+    effect: [:styles, :muted, :effect],
     stop: [:defs, :fade, :stops, 0],
-    curve_opts: [:styles, :series, :curve_opts],
     label: [:labels, 0],
     layout: [:layout],
     interaction: [:interaction],
@@ -199,7 +209,7 @@ defmodule Visualize.Chart.ValidatorTest do
     mark = %{type: type, data: :primary, channels: channels}
 
     %{
-      version: 2,
+      version: 3,
       sources: %{primary: %{fields: [:t]}},
       frames: %{main: %{kind: :cartesian}},
       marks: [mark]
@@ -438,7 +448,7 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "the version must be the current one" do
-      assert errors(Map.put(@full, :version, 3)) == [{[:version], {:newer_schema, 3, 2}}]
+      assert errors(Map.put(@full, :version, 4)) == [{[:version], {:newer_schema, 4, 3}}]
     end
 
     test "an empty theme series is reported" do
@@ -447,7 +457,7 @@ defmodule Visualize.Chart.ValidatorTest do
 
     test "slots resolve against the default theme when none is named" do
       design = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian}},
         styles: %{s: %{opacity: :none}}
       }
@@ -465,7 +475,7 @@ defmodule Visualize.Chart.ValidatorTest do
     # is undeclared, not unchecked — and a design that validates draws.
     test "into a declaring map the design does not have" do
       design = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}]}},
         sources: %{s: %{fields: [:t, :value]}},
         marks: [%{type: :line, data: :s, channels: %{x: :t, y: :value}}]
@@ -474,7 +484,7 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(design) == [{[:frames, :main, :axes, 0, :scale], {:undeclared, :scale, :x}}]
 
       no_sources = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian}},
         marks: [%{type: :line, data: :s}]
       }
@@ -482,7 +492,7 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(no_sources) == [{[:marks, 0, :data], {:undeclared, :source, :s}}]
 
       no_styles = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian}},
         sources: %{s: %{fields: [:t]}},
         marks: [%{type: :line, data: :s, style: :series}]
@@ -491,15 +501,15 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(no_styles) == [{[:marks, 0, :style], {:undeclared, :style, :series}}]
 
       no_defs = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian}},
         styles: %{w: %{fill: {:paint, :g}}}
       }
 
-      assert errors(no_defs) == [{[:styles, :w, :fill], {:undeclared, :paint, :g}}]
+      assert errors(no_defs) == [{[:styles, :w, :fill, :name], {:undeclared, :paint, :g}}]
 
       no_vars = %{
-        version: 2,
+        version: 3,
         frames: %{main: %{kind: :cartesian, margin: Visualize.Chart.var(:size)}}
       }
 
@@ -561,7 +571,7 @@ defmodule Visualize.Chart.ValidatorTest do
     test "variables, wherever they appear" do
       for path <- [
             [:meta, :description, 1],
-            [:styles, :series, :stroke],
+            [:styles, :series, :stroke, :color],
             [:labels, 0, :text, 1],
             [:marks, 1, :label, :text, 0],
             [:marks, 2, :options],
@@ -592,24 +602,31 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "theme slots, against the built-in or inline theme" do
-      assert errors(put_at(@full, [:styles, :muted, :stroke], :nope)) ==
-               [{[:styles, :muted, :stroke], {:undeclared, :slot, :nope}}]
+      assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :nope)) ==
+               [{[:styles, :muted, :stroke, :color], {:undeclared, :slot, :nope}}]
 
-      assert errors(put_at(@full, [:styles, :muted, :stroke], :series_3)) ==
-               [{[:styles, :muted, :stroke], {:undeclared, :slot, :series_3}}]
+      assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :series_3)) ==
+               [{[:styles, :muted, :stroke, :color], {:undeclared, :slot, :series_3}}]
 
-      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke], {:series, 99})) == :ok
-      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke], :series_2)) == :ok
+      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke, :color], {:series, 99})) ==
+               :ok
+
+      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke, :color], :series_2)) ==
+               :ok
 
       dark = put_at(@full, [:theme], :dark)
-      assert Validator.validate(put_at(dark, [:styles, :muted, :stroke], :series_10)) == :ok
 
-      assert errors(put_at(dark, [:styles, :muted, :font_size], :series_11)) ==
-               [{[:styles, :muted, :font_size], {:undeclared, :slot, :series_11}}]
+      assert Validator.validate(put_at(dark, [:styles, :muted, :stroke, :color], :series_10)) ==
+               :ok
+
+      assert errors(put_at(dark, [:styles, :muted, :font, :size], :series_11)) ==
+               [{[:styles, :muted, :font, :size], {:undeclared, :slot, :series_11}}]
 
       # A theme the validator does not know leaves slots to application.
       house = put_at(@full, [:theme], :house)
-      assert Validator.validate(put_at(house, [:styles, :muted, :stroke], :anything)) == :ok
+
+      assert Validator.validate(put_at(house, [:styles, :muted, :stroke, :color], :anything)) ==
+               :ok
     end
   end
 
@@ -638,7 +655,7 @@ defmodule Visualize.Chart.ValidatorTest do
                "frames.main.kind: must be one of :cartesian, :polar"
 
       assert Validator.format({[:version], {:unsupported_version, 2}}) ==
-               "version: version 2 is not supported; the current version is 2"
+               "version: version 2 is not supported; the current version is 3"
 
       assert Validator.format({[:marks, 0, :options, :radius], {:invalid_for, :line}}) ==
                "marks[0].options.radius: is not read by :line"
@@ -658,7 +675,7 @@ defmodule Visualize.Chart.ValidatorTest do
 
   describe "extends (spec/14 §3.5)" do
     defp with_styles(styles) do
-      %{version: 2, styles: styles, frames: %{main: %{kind: :cartesian}}}
+      %{version: 3, styles: styles, frames: %{main: %{kind: :cartesian}}}
     end
 
     test "a chain of three validates and a built-in parent resolves" do
@@ -700,7 +717,7 @@ defmodule Visualize.Chart.ValidatorTest do
     defp synced(x, extra \\ %{}) do
       Map.merge(
         %{
-          version: 2,
+          version: 3,
           interaction: %{sync: "dash"},
           frames: %{main: %{kind: :cartesian, scales: x}}
         },
@@ -738,7 +755,7 @@ defmodule Visualize.Chart.ValidatorTest do
         c: %{kind: :cartesian, scales: %{x: %{kind: :time}}}
       }
 
-      design = %{version: 2, interaction: %{sync: "dash"}, frames: frames}
+      design = %{version: 3, interaction: %{sync: "dash"}, frames: frames}
       assert errors(design) == [{[:interaction, :sync], {:sync, :x_scale, :band}}]
       assert Validator.validate(put_at(design, [:interaction, :frame], :b)) == :ok
 
@@ -748,7 +765,7 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "no sync, no check" do
-      assert Validator.validate(%{version: 2, frames: %{main: %{kind: :polar}}}) == :ok
+      assert Validator.validate(%{version: 3, frames: %{main: %{kind: :polar}}}) == :ok
     end
   end
 end

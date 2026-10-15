@@ -9,7 +9,7 @@ defmodule Visualize.Chart.AxisMeasureTest do
 
   defp design(axis, opts \\ []) do
     %{
-      version: 2,
+      version: 3,
       sources: %{primary: %{fields: [:n, :v]}},
       labels: Keyword.get(opts, :labels, []),
       frames: %{

@@ -81,7 +81,7 @@ defmodule Visualize.Chart do
     :labels
   ]
 
-  defstruct version: 2,
+  defstruct version: 3,
             meta: %{},
             sources: %{},
             vars: %{},
@@ -165,8 +165,8 @@ defmodule Visualize.Chart do
   its inputs and holds the number. Raises `ArgumentError` for a name that is not a limit
   or a value that is not a positive integer.
 
-      iex> Visualize.Chart.from_map(%{version: 3, frames: %{main: %{}}})
-      {:error, [{[:version], {:newer_schema, 3, 2}}]}
+      iex> Visualize.Chart.from_map(%{version: 4, frames: %{main: %{}}})
+      {:error, [{[:version], {:newer_schema, 4, 3}}]}
   """
   @spec from_map(term(), keyword()) :: {:ok, t()} | {:error, [Validator.error(), ...]}
   def from_map(map, opts \\ []) do
