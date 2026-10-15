@@ -301,6 +301,11 @@ defmodule Visualize.Chart.Validator.Words do
       "contrast() — a transform of colors with every number in 0..1, or a paint"
   end
 
+  defp type_words(:theme_colour),
+    do:
+      type_words(:colour) <>
+        ", or a map of pinned steps, an integer in 0..1000 to a colour string"
+
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"
   defp type_words(:size), do: "a number or a theme slot"
   defp type_words(:font), do: "a font string or a theme slot"

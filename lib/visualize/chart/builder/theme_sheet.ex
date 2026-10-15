@@ -201,7 +201,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         Map.merge(
           default.colors,
           Map.filter(theme.colors || %{}, fn {_name, value} ->
-            colour?(value) or (not is_binary(value) and Visualize.Color.value?(value))
+            colour?(value) or (not is_binary(value) and Visualize.Color.value?(value)) or
+              pinned?(value)
           end)
         )
 
@@ -235,6 +236,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp literals(_theme, other), do: other
 
     defp colour?(value), do: Themes.readable?(value)
+
+    # A name's pinned steps that all read, step 500 among them (spec/08 §7.1, #667).
+    defp pinned?(%{500 => _} = steps) when not is_struct(steps),
+      do: Enum.all?(steps, fn {n, c} -> is_integer(n) and colour?(c) end)
+
+    defp pinned?(_value), do: false
 
     @doc """
     The fixed samples (spec/14 §20.3), each `%{id, title, design, sources}`: categorical

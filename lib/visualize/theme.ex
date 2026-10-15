@@ -629,6 +629,7 @@ defmodule Visualize.Theme do
       case lookup(theme, name) do
         literal when is_binary(literal) -> literal
         {:color, _} = next -> anchor_literal(theme, next, [name | seen])
+        %{500 => base} when is_binary(base) -> base
         _other -> nil
       end
     end
@@ -828,10 +829,26 @@ defmodule Visualize.Theme do
       for slot <-
             slots(theme) ++ ((own_colors(theme) |> Map.keys() |> Enum.sort()) -- slots(theme)) do
         {kind, value} = value(theme, slot)
-        "  #{property(slot)}: #{css_value(kind, value)};"
+        ["  #{property(slot)}: #{css_value(kind, value)};" | pinned_lines(theme, slot)]
       end
 
-    ".vis-theme-#{name} {\n" <> Enum.join(lines, "\n") <> "\n}\n" <> forced_colors(name)
+    ".vis-theme-#{name} {\n" <>
+      Enum.join(List.flatten(lines), "\n") <>
+      "\n}\n" <>
+      forced_colors(name)
+  end
+
+  # A name's pinned steps other than 500, each its own property: `--vis-red-100` (#667).
+  defp pinned_lines(theme, slot) do
+    case Map.get(own_colors(theme), slot) do
+      %{} = steps when not is_struct(steps) ->
+        for {n, literal} <- Enum.sort(steps),
+            n != 500,
+            do: "  #{property(slot)}-#{n}: #{css_value(:colour, literal)};"
+
+      _other ->
+        []
+    end
   end
 
   # In high-contrast mode the furniture is the user's system colors (spec/08 §7.3, #665):
@@ -898,7 +915,38 @@ defmodule Visualize.Theme do
       literal when is_binary(literal) -> literal
       {:ramp, ramp, t} -> ramp(theme, ramp, t)
       {:color, other} -> table_literal(theme, other, [name | seen])
+      # A name's pinned steps: its own color is step 500 (#667).
+      %{500 => base} when is_binary(base) -> base
       value -> Color.resolve(value, theme, :literal)
+    end
+  end
+
+  @doc false
+  # The literal a theme pins at step `n` of a name's scale (spec/08 §1.9, #667), `nil` when
+  # it pins none there: the theme's own entry, else the default theme's.
+  @spec step(t(), atom(), number()) :: String.t() | nil
+  def step(%__MODULE__{} = theme, name, n) do
+    case lookup(theme, name) do
+      %{^n => literal} when is_binary(literal) -> literal
+      _unpinned -> nil
+    end
+  end
+
+  # A pinned entry: integer steps in 0..1000, 500 among them, to colour strings.
+  defp steps(steps) do
+    cond do
+      not Map.has_key?(steps, 500) ->
+        {:error,
+         "pinned steps must include 500, the name's own color; got #{inspect(Map.keys(steps))}"}
+
+      bad = Enum.find(Map.keys(steps), &(not (is_integer(&1) and &1 >= 0 and &1 <= 1000))) ->
+        {:error, "a pinned step is an integer in 0..1000, got #{inspect(bad)}"}
+
+      bad = Enum.find(Map.values(steps), &(not (is_binary(&1) and Color.parse(&1) != nil))) ->
+        {:error, "a pinned step is a color string, got #{inspect(bad)}"}
+
+      true ->
+        :ok
     end
   end
 
@@ -916,6 +964,9 @@ defmodule Visualize.Theme do
 
       Color.value?(value) ->
         names_resolve(theme, value, [name])
+
+      is_map(value) and not is_struct(value) ->
+        steps(value)
 
       true ->
         {:error,

@@ -16,7 +16,7 @@ defmodule Visualize.Chart.Codec do
   @series_slot ~r/^series_[1-9]\d*$/
   # A color name read from a document is made an atom only when it is plain words.
   @colour_word ~r/^[a-z][a-z0-9_]*$/
-  @unary Visualize.Color.Typed.unary()
+  @unary Visualize.Color.Typed.ops()
 
   # -- encode ---------------------------------------------------------------------------
 
@@ -74,6 +74,12 @@ defmodule Visualize.Chart.Codec do
 
   defp value(:colour, {:blend, list}) when is_list(list),
     do: %{"$blend" => Enum.map(list, &value(:colour, &1))}
+
+  # A theme's pinned steps, `[step, colour]` pairs in step order (spec/14 §11.2, #667).
+  defp value(:theme_colour, steps) when is_map(steps) and not is_struct(steps),
+    do: %{"$steps" => steps |> Enum.sort() |> Enum.map(fn {n, c} -> [n, value(:colour, c)] end)}
+
+  defp value(:theme_colour, v), do: value(:colour, v)
 
   defp value(:colour, {:contrast, :under}), do: %{"$contrast" => "under"}
   defp value(:colour, {:contrast, c}), do: %{"$contrast" => value(:colour, c)}
@@ -227,6 +233,14 @@ defmodule Visualize.Chart.Codec do
       found -> {:ramp, found, t}
     end
   end
+
+  defp read(:theme_colour, %{"$steps" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
+    if Enum.all?(pairs, &match?([n, _] when is_integer(n), &1)),
+      do: Map.new(pairs, fn [n, c] -> {n, read(:colour, c)} end),
+      else: v
+  end
+
+  defp read(:theme_colour, v), do: read(:colour, v)
 
   defp read(:colour, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
     if Regex.match?(@colour_word, name), do: {:color, String.to_atom(name)}, else: v
