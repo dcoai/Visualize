@@ -380,8 +380,14 @@ defmodule Visualize.Hooks.CanvasBinary do
               const r = bytes[offset++], g = bytes[offset++], b = bytes[offset++], a = bytes[offset++];
               ctx.strokeStyle = `rgba(${r},${g},${b},${a / 255})`;
             }
-            if (flags & 0x04) { // stroke width
-              ctx.lineWidth = view.getFloat32(offset, true);
+            if (flags & 0x04) { // stroke width, divided by the scale when it does not scale
+              const w = view.getFloat32(offset, true);
+              if (flags & 0x10) {
+                const t = ctx.getTransform();
+                ctx.lineWidth = w / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
+              } else {
+                ctx.lineWidth = w;
+              }
               offset += 4;
             }
             if (flags & 0x08) { // global alpha

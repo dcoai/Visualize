@@ -1305,3 +1305,72 @@ Common to every check: `{:raised, call, reason}`, `{:timeout, call}` and `{:desc
 | `Visualize.Feed.Conformance.check/2` | `check(feed, opts)`: every check's findings, concatenated in the order of `checks/0`. |
 | `Visualize.Feed.Conformance.check/3` | `check(check, feed, opts)`: one check's findings, `[]` for a feed that passes (12.3). |
 | `Visualize.Feed.Conformance.format/1` | One finding as a line a person reads. |
+
+## 13. Units
+
+`Visualize.Units` names a length with its unit, so a style can say "12 pt" or "1.5 em" where it said a bare number (spec/14 §3.2, #651, D-174). A unit value is a tuple, `{12, :pt}`, built by a constructor of the unit's name or written directly; it is data, stored and compared as a value. A bare number keeps the meaning it always had: user units, which are CSS pixels on every backend.
+
+### 13.1 Screen units
+
+**Absolute units** convert to user units at CSS's fixed ratios (CSS Values 4 §6.2): 96 px = 1 in = 2.54 cm = 25.4 mm = 72 pt, and 1 pc = 12 pt.
+
+| Unit | Constructor | In user units |
+|---|---|---|
+| `:px` | `px(n)` | `n` |
+| `:pt` | `pt(n)` | `n × 4/3` |
+| `:pc` | `pc(n)` | `n × 16` |
+| `:in` | `inch(n)` — `in` is an Elixir operator | `n × 96` |
+| `:cm` | `cm(n)` | `n × 96 / 2.54` |
+| `:mm` | `mm(n)` | `n × 96 / 25.4` |
+
+So `pt(12)` is 16 user units and `mm(3)` is about 11.34.
+
+### 13.2 Relative units
+
+**Relative units** are resolved in context, never by `to_px/1`:
+
+| Unit | Constructor | Measured against |
+|---|---|---|
+| `:em` | `em(n)` | a font size: `n ×` it |
+| `:pct` | `pct(n)` | a box's length: `n / 100 ×` it |
+
+What the font size and the box are is the style grammar's to say (spec/14 §3.2): the inherited font size for an `em`, and for a `pct` only a size that has a box.
+
+### 13.3 World lengths
+
+A scene measures its world in lengths of the ground, not of the screen (#620). The table of those lengths, in metres, is here so that #620's world units and every other caller convert by one table:
+
+| Unit | Metres |
+|---|---|
+| `:mm` | `0.001` |
+| `:cm` | `0.01` |
+| `:m` | `1` |
+| `:km` | `1000` |
+| `:in` | `0.0254` |
+| `:ft` | `0.3048` |
+| `:yd` | `0.9144` |
+| `:mi` | `1609.344` |
+
+The inch, foot, yard and mile are the international ones (1959). A world length becomes a screen length only through a scale a scene declares (#620), never by these tables alone.
+
+### 13.4 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Units.px/1` | `{n, :px}` for a number `n`. |
+| `Visualize.Units.pt/1` | `{n, :pt}`. |
+| `Visualize.Units.pc/1` | `{n, :pc}`. |
+| `Visualize.Units.inch/1` | `{n, :in}`. |
+| `Visualize.Units.cm/1` | `{n, :cm}`. |
+| `Visualize.Units.mm/1` | `{n, :mm}`. |
+| `Visualize.Units.em/1` | `{n, :em}`. |
+| `Visualize.Units.pct/1` | `{n, :pct}`. |
+| `Visualize.Units.units/0` | The screen units, absolute then relative: `[:px, :pt, :pc, :in, :cm, :mm, :em, :pct]`. |
+| `Visualize.Units.absolute_units/0` | `[:px, :pt, :pc, :in, :cm, :mm]`. |
+| `Visualize.Units.unit?/1` | Whether a term is a unit value: `{n, unit}` with `n` a number and `unit` of `units/0`. |
+| `Visualize.Units.to_px/1` | A number as it is; an absolute unit value in user units (13.1); `ArgumentError` for a relative one. |
+| `Visualize.Units.convert/3` | `convert(n, from, to)`: `n` of one absolute unit in another (13.1). |
+| `Visualize.Units.resolve/2` | `resolve(value, context)`: a number as it is, an absolute unit value by `to_px/1`, an `em` against `context.em` and a `pct` against `context.box`, each a number in user units; `ArgumentError` naming the unit when its measure is absent from the context. |
+| `Visualize.Units.length_units/0` | The world units of 13.3: `[:mm, :cm, :m, :km, :in, :ft, :yd, :mi]`. |
+| `Visualize.Units.to_meters/2` | `to_meters(n, unit)`: a world length in metres (13.3). |
+| `Visualize.Units.convert_length/3` | `convert_length(n, from, to)`: a world length in another world unit. |

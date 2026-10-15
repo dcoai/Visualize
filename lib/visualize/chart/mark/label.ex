@@ -145,9 +145,14 @@ defmodule Visualize.Chart.Mark.Label do
 
         Element.new(:text, attrs: attrs, style: Map.merge(base, style), content: content)
         |> Polar.rotate(rotation)
-        |> Position.apply(style_node, outward(anchor))
+        |> Position.apply(style_node, outward(anchor), box(bounds, frame))
     end
   end
+
+  # The box an offset in `pct` is of (spec/14 §3.9): the element's bounds, the plot when
+  # the element has no extent.
+  defp box({_x, _y, w, h}, _frame), do: {w, h}
+  defp box(_bounds, frame), do: {frame.plot.width, frame.plot.height}
 
   # Every colour key the label's style writes as `:contrast`, inked against the colour under
   # the label rather than the background `Style.resolve/3` assumed (spec/14 §5.5, D-123).

@@ -33,14 +33,15 @@ defmodule Visualize.Chart.Style do
 
   """
 
-  alias Visualize.Chart.Style.Parts
+  alias Visualize.Chart.Style.{Inherited, Parts, Sizes}
   alias Visualize.Chart.Var
   alias Visualize.Data.Table
-  alias Visualize.{Scale, Theme}
+  alias Visualize.{Scale, Theme, Units}
 
   @colour_keys [:fill, :stroke]
   @size_keys [:stroke_width, :opacity, :fill_opacity, :stroke_opacity, :font_size, :symbol_size]
   @font_keys [:font_family]
+  @unit_keys [:stroke_width, :font_size, :effect_radius]
   # The built-in styles of spec/14 §3.3, `Visualize.Chart.Schema.builtin_styles/0`.
   @builtin [:axis, :grid, :label, :title]
   @element_keys [
@@ -62,7 +63,8 @@ defmodule Visualize.Chart.Style do
     :class,
     :blend,
     :effect,
-    :effect_radius
+    :effect_radius,
+    :vector_effect
   ]
 
   @doc """
@@ -253,7 +255,24 @@ defmodule Visualize.Chart.Style do
   # `node/3` laid over `base`, the style an element's containers lay under every style it
   # names (spec/14 §3.7, §3.8, D-174), in its parts. An empty base lays nothing, so a design
   # without defaults resolves exactly as `node/3` does.
-  @spec node(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil), map()) :: map()
+  #
+  # Given what the element inherits (`Visualize.Chart.Style.Inherited`), its unit values are
+  # resolved too, measured with the theme it carries (§3.9).
+  @spec node(
+          %{atom() => map()},
+          term(),
+          ({:field, atom()} -> atom() | nil),
+          Inherited.t() | map()
+        ) :: map()
+  def node(styles, stack, pick, %Inherited{style: base, theme: theme}) do
+    own = compound(styles, stack, pick)
+
+    base
+    |> Parts.merge(own)
+    |> Sizes.resolve(base, own, theme)
+    |> Parts.project()
+  end
+
   def node(styles, stack, pick, base) when map_size(base) == 0, do: node(styles, stack, pick)
 
   def node(styles, stack, pick, base),
@@ -346,7 +365,15 @@ defmodule Visualize.Chart.Style do
   # One style value resolved: a slot through the theme, a literal as it is.
   @spec value(atom(), term(), Theme.t(), Theme.mode()) :: term()
   def value(_key, %Var{name: name}, _theme, _mode), do: unresolved!(name)
-  def value(:stroke_dasharray, list, _theme, _mode) when is_list(list), do: Enum.join(list, " ")
+  # A unit value a style resolved without its containers still reaches the element as a
+  # number: an absolute one converted, an `em` against the theme's root (spec/14 §3.9).
+  def value(:stroke_dasharray, list, theme, _mode) when is_list(list),
+    do: Enum.map_join(list, " ", &sized(&1, theme))
+
+  def value(key, {n, unit} = size, theme, _mode)
+      when key in @unit_keys and is_number(n) and is_atom(unit),
+      do: sized(size, theme)
+
   # A paint is the frame's to resolve, once it has its defs (spec/14 §3.2).
   def value(key, {:paint, _name} = paint, _theme, _mode) when key in @colour_keys, do: paint
   # The contrast ink with nothing under the text: the background's, a literal in both modes
@@ -363,6 +390,10 @@ defmodule Visualize.Chart.Style do
   def value(key, value, theme, mode) when key in @size_keys, do: slot_or(value, theme, mode)
   def value(key, value, theme, mode) when key in @font_keys, do: slot_or(value, theme, mode)
   def value(_key, value, _theme, _mode), do: value
+
+  defp sized(size, theme) do
+    if Units.unit?(size), do: Units.resolve(size, %{em: theme.font_size}), else: size
+  end
 
   @doc false
   # A colour a scale yields, resolved when it is a theme slot (spec/14 §4.3).

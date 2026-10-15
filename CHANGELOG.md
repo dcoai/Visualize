@@ -17,6 +17,23 @@ release it merely follows.
 
 ### Added
 
+- **Sizes in units, and strokes that do not scale** (#671, D-174). A style size can now be
+  written in a unit: `stroke: %{width: pt(1.5), dash: [mm(2), 4]}`, `font: %{size: em(1.2)}`,
+  `text: %{offset: [pct(10), 0]}`. `import Visualize.Units` gives `px/1`, `pt/1`, `pc/1`,
+  `inch/1`, `cm/1`, `mm/1`, `em/1` and `pct/1`, each building `{n, unit}`; absolute units
+  convert at CSS's ratios (96 px = 1 in = 72 pt). Every unit is resolved on the server, so SVG
+  and canvas get the same number: `em` at a font size is relative to the inherited font size
+  (the containers' defaults, else the theme's `font_size`), and elsewhere to the element's own;
+  `pct` is allowed only where a size has a box (a text offset of the labelled element, a marker
+  size of the mark's band, a font size of the inherited one). A `pct` stroke width, dash or
+  effect radius is the new validator fault `{:no_box, key}`, and a unit at an opacity
+  `{:no_unit, :opacity}`. A unit-valued marker size is the side of the square, not its area. In
+  JSON a unit is `{"$unit": [1.5, "pt"]}`. `stroke: %{non_scaling: true}` keeps a stroke's
+  width on screen under a scale: SVG writes `vector-effect="non-scaling-stroke"` on each shape,
+  and the canvas backends divide the width by the current transform's scale when drawing (a new
+  `nonScalingLineWidth` command that `CanvasChart` understands, and bit 4 of the binary style
+  record). `Visualize.Units` also carries the world length table (mm … mi) that scenes will
+  use. Bare numbers mean what they always did.
 - **Inherited style defaults** (#670, D-174). A design and a frame take `defaults`: a style's
   parts that every element inside inherits under its own style, and an entry per mark type, so
   "every stroke here is 2 wide, every line 1.5" is said once:

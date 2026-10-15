@@ -14,7 +14,7 @@ defmodule Visualize.Chart.Style.Defaults do
   # and it is never laid onto an element: writing it would change bytes, not drawings.
 
   alias Visualize.Chart.{Schema, Style, Var}
-  alias Visualize.Chart.Style.Parts
+  alias Visualize.Chart.Style.{Inherited, Parts, Sizes}
 
   # `text` is the part, where a text sits, so the `:text` mark has no entry (§3.8).
   @kinds Schema.mark_types() -- [:text]
@@ -51,18 +51,32 @@ defmodule Visualize.Chart.Style.Defaults do
   # The style the containers lay for an element of `kind` — a mark type, `:text` for a
   # label, `nil` for furniture, which takes the part defaults alone — in its parts. `%{}`
   # when no container declares anything, so the stack laid over it is what it always was.
-  @spec layer([map() | nil], atom() | nil) :: map()
-  def layer(containers, kind) do
+  #
+  # A container's relative font size is measured against the one the containers before it
+  # laid (spec/14 §3.9): `theme` turns a slot under it into a number.
+  @spec layer([map() | nil], atom() | nil, Visualize.Theme.t() | nil) :: map()
+  def layer(containers, kind, theme \\ nil) do
     Enum.reduce(containers, %{}, fn container, laid ->
-      laid |> Parts.merge(parts(container)) |> Parts.merge(entry(container, kind))
+      own = Parts.merge(parts(container), entry(container, kind))
+
+      case get_in(own, [:font, :size]) do
+        nil ->
+          Parts.merge(laid, own)
+
+        set ->
+          size = Sizes.nest(get_in(laid, [:font, :size]), set, theme)
+          laid |> Parts.merge(own) |> put_in([:font, :size], size)
+      end
     end)
   end
 
   @doc false
   # What a realised frame's containers (`Visualize.Chart.Frame`'s `defaults`) and the
   # element's own `defaults` lay for an element of `kind`.
-  @spec at(%{defaults: [map() | nil]}, map() | nil, atom() | nil) :: map()
-  def at(%{defaults: containers}, own, kind), do: layer(containers ++ [own], kind)
+  @spec at(%{defaults: [map() | nil], theme: Visualize.Theme.t()}, map() | nil, atom() | nil) ::
+          Inherited.t()
+  def at(%{defaults: containers, theme: theme}, own, kind),
+    do: %Inherited{style: layer(containers ++ [own], kind, theme), theme: theme}
 
   @doc false
   # Each container's contribution for an element of `kind`, farthest first: `{:parts, node}`

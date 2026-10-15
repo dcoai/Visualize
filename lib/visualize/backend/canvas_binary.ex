@@ -433,7 +433,8 @@ defmodule Visualize.Backend.CanvasBinary do
   end
 
   defp encode_style(style) do
-    # Flags: bit 0 = has fill, bit 1 = has stroke, bit 2 = has stroke_width
+    # Flags: bit 0 = has fill, bit 1 = has stroke, bit 2 = has stroke_width, bit 3 = has
+    # opacity, bit 4 = the stroke width does not scale
     flags = 0
     parts = []
 
@@ -463,10 +464,12 @@ defmodule Visualize.Backend.CanvasBinary do
           {flags ||| 0x02, parts ++ [<<r::8, g::8, b::8, a::8>>]}
       end
 
+    # Bit 4: the width does not scale (spec/09 §4.3.5, spec/14 §3.9).
     {flags, parts} =
-      case style[:stroke_width] do
-        nil -> {flags, parts}
-        w -> {flags ||| 0x04, parts ++ [<<w::little-float-32>>]}
+      case {style[:stroke_width], style[:vector_effect]} do
+        {nil, _effect} -> {flags, parts}
+        {w, :non_scaling_stroke} -> {flags ||| 0x14, parts ++ [<<w::little-float-32>>]}
+        {w, _effect} -> {flags ||| 0x04, parts ++ [<<w::little-float-32>>]}
       end
 
     {flags, parts} =

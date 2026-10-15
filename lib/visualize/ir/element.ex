@@ -84,7 +84,8 @@ defmodule Visualize.IR.Element do
           optional(:line_height) => number(),
           optional(:blend) => atom(),
           optional(:effect) => :none | :shadow | :blur,
-          optional(:effect_radius) => number()
+          optional(:effect_radius) => number(),
+          optional(:vector_effect) => :non_scaling_stroke
         }
 
   @typedoc """

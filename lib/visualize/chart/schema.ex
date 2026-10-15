@@ -291,6 +291,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:boolean, v), do: is_boolean(v)
   defp shape?(:string, v), do: is_binary(v)
   defp shape?(:size, v), do: is_number(v) or is_atom(v) or is_tuple(v)
+  defp shape?(:length, v), do: is_number(v) or is_tuple(v)
   defp shape?(:channel, v), do: is_number(v) or is_atom(v) or is_tuple(v)
   defp shape?(:field_ref, v), do: is_tuple(v)
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
@@ -381,10 +382,13 @@ defmodule Visualize.Chart.Schema do
     paint_keys() ++
       [
         spec(:width, :size, :style, range: {0, 20, 0.5}),
-        spec(:dash, {:one_of, [:string, {:list, :number}]}, :style),
+        # A dash's members may be unit values, never slots (spec/14 §3.9, #651).
+        spec(:dash, {:one_of, [:string, {:list, :length}]}, :style),
         spec(:join, {:enum, [:miter, :round, :bevel]}, :style),
         spec(:cap, {:enum, [:butt, :round, :square]}, :style),
-        spec(:placement, {:enum, [:center, :inside, :outside, :double]}, :style)
+        spec(:placement, {:enum, [:center, :inside, :outside, :double]}, :style),
+        # The width kept on screen under a scale (spec/14 §3.9, #651).
+        spec(:non_scaling, :boolean, :style)
       ]
   end
 
@@ -412,7 +416,7 @@ defmodule Visualize.Chart.Schema do
     [
       spec(:anchor, {:enum, [:start, :middle, :end]}, :style),
       spec(:baseline, {:enum, [:top, :middle, :baseline, :bottom]}, :style),
-      spec(:offset, {:list, :number}, :style),
+      spec(:offset, {:list, :length}, :style),
       spec(:angle, :number, :style, range: {-180, 180, 5})
     ]
   end

@@ -19,7 +19,7 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Words}
+  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Units, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
@@ -827,7 +827,8 @@ defmodule Visualize.Chart.Validator do
     end)
   end
 
-  defp check_key(_kind, spec, v, path, ctx), do: check(spec.type, v, path, ctx)
+  defp check_key(kind, spec, v, path, ctx),
+    do: Units.faults(kind, spec.key, v, path) ++ check(spec.type, v, path, ctx)
 
   # -- types ----------------------------------------------------------------------------
 
@@ -981,8 +982,8 @@ defmodule Visualize.Chart.Validator do
     end)
   end
 
-  defp check(:size, v, _path, _ctx) when is_number(v), do: []
-  defp check(:size, v, path, ctx), do: slot_or(:size, v, path, ctx)
+  defp check(:size, v, path, ctx), do: Units.check(:size, v, path) || slot_or(:size, v, path, ctx)
+  defp check(:length, v, path, _ctx), do: Units.check(:length, v, path)
   defp check(:font, v, _path, _ctx) when is_binary(v), do: []
   defp check(:font, v, path, ctx), do: slot_or(:font, v, path, ctx)
   defp check(:slot, v, path, ctx), do: slot_or(:slot, v, path, ctx)

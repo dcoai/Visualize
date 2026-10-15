@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Frame.Position do
   # the element's: nothing here reaches the SVG as an attribute.
 
   alias Visualize.IR.{Element, Transform}
+  alias Visualize.Units
 
   @typedoc "The outward direction of a placement, as signs, or none."
   @type outward :: {-1 | 0 | 1, -1 | 0 | 1} | nil
@@ -13,15 +14,25 @@ defmodule Visualize.Chart.Frame.Position do
   @baselines %{baseline: nil, middle: "0.32em", top: "0.71em", bottom: "-0.25em"}
 
   @doc false
-  @spec apply(Element.t(), map(), outward()) :: Element.t()
-  def apply(%Element{type: :text} = text, node, outward) when is_map(node) do
+  # `box` is `{width, height}` of what the text labels, which an offset in `pct` is of
+  # (spec/14 §3.9): the labelled element's bounds, or the plot.
+  @spec apply(Element.t(), map(), outward(), {number(), number()}) :: Element.t()
+  def apply(text, node, outward, box)
+
+  def apply(%Element{type: :text} = text, node, outward, {width, height}) when is_map(node) do
+    mx = sized(Map.get(node, :margin_x, 0), width)
+    my = sized(Map.get(node, :margin_y, 0), height)
+
     text
     |> aligned(Map.get(node, :vertical_align))
-    |> margined(Map.get(node, :margin_x, 0), Map.get(node, :margin_y, 0), outward)
+    |> margined(mx, my, outward)
     |> rotated(Map.get(node, :text_angle, 0))
   end
 
-  def apply(element, _node, _outward), do: element
+  def apply(element, _node, _outward, _box), do: element
+
+  defp sized(size, box),
+    do: if(Units.unit?(size), do: Units.resolve(size, %{box: box}), else: size)
 
   @doc false
   # Every tick label of an axis turned about its own point, when the style says so.

@@ -1003,6 +1003,73 @@ defmodule Visualize.Hooks.ExecutedHooksTest do
     end
   end
 
+  describe "a stroke that does not scale keeps its width on screen (spec/14 §3.9, #651)" do
+    # A 2-wide non-scaling stroke under a group scaled by `zoom`: the line width the hook
+    # sets is 2 / zoom, so the stroke draws 2 pixels wide at every zoom.
+    defp zoomed(zoom) do
+      path = Path.new() |> Path.move_to(0, 0) |> Path.line_to(10, 10)
+
+      Element.group(
+        [
+          Element.path(path, %{
+            stroke: "#336699",
+            stroke_width: 2,
+            vector_effect: :non_scaling_stroke
+          })
+        ],
+        transform: Visualize.IR.Transform.scale(zoom, zoom)
+      )
+    end
+
+    defp widths(log, canvas) do
+      for %{"on" => ^canvas, "kind" => "set", "name" => "lineWidth", "value" => w} <- log, do: w
+    end
+
+    for zoom <- [1, 2] do
+      test "CanvasChart, from :json commands, at zoom #{zoom}" do
+        zoom = unquote(zoom)
+        commands = Visualize.Backend.Canvas.render_element(zoomed(zoom), format: :json)
+
+        assert {:ok, %{"log" => log, "report" => %{"canvas" => canvas}}} =
+                 run("""
+                 const el = Stub.element({commands: #{js(IO.iodata_to_binary(commands))}, width: '100', height: '100'}, 100, 100);
+                 const hook = Stub.mount(CanvasChart, el);
+                 Stub.done({canvas: hook.canvas.id});
+                 """)
+
+        assert widths(log, canvas) == [2 / zoom]
+      end
+
+      test "CanvasChart, from the :js script, at zoom #{zoom}" do
+        zoom = unquote(zoom)
+        script = Visualize.Backend.Canvas.render_element(zoomed(zoom), format: :js)
+
+        assert {:ok, %{"log" => log, "report" => %{"canvas" => canvas}}} =
+                 run("""
+                 const el = Stub.element({script: #{js(IO.iodata_to_binary(script))}, width: '100', height: '100'}, 100, 100);
+                 const hook = Stub.mount(CanvasChart, el);
+                 Stub.done({canvas: hook.canvas.id});
+                 """)
+
+        assert widths(log, canvas) == [2 / zoom]
+      end
+
+      test "CanvasBinaryChart, from the binary stream, at zoom #{zoom}" do
+        zoom = unquote(zoom)
+        binary = zoomed(zoom) |> CanvasBinary.encode_element!() |> CanvasBinary.to_base64()
+
+        assert {:ok, %{"log" => log, "report" => %{"canvas" => canvas}}} =
+                 run("""
+                 const el = Stub.element({binary: #{js(binary)}, width: '100', height: '100'}, 100, 100);
+                 const hook = Stub.mount(CanvasBinaryChart, el);
+                 Stub.done({canvas: hook.canvas.id});
+                 """)
+
+        assert widths(log, canvas) == [2 / zoom]
+      end
+    end
+  end
+
   defp applied_frame(size) do
     design = %{
       version: 2,

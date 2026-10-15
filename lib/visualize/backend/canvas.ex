@@ -526,10 +526,14 @@ defmodule Visualize.Backend.Canvas do
         color -> cmds ++ [{:set_strokeStyle, [to_string(color)]}]
       end
 
+    # A stroke that keeps its width on screen divides it by the transform's scale when it
+    # is set, which only the context knows (spec/09 §3.3.3, spec/14 §3.9).
     cmds =
-      if style[:stroke_width],
-        do: cmds ++ [{:set_lineWidth, [style[:stroke_width]]}],
-        else: cmds
+      case {style[:stroke_width], style[:vector_effect]} do
+        {nil, _effect} -> cmds
+        {w, :non_scaling_stroke} -> cmds ++ [{:nonScalingLineWidth, [w]}]
+        {w, _effect} -> cmds ++ [{:set_lineWidth, [w]}]
+      end
 
     # A blend is the compositing operation; an effect the context's shadow or its filter
     # (spec/09 §3.3.3).
@@ -655,6 +659,15 @@ defmodule Visualize.Backend.Canvas do
   defp command_to_js_line({:set_fillStyle, [color]}), do: ["ctx.fillStyle = '", color, "';"]
   defp command_to_js_line({:set_strokeStyle, [color]}), do: ["ctx.strokeStyle = '", color, "';"]
   defp command_to_js_line({:set_lineWidth, [w]}), do: ["ctx.lineWidth = ", format_num(w), ";"]
+
+  defp command_to_js_line({:nonScalingLineWidth, [w]}) do
+    [
+      "ctx.lineWidth = ",
+      format_num(w),
+      " / (function(t){return Math.sqrt(Math.abs(t.a*t.d-t.b*t.c));})(ctx.getTransform());"
+    ]
+  end
+
   defp command_to_js_line({:set_lineCap, [cap]}), do: ["ctx.lineCap = '", cap, "';"]
   defp command_to_js_line({:set_lineJoin, [join]}), do: ["ctx.lineJoin = '", join, "';"]
   defp command_to_js_line({:set_globalAlpha, [a]}), do: ["ctx.globalAlpha = ", format_num(a), ";"]
