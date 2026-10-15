@@ -18,7 +18,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Shape.{Line, Symbol}
 
     @drawn [
-      :fill_style,
+      :paint_type,
       :effect,
       :vertical_align,
       :stroke_style,
@@ -196,11 +196,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # A fill style (§18.6): no paint, a solid, a gradient down the square, one out from
-    # its centre. A gradient is drawn as translucent bands, not a paint server: a glyph is
-    # shown once per choice in one HTML document, so an id would repeat (#471).
-    defp picture(:fill_style, style) when style in [:none, :solid, :linear, :radial] do
-      case style do
+    # A paint's type (§18.6, D-178): no paint, a solid, a gradient down the square, one out
+    # from its centre, hatching, a paint the design names. A gradient is drawn as
+    # translucent bands, not a paint server: a glyph is shown once per choice in one HTML
+    # document, so an id would repeat (#471); hatching is lines, not a pattern, for the same
+    # reason.
+    defp picture(:paint_type, type)
+         when type in [:none, :solid, :linear, :radial, :hatch, :paint] do
+      case type do
         :none ->
           ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/>|
 
@@ -212,10 +215,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         :radial ->
           bands([0.2, 0.25, 0.3, 0.4], fn i -> {5 + i * 2, 5 + i * 2, 14 - i * 4, 14 - i * 4} end)
+
+        :hatch ->
+          ~s|<rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/><path d="M5 12 L12 5 M5 19 L19 5 M12 19 L19 12" stroke="currentColor" stroke-width="1.5"/>|
+
+        # A named paint: a swatch with its name's tag.
+        :paint ->
+          ~s|<rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.35"/><path d="M8 9 H16 M8 12 H16 M8 15 H13" stroke="currentColor" stroke-width="1.5"/>|
       end
     end
 
     # A square's edge with the stroke where the style puts it: on it, twice, within, without.
+    defp picture(:stroke_style, :center), do: picture(:stroke_style, :single)
+
     defp picture(:stroke_style, style) when style in [:single, :double, :inside, :outside] do
       fill = ~s|<rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/>|
 

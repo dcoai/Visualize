@@ -343,6 +343,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         origins={StyleStack.origins(@design, @style_site.stack)}
         strip={false}
         event="edit_style"
+        drawn_by={@style_site.drawn_by}
         refs={@refs}
         theme={@theme}
         defs={@defs}

@@ -11,10 +11,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Phoenix.Component, only: [assign: 2, assign: 3, update: 3]
     import Visualize.Chart.Builder.Editing, only: [editing: 1, root_word: 1]
     import Visualize.Chart.Builder.Selection, only: [aimed: 2, row_use: 2]
-    import Visualize.Chart.Builder.Writes, only: [locked_notice: 2, update_layer: 4]
+
+    import Visualize.Chart.Builder.Writes,
+      only: [locked_notice: 2, update_layer: 4, update_node: 3]
 
     alias Visualize.Chart.{Builder, Fragment, Use}
-    alias Visualize.Chart.Builder.{Editor, FormSchema, Params, Stack, Variables}
+    alias Visualize.Chart.Builder.{Editor, Params, Stack, Variables}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -49,27 +51,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # the control's type by being used here (spec/14 §19.9).
     def handle_event("bind_field", %{"field" => field, "name" => name} = params, socket) do
       socket = aimed(socket, params)
-      %{entry: entry, layers: layers, design: design} = editing(socket.assigns)
+      %{entry: entry, layers: layers, design: design, editing: node} = editing(socket.assigns)
 
-      with %{key: key, type: type} when type != :text <-
-             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
+      # A part's key by its path (§18.7): the variable is written into the part.
+      with %{path: at, spec: %{key: key, type: type}} when type != :text <-
+             Editor.locate(entry.kind, field),
            {:ok, var} <- Editor.variable(name),
            :ok <- fits(Variables.list(layers, design), var.name, element(type), key) do
-        case type do
-          {:list, _scalar} ->
+        value =
+          case type do
             # A list of scalars takes the variable as an item (§19.9): fields: [:t, var(:y)].
-            %{editing: node} = editing(socket.assigns)
-            list = if(is_map(node), do: Map.get(node, key, []), else: []) ++ [var]
+            {:list, _scalar} -> List.wrap(Editor.value_at(entry.kind, node, at)) ++ [var]
+            _single -> var
+          end
 
-            {:noreply,
-             socket |> update_layer(entry.path, key, {:ok, list}) |> assign(:notice, nil)}
-
-          _single ->
-            {:noreply,
-             socket |> update_layer(entry.path, key, {:ok, var}) |> assign(:notice, nil)}
-        end
+        {:noreply,
+         socket
+         |> update_node(entry.path, Editor.write(entry.kind, node, at, {:ok, value}))
+         |> assign(:notice, nil)}
       else
-        %{type: :text} ->
+        %{spec: %{type: :text}} ->
           # A text takes a variable as text among text, at the caret, by the hook (§7.1).
           {:noreply, socket}
 
@@ -98,11 +99,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("unbind_field", %{"field" => field} = params, socket) do
       socket = aimed(socket, params)
-      %{entry: entry} = editing(socket.assigns)
+      %{entry: entry, editing: node} = editing(socket.assigns)
 
-      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
-        nil -> {:noreply, socket}
-        %{key: key} -> {:noreply, update_layer(socket, entry.path, key, :error)}
+      case Editor.locate(entry.kind, field) do
+        nil ->
+          {:noreply, socket}
+
+        %{path: at} ->
+          {:noreply, update_node(socket, entry.path, Editor.write(entry.kind, node, at, :error))}
       end
     end
 
@@ -114,14 +118,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
       kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
 
-      stop? = String.starts_with?(field, "fill.stop.")
-
-      case Enum.find(FormSchema.describe(kind), &(to_string(&1.key) == field)) do
-        %{type: :colour} ->
-          control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
-          Builder.handle_event(edit, %{"_target" => [control], control => colour}, socket)
-
-        nil when stop? ->
+      # A part's colour by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
+      case Editor.locate(kind, field) do
+        %{spec: %{type: :colour}} ->
           control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
           Builder.handle_event(edit, %{"_target" => [control], control => colour}, socket)
 
@@ -144,14 +143,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       socket = aimed(socket, params)
       %{entry: entry, editing: node, layers: layers, design: design} = editing(socket.assigns)
 
-      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
-        %{key: key} when is_map(node) and is_map_key(node, key) ->
+      located = Editor.locate(entry.kind, field)
+      value = located && Editor.value_at(entry.kind, node, located.path)
+
+      case located do
+        %{path: at} when value != nil ->
+          # Named for the key, or for a part's key by its path: `stroke_width` (D-178).
+          key = at |> Enum.map_join("_", &to_string/1) |> String.to_atom()
           name = fresh_name(key, Variables.list(layers, design))
+          var = %Visualize.Chart.Var{name: name}
 
           {:noreply,
            socket
-           |> declared(name, Map.fetch!(node, key))
-           |> update_layer(entry.path, key, {:ok, %Visualize.Chart.Var{name: name}})}
+           |> declared(name, value)
+           |> update_node(entry.path, Editor.write(entry.kind, node, at, {:ok, var}))}
 
         _other ->
           {:noreply, assign(socket, :notice, "#{field} has no value to promote")}
@@ -243,7 +248,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp first_fit(kind, vars, name) do
       typed = Enum.find(vars, &(&1.name == name))
 
-      Enum.find(FormSchema.describe(kind), fn spec ->
+      Enum.find(Editor.describe(kind), fn spec ->
         typed == nil or typed.type == nil or typed.type == spec.type
       end)
     end

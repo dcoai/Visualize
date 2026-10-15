@@ -20,19 +20,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         locked_notice: 2,
         owner_of: 4,
         pool: 1,
-        update_layer: 4
+        update_layer: 4,
+        update_node: 3
       ]
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Editor, Fills, FormSchema, Params, Stack}
-    alias Visualize.Chart.{Fragment, Use, Var}
+    alias Visualize.Chart.Builder.{Editor, Params, Stack, StyleForm, StyleStack}
+    alias Visualize.Chart.{Fragment, Schema, Use, Var}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
       toggle_axis toggle_grid add_style_entry remove_style_entry select_style_entry
       edit_style add_style select_style edit submitted set_var set_key list_add
-      list_remove
+      list_remove style_item
     )
 
     @doc false
@@ -117,27 +118,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, assign(socket, :style_entry, position(index))}
     end
 
-    # Every edit at a site lands in its local style, never in a named entry (§18.19, D-98).
-    def handle_event("edit_style", %{"_target" => [target]} = params, socket) do
-      if Fills.control?(target) do
-        {:noreply, filled(socket, target, params[target], &styled(&1, &2))}
-      else
-        {:noreply, Enum.reduce(Editor.changes(:style, params), socket, &styled(&2, &1))}
-      end
+    # Every edit at a site lands in its local style, never in a named entry (§18.19, D-98),
+    # and writes only the key changed, in its part (§18.7, D-178): the local style is the
+    # node the write lands in, the site's resolved style what a type change starts from.
+    def handle_event("edit_style", %{"_target" => [_target]} = params, socket) do
+      {:noreply, styled(socket, &Editor.changes(:style, params, &1, &2))}
     end
 
     def handle_event("edit_style", _params, socket), do: {:noreply, socket}
 
+    # A created style is declared in the design, never in a layer (§18.14, §19.11, D-178):
+    # a style site keyed by its name at the chart's top level, selected and opened. A name
+    # the design declares already is opened, not declared twice.
     def handle_event("add_style", %{"name" => submitted}, socket) do
-      case Editor.parse({:ref, :style}, String.trim(submitted)) do
-        {:ok, name} ->
-          socket
-          |> update_layer([:styles], name, {:ok, %{}})
-          |> opened("styles." <> to_string(name))
-          |> assign(:notice, nil)
-          |> then(&{:noreply, &1})
+      %{design: design} = editing(socket.assigns)
 
-        :error ->
+      case Editor.parse({:ref, :style}, String.trim(submitted)) do
+        {:ok, name} when is_atom(name) ->
+          if Map.has_key?(Map.get(design, :styles) || %{}, name) do
+            socket
+            |> opened_style(name)
+            |> assign(:notice, "#{name} is declared already — opened it")
+            |> then(&{:noreply, &1})
+          else
+            {:noreply, declared_style(socket, name)}
+          end
+
+        _error_or_id ->
           {:noreply, assign(socket, :notice, "a style needs a name")}
       end
     end
@@ -148,6 +155,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case declaring(layers, submitted) do
         nil -> {:noreply, socket}
         index -> {:noreply, socket |> select(index) |> opened("styles." <> submitted)}
+      end
+    end
+
+    # A list of nodes in a style — a gradient's stops — gains an item or loses one (§18.6),
+    # in the node the form edits or, at a site, the local style (`edit`).
+    def handle_event("style_item", %{"field" => field, "op" => op} = params, socket) do
+      change =
+        case {op, Integer.parse(Map.get(params, "index", ""))} do
+          {"add", _index} -> :add
+          {"remove", {i, ""}} -> {:remove, i}
+          _other -> nil
+        end
+
+      socket = aimed(socket, params)
+
+      case {change, Map.get(params, "edit")} do
+        {nil, _edit} ->
+          {:noreply, socket}
+
+        {change, "edit_style"} ->
+          {:noreply, styled(socket, &items(:style, field, change, &1, &2))}
+
+        {change, _edit} ->
+          %{entry: entry, editing: node} = editing(socket.assigns)
+          writes = items(entry.kind, field, change, node, node)
+          {:noreply, update_node(socket, entry.path, writes)}
       end
     end
 
@@ -217,11 +250,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{entry: entry, editing: node} = editing(socket.assigns)
       typed = Map.get(params, "value") || Map.get(params, "#{field}.add") || ""
 
-      with %{key: key, type: {:list, scalar}} <-
-             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
+      with %{path: at, spec: %{type: {:list, scalar}}} <- Editor.locate(entry.kind, field),
            {:ok, item} <- Editor.parse(scalar, typed) do
-        list = if(is_map(node), do: Map.get(node, key, []), else: []) ++ [item]
-        {:noreply, socket |> update_layer(entry.path, key, {:ok, list}) |> assign(:notice, nil)}
+        list = List.wrap(Editor.value_at(entry.kind, node, at)) ++ [item]
+
+        {:noreply,
+         socket
+         |> update_node(entry.path, Editor.write(entry.kind, node, at, {:ok, list}))
+         |> assign(:notice, nil)}
       else
         _other -> {:noreply, socket}
       end
@@ -231,98 +267,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       socket = aimed(socket, params)
       %{entry: entry, editing: node} = editing(socket.assigns)
 
-      with %{key: key, type: {:list, _}} <-
-             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
-           list when is_list(list) <- is_map(node) && Map.get(node, key) do
+      with %{path: at, spec: %{type: {:list, _}}} <- Editor.locate(entry.kind, field),
+           list when is_list(list) <- Editor.value_at(entry.kind, node, at) do
         rest = List.delete_at(list, position(index))
         write = if rest == [], do: :error, else: {:ok, rest}
-        {:noreply, update_layer(socket, entry.path, key, write)}
+        {:noreply, update_node(socket, entry.path, Editor.write(entry.kind, node, at, write))}
       else
         _other -> {:noreply, socket}
       end
     end
-
-    # The fill group's controls (spec/14 §18.6): `fill_style` writes the fill and may declare
-    # the gradient named for the style; the `fill.…` controls edit that gradient where it is
-    # declared. `write` is how this form writes the fill itself — the node's or the panel's.
-    defp filled(socket, target, submitted, write) do
-      %{entry: entry, editing: node, design: design} = editing(socket.assigns)
-      value = if(is_map(node), do: Map.get(node, :fill))
-      defs = Map.get(design, :defs, %{})
-      name = Fills.name(entry.path)
-
-      target
-      |> Fills.writes(submitted, value, defs, name, nil)
-      |> Enum.reduce(socket, fn
-        {:fill, parsed}, acc -> write.(acc, {:fill, parsed})
-        {:declare, name, gradient}, acc -> declare_gradient(acc, name, gradient)
-        {:gradient, name, fun}, acc -> update_gradient(acc, name, fun)
-      end)
-      |> assign(:notice, nil)
-    end
-
-    # A gradient is declared where the selected site can hold it: under the site's own
-    # `defs` when the site is a design-level layer, else as a gradient site of its own,
-    # keyed by name, just below (spec/14 §18.6, §19.3).
-    defp declare_gradient(socket, name, gradient) do
-      %{uses: uses, labels: labels, selected: selected} = socket.assigns
-
-      case Stack.get(uses, selected) do
-        nil ->
-          socket
-
-        %Use{local: local} = use ->
-          cond do
-            declares_gradient?(use, name) ->
-              update_gradient(socket, name, fn _old -> gradient end)
-
-            is_map(local) and Fragment.wrapped(local) == nil ->
-              update_layer(socket, [:defs], name, {:ok, gradient})
-
-            true ->
-              site = %{Use.new(nil, uses) | ref: nil, local: %{gradient: gradient}, key: name}
-
-              assign(socket,
-                uses: Stack.insert(uses, selected, site),
-                labels: Map.put(labels, site.id, "gradient #{name}")
-              )
-          end
-      end
-    end
-
-    # The gradient is edited in the site that declares it — as a keyed gradient site, or
-    # under a layer's `defs`; one declared only through a library reference is left alone.
-    defp update_gradient(socket, name, fun) do
-      %{uses: uses} = socket.assigns
-
-      case Enum.find(uses, &declares_gradient?(&1, name)) do
-        nil ->
-          assign(socket, :notice, "gradient #{name} is not declared in this stack")
-
-        %Use{ref: ref} = use when ref != nil ->
-          assign(socket, :notice, locked_notice(socket.assigns, use))
-
-        %Use{id: id, local: %{gradient: body}} ->
-          assign(socket, :uses, Stack.update(uses, id, &%{&1 | local: %{gradient: fun.(body)}}))
-
-        %Use{id: id} ->
-          assign(
-            socket,
-            :uses,
-            Stack.update(uses, id, fn use ->
-              Stack.write(use, [:defs], name, {:ok, fun.(get_in(use.local, [:defs, name]))})
-            end)
-          )
-      end
-    end
-
-    defp declares_gradient?(%Use{local: %{gradient: body}, key: key}, name) when is_map(body),
-      do: key == name
-
-    defp declares_gradient?(%Use{local: local}, name) when is_map(local),
-      do: is_map(local[:defs]) and Map.has_key?(local[:defs], name)
-
-    defp declares_gradient?(_use, _name), do: false
 
     # A source chosen from the pool takes the pool's fields when it declares none (§19.10).
     defp filled(%{source: body} = local, key, pool) when is_map(body) and key != nil do
@@ -348,8 +301,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp picked(socket, entry, field, params) do
       %{editing: node} = editing(socket.assigns)
 
-      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)) do
-        %{key: key, type: {:list, _}} ->
+      case Editor.locate(entry.kind, field) do
+        %{path: [key], spec: %{type: {:list, _}}} ->
           ticked =
             params |> Map.get(field <> ".pick", []) |> List.wrap() |> Enum.map(&String.to_atom/1)
 
@@ -362,15 +315,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp edit_field(socket, entry, target, params) do
-      if Fills.control?(target) do
-        {:noreply, filled(socket, target, params[target], &edited(&1, entry, &2))}
-      else
-        {:noreply,
-         Editor.changes(entry.kind, params)
-         |> Enum.reduce(socket, &edited(&2, entry, &1))
-         |> derived_scales()}
-      end
+    # A form's change, in the node the editor is on: a key's write, or a style's parts
+    # (§18.7, D-178); the scales a bound channel needs follow.
+    defp edit_field(socket, entry, _target, params) do
+      %{editing: node} = editing(socket.assigns)
+
+      {:noreply,
+       entry.kind
+       |> Editor.changes(params, node)
+       |> Enum.reduce(socket, &edited(&2, entry, &1))
+       |> derived_scales()}
     end
 
     # A composed axis taken out of the layer that gives it: an axis site leaves the stack;
@@ -445,18 +399,49 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end)
     end
 
-    defp styled(socket, nil), do: socket
-    defp styled(socket, {key, parsed}), do: restacked(socket, &local(&1, key, parsed))
+    # The writes `writes.(local, resolved)` means, laid in the site's local style: the last
+    # entry when it is a node, else a new one (D-98). `resolved` is the site's stack in its
+    # parts, which a paint's type change and a list's rows start from (§18.19).
+    defp styled(socket, writes) do
+      %{design: design, style_site: site} = editing(socket.assigns)
+      stack = (site && site.stack) || []
+      resolved = StyleStack.resolved(design, stack)
 
-    defp local(stack, key, parsed) do
-      case List.last(stack) do
-        node when is_map(node) -> List.replace_at(stack, -1, write_key(node, key, parsed))
-        _none -> stack ++ [write_key(%{}, key, parsed)]
+      local =
+        case List.last(stack) do
+          node when is_map(node) and not is_struct(node) -> node
+          _none -> %{}
+        end
+
+      case writes.(local, resolved) do
+        [] -> socket
+        changes -> restacked(socket, &local(&1, changes))
       end
     end
 
-    defp write_key(node, key, {:ok, value}), do: Map.put(node, key, value)
-    defp write_key(node, key, :error), do: Map.delete(node, key)
+    defp local(stack, changes) do
+      case List.last(stack) do
+        node when is_map(node) and not is_struct(node) ->
+          List.replace_at(stack, -1, Enum.reduce(changes, node, &write_key(&2, &1)))
+
+        _none ->
+          stack ++ [Enum.reduce(changes, %{}, &write_key(&2, &1))]
+      end
+    end
+
+    defp write_key(node, {key, {:ok, value}}), do: Map.put(node, key, value)
+    defp write_key(node, {key, :error}), do: Map.delete(node, key)
+
+    # An item added to or removed from a style's list of nodes at a field's path.
+    defp items(kind, field, change, node, resolved) do
+      case StyleForm.kind?(kind) && StyleForm.locate(kind, field) do
+        %{path: path, spec: %{type: {:list, {:node, _}}}, suffix: nil} ->
+          StyleForm.item(node, path, change, resolved)
+
+        _other ->
+          []
+      end
+    end
 
     # A change to the open node's stack, written back in whatever shape it came in: a stack
     # of one that names a style stays a bare reference (spec/14 §3.6).
@@ -464,7 +449,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def restacked(socket, change) do
       %{entry: entry, editing: node} = editing(socket.assigns)
 
-      case FormSchema.key(entry.kind, :style) do
+      case Schema.key(entry.kind, :style) do
         nil ->
           socket
 
@@ -495,6 +480,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Editor.submitted(Params.expects(free), value) do
         {:ok, parsed} -> update(socket, :bindings, &Map.put(&1, free.name, parsed))
         :error -> update(socket, :bindings, &Map.delete(&1, free.name))
+      end
+    end
+
+    # A style site keyed by the name, appended at the chart's top level, selected and its
+    # node opened (§18.14, D-178).
+    defp declared_style(socket, name) do
+      %{uses: uses, labels: labels} = socket.assigns
+      site = %{Use.new(nil, uses) | ref: nil, local: %{style: %{}}, key: name}
+
+      socket
+      |> assign(
+        uses: uses ++ [site],
+        labels: Map.put(labels, site.id, "style #{name}"),
+        selected: site.id,
+        notice: nil
+      )
+      |> opened("styles." <> to_string(name))
+    end
+
+    # A declared style opened where the highest layer declaring it is.
+    defp opened_style(socket, name) do
+      %{layers: layers} = editing(socket.assigns)
+
+      case declaring(layers, to_string(name)) do
+        nil -> opened(socket, "styles." <> to_string(name))
+        index -> socket |> select(index) |> opened("styles." <> to_string(name))
       end
     end
 

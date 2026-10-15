@@ -237,6 +237,26 @@ release it merely follows.
 
 ### Changed
 
+- **The builder edits a style in its parts** (#682, D-178). A style's form is the whole
+  element's keys (`extends`, `opacity`, `blend`, `class`), then one section per part —
+  fill, stroke, font, text, effect, marker, curve, transition, animation, enter, exit — each
+  with its own keys. A fill's and a stroke's first control is the paint type (none, solid,
+  linear, radial, hatch, a named paint), and it decides which keys follow; a gradient picked
+  over a color starts from it, and its stops are rows you add and remove. At a mark's or a
+  label's site the parts that element does not draw are grayed ("not drawn by a line").
+  Controls are named by their path (`stroke.width`, `fill.stops.1.color`), so a host that
+  drives the builder's `edit` event by name uses those names; the flat names
+  (`stroke_width`, `fill_style`, `font_face`) are gone. An edit writes only what was set, in
+  its part — a width set at a site is `%{stroke: %{width: 7}}` in the local style — and a
+  style still written in the flat keys of version 2 is rewritten in its parts by its first
+  edit. **Add style** now declares the style as a site keyed by its name in the design,
+  never inside the selected layer; a name already declared is opened instead.
+  The builder editor's `changes` now takes the node the write lands in
+  (`Visualize.Chart.Builder.Editor.changes/3`); the builder's `Fills` module and the schema's
+  `group` and `groups` functions are removed, and a key spec no longer carries `group`. A choice of types in a
+  text box now reads as whichever alternative takes it — an animation's `iterations` takes
+  `3` or `infinite`.
+
 - **Theme contracts on role styles are rewritten** (#666, D-173). A role style may now paint in
   any color, since a theme restyles what a meaning looks like. In place of "a role paints with its
   own role", a theme is refused when:

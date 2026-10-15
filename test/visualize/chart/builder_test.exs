@@ -412,16 +412,19 @@ defmodule Visualize.Chart.BuilderTest do
       {:ok, added} = Builder.update(stored, added)
       assert length(BuilderFixture.layers(added)) == length(host.layers) + 1
 
-      # The house opens on its first real node, `styles.series` (§18.13): an edit lands there.
+      # The house opens on its first real node, `styles.series` (§18.13): an edit lands there,
+      # in the style's parts (§18.7, D-178).
       {:noreply, edited} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "7"},
           socket
         )
 
       {:ok, edited} = Builder.update(host, edited)
-      assert {_name, %{styles: %{series: %{stroke_width: 7}}}} = hd(BuilderFixture.layers(edited))
+
+      assert {_name, %{styles: %{series: %{stroke: %{width: 7}}}}} =
+               hd(BuilderFixture.layers(edited))
     end
 
     test "a host that changes its list replaces the stack", %{socket: socket} do
@@ -506,23 +509,42 @@ defmodule Visualize.Chart.BuilderTest do
       assert Palette.names(Chart.stack(BuilderFixture.layers())) == [:series]
     end
 
-    test "a style is created in the selected layer and the editor opens on it", %{socket: s} do
+    test "a style is declared in the design by a site keyed by its name, never in a layer (§18.14, D-178)",
+         %{socket: s} do
+      before = BuilderFixture.layers(s)
       {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
 
-      {_name, layer} = hd(BuilderFixture.layers(s))
-      assert %{} = layer.styles.callout
+      # No layer's fragment gained a declaration: the layers are as they were, and a new
+      # site, keyed by the name, is selected at the chart's top level.
+      assert Enum.take(BuilderFixture.layers(s), length(before)) == before
+      site = Stack.get(s.assigns.uses, s.assigns.selected)
+      assert site == List.last(s.assigns.uses)
+      assert %Use{ref: nil, key: :callout, local: %{style: %{}}} = site
+      assert s.assigns.labels[site.id] == "style callout"
+      assert BuilderFixture.design(s).styles.callout == %{}
+
       assert s.assigns.node_label == "styles.callout"
       assert s.assigns.notice == nil
+
+      # An edit of it lands in its site, in its parts.
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke.width"], "stroke.width" => "3", "_node" => "styles.callout"},
+          s
+        )
+
+      assert Stack.get(s.assigns.uses, site.id).local == %{style: %{stroke: %{width: 3}}}
     end
 
-    test "a style may be added to a layer that carries no styles at all", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "1"}, s)
-      {_name, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      refute Map.has_key?(shared, :styles)
+    test "a name the design declares already is opened, not declared twice", %{socket: s} do
+      {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "2"}, s)
+      {:noreply, again} = Builder.handle_event("add_style", %{"name" => "series"}, s)
 
-      {:noreply, s} = Builder.handle_event("add_style", %{"name" => "callout"}, s)
-      {_name, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.styles.callout == %{}
+      assert length(again.assigns.uses) == length(s.assigns.uses)
+      assert BuilderFixture.selected(again) == 0
+      assert again.assigns.node_label == "styles.series"
+      assert again.assigns.notice == "series is declared already — opened it"
     end
 
     test "a blank name is a notice and declares nothing", %{socket: s} do
@@ -768,11 +790,12 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit_style",
-          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "7"},
           s
         )
 
-      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7}]
+      # Only what was set, in its part: the stroke beneath still shows through (D-178).
+      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}}]
 
       # The shared style is untouched, which is the whole reason the local one exists.
       {_name, house} = hd(BuilderFixture.layers(s))
@@ -783,30 +806,30 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit_style",
-          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "7"},
           s
         )
 
       {:noreply, s} =
         Builder.handle_event("edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"}, s)
 
-      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7, opacity: 0.5}]
+      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}, opacity: 0.5}]
     end
 
     test "blanking the last local key removes the local entry", %{socket: s} do
       {:noreply, s} =
         Builder.handle_event(
           "edit_style",
-          %{"_target" => ["stroke_width"], "stroke_width" => "7"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "7"},
           s
         )
 
-      assert BuilderFixture.style_at(s) == [:series, %{stroke_width: 7}]
+      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}}]
 
       {:noreply, s} =
         Builder.handle_event(
           "edit_style",
-          %{"_target" => ["stroke_width"], "stroke_width" => ""},
+          %{"_target" => ["stroke.width"], "stroke.width" => ""},
           s
         )
 
@@ -819,6 +842,65 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("edit_style", %{"_target" => ["nonsense"], "nonsense" => "1"}, s)
 
       assert BuilderFixture.style_at(other) == BuilderFixture.style_at(s)
+
+      {:noreply, other} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke.nonsense"], "stroke.nonsense" => "1"},
+          s
+        )
+
+      assert BuilderFixture.style_at(other) == BuilderFixture.style_at(s)
+    end
+
+    test "a paint's type chosen at a site starts from the colour the site resolves to", %{
+      socket: s
+    } do
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke.type"], "stroke.type" => "linear"},
+          s
+        )
+
+      assert [:series, %{stroke: stroke}] = BuilderFixture.style_at(s)
+      assert stroke.type == :linear
+
+      assert stroke.stops == [
+               %{at: 0, color: :series_1, opacity: 0.8},
+               %{at: 1, color: :series_1, opacity: 0.1}
+             ]
+
+      # A stop edited at the site: the local takes the site's stops whole and changes one.
+      {:noreply, s} =
+        Builder.handle_event(
+          "edit_style",
+          %{"_target" => ["stroke.stops.1.opacity"], "stroke.stops.1.opacity" => "0.4"},
+          s
+        )
+
+      assert [:series, %{stroke: %{stops: [_first, %{opacity: 0.4}]}}] =
+               BuilderFixture.style_at(s)
+
+      # A stop added and removed at the site, through the rows' + and ×.
+      {:noreply, s} =
+        Builder.handle_event(
+          "style_item",
+          %{"field" => "stroke.stops", "op" => "add", "edit" => "edit_style"},
+          s
+        )
+
+      assert [:series, %{stroke: %{stops: [_, _, %{at: 1}]}}] = BuilderFixture.style_at(s)
+
+      {:noreply, s} =
+        Builder.handle_event(
+          "style_item",
+          %{"field" => "stroke.stops", "op" => "remove", "index" => "0", "edit" => "edit_style"},
+          s
+        )
+
+      assert [:series, %{stroke: %{stops: [%{opacity: 0.4}, %{at: 1}]}}] =
+               BuilderFixture.style_at(s)
     end
 
     test "the panel is shown only when an entry is selected" do
@@ -829,21 +911,50 @@ defmodule Visualize.Chart.BuilderTest do
       refute at_node("marks[0]", selected: 2) =~ "vis-builder-style-panel"
     end
 
+    test "the parts a line does not draw are grayed, with a note (§5.6, §18.7)" do
+      html = at_node("marks[0]", selected: 2, style_entry: 0)
+
+      [_, panel] =
+        String.split(html, ~s(class="vis-builder-editor vis-builder-style-panel"), parts: 2)
+
+      for part <- ~w(fill marker font text) do
+        assert panel =~
+                 ~r|<fieldset class="vis-builder-part vis-builder-part-undrawn" data-builder-part="#{part}">\s*<legend class="vis-builder-part-name">#{part}</legend>\s*<p class="vis-builder-context-note vis-builder-part-note">not drawn by a line</p>|
+      end
+
+      for part <- ~w(stroke effect curve transition) do
+        assert panel =~ ~s(<fieldset class="vis-builder-part" data-builder-part="#{part}">)
+      end
+    end
+
     test "every field names the entry its value came from" do
       design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
 
-      assert StyleStack.origins(design, [:series, %{stroke_width: 5}]) ==
-               %{stroke: "series", stroke_width: "local"}
+      assert StyleStack.origins(design, [:series, %{stroke: %{width: 5}}]) ==
+               %{
+                 "stroke.type" => "series",
+                 "stroke.color" => "series",
+                 "stroke.width" => "local"
+               }
 
       # A key nothing sets is named by nothing.
       refute Map.has_key?(StyleStack.origins(design, [:series]), :opacity)
+
+      # The panel shows each name beside its field.
+      html = at_node("marks[0]", selected: 2, style_entry: 0)
+
+      [_, panel] =
+        String.split(html, ~s(class="vis-builder-editor vis-builder-style-panel"), parts: 2)
+
+      assert panel =~
+               ~r|data-builder-bind="stroke.width"[^>]*>\s*<span class="vis-builder-key">\s*width<span\s+class="vis-builder-origin"\s*>series</span>|
     end
 
-    test "the resolved style is the cascade, and the panel is a view of it" do
+    test "the resolved style is the cascade in its parts, and the panel is a view of it" do
       design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
 
-      assert StyleStack.resolved(design, [:series, %{stroke_width: 5}]) ==
-               %{stroke: "#111", stroke_width: 5}
+      assert StyleStack.resolved(design, [:series, %{stroke: %{width: 5}}]) ==
+               %{stroke: %{type: :solid, color: "#111", width: 5}}
     end
   end
 
@@ -1140,8 +1251,9 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, edited} =
         Builder.handle_event("edit", %{"_target" => ["opacity"], "opacity" => "0.5"}, opened)
 
+      # The entry was written in the flat keys; its first edit writes it in its parts (D-178).
       assert BuilderFixture.layers(edited) ==
-               [{"Styles::thick", %{style: %{stroke_width: 5, opacity: 0.5}}}]
+               [{"Styles::thick", %{style: %{stroke: %{width: 5}, opacity: 0.5}}}]
 
       {:noreply, closed} = Builder.handle_event("close", %{}, edited)
       assert closed.assigns.open == nil
@@ -2077,7 +2189,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert saved.assigns.notice == nil
       assert saved.assigns.open == %{id: {:style, 1}, name: "Styles::thicker", kind: :style}
 
-      assert {:ok, %{fragment: %{style: %{stroke_width: 5, opacity: 0.5}}}} =
+      assert {:ok, %{fragment: %{style: %{stroke: %{width: 5}, opacity: 0.5}}}} =
                Recording.get({:style, 1}, %{})
 
       {:noreply, stacked} =
@@ -2241,12 +2353,13 @@ defmodule Visualize.Chart.BuilderTest do
     test "a colour field is a well showing its colour, and no select or picker" do
       html = at_node("styles.series", selected: 0)
 
+      # The stroke's colour, by its path in the part (§18.7, D-178).
       assert html =~
-               ~s(<span class="vis-builder-well" style="--vis-builder-swatch: #3b6fa8" title="series_1" role="img" aria-label="stroke: series_1" data-builder-well="stroke">)
+               ~s(<span class="vis-builder-well" style="--vis-builder-swatch: #3b6fa8" title="series_1" role="img" aria-label="stroke.color: series_1" data-builder-well="stroke.color">)
 
-      refute html =~ ~s(name="stroke.slot")
-      refute html =~ ~s(<input type="color" name="stroke")
-      refute html =~ "stroke.mode"
+      refute html =~ ~s(name="stroke.color.slot")
+      refute html =~ ~s(<input type="color" name="stroke.color")
+      refute html =~ "stroke.color.mode"
 
       # A hex is itself, none is hatched, unset is empty, a slot the theme lacks has no colour.
       theme = Visualize.Theme.default()
@@ -2257,15 +2370,29 @@ defmodule Visualize.Chart.BuilderTest do
       assert Editor.well({:series, 2}, theme).colour == Enum.at(theme.series, 1)
 
       # The chooser's controls still write the same key: a slot is the atom, a hex the
-      # string, blank removes.
-      assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => "axis"}) ==
-               {:fill, {:ok, :axis}}
+      # string, blank removes — a part's colour as any key.
+      solid = %{fill: %{type: :solid, color: :series_1}}
 
-      assert Editor.change(:style, %{"_target" => ["fill"], "fill" => "#3b6fa8"}) ==
-               {:fill, {:ok, "#3b6fa8"}}
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["fill.color.slot"], "fill.color.slot" => "axis"},
+               solid
+             ) ==
+               [fill: {:ok, %{type: :solid, color: :axis}}]
 
-      assert Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => ""}) ==
-               {:fill, :error}
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["fill.color"], "fill.color" => "#3b6fa8"},
+               solid
+             ) ==
+               [fill: {:ok, %{type: :solid, color: "#3b6fa8"}}]
+
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["fill.color.slot"], "fill.color.slot" => ""},
+               solid
+             ) ==
+               [fill: {:ok, %{type: :solid}}]
     end
 
     test "a reference offers what the document declares and what the library holds, by id" do
@@ -2682,213 +2809,6 @@ defmodule Visualize.Chart.BuilderTest do
     end
   end
 
-  describe "a fill is a fill style (spec/14 §18.6, §2.7)" do
-    setup do
-      s = BuilderFixture.socket(BuilderFixture.layers(), store: Visualize.Chart.BuilderTest.Refs)
-      {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
-      %{socket: s}
-    end
-
-    defp fill_of(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series, :fill])
-    defp defs_of(s), do: get_in(hd(s.assigns.uses).local, [:defs]) || %{}
-
-    test "the fill group opens with four glyphs, and none writes :none, solid a colour", %{
-      socket: s
-    } do
-      html = BuilderFixture.render(s)
-      assert html =~ ~s(aria-label="fill style")
-
-      for style <- ~w(none solid linear radial) do
-        assert html =~ ~s(<input type="radio" name="fill_style" value="#{style}")
-      end
-
-      # Unset shows as solid; none hatches the well; solid on none is the first series.
-      assert html =~ ~s(name="fill_style" value="solid" checked)
-
-      {:noreply, none} =
-        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "none"}, s)
-
-      assert fill_of(none) == :none
-      assert BuilderFixture.render(none) =~ ~s(class="vis-builder-well vis-builder-well-none")
-
-      {:noreply, solid} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fill_style"], "fill_style" => "solid"},
-          none
-        )
-
-      assert fill_of(solid) == :series_1
-      refute BuilderFixture.render(solid) =~ "vis-builder-gradient"
-    end
-
-    test "linear declares the gradient named for the style under the layer's defs and shows its controls",
-         %{socket: s} do
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["fill"], "fill" => "#abcdef"}, s)
-
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "linear"}, s)
-
-      assert fill_of(s) == {:paint, :series_fill}
-
-      assert defs_of(s) == %{
-               series_fill: %{
-                 type: :linear,
-                 stops: [
-                   %{at: 0, color: "#abcdef", opacity: 0.8},
-                   %{at: 1, color: "#abcdef", opacity: 0.1}
-                 ]
-               }
-             }
-
-      html = BuilderFixture.render(s)
-      assert html =~ ~s(name="fill_style" value="linear" checked)
-      # The fill's wells are the first and last stops — no third swatch — in the colours
-      # column; the numbers column holds the opacity then the angle as a ranged box.
-      refute html =~ ~s(data-builder-well="fill")
-
-      assert html =~
-               ~s(--vis-builder-swatch: #abcdef" title="#abcdef" role="img" aria-label="stop 0: #abcdef" data-builder-well="fill.stop.0")
-
-      assert html =~ ~s(data-builder-well="fill.stop.1")
-      refute html =~ ~s(name="fill.stop.1.opacity")
-
-      colours =
-        html
-        |> String.split(~s(class="vis-builder-fill-colours"))
-        |> Enum.at(1)
-        |> String.split("vis-builder-fill-numbers")
-        |> hd()
-
-      assert colours =~ ~s(fill.stop.0) and colours =~ ~s(fill.stop.1)
-
-      # The opacity sits beside the style at the top, titled opacity; the colours are titled
-      # colour; the angle sits under the opacity.
-      {style_at, _} = :binary.match(html, ~s(<span class="vis-builder-key">style</span>))
-      {opacity_at, _} = :binary.match(html, ~s(name="fill_opacity"))
-      {colours_at, _} = :binary.match(html, ~s(class="vis-builder-fill-colours"))
-      assert style_at < opacity_at and opacity_at < colours_at
-
-      assert html =~
-               ~r|phx-value-field="fill_opacity" phx-target="-1">\s*<span class="vis-builder-key">\s*opacity\s*<|
-
-      assert html =~
-               ~r|phx-value-field="fill" phx-target="-1">\s*<span class="vis-builder-key">\s*colour\s*<|
-
-      numbers =
-        html
-        |> String.split(~s(class="vis-builder-fill-numbers"))
-        |> Enum.at(1)
-        |> String.split("</fieldset>")
-        |> hd()
-
-      refute numbers =~ ~s(name="fill_opacity")
-      assert numbers =~ ~s(<input type="text" name="fill.angle" value="180")
-
-      assert numbers =~
-               ~s(name="fill.angle.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 50.0%")
-
-      refute html =~ ~s(name="fill.centre.x")
-      # And the preview carries the gradient.
-      assert html =~ "<linearGradient"
-      assert html =~ ~s(-series_fill)
-
-      # The stop wells and the angle write the gradient where it is declared.
-      {:noreply, s} =
-        Builder.handle_event("drop_colour", %{"field" => "fill.stop.1", "colour" => "axis"}, s)
-
-      {:noreply, s} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fill.stop.0"], "fill.stop.0" => "#123456"},
-          s
-        )
-
-      {:noreply, s} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fill.angle.range"], "fill.angle.range" => "90"},
-          s
-        )
-
-      gradient = defs_of(s).series_fill
-      assert gradient.angle == 90
-
-      assert gradient.stops == [
-               %{at: 0, color: "#123456", opacity: 0.8},
-               %{at: 1, color: :axis, opacity: 0.1}
-             ]
-
-      # A stop well selected opens the chooser on that stop.
-      {:noreply, picked} = Builder.handle_event("select_field", %{"field" => "fill.stop.1"}, s)
-      assert picked.assigns.context == :colour
-      html = BuilderFixture.render(picked)
-      assert html =~ ~s(<h3 class="vis-builder-context-title">fill.stop.1</h3>)
-      assert html =~ ~s(name="fill.stop.1.slot" value="axis" checked)
-
-      # Radial keeps the stops and shows a centre; solid takes the first stop's colour.
-      {:noreply, radial} =
-        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "radial"}, s)
-
-      assert defs_of(radial).series_fill.type == :radial and
-               defs_of(radial).series_fill.stops == gradient.stops
-
-      {:noreply, radial} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fill.centre.y"], "fill.centre.y" => "0.25"},
-          radial
-        )
-
-      assert defs_of(radial).series_fill.center == [0.5, 0.25]
-      assert BuilderFixture.render(radial) =~ ~s(name="fill.centre.y")
-
-      {:noreply, solid} =
-        Builder.handle_event(
-          "edit",
-          %{"_target" => ["fill_style"], "fill_style" => "solid"},
-          radial
-        )
-
-      assert fill_of(solid) == "#123456"
-      assert Map.has_key?(defs_of(solid), :series_fill)
-    end
-
-    test "on a style site the gradient becomes a keyed gradient site just below it" do
-      site = %{
-        Visualize.Chart.Use.new(nil, [])
-        | ref: nil,
-          local: %{style: %{stroke: "#000"}},
-          key: :thick
-      }
-
-      s = BuilderFixture.socket([])
-
-      s =
-        Phoenix.Component.assign(s,
-          uses: [site],
-          labels: %{site.id => "style thick"},
-          selected: site.id
-        )
-
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["fill_style"], "fill_style" => "linear"}, s)
-
-      # Named for the style as the chart knows it, `styles.thick` (§18.6, §18.15).
-      [style, gradient] = s.assigns.uses
-      assert style.local == %{style: %{stroke: "#000", fill: {:paint, :thick_fill}}}
-      assert gradient.key == :thick_fill
-      assert gradient.local.gradient.type == :linear
-      assert s.assigns.labels[gradient.id] == "gradient thick_fill"
-
-      {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["fill.angle"], "fill.angle" => "45"}, s)
-
-      assert Enum.at(s.assigns.uses, 1).local.gradient.angle == 45
-    end
-  end
-
   describe "signals are the chart's sources while it is designed (spec/14 §19.10)" do
     setup do
       %{
@@ -3157,8 +3077,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert back.assigns.context == :inspect
       assert BuilderFixture.render(back) =~ ~s(class="vis-builder-layer-context")
 
-      # A colour field still opens the picker; the variables tab its panel.
-      {:noreply, field} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
+      # A colour field still opens the picker — a part's colour by its path; the variables
+      # tab its panel.
+      {:noreply, field} = Builder.handle_event("select_field", %{"field" => "stroke.color"}, s)
       assert field.assigns.context == :colour
 
       {:noreply, vars} = Builder.handle_event("context", %{"panel" => "variables"}, s)
@@ -3174,37 +3095,43 @@ defmodule Visualize.Chart.BuilderTest do
          %{
            socket: s
          } do
-      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke.color"}, s)
       assert s.assigns.context == :colour
       html = BuilderFixture.render(s)
 
       assert html =~ ~s(<form id="b-picker" class="vis-builder-picker" phx-change="edit")
       assert html =~ ~s(data-builder-scope="colour")
-      assert html =~ ~s(<h3 class="vis-builder-context-title">stroke</h3>)
+      assert html =~ ~s(<h3 class="vis-builder-context-title">stroke.color</h3>)
 
       for slot <- Visualize.Theme.colour_slots(Visualize.Theme.default()) do
-        assert html =~ ~s(name="stroke.slot" value="#{slot}")
+        assert html =~ ~s(name="stroke.color.slot" value="#{slot}")
         assert html =~ ~s(draggable="true" data-builder-colour="#{slot}")
       end
 
       assert html =~ ~s(class="vis-builder-swatch vis-builder-swatch-on" title="series_1")
       assert length(Regex.scan(~r/class="vis-builder-hue"/, html)) >= 35
-      assert html =~ ~s(<input type="color" name="stroke" class="vis-builder-colour")
-      refute html =~ "stroke.var"
+      assert html =~ ~s(<input type="color" name="stroke.color" class="vis-builder-colour")
+      refute html =~ "stroke.color.var"
 
       # The patches come before the hues and the picker.
       {swatches, _} = :binary.match(html, ~s(aria-label="theme slots"))
       {hues, _} = :binary.match(html, ~s(aria-label="hues"))
-      {picker, _} = :binary.match(html, ~s(<input type="color" name="stroke"))
+      {picker, _} = :binary.match(html, ~s(<input type="color" name="stroke.color"))
       assert swatches < hues and hues < picker
 
       {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["stroke.slot"], "stroke.slot" => "axis"}, s)
+        Builder.handle_event(
+          "edit",
+          %{"_target" => ["stroke.color.slot"], "stroke.color.slot" => "axis"},
+          s
+        )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke]) == :axis
+      # The flat house style is written in its parts by the edit (D-178).
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series]) ==
+               %{stroke: %{type: :solid, color: :axis, width: 2}}
 
       # With no colour field selected the panel shows the colours and writes nothing.
-      {:noreply, off} = Builder.handle_event("select_field", %{"field" => "stroke_width"}, s)
+      {:noreply, off} = Builder.handle_event("select_field", %{"field" => "stroke.width"}, s)
       {:noreply, off} = Builder.handle_event("context", %{"panel" => "colour"}, off)
       html = BuilderFixture.render(off)
       assert html =~ "click a colour well to set it here"
@@ -3217,37 +3144,42 @@ defmodule Visualize.Chart.BuilderTest do
       assert s.assigns.field == nil
 
       {:noreply, s} =
-        Builder.handle_event("drop_colour", %{"field" => "fill", "colour" => "axis"}, s)
+        Builder.handle_event("drop_colour", %{"field" => "stroke.color", "colour" => "axis"}, s)
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :fill]) == :axis
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) == :axis
 
       {:noreply, s} =
-        Builder.handle_event("drop_colour", %{"field" => "fill", "colour" => "#abcdef"}, s)
+        Builder.handle_event(
+          "drop_colour",
+          %{"field" => "stroke.color", "colour" => "#abcdef"},
+          s
+        )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :fill]) == "#abcdef"
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) == "#abcdef"
       assert BuilderFixture.render(s) =~ ~s(--vis-builder-swatch: #abcdef" title="#abcdef")
 
       {:noreply, refused} =
-        Builder.handle_event("drop_colour", %{"field" => "stroke_width", "colour" => "axis"}, s)
+        Builder.handle_event("drop_colour", %{"field" => "stroke.width", "colour" => "axis"}, s)
 
-      assert refused.assigns.notice == "stroke_width is not a colour"
-      assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke_width]) == 2
+      assert refused.assigns.notice == "stroke.width is not a colour"
+      assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke, :width]) == 2
     end
 
     test "the font panel: families in their face, size, the face list, anchor — for a node with font keys",
          %{
            socket: s
          } do
-      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "font_family"}, s)
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "font.family"}, s)
       # A font key leaves inspect where it is: the font panel is under the styles root (#314).
       assert s.assigns.context == :inspect
       html = BuilderFixture.render(s)
       assert html =~ ~s(<form id="b-fonts-form" class="vis-builder-fonts" phx-change="edit")
       assert html =~ ~s(class="vis-builder-face" style="font-family: Georgia")
-      assert html =~ ~s(name="font_size.range")
-      refute html =~ ~s(name="font_weight")
-      assert html =~ ~s(<input type="radio" name="font_face" value="bold_italic")
-      assert html =~ ~s(<input type="radio" name="text_anchor" value="middle")
+      # A style's font keys are its parts' (§18.7, D-178).
+      assert html =~ ~s(name="font.size.range")
+      refute html =~ ~s(name="font.weight")
+      assert html =~ ~s(<input type="radio" name="font.face" value="bold_italic")
+      assert html =~ ~s(<input type="radio" name="text.anchor" value="middle")
 
       # The face list is one control over two keys (§18.6): a face writes both, and the
       # node then shows that face; the form shows the same list in font_weight's place
@@ -3255,25 +3187,25 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, faced} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["font_face"], "font_face" => "light_italic"},
+          %{"_target" => ["font.face"], "font.face" => "light_italic"},
           s
         )
 
       style = get_in(hd(faced.assigns.uses).local, [:styles, :series])
-      assert style.font_weight == :light and style.font_style == :italic
+      assert style.font == %{weight: :light, style: :italic}
       faced_html = BuilderFixture.render(faced)
 
       assert faced_html =~
-               ~s(name="font_face" value="light_italic" checked aria-label="light italic")
+               ~s(name="font.face" value="light_italic" checked aria-label="light italic")
 
       # The form's face is a dropdown wearing the chosen face — the form is under the
       # inspect tab, the panel keeps its list.
       {:noreply, inspected} = Builder.handle_event("context", %{"panel" => "inspect"}, faced)
       faced_html = BuilderFixture.render(inspected)
-      refute faced_html =~ ~s(phx-value-field="font_style")
+      refute faced_html =~ ~s(phx-value-field="font.style")
 
       assert faced_html =~
-               ~s(<select name="font_face" class="vis-builder-face-select" style="font-weight: 300; font-style: italic" aria-label="face">)
+               ~s(<select name="font.face" class="vis-builder-face-select" style="font-weight: 300; font-style: italic" aria-label="face">)
 
       assert faced_html =~
                ~r|<option value="light_italic" style="font-weight: 300; font-style: italic" selected>\s*light italic\s*</option>|
@@ -3287,11 +3219,11 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["font_family"], "font_family" => "Georgia"},
+          %{"_target" => ["font.family"], "font.family" => "Georgia"},
           s
         )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :font_family]) == "Georgia"
+      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :font, :family]) == "Georgia"
 
       # Under another root there is no font panel; under styles with a node that has no
       # font keys it says which to open.
@@ -3300,8 +3232,8 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "selecting a node or a layer clears the field", %{socket: s} do
-      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke"}, s)
-      assert s.assigns.field == "stroke"
+      {:noreply, s} = Builder.handle_event("select_field", %{"field" => "stroke.color"}, s)
+      assert s.assigns.field == "stroke.color"
 
       {:noreply, node} = Builder.handle_event("select_node", %{"node" => "frames.main"}, s)
       assert node.assigns.field == nil
@@ -3850,13 +3782,14 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["stroke_width"], "stroke_width" => "7", "_node" => "styles.series"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "7", "_node" => "styles.series"},
           s
         )
 
+      # The panel's node is the one the stack keeps, so it is the one rewritten in its parts.
       [{:house, house}, {:panel, panel}] = BuilderFixture.layers(s)
       assert house.styles.series.stroke_width == 2
-      assert panel.styles.series.stroke_width == 7
+      assert panel.styles.series == %{stroke: %{width: 7}}
     end
 
     test "a keyed site is written at its own path", %{socket: s} do
@@ -3916,12 +3849,12 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event(
           "edit",
-          %{"_target" => ["stroke_width"], "stroke_width" => "3", "_node" => "style"},
+          %{"_target" => ["stroke.width"], "stroke.width" => "3", "_node" => "style"},
           s
         )
 
       assert Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected).local ==
-               %{style: %{stroke_width: 3}}
+               %{style: %{stroke: %{width: 3}}}
     end
   end
 
@@ -4004,30 +3937,33 @@ defmodule Visualize.Chart.BuilderTest do
     test "a bound field renders the chip in place of its control, with an × that unbinds", %{
       socket: s
     } do
+      # The stroke written short as a variable is a solid paint of it: its colour's chip
+      # (§18.7, D-178).
       html = BuilderFixture.render(s)
       assert html =~ ~s(class="vis-builder-var-chip vis-builder-var-chip-bound")
       assert html =~ "var(:color)"
-      assert html =~ ~s(phx-click="unbind_field" phx-value-field="stroke")
-      refute html =~ ~s(data-builder-well="stroke")
-      refute html =~ "stroke.mode"
-      refute html =~ "stroke.var"
+      assert html =~ ~s(phx-click="unbind_field" phx-value-field="stroke.color")
+      refute html =~ ~s(data-builder-well="stroke.color")
+      refute html =~ "stroke.color.var"
 
-      {:noreply, unbound} = Builder.handle_event("unbind_field", %{"field" => "stroke"}, s)
+      {:noreply, unbound} =
+        Builder.handle_event("unbind_field", %{"field" => "stroke.color"}, s)
+
       {_, house} = hd(BuilderFixture.layers(unbound))
-      refute Map.has_key?(house.styles.series, :stroke)
-      assert BuilderFixture.render(unbound) =~ ~s(data-builder-well="stroke")
+      assert house.styles.series.stroke == %{type: :solid, width: 2}
+      assert BuilderFixture.render(unbound) =~ ~s(data-builder-well="stroke.color")
     end
 
     test "a chip dropped on a field binds it; a mismatch is refused by name; untyped takes the type",
          %{
            socket: s
          } do
-      # `color` is a colour by its use at stroke; fill takes it.
+      # `color` is a colour by its use at stroke; a fill's colour takes it.
       {:noreply, s} =
-        Builder.handle_event("bind_field", %{"field" => "fill", "name" => "color"}, s)
+        Builder.handle_event("bind_field", %{"field" => "fill.color", "name" => "color"}, s)
 
       {_, house} = hd(BuilderFixture.layers(s))
-      assert house.styles.series.fill == Chart.var(:color)
+      assert house.styles.series.fill == %{color: Chart.var(:color)}
 
       # `unit` is text by its use in a label; a colour field refuses it by name.
       {:noreply, refused} =
@@ -4053,7 +3989,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert fresh.type == :size
 
       # And the field row carries every key as a drop target, in the field's markup.
-      assert BuilderFixture.render(s) =~ ~s(data-builder-bind="stroke_width")
+      assert BuilderFixture.render(s) =~ ~s(data-builder-bind="stroke.width")
     end
 
     test "a chip dropped on a strip tab binds the first key of that root it fits", %{socket: s} do
@@ -4078,19 +4014,20 @@ defmodule Visualize.Chart.BuilderTest do
     test "a field's value is promoted to a variable named for its key, and the field bound", %{
       socket: s
     } do
-      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke_width"}, s)
+      # A part's key is promoted under its path's name (D-178).
+      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke.width"}, s)
       assert hd(BuilderFixture.names(s)) == "var stroke_width"
       {_, house} = List.last(BuilderFixture.layers(s))
-      assert house.styles.series.stroke_width == Chart.var(:stroke_width)
+      assert house.styles.series.stroke.width == Chart.var(:stroke_width)
       assert BuilderFixture.design(s).vars.stroke_width == %{default: 2}
 
       # A second promotion of the same key takes the next free name.
-      {:noreply, s} = Builder.handle_event("unbind_field", %{"field" => "stroke_width"}, s)
+      {:noreply, s} = Builder.handle_event("unbind_field", %{"field" => "stroke.width"}, s)
 
       {:noreply, s} =
-        Builder.handle_event("edit", %{"_target" => ["stroke_width"], "stroke_width" => "4"}, s)
+        Builder.handle_event("edit", %{"_target" => ["stroke.width"], "stroke.width" => "4"}, s)
 
-      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke_width"}, s)
+      {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke.width"}, s)
       assert hd(BuilderFixture.names(s)) == "var stroke_width_2"
 
       # A field with no value has nothing to promote.
@@ -5263,10 +5200,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("select_node", %{"node" => "styles.series"}, s)
 
       {:noreply, promoted} =
-        Builder.handle_event("promote", %{"field" => "stroke_width", "scope" => "root"}, s)
+        Builder.handle_event("promote", %{"field" => "stroke.width", "scope" => "root"}, s)
 
       assert %Visualize.Chart.Var{name: name} =
-               BuilderFixture.design(promoted).styles.series.stroke_width
+               BuilderFixture.design(promoted).styles.series.stroke.width
 
       assert to_string(name) =~ "stroke_width"
     end

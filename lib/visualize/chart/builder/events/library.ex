@@ -16,10 +16,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Workspace,
       only: [fetch: 2, opened_entry: 2, saved: 3, structure: 1]
 
-    import Visualize.Chart.Builder.Writes, only: [admits: 2, linked: 3, update_layer: 4]
+    import Visualize.Chart.Builder.Writes, only: [admits: 2, linked: 3, update_node: 3]
 
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{Document, FormSchema, Stack, Store}
+    alias Visualize.Chart.Builder.{Document, Editor, Stack, Store}
     alias Visualize.Chart.{Composite, Fragment, Validator}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
@@ -194,11 +194,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           socket
         ) do
       socket = aimed(socket, params)
-      %{entry: entry} = editing(socket.assigns)
+      %{entry: entry, editing: node} = editing(socket.assigns)
 
       with {:ok, stored} <- fetch(socket.assigns.store, submitted),
-           %{key: key, type: type} <-
-             Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == field)),
+           %{path: at, spec: %{type: type}} <- Editor.locate(entry.kind, field),
            kind when kind != nil <- ref_kind(type) do
         cond do
           stored.kind != kind ->
@@ -214,7 +213,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
           true ->
             {:noreply,
-             socket |> update_layer(entry.path, key, {:ok, stored.id}) |> assign(:notice, nil)}
+             socket
+             |> update_node(entry.path, Editor.write(entry.kind, node, at, {:ok, stored.id}))
+             |> assign(:notice, nil)}
         end
       else
         :error -> {:noreply, assign(socket, :notice, "no fragment is stored under #{submitted}")}

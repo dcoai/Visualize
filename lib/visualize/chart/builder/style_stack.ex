@@ -41,7 +41,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.StyleStack.entries(:series, nil)
         [%{index: 0, name: "series", local: false, default: false}]
 
-        iex> Visualize.Chart.Builder.StyleStack.entries([:series, %{stroke_width: 5}], nil)
+        iex> Visualize.Chart.Builder.StyleStack.entries([:series, %{stroke: %{width: 5}}], nil)
         [
           %{index: 0, name: "series", local: false, default: false},
           %{index: 1, name: "local", local: true, default: false}
@@ -95,31 +95,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc """
-    The site's stack cascaded, as the panel shows it (spec/14 §18.19).
+    The site's stack cascaded in its parts, as the panel shows it (spec/14 §18.19, D-178).
 
-    The design's declared styles over the built-in four, then the entries resolved left to
-    right by §3.6 — which is `Visualize.Chart.Style`'s own rule, asked here for one site.
+    The design's declared styles over the theme's palette, then the entries resolved left
+    to right by §3.6 and merged part by part by §3.5 — `Visualize.Chart.Style`'s own rule,
+    asked here for one site, before any projection onto the element keys. A field entry
+    and a generator lay nothing, since the panel has no datum to read.
 
-        iex> design = %{styles: %{series: %{stroke_width: 2}}}
-        iex> Visualize.Chart.Builder.StyleStack.resolved(design, [:series, %{stroke_width: 5}])
-        %{stroke_width: 5}
+        iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
+        iex> Visualize.Chart.Builder.StyleStack.resolved(design, [:series, %{stroke: %{width: 5}}])
+        %{stroke: %{type: :solid, color: "#111", width: 5}}
     """
     @spec resolved(map(), term()) :: map()
     def resolved(design, value) do
-      design |> Map.get(:styles, %{}) |> Style.all() |> Style.node(value)
+      design
+      |> Map.get(:styles, %{})
+      |> Style.all()
+      |> Style.compound(value, fn _entry -> nil end)
     end
 
     @doc """
-    Which entry supplied each key of the resolved style (spec/14 §18.19).
+    Which entry supplied each key of the resolved style (spec/14 §18.19), by its path: a
+    whole element's key by its key, a part's by `part.key` — one part is often several
+    entries' (a stroke's colour from `series`, its width from `local`).
 
     A resolved style is a cascade, so a value belongs to the last entry that set it. This is
     `Visualize.Chart.explain/1`'s question asked at a site: which style said this.
 
-        iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}}}
-        iex> Visualize.Chart.Builder.StyleStack.origins(design, [:series, %{stroke_width: 5}])
-        %{stroke: "series", stroke_width: "local"}
+        iex> design = %{styles: %{series: %{stroke: "#111", stroke_width: 2}, faded: %{opacity: 0.5}}}
+        iex> Visualize.Chart.Builder.StyleStack.origins(design, [:series, :faded, %{stroke: %{width: 5}}])
+        %{:opacity => "faded", "stroke.color" => "series", "stroke.type" => "series", "stroke.width" => "local"}
     """
-    @spec origins(map(), term()) :: %{atom() => String.t()}
+    @spec origins(map(), term()) :: %{(atom() | String.t()) => String.t()}
     def origins(design, value) do
       styles = design |> Map.get(:styles, %{}) |> Style.all()
 
@@ -130,9 +137,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
         name = one |> row(index, false) |> Map.fetch!(:name)
 
         styles
-        |> Style.node(one)
-        |> Map.keys()
+        |> Style.compound(one, fn _entry -> nil end)
+        |> leaves([])
         |> Enum.reduce(origins, &Map.put(&2, &1, name))
+      end)
+    end
+
+    # The paths a node in its parts sets: a whole element's key as itself, a part's keys —
+    # and a nested node's, a transition's per property — joined by `.`.
+    defp leaves(node, prefix) do
+      Enum.flat_map(node, fn
+        {key, value} when is_map(value) and not is_struct(value) -> leaves(value, prefix ++ [key])
+        {key, _value} when prefix == [] -> [key]
+        {key, _value} -> [Enum.map_join(prefix ++ [key], ".", &to_string/1)]
       end)
     end
 

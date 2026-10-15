@@ -6,14 +6,12 @@
     
     
     <fieldset class="vis-builder-form-body">
-    
-      
-      <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-keyup="select_field" phx-value-field="extends">
+    <div class="vis-builder-style-form">
+  <label class="vis-builder-field" data-builder-ref="extends" data-builder-bind="extends" phx-keyup="select_field" phx-value-field="extends">
   <span class="vis-builder-key">
     extends
     
   </span>
-  
   
   
   
@@ -31,98 +29,17 @@
   
   
   
-</label>
-    
-      <fieldset class="vis-builder-block vis-builder-block-fill">
-        <legend class="vis-builder-block-name">fill</legend>
-        
-          <div class="vis-builder-field vis-builder-field-fill-style">
-            <span class="vis-builder-key">style</span>
-            <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
-              <label class="vis-builder-glyph" title="none">
-                <input type="radio" name="fill_style" value="none" aria-label="none">
-                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
-              </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
-                <input type="radio" name="fill_style" value="solid" checked aria-label="solid">
-                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
-              </label><label class="vis-builder-glyph" title="linear">
-                <input type="radio" name="fill_style" value="linear" aria-label="linear">
-                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="2" fill="currentColor" opacity="0.9"/><rect x="5" y="7" width="14" height="2" fill="currentColor" opacity="0.75"/><rect x="5" y="9" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="5" y="11" width="14" height="2" fill="currentColor" opacity="0.45"/><rect x="5" y="13" width="14" height="2" fill="currentColor" opacity="0.3"/><rect x="5" y="15" width="14" height="2" fill="currentColor" opacity="0.2"/><rect x="5" y="17" width="14" height="2" fill="currentColor" opacity="0.1"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
-              </label><label class="vis-builder-glyph" title="radial">
-                <input type="radio" name="fill_style" value="radial" aria-label="radial">
-                <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.2"/><rect x="7" y="7" width="10" height="10" fill="currentColor" opacity="0.25"/><rect x="9" y="9" width="6" height="6" fill="currentColor" opacity="0.3"/><rect x="11" y="11" width="2" height="2" fill="currentColor" opacity="0.4"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
-              </label>
-            </span>
-          </div>
-          <label class="vis-builder-field" data-builder-bind="fill_opacity" phx-keyup="select_field" phx-value-field="fill_opacity">
-  <span class="vis-builder-key">
-    opacity
-    
-  </span>
-  
-  
-  
-  <span class="vis-builder-ranged">
-    
-    <input type="text" name="fill_opacity">
-    <input type="range" name="fill_opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="fill_opacity, dragged">
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   
 </label>
-          <div class="vis-builder-fill-colours">
-            <label class="vis-builder-field" data-builder-bind="fill" phx-keyup="select_field" phx-value-field="fill">
+<fieldset class="vis-builder-part" data-builder-part="fill">
+  <legend class="vis-builder-part-name">fill</legend>
+  
+  
+  
+  
+<div class="vis-builder-field" data-builder-bind="fill.type" phx-keyup="select_field" phx-value-field="fill.type">
   <span class="vis-builder-key">
-    colour
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="fill: not set" data-builder-well="fill"></span>
-  
-  
-  
-  
-  
-  
-  
-  
-</label>
-          </div>
-          <div class="vis-builder-fill-numbers">
-            
-            
-            
-          </div>
-        
-      </fieldset>
-      
-    
-      <fieldset class="vis-builder-block">
-        <legend class="vis-builder-block-name">stroke</legend>
-        
-          <label class="vis-builder-field" data-builder-bind="stroke_style" phx-keyup="select_field" phx-value-field="stroke_style">
-  <span class="vis-builder-key">
-    stroke_style
+    type
     
   </span>
   
@@ -138,37 +55,42 @@
   
   
   
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_style">
-    <label class="vis-builder-glyph" title="single">
-      <input type="radio" name="stroke_style" value="single" aria-label="single">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="6" y="6" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"/></svg>
-    </label><label class="vis-builder-glyph" title="double">
-      <input type="radio" name="stroke_style" value="double" aria-label="double">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="8.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
-    </label><label class="vis-builder-glyph" title="inside">
-      <input type="radio" name="stroke_style" value="inside" aria-label="inside">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="7.5" y="7.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="3"/></svg>
-    </label><label class="vis-builder-glyph" title="outside">
-      <input type="radio" name="stroke_style" value="outside" aria-label="outside">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="4.5" y="4.5" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill.type">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="fill.type" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph" title="solid">
+      <input type="radio" name="fill.type" value="solid" aria-label="solid">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="linear">
+      <input type="radio" name="fill.type" value="linear" aria-label="linear">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="2" fill="currentColor" opacity="0.9"/><rect x="5" y="7" width="14" height="2" fill="currentColor" opacity="0.75"/><rect x="5" y="9" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="5" y="11" width="14" height="2" fill="currentColor" opacity="0.45"/><rect x="5" y="13" width="14" height="2" fill="currentColor" opacity="0.3"/><rect x="5" y="15" width="14" height="2" fill="currentColor" opacity="0.2"/><rect x="5" y="17" width="14" height="2" fill="currentColor" opacity="0.1"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="radial">
+      <input type="radio" name="fill.type" value="radial" aria-label="radial">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.2"/><rect x="7" y="7" width="10" height="10" fill="currentColor" opacity="0.25"/><rect x="9" y="9" width="6" height="6" fill="currentColor" opacity="0.3"/><rect x="11" y="11" width="2" height="2" fill="currentColor" opacity="0.4"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="hatch">
+      <input type="radio" name="fill.type" value="hatch" aria-label="hatch">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/><path d="M5 12 L12 5 M5 19 L19 5 M12 19 L19 12" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph" title="paint">
+      <input type="radio" name="fill.type" value="paint" aria-label="paint">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.35"/><path d="M8 9 H16 M8 12 H16 M8 15 H13" stroke="currentColor" stroke-width="1.5"/></svg>
     </label>
   </span>
   
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_width" phx-keyup="select_field" phx-value-field="stroke_width">
+</div><label class="vis-builder-field" data-builder-bind="fill.opacity" phx-keyup="select_field" phx-value-field="fill.opacity">
   <span class="vis-builder-key">
-    stroke_width
-    <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke_width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
+    opacity
+    
   </span>
-  
   
   
   <span class="vis-builder-ranged">
     
-    <input type="text" name="stroke_width" value="2">
-    <input type="range" name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 10.0%" min="0" max="20" step="0.5" value="2" aria-label="stroke_width, dragged">
+    <input type="text" name="fill.opacity">
+    <input type="range" name="fill.opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="fill.opacity, dragged">
   </span>
   
   
@@ -184,43 +106,92 @@
   
   
   
-</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="stroke" phx-keyup="select_field" phx-value-field="stroke">
-  <span class="vis-builder-key">
-    stroke
-    
-  </span>
   
-  
-  
-  
-  
-  
-  
-  
-  
-  <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="series_1" role="img" aria-label="stroke: series_1" data-builder-well="stroke"></span>
-  
-  
-  
-  
-  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="stroke">
+  <legend class="vis-builder-part-name">stroke</legend>
   
   
   <ul class="vis-builder-key-errors">
     <li class="vis-builder-error">styles.series.stroke: slot :series_1 is not a slot of the theme</li>
   </ul>
-</label><label class="vis-builder-field" data-builder-bind="stroke_opacity" phx-keyup="select_field" phx-value-field="stroke_opacity">
+  
+<div class="vis-builder-field" data-builder-bind="stroke.type" phx-keyup="select_field" phx-value-field="stroke.type">
   <span class="vis-builder-key">
-    stroke_opacity
+    type
+    <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke.type" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.type">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="stroke.type" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 19 L19 5" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label><label class="vis-builder-glyph vis-builder-glyph-on" title="solid">
+      <input type="radio" name="stroke.type" value="solid" checked aria-label="solid">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="linear">
+      <input type="radio" name="stroke.type" value="linear" aria-label="linear">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="2" fill="currentColor" opacity="0.9"/><rect x="5" y="7" width="14" height="2" fill="currentColor" opacity="0.75"/><rect x="5" y="9" width="14" height="2" fill="currentColor" opacity="0.6"/><rect x="5" y="11" width="14" height="2" fill="currentColor" opacity="0.45"/><rect x="5" y="13" width="14" height="2" fill="currentColor" opacity="0.3"/><rect x="5" y="15" width="14" height="2" fill="currentColor" opacity="0.2"/><rect x="5" y="17" width="14" height="2" fill="currentColor" opacity="0.1"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="radial">
+      <input type="radio" name="stroke.type" value="radial" aria-label="radial">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.2"/><rect x="7" y="7" width="10" height="10" fill="currentColor" opacity="0.25"/><rect x="9" y="9" width="6" height="6" fill="currentColor" opacity="0.3"/><rect x="11" y="11" width="2" height="2" fill="currentColor" opacity="0.4"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+    </label><label class="vis-builder-glyph" title="paint">
+      <input type="radio" name="stroke.type" value="paint" aria-label="paint">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" fill="currentColor" opacity="0.35"/><path d="M8 9 H16 M8 12 H16 M8 15 H13" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label>
+  </span>
+  
+  
+  
+  
+</div><label class="vis-builder-field" data-builder-bind="stroke.color" phx-keyup="select_field" phx-value-field="stroke.color">
+  <span class="vis-builder-key">
+    color
     
   </span>
   
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="series_1" role="img" aria-label="stroke.color: series_1" data-builder-well="stroke.color"></span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="stroke.opacity" phx-keyup="select_field" phx-value-field="stroke.opacity">
+  <span class="vis-builder-key">
+    opacity
+    
+  </span>
   
   
   <span class="vis-builder-ranged">
     
-    <input type="text" name="stroke_opacity">
-    <input type="range" name="stroke_opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="stroke_opacity, dragged">
+    <input type="text" name="stroke.opacity">
+    <input type="range" name="stroke.opacity.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="1" step="0.05" value="0" aria-label="stroke.opacity, dragged">
   </span>
   
   
@@ -236,9 +207,64 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_dasharray" phx-keyup="select_field" phx-value-field="stroke_dasharray">
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="stroke.width" phx-keyup="select_field" phx-value-field="stroke.width">
   <span class="vis-builder-key">
-    stroke_dasharray
+    width
+    <span class="vis-builder-field-handle" draggable="true" data-builder-promote="stroke.width" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    
+    <input type="text" name="stroke.width" value="2">
+    <input type="range" name="stroke.width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 10.0%" min="0" max="20" step="0.5" value="2" aria-label="stroke.width, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="stroke.dash" phx-keyup="select_field" phx-value-field="stroke.dash">
+  <span class="vis-builder-key">
+    dash
+    
+  </span>
+  
+  
+  
+  
+  
+  <input type="text" name="stroke.dash">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+
+<div class="vis-builder-field" data-builder-bind="stroke.join" phx-keyup="select_field" phx-value-field="stroke.join">
+  <span class="vis-builder-key">
+    join
     
   </span>
   
@@ -247,7 +273,6 @@
   
   
   
-  <input type="text" name="stroke_dasharray">
   
   
   
@@ -255,37 +280,15 @@
   
   
   
-  
-  
-  
-  
-</label><label class="vis-builder-field" data-builder-bind="stroke_linejoin" phx-keyup="select_field" phx-value-field="stroke_linejoin">
-  <span class="vis-builder-key">
-    stroke_linejoin
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linejoin">
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.join">
     <label class="vis-builder-glyph" title="miter">
-      <input type="radio" name="stroke_linejoin" value="miter" aria-label="miter">
+      <input type="radio" name="stroke.join" value="miter" aria-label="miter">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="miter" stroke-linecap="butt"/></svg>
     </label><label class="vis-builder-glyph" title="round">
-      <input type="radio" name="stroke_linejoin" value="round" aria-label="round">
+      <input type="radio" name="stroke.join" value="round" aria-label="round">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round" stroke-linecap="butt"/></svg>
     </label><label class="vis-builder-glyph" title="bevel">
-      <input type="radio" name="stroke_linejoin" value="bevel" aria-label="bevel">
+      <input type="radio" name="stroke.join" value="bevel" aria-label="bevel">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M4 20 L12 5 L20 20" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="bevel" stroke-linecap="butt"/></svg>
     </label>
   </span>
@@ -293,9 +296,10 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="stroke_linecap" phx-keyup="select_field" phx-value-field="stroke_linecap">
+</div>
+<div class="vis-builder-field" data-builder-bind="stroke.cap" phx-keyup="select_field" phx-value-field="stroke.cap">
   <span class="vis-builder-key">
-    stroke_linecap
+    cap
     
   </span>
   
@@ -311,15 +315,15 @@
   
   
   
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linecap">
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.cap">
     <label class="vis-builder-glyph" title="butt">
-      <input type="radio" name="stroke_linecap" value="butt" aria-label="butt">
+      <input type="radio" name="stroke.cap" value="butt" aria-label="butt">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="butt"/></svg>
     </label><label class="vis-builder-glyph" title="round">
-      <input type="radio" name="stroke_linecap" value="round" aria-label="round">
+      <input type="radio" name="stroke.cap" value="round" aria-label="round">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/></svg>
     </label><label class="vis-builder-glyph" title="square">
-      <input type="radio" name="stroke_linecap" value="square" aria-label="square">
+      <input type="radio" name="stroke.cap" value="square" aria-label="square">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M7 12 H17" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="square"/></svg>
     </label>
   </span>
@@ -327,17 +331,77 @@
   
   
   
+</div>
+<div class="vis-builder-field" data-builder-bind="stroke.placement" phx-keyup="select_field" phx-value-field="stroke.placement">
+  <span class="vis-builder-key">
+    placement
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.placement">
+    <label class="vis-builder-glyph" title="center">
+      <input type="radio" name="stroke.placement" value="center" aria-label="center">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="6" y="6" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label><label class="vis-builder-glyph" title="inside">
+      <input type="radio" name="stroke.placement" value="inside" aria-label="inside">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="7.5" y="7.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label><label class="vis-builder-glyph" title="outside">
+      <input type="radio" name="stroke.placement" value="outside" aria-label="outside">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="4.5" y="4.5" width="15" height="15" fill="none" stroke="currentColor" stroke-width="3"/></svg>
+    </label><label class="vis-builder-glyph" title="double">
+      <input type="radio" name="stroke.placement" value="double" aria-label="double">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.25"/><rect x="5" y="5" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="8.5" y="8.5" width="7" height="7" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+    </label>
+  </span>
+  
+  
+  
+  
+</div><label class="vis-builder-field" data-builder-bind="stroke.non_scaling" phx-keyup="select_field" phx-value-field="stroke.non_scaling">
+  <span class="vis-builder-key">
+    non_scaling
+    
+  </span>
+  
+  <input type="checkbox" name="stroke.non_scaling" value="true">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
 </label>
-        
-      </fieldset>
-      
-    
-      <fieldset class="vis-builder-block">
-        <legend class="vis-builder-block-name">font</legend>
-        
-          <label class="vis-builder-field" data-builder-bind="font_family" phx-keyup="select_field" phx-value-field="font_family">
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="font">
+  <legend class="vis-builder-part-name">font</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="font.family" phx-keyup="select_field" phx-value-field="font.family">
   <span class="vis-builder-key">
-    font_family
+    family
     
   </span>
   
@@ -345,9 +409,7 @@
   
   
   
-  
-  <input type="text" name="font_family">
-  
+  <input type="text" name="font.family">
   
   
   
@@ -358,18 +420,20 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="font_size" phx-keyup="select_field" phx-value-field="font_size">
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="font.size" phx-keyup="select_field" phx-value-field="font.size">
   <span class="vis-builder-key">
-    font_size
+    size
     
   </span>
-  
   
   
   <span class="vis-builder-ranged">
     
-    <input type="text" name="font_size">
-    <input type="range" name="font_size.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="6" max="72" step="1" value="6" aria-label="font_size, dragged">
+    <input type="text" name="font.size">
+    <input type="range" name="font.size.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="6" max="72" step="1" value="6" aria-label="font.size, dragged">
   </span>
   
   
@@ -385,17 +449,18 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="font_weight" phx-keyup="select_field" phx-value-field="font_weight">
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="font.weight" phx-keyup="select_field" phx-value-field="font.weight">
   <span class="vis-builder-key">
-    font_weight
+    weight
     
   </span>
   
   
   
   
-  
-  <select name="font_face" class="vis-builder-face-select" style="font-weight: 400; font-style: normal" aria-label="face">
+  <select name="font.face" class="vis-builder-face-select" style="font-weight: 400; font-style: normal" aria-label="face">
     <option value="regular" style="font-weight: 400; font-style: normal" selected>
       regular
     </option><option value="italic" style="font-weight: 400; font-style: italic">
@@ -426,18 +491,19 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="line_height" phx-keyup="select_field" phx-value-field="line_height">
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="font.line_height" phx-keyup="select_field" phx-value-field="font.line_height">
   <span class="vis-builder-key">
     line_height
     
   </span>
   
   
-  
   <span class="vis-builder-ranged">
-    <input type="number" name="line_height">
+    <input type="number" name="font.line_height">
     
-    <input type="range" name="line_height.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0.8" max="3" step="0.1" value="0.8" aria-label="line_height, dragged">
+    <input type="range" name="font.line_height.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0.8" max="3" step="0.1" value="0.8" aria-label="font.line_height, dragged">
   </span>
   
   
@@ -455,17 +521,18 @@
   
   
   
+  
 </label>
-        
-      </fieldset>
-      
-    
-      <fieldset class="vis-builder-block">
-        <legend class="vis-builder-block-name">position</legend>
-        
-          <label class="vis-builder-field" data-builder-bind="text_anchor" phx-keyup="select_field" phx-value-field="text_anchor">
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="text">
+  <legend class="vis-builder-part-name">text</legend>
+  
+  
+  
+  
+<div class="vis-builder-field" data-builder-bind="text.anchor" phx-keyup="select_field" phx-value-field="text.anchor">
   <span class="vis-builder-key">
-    text_anchor
+    anchor
     
   </span>
   
@@ -481,15 +548,15 @@
   
   
   
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="text_anchor">
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="text.anchor">
     <label class="vis-builder-glyph" title="start">
-      <input type="radio" name="text_anchor" value="start" aria-label="start">
+      <input type="radio" name="text.anchor" value="start" aria-label="start">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M5 12 H13"/><path d="M5 17 H16"/></g></svg>
     </label><label class="vis-builder-glyph" title="middle">
-      <input type="radio" name="text_anchor" value="middle" aria-label="middle">
+      <input type="radio" name="text.anchor" value="middle" aria-label="middle">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M8 12 H16"/><path d="M6.5 17 H17.5"/></g></svg>
     </label><label class="vis-builder-glyph" title="end">
-      <input type="radio" name="text_anchor" value="end" aria-label="end">
+      <input type="radio" name="text.anchor" value="end" aria-label="end">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7 H19"/><path d="M11 12 H19"/><path d="M8 17 H19"/></g></svg>
     </label>
   </span>
@@ -497,9 +564,10 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="vertical_align" phx-keyup="select_field" phx-value-field="vertical_align">
+</div>
+<div class="vis-builder-field" data-builder-bind="text.baseline" phx-keyup="select_field" phx-value-field="text.baseline">
   <span class="vis-builder-key">
-    vertical_align
+    baseline
     
   </span>
   
@@ -515,18 +583,18 @@
   
   
   
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="vertical_align">
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="text.baseline">
     <label class="vis-builder-glyph" title="top">
-      <input type="radio" name="vertical_align" value="top" aria-label="top">
+      <input type="radio" name="text.baseline" value="top" aria-label="top">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="6" width="8" height="5" fill="currentColor"/></svg>
     </label><label class="vis-builder-glyph" title="middle">
-      <input type="radio" name="vertical_align" value="middle" aria-label="middle">
+      <input type="radio" name="text.baseline" value="middle" aria-label="middle">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="9.5" width="8" height="5" fill="currentColor"/></svg>
     </label><label class="vis-builder-glyph" title="baseline">
-      <input type="radio" name="vertical_align" value="baseline" aria-label="baseline">
+      <input type="radio" name="text.baseline" value="baseline" aria-label="baseline">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="11" width="8" height="5" fill="currentColor"/></svg>
     </label><label class="vis-builder-glyph" title="bottom">
-      <input type="radio" name="vertical_align" value="bottom" aria-label="bottom">
+      <input type="radio" name="text.baseline" value="bottom" aria-label="bottom">
       <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M3 12 H21" stroke="currentColor" stroke-width="1" opacity="0.5"/><rect x="8" y="13" width="8" height="5" fill="currentColor"/></svg>
     </label>
   </span>
@@ -534,73 +602,48 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="margin_x" phx-keyup="select_field" phx-value-field="margin_x">
+</div><label class="vis-builder-field" data-builder-bind="text.offset" phx-keyup="select_field" phx-value-field="text.offset">
   <span class="vis-builder-key">
-    margin_x
+    offset
     
   </span>
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <div class="vis-builder-items">
+    
+    <span class="vis-builder-item-add" data-builder-bind="text.offset">
+      <input type="text" name="text.offset.add" class="vis-builder-item-box" placeholder="+ add" aria-label="add to text.offset" phx-keydown="list_add" phx-key="Enter" phx-value-field="text.offset">
+    </span>
+  </div>
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="text.angle" phx-keyup="select_field" phx-value-field="text.angle">
+  <span class="vis-builder-key">
+    angle
+    
+  </span>
   
   
   <span class="vis-builder-ranged">
-    <input type="number" name="margin_x">
+    <input type="number" name="text.angle">
     
-    <input type="range" name="margin_x.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="40" step="1" value="0" aria-label="margin_x, dragged">
+    <input type="range" name="text.angle.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="-180" max="180" step="5" value="-180" aria-label="text.angle, dragged">
   </span>
   
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-</label><label class="vis-builder-field" data-builder-bind="margin_y" phx-keyup="select_field" phx-value-field="margin_y">
-  <span class="vis-builder-key">
-    margin_y
-    
-  </span>
-  
-  
-  
-  <span class="vis-builder-ranged">
-    <input type="number" name="margin_y">
-    
-    <input type="range" name="margin_y.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="40" step="1" value="0" aria-label="margin_y, dragged">
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-</label><label class="vis-builder-field" data-builder-bind="text_angle" phx-keyup="select_field" phx-value-field="text_angle">
-  <span class="vis-builder-key">
-    text_angle
-    
-  </span>
-  
-  
-  
-  <span class="vis-builder-ranged">
-    <input type="number" name="text_angle">
-    
-    <input type="range" name="text_angle.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="-180" max="180" step="5" value="-180" aria-label="text_angle, dragged">
-  </span>
   
   
   
@@ -616,19 +659,134 @@
   
   
 </label>
-        
-      </fieldset>
-      
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="effect">
+  <legend class="vis-builder-part-name">effect</legend>
+  
+  
+  
+  
+<div class="vis-builder-field" data-builder-bind="effect.type" phx-keyup="select_field" phx-value-field="effect.type">
+  <span class="vis-builder-key">
+    type
     
-      <fieldset class="vis-builder-block">
-        <legend class="vis-builder-block-name">effects</legend>
-        
-          <label class="vis-builder-field" data-builder-bind="opacity" phx-keyup="select_field" phx-value-field="opacity">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="effect.type">
+    <label class="vis-builder-glyph" title="none">
+      <input type="radio" name="effect.type" value="none" aria-label="none">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="shadow">
+      <input type="radio" name="effect.type" value="shadow" aria-label="shadow">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="blur">
+      <input type="radio" name="effect.type" value="blur" aria-label="blur">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity="0.15"/><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" opacity="0.35"/><rect x="7" y="7" width="10" height="10" fill="currentColor"/></svg>
+    </label>
+  </span>
+  
+  
+  
+  
+</div><label class="vis-builder-field" data-builder-bind="effect.radius" phx-keyup="select_field" phx-value-field="effect.radius">
+  <span class="vis-builder-key">
+    radius
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    
+    <input type="text" name="effect.radius">
+    <input type="range" name="effect.radius.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0" aria-label="effect.radius, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="effect.offset" phx-keyup="select_field" phx-value-field="effect.offset">
+  <span class="vis-builder-key">
+    offset
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <div class="vis-builder-items">
+    
+    <span class="vis-builder-item-add" data-builder-bind="effect.offset">
+      <input type="text" name="effect.offset.add" class="vis-builder-item-box" placeholder="+ add" aria-label="add to effect.offset" phx-keydown="list_add" phx-key="Enter" phx-value-field="effect.offset">
+    </span>
+  </div>
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="effect.color" phx-keyup="select_field" phx-value-field="effect.color">
+  <span class="vis-builder-key">
+    color
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-well vis-builder-well-empty" style="--vis-builder-swatch: transparent" title="no colour set" role="img" aria-label="effect.color: not set" data-builder-well="effect.color"></span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><label class="vis-builder-field" data-builder-bind="opacity" phx-keyup="select_field" phx-value-field="opacity">
   <span class="vis-builder-key">
     opacity
     
   </span>
-  
   
   
   <span class="vis-builder-ranged">
@@ -650,12 +808,13 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="blend" phx-keyup="select_field" phx-value-field="blend">
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="blend" phx-keyup="select_field" phx-value-field="blend">
   <span class="vis-builder-key">
     blend
     
   </span>
-  
   
   
   
@@ -676,9 +835,17 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="effect" phx-keyup="select_field" phx-value-field="effect">
+  
+</label>
+<fieldset class="vis-builder-part" data-builder-part="marker">
+  <legend class="vis-builder-part-name">marker</legend>
+  
+  
+  
+  
+<div class="vis-builder-field" data-builder-bind="marker.shape" phx-keyup="select_field" phx-value-field="marker.shape">
   <span class="vis-builder-key">
-    effect
+    shape
     
   </span>
   
@@ -694,35 +861,137 @@
   
   
   
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="effect">
-    <label class="vis-builder-glyph" title="none">
-      <input type="radio" name="effect" value="none" aria-label="none">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="shadow">
-      <input type="radio" name="effect" value="shadow" aria-label="shadow">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" fill="currentColor" opacity="0.35"/><rect x="5" y="5" width="12" height="12" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="blur">
-      <input type="radio" name="effect" value="blur" aria-label="blur">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4" fill="currentColor" opacity="0.15"/><rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor" opacity="0.35"/><rect x="7" y="7" width="10" height="10" fill="currentColor"/></svg>
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="marker.shape">
+    <label class="vis-builder-glyph" title="circle">
+      <input type="radio" name="marker.shape" value="circle" aria-label="circle">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6.1804,0A6.1804,6.1804,0,1,1,-6.1804,0A6.1804,6.1804,0,1,1,6.1804,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="cross">
+      <input type="radio" name="marker.shape" value="cross" aria-label="cross">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-7.3485,-2.4495L-7.3485,2.4495L-2.4495,2.4495L-2.4495,7.3485L2.4495,7.3485L2.4495,2.4495L7.3485,2.4495L7.3485,-2.4495L2.4495,-2.4495L2.4495,-7.3485L-2.4495,-7.3485L-2.4495,-2.4495Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="diamond">
+      <input type="radio" name="marker.shape" value="diamond" aria-label="diamond">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-10.1943L5.8857,0L0,10.1943L-5.8857,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="square">
+      <input type="radio" name="marker.shape" value="square" aria-label="square">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-5.4772,-5.4772L5.4772,-5.4772L5.4772,5.4772L-5.4772,5.4772Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="star">
+      <input type="radio" name="marker.shape" value="star" aria-label="star">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-8.4853L1.995,-2.7459L8.07,-2.6221L3.228,1.0488L4.9875,6.8647L0,3.3941L-4.9875,6.8647L-3.228,1.0488L-8.07,-2.6221L-1.995,-2.7459Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="triangle">
+      <input type="radio" name="marker.shape" value="triangle" aria-label="triangle">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.5491L7.2084,2.7745L-7.2084,2.7745Z" transform="translate(12 12)" fill="currentColor"/></svg>
+    </label><label class="vis-builder-glyph" title="wye">
+      <input type="radio" name="marker.shape" value="wye" aria-label="wye">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.4772L2.7386,-4.7434L7.482,-4.7434L4.7434,0L7.482,4.7434L2.7386,4.7434L0,5.4772L-2.7386,4.7434L-7.482,4.7434L-4.7434,0L-7.482,-4.7434L-2.7386,-4.7434Z" transform="translate(12 12)" fill="currentColor"/></svg>
     </label>
   </span>
   
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="effect_radius" phx-keyup="select_field" phx-value-field="effect_radius">
+</div><label class="vis-builder-field" data-builder-bind="marker.size" phx-keyup="select_field" phx-value-field="marker.size">
   <span class="vis-builder-key">
-    effect_radius
+    size
     
   </span>
   
   
   
-  <span class="vis-builder-ranged">
+  
+  
+  <input type="text" name="marker.size">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="curve">
+  <legend class="vis-builder-part-name">curve</legend>
+  
+  
+  <ul class="vis-builder-key-errors">
+    <li class="vis-builder-error">styles.series.curve: must be one of :linear, :step</li>
+  </ul>
+  
+<div class="vis-builder-field" data-builder-bind="curve.type" phx-keyup="select_field" phx-value-field="curve.type">
+  <span class="vis-builder-key">
+    type
     
-    <input type="text" name="effect_radius">
-    <input type="range" name="effect_radius.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0" aria-label="effect_radius, dragged">
   </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <span class="vis-builder-glyphs" role="radiogroup" aria-label="curve.type">
+    <label class="vis-builder-glyph" title="linear">
+      <input type="radio" name="curve.type" value="linear" aria-label="linear">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L8,6L15,17L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="step">
+      <input type="radio" name="curve.type" value="step" aria-label="step">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H5V6H11.5V17H18.5V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="step_before">
+      <input type="radio" name="curve.type" value="step_before" aria-label="step_before">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19V6H8V17H15V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="step_after">
+      <input type="radio" name="curve.type" value="step_after" aria-label="step_after">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H8V6H15V17H22V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="basis">
+      <input type="radio" name="curve.type" value="basis" aria-label="basis">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L3,16.8333C4,14.6667,6,10.3333,8.1667,10C10.3333,9.6667,12.6667,13.3333,15,13.1667C17.3333,13,19.6667,9,20.8333,7L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="cardinal">
+      <input type="radio" name="curve.type" value="cardinal" aria-label="cardinal">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3,16.8333,5.8333,6.3333,8,6C10.1667,5.6667,12.6667,17.1667,15,17C17.3333,16.8333,20.8333,7,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="catmull_rom">
+      <input type="radio" name="curve.type" value="catmull_rom" aria-label="catmull_rom">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C2.0053,18.9886,5.7722,6.1498,8,6C10.1259,5.857,12.7025,17.0444,15,17C17.3715,16.9542,21.9938,5.0107,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="monotone_x">
+      <input type="radio" name="curve.type" value="monotone_x" aria-label="monotone_x">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,6,6,8,6C10.3333,6,12.6667,17,15,17C17.3333,17,19.6667,5,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="monotone_y">
+      <input type="radio" name="curve.type" value="monotone_y" aria-label="monotone_y">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,8,10.3333,8,6C8,9.6667,15,13.3333,15,17C15,13,22,9,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="natural">
+      <input type="radio" name="curve.type" value="natural" aria-label="natural">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3.9111,12.0222,5.8222,5.0444,8,6C10.1778,6.9556,12.6222,15.8444,15,17C17.3778,18.1556,19.6889,11.5778,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="cardinal_closed">
+      <input type="radio" name="curve.type" value="cardinal_closed" aria-label="cardinal_closed">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C-0.3333,19.1667,5.8333,6.3333,8,6C10.1667,5.6667,12.6667,17.1667,15,17C17.3333,16.8333,24.1667,4.6667,22,5C19.8333,5.3333,4.3333,18.8333,2,19Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label><label class="vis-builder-glyph" title="basis_closed">
+      <input type="radio" name="curve.type" value="basis_closed" aria-label="basis_closed">
+      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M17.5,9.3333C15.3333,9.6667,8.6667,14.3333,6.3333,14.5C4,14.6667,6,10.3333,8.1667,10C10.3333,9.6667,12.6667,13.3333,15,13.1667C17.3333,13,19.6667,9,17.5,9.3333Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    </label>
+  </span>
+  
+  
+  
+  
+</div><label class="vis-builder-field" data-builder-bind="curve.tension" phx-keyup="select_field" phx-value-field="curve.tension">
+  <span class="vis-builder-key">
+    tension
+    
+  </span>
+  
+  
+  
+  <input type="number" name="curve.tension">
   
   
   
@@ -738,17 +1007,592 @@
   
   
 </label>
-        
-      </fieldset>
-      
+<label class="vis-builder-field" data-builder-bind="curve.alpha" phx-keyup="select_field" phx-value-field="curve.alpha">
+  <span class="vis-builder-key">
+    alpha
     
-      
-      <label class="vis-builder-field" data-builder-bind="class" phx-keyup="select_field" phx-value-field="class">
+  </span>
+  
+  
+  
+  <input type="number" name="curve.alpha">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="transition">
+  <legend class="vis-builder-part-name">transition</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="transition.duration" phx-keyup="select_field" phx-value-field="transition.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="transition.duration">
+    
+    <input type="range" name="transition.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="transition.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="transition.easing" phx-keyup="select_field" phx-value-field="transition.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="transition.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+<fieldset class="vis-builder-part" data-builder-part="transition.fill">
+  <legend class="vis-builder-part-name">fill</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="transition.fill.duration" phx-keyup="select_field" phx-value-field="transition.fill.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="transition.fill.duration">
+    
+    <input type="range" name="transition.fill.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="transition.fill.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="transition.fill.easing" phx-keyup="select_field" phx-value-field="transition.fill.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="transition.fill.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="transition.stroke">
+  <legend class="vis-builder-part-name">stroke</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="transition.stroke.duration" phx-keyup="select_field" phx-value-field="transition.stroke.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="transition.stroke.duration">
+    
+    <input type="range" name="transition.stroke.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="transition.stroke.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="transition.stroke.easing" phx-keyup="select_field" phx-value-field="transition.stroke.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="transition.stroke.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="transition.opacity">
+  <legend class="vis-builder-part-name">opacity</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="transition.opacity.duration" phx-keyup="select_field" phx-value-field="transition.opacity.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="transition.opacity.duration">
+    
+    <input type="range" name="transition.opacity.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="transition.opacity.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="transition.opacity.easing" phx-keyup="select_field" phx-value-field="transition.opacity.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="transition.opacity.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset>
+</fieldset><fieldset class="vis-builder-part" data-builder-part="animation">
+  <legend class="vis-builder-part-name">animation</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="animation.name" phx-keyup="select_field" phx-value-field="animation.name">
+  <span class="vis-builder-key">
+    name
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="animation.name">
+    <option value=""></option>
+    <option value="pulse">pulse</option><option value="blink">blink</option><option value="shake">shake</option><option value="spin">spin</option>
+  </select>
+  <input type="text" name="animation.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="animation.name, a name the list lacks">
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="animation.duration" phx-keyup="select_field" phx-value-field="animation.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="animation.duration">
+    
+    <input type="range" name="animation.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="10000" step="100" value="0" aria-label="animation.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="animation.easing" phx-keyup="select_field" phx-value-field="animation.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="animation.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="animation.iterations" phx-keyup="select_field" phx-value-field="animation.iterations">
+  <span class="vis-builder-key">
+    iterations
+    
+  </span>
+  
+  
+  
+  <input type="number" name="animation.iterations">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="animation.delay" phx-keyup="select_field" phx-value-field="animation.delay">
+  <span class="vis-builder-key">
+    delay
+    
+  </span>
+  
+  
+  
+  <input type="number" name="animation.delay">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="enter">
+  <legend class="vis-builder-part-name">enter</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="enter.name" phx-keyup="select_field" phx-value-field="enter.name">
+  <span class="vis-builder-key">
+    name
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="enter.name">
+    <option value=""></option>
+    <option value="fade">fade</option><option value="grow">grow</option>
+  </select>
+  <input type="text" name="enter.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="enter.name, a name the list lacks">
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="enter.duration" phx-keyup="select_field" phx-value-field="enter.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="enter.duration">
+    
+    <input type="range" name="enter.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="enter.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="enter.easing" phx-keyup="select_field" phx-value-field="enter.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="enter.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><fieldset class="vis-builder-part" data-builder-part="exit">
+  <legend class="vis-builder-part-name">exit</legend>
+  
+  
+  
+  <label class="vis-builder-field" data-builder-bind="exit.name" phx-keyup="select_field" phx-value-field="exit.name">
+  <span class="vis-builder-key">
+    name
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="exit.name">
+    <option value=""></option>
+    <option value="fade">fade</option><option value="shrink">shrink</option><option value="explode">explode</option>
+  </select>
+  <input type="text" name="exit.name.other" class="vis-builder-declared-name" placeholder="or a name the list lacks" aria-label="exit.name, a name the list lacks">
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="exit.duration" phx-keyup="select_field" phx-value-field="exit.duration">
+  <span class="vis-builder-key">
+    duration
+    
+  </span>
+  
+  
+  <span class="vis-builder-ranged">
+    <input type="number" name="exit.duration">
+    
+    <input type="range" name="exit.duration.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="5000" step="50" value="0" aria-label="exit.duration, dragged">
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="exit.easing" phx-keyup="select_field" phx-value-field="exit.easing">
+  <span class="vis-builder-key">
+    easing
+    
+  </span>
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <select name="exit.easing">
+    <option value=""></option>
+    <option value="linear">linear</option><option value="quad_in">quad_in</option><option value="quad_out">quad_out</option><option value="quad_in_out">quad_in_out</option><option value="cubic_in">cubic_in</option><option value="cubic_out">cubic_out</option><option value="cubic_in_out">cubic_in_out</option><option value="sin_in">sin_in</option><option value="sin_out">sin_out</option><option value="sin_in_out">sin_in_out</option><option value="exp_in">exp_in</option><option value="exp_out">exp_out</option><option value="exp_in_out">exp_in_out</option><option value="circle_in">circle_in</option><option value="circle_out">circle_out</option><option value="circle_in_out">circle_in_out</option><option value="elastic_in">elastic_in</option><option value="elastic_out">elastic_out</option><option value="elastic_in_out">elastic_in_out</option><option value="back_in">back_in</option><option value="back_out">back_out</option><option value="back_in_out">back_in_out</option><option value="bounce_in">bounce_in</option><option value="bounce_out">bounce_out</option><option value="bounce_in_out">bounce_in_out</option>
+  </select>
+  
+  
+  
+  
+  
+  
+</label>
+
+</fieldset><label class="vis-builder-field" data-builder-bind="class" phx-keyup="select_field" phx-value-field="class">
   <span class="vis-builder-key">
     class
     
   </span>
-  
   
   
   
@@ -766,162 +1610,10 @@
   
   
   
-</label><label class="vis-builder-field vis-builder-field-needs" data-builder-bind="curve" phx-keyup="select_field" phx-value-field="curve">
-  <span class="vis-builder-key">
-    curve
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="curve">
-    <label class="vis-builder-glyph" title="linear">
-      <input type="radio" name="curve" value="linear" aria-label="linear">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L8,6L15,17L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="step">
-      <input type="radio" name="curve" value="step" aria-label="step">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H5V6H11.5V17H18.5V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="step_before">
-      <input type="radio" name="curve" value="step_before" aria-label="step_before">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19V6H8V17H15V5H22" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="step_after">
-      <input type="radio" name="curve" value="step_after" aria-label="step_after">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19H8V6H15V17H22V5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="basis">
-      <input type="radio" name="curve" value="basis" aria-label="basis">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19L3,16.8333C4,14.6667,6,10.3333,8.1667,10C10.3333,9.6667,12.6667,13.3333,15,13.1667C17.3333,13,19.6667,9,20.8333,7L22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="cardinal">
-      <input type="radio" name="curve" value="cardinal" aria-label="cardinal">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3,16.8333,5.8333,6.3333,8,6C10.1667,5.6667,12.6667,17.1667,15,17C17.3333,16.8333,20.8333,7,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="catmull_rom">
-      <input type="radio" name="curve" value="catmull_rom" aria-label="catmull_rom">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C2.0053,18.9886,5.7722,6.1498,8,6C10.1259,5.857,12.7025,17.0444,15,17C17.3715,16.9542,21.9938,5.0107,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="monotone_x">
-      <input type="radio" name="curve" value="monotone_x" aria-label="monotone_x">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,6,6,8,6C10.3333,6,12.6667,17,15,17C17.3333,17,19.6667,5,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="monotone_y">
-      <input type="radio" name="curve" value="monotone_y" aria-label="monotone_y">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C4,14.6667,8,10.3333,8,6C8,9.6667,15,13.3333,15,17C15,13,22,9,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="natural">
-      <input type="radio" name="curve" value="natural" aria-label="natural">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C3.9111,12.0222,5.8222,5.0444,8,6C10.1778,6.9556,12.6222,15.8444,15,17C17.3778,18.1556,19.6889,11.5778,22,5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="cardinal_closed">
-      <input type="radio" name="curve" value="cardinal_closed" aria-label="cardinal_closed">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M2,19C-0.3333,19.1667,5.8333,6.3333,8,6C10.1667,5.6667,12.6667,17.1667,15,17C17.3333,16.8333,24.1667,4.6667,22,5C19.8333,5.3333,4.3333,18.8333,2,19Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label><label class="vis-builder-glyph" title="basis_closed">
-      <input type="radio" name="curve" value="basis_closed" aria-label="basis_closed">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M17.5,9.3333C15.3333,9.6667,8.6667,14.3333,6.3333,14.5C4,14.6667,6,10.3333,8.1667,10C10.3333,9.6667,12.6667,13.3333,15,13.1667C17.3333,13,19.6667,9,17.5,9.3333Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
-    </label>
-  </span>
-  
-  
-  
-  <ul class="vis-builder-key-errors">
-    <li class="vis-builder-error">styles.series.curve: must be one of :linear, :step</li>
-  </ul>
-</label><label class="vis-builder-field" data-builder-bind="curve_opts" phx-keyup="select_field" phx-value-field="curve_opts">
-  <span class="vis-builder-key">
-    curve_opts
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <textarea name="curve_opts"></textarea>
-  
-</label><label class="vis-builder-field" data-builder-bind="symbol" phx-keyup="select_field" phx-value-field="symbol">
-  <span class="vis-builder-key">
-    symbol
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  <span class="vis-builder-glyphs" role="radiogroup" aria-label="symbol">
-    <label class="vis-builder-glyph" title="circle">
-      <input type="radio" name="symbol" value="circle" aria-label="circle">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M6.1804,0A6.1804,6.1804,0,1,1,-6.1804,0A6.1804,6.1804,0,1,1,6.1804,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="cross">
-      <input type="radio" name="symbol" value="cross" aria-label="cross">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-7.3485,-2.4495L-7.3485,2.4495L-2.4495,2.4495L-2.4495,7.3485L2.4495,7.3485L2.4495,2.4495L7.3485,2.4495L7.3485,-2.4495L2.4495,-2.4495L2.4495,-7.3485L-2.4495,-7.3485L-2.4495,-2.4495Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="diamond">
-      <input type="radio" name="symbol" value="diamond" aria-label="diamond">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-10.1943L5.8857,0L0,10.1943L-5.8857,0Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="square">
-      <input type="radio" name="symbol" value="square" aria-label="square">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M-5.4772,-5.4772L5.4772,-5.4772L5.4772,5.4772L-5.4772,5.4772Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="star">
-      <input type="radio" name="symbol" value="star" aria-label="star">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-8.4853L1.995,-2.7459L8.07,-2.6221L3.228,1.0488L4.9875,6.8647L0,3.3941L-4.9875,6.8647L-3.228,1.0488L-8.07,-2.6221L-1.995,-2.7459Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="triangle">
-      <input type="radio" name="symbol" value="triangle" aria-label="triangle">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.5491L7.2084,2.7745L-7.2084,2.7745Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label><label class="vis-builder-glyph" title="wye">
-      <input type="radio" name="symbol" value="wye" aria-label="wye">
-      <svg class="vis-builder-glyph-svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M0,-5.4772L2.7386,-4.7434L7.482,-4.7434L4.7434,0L7.482,4.7434L2.7386,4.7434L0,5.4772L-2.7386,4.7434L-7.482,4.7434L-4.7434,0L-7.482,-4.7434L-2.7386,-4.7434Z" transform="translate(12 12)" fill="currentColor"/></svg>
-    </label>
-  </span>
-  
-  
-  
-  
-</label><label class="vis-builder-field" data-builder-bind="symbol_size" phx-keyup="select_field" phx-value-field="symbol_size">
-  <span class="vis-builder-key">
-    symbol_size
-    
-  </span>
-  
-  
-  
-  
-  
-  
-  <input type="text" name="symbol_size">
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
   
 </label>
+
+</div>
     
     </fieldset>
   </form>

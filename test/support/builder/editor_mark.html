@@ -7,13 +7,11 @@
     
     <fieldset class="vis-builder-form-body">
     
-      
-      <label class="vis-builder-field" data-builder-bind="type" phx-keyup="select_field" phx-value-field="type">
+    <label class="vis-builder-field" data-builder-bind="type" phx-keyup="select_field" phx-value-field="type">
   <span class="vis-builder-key">
     type
     <span class="vis-builder-field-handle" draggable="true" data-builder-promote="type" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
   </span>
-  
   
   
   
@@ -34,7 +32,9 @@
   
   
   
-</label><label class="vis-builder-field" data-builder-bind="channels" phx-keyup="select_field" phx-value-field="channels">
+  
+</label>
+<label class="vis-builder-field" data-builder-bind="channels" phx-keyup="select_field" phx-value-field="channels">
   <span class="vis-builder-key">
     channels
     <span class="vis-builder-field-handle" draggable="true" data-builder-promote="channels" title="drag to the variables panel to make a variable of this value" aria-hidden="true">⠿</span>
@@ -57,7 +57,8 @@
   
   <textarea name="channels" placeholder="%{}">%{x: :t, y: :v}</textarea>
   
-</label><label class="vis-builder-field" data-builder-bind="scales" phx-keyup="select_field" phx-value-field="scales">
+</label>
+<label class="vis-builder-field" data-builder-bind="scales" phx-keyup="select_field" phx-value-field="scales">
   <span class="vis-builder-key">
     scales
     
@@ -80,7 +81,8 @@
   
   <textarea name="scales" placeholder="%{}"></textarea>
   
-</label><label class="vis-builder-field" data-builder-bind="offset" phx-keyup="select_field" phx-value-field="offset">
+</label>
+<label class="vis-builder-field" data-builder-bind="offset" phx-keyup="select_field" phx-value-field="offset">
   <span class="vis-builder-key">
     offset
     
@@ -104,7 +106,7 @@
   <textarea name="offset" placeholder="%{}"></textarea>
   
 </label>
-    
+
     </fieldset>
   </form>
 </div>
