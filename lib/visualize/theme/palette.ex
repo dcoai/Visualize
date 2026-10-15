@@ -17,8 +17,6 @@ defmodule Visualize.Theme.Palette do
   # The parts that carry hue: a paint's colour, which everything else an entry says is
   # visible without.
   @paints [:fill, :stroke]
-  # Where a status role stands on the status ramp, its other spelling (spec/08 §7.3).
-  @status_positions %{good: 0, warning: 0.5, bad: 1}
   @size_slots [:font_size, :label_size, :title_size]
 
   # The ten style series: seven symbols against five dashes, so no two share both and every
@@ -286,22 +284,9 @@ defmodule Visualize.Theme.Palette do
     end
   end
 
-  defp group(role, entry) when role in @roles do
-    Enum.find_value(@paints, :ok, fn part ->
-      case colour(entry, part) do
-        nil ->
-          nil
-
-        value ->
-          if own_role?(role, value),
-            do: nil,
-            else:
-              {:error,
-               "a role style paints with its own role, so #{part}.color must be " <>
-                 "#{inspect(role)} or absent; got #{inspect(value)}"}
-      end
-    end)
-  end
+  # The roles' contracts are held by the five as a set, against the theme's colors and
+  # background, in `Visualize.Theme.Roles` (#666).
+  defp group(role, _entry) when role in @roles, do: :ok
 
   defp group(state, entry) when state in @states do
     if non_hue_change?(entry),
@@ -376,14 +361,6 @@ defmodule Visualize.Theme.Palette do
       _other -> nil
     end
   end
-
-  defp own_role?(role, role), do: true
-  defp own_role?(role, {:color, role}), do: true
-
-  defp own_role?(role, {:ramp, :status, t}) when is_number(t),
-    do: Map.get(@status_positions, role) == t
-
-  defp own_role?(_role, _value), do: false
 
   # A part that changes how an object looks without hue: present, and not the value that
   # would leave the object as it is.

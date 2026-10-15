@@ -18,6 +18,8 @@ defmodule Examples.ColorPalettes do
   # A UI font stack, ending in the generic family: the gallery's text is set in the first
   # face the viewer has, where the library's default theme names only `sans-serif` (#486).
   @font_family "Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+  # A status green that holds 3:1 on every tinted page of the gallery (spec/08 §7.7).
+  @good "#3d8b3c"
 
   @palettes %{
     default: %{
@@ -262,9 +264,16 @@ defmodule Examples.ColorPalettes do
     # its page, the colour-safe theme's status is its point. Any other palette tunes one
     # ramp, `sequential`, to run from its page to its first colour, so a heatmap takes the
     # palette's tone; its other ramps and roles are the default's (spec/08 §7.5).
+    #
+    # On a tinted page the default's light-page green falls under WCAG's 3:1 (spec/08 §7.7,
+    # #666), so such a palette's `good` is a step darker, standing apart from the ramp.
     case Theme.builtin(key) do
-      nil -> Theme.default() |> Theme.merge(ramps: %{sequential: sequential(palette)})
-      builtin -> builtin
+      nil ->
+        Theme.default()
+        |> Theme.merge(ramps: %{sequential: sequential(palette)}, colors: %{good: @good})
+
+      builtin ->
+        builtin
     end
     |> Theme.merge(
       name: if(Map.has_key?(@palettes, key), do: key, else: :default),

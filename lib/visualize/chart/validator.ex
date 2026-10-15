@@ -402,10 +402,10 @@ defmodule Visualize.Chart.Validator do
     with ramps when is_map(ramps) <- Map.get(map, :ramps, %{}),
          colors when is_map(colors) <- Map.get(map, :colors, %{}),
          styles when is_map(styles) and not is_struct(styles) <- Map.get(map, :styles, %{}),
-         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &anchor?/1) end),
+         true <- Enum.all?(ramps, fn {_, v} -> is_list(v) and Enum.all?(v, &Colors.anchor?/1) end),
          true <- Enum.all?(colors, fn {_, v} -> is_binary(v) or Visualize.Color.value?(v) end),
          true <- Enum.all?(styles, fn {_, v} -> is_map(v) and not is_struct(v) end),
-         theme = Theme.build(Theme.default(), Map.take(map, [:ramps, :colors, :styles])),
+         theme = Theme.build(Theme.default(), Colors.measured(map)),
          {:error, {kind, name}, message} <- Theme.check(theme) do
       [{path ++ [plural(kind), name], {:contract, message}}]
     else
@@ -1049,9 +1049,6 @@ defmodule Visualize.Chart.Validator do
   defp slot?(v), do: name?(v)
 
   defp name?(v), do: is_atom(v) and v not in @not_names
-
-  # A ramp's anchor is a colour string or a name of the theme's table (spec/08 §7.5, #664).
-  defp anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_atom(name), anchor)
 
   # `:auto` is a bound, so only a two-element list may carry it (spec/14 §1.4).
   defp extent?(list) do

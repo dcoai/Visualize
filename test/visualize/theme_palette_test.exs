@@ -188,23 +188,60 @@ defmodule Visualize.ThemePaletteTest do
   end
 
   describe "contracts refuse a breaking entry, naming the theme, the entry and the term" do
-    test "a role paints with its own role, or a status role's ramp position" do
-      assert refusal(styles: %{bad: %{fill: :good}}) ==
-               "theme :house: style :bad breaks its contract: a role style paints with its own " <>
-                 "role, so fill.color must be :bad or absent; got {:color, :good}"
+    test "a role style may paint in any color: a theme restyles a meaning (#666)" do
+      vermilion =
+        Theme.new(colors: %{vermilion: "#d55e00"}, styles: %{bad: %{fill: {:color, :vermilion}}})
 
-      assert refusal(styles: %{info: %{stroke: %{color: "#3b6fa8", width: 2}}}) =~
-               ~r/style :info .*stroke.color must be :info or absent; got "#3b6fa8"/
+      assert vermilion.styles.bad == %{fill: solid(:vermilion)}
 
-      assert Theme.new(styles: %{warning: %{fill: {:ramp, :status, 0.5}}}).styles.warning ==
-               %{fill: solid({:ramp, :status, 0.5})}
-
-      assert refusal(styles: %{warning: %{fill: {:ramp, :status, 1}}}) =~
-               ~r/fill.color must be :warning or absent; got \{:ramp, :status, 1\}/
+      assert Theme.new(styles: %{info: %{stroke: %{color: "#3b6fa8", width: 2}}}).styles.info ==
+               %{stroke: %{type: :solid, color: "#3b6fa8", width: 2}}
 
       assert Theme.new(styles: %{neutral: %{stroke: %{width: 2}}}).styles.neutral == %{
                stroke: %{width: 2}
              }
+    end
+
+    test "a role style's paint reaches 3:1 against the background, its text 4.5:1 (WCAG)" do
+      assert refusal(colors: %{warning: "#f5c242"}) ==
+               "theme :house: style :warning breaks its contract: fill {:color, :warning} is " <>
+                 "1.65:1 against #ffffff; a role style's paint must reach 3:1 (WCAG 1.4.11, " <>
+                 "non-text contrast)"
+
+      assert refusal(colors: %{bad: "#e0484e"}, styles: %{bad: %{fill: :bad, font: %{size: 12}}}) =~
+               "fill {:color, :bad} is 4.03:1 against #ffffff; a role style's text must reach " <>
+                 "4.5:1 (WCAG 1.4.3, text contrast)"
+
+      # Measured against the theme's own background: the dark theme's roles read on it.
+      assert Theme.check(Theme.dark()) == :ok
+
+      assert refusal(background: "#1b1e24", colors: %{neutral: "#3a3f48"}) =~
+               ~r/style :neutral breaks its contract: fill \{:color, :neutral\} is 1\.\d\d:1 against #1b1e24/
+    end
+
+    test "the role styles' colors are distinct from each other" do
+      assert refusal(styles: %{bad: %{fill: :good}}) ==
+               "theme :house: style :bad breaks its contract: the role styles' colors must be " <>
+                 "distinct, but :good paints {:color, :good} and :bad {:color, :good}, 0.0 ΔEOK " <>
+                 "apart, under the just-noticeable 0.02"
+
+      assert refusal(styles: %{warning: %{fill: {:ramp, :status, 1}}}) =~
+               ~r/style :bad breaks its contract: the role styles' colors must be distinct, but :warning paints \{:ramp, :status, 1\} and :bad/
+    end
+
+    test "the role styles differ from each other without hue" do
+      look = fn role -> %{fill: role, stroke: %{color: role}, marker: %{shape: :circle}} end
+
+      assert refusal(styles: %{good: look.(:good), warning: look.(:warning)}) ==
+               "theme :house: style :warning breaks its contract: role styles must differ in " <>
+                 "something besides the colors of fill and stroke (a dash, a marker, a weight), " <>
+                 "but :good and :warning differ only in hue"
+    end
+
+    test "every color name a palette entry paints with resolves" do
+      assert refusal(styles: %{hover: %{stroke: %{color: {:color, :nope}, width: 2}}}) ==
+               "theme :house: style :hover breaks its contract: names :nope, not a color of the " <>
+                 "theme's color table"
     end
 
     test "a state style changes a non-hue key, never only a colour" do
@@ -325,8 +362,9 @@ defmodule Visualize.ThemePaletteTest do
           styles: %{bad: %{fill: :good}, hover: %{stroke: :bad}, sparkle: %{}}
       }
 
+      # The palette's own, then the role styles as a set (#666) once the table reads.
       assert theme |> Theme.violations() |> Enum.map(&elem(&1, 0)) ==
-               [{:color, :neutral}, {:style, :bad}, {:style, :hover}, {:style, :sparkle}]
+               [{:color, :neutral}, {:style, :hover}, {:style, :sparkle}]
 
       assert {:error, {:color, :neutral}, _} = Theme.check(theme)
     end

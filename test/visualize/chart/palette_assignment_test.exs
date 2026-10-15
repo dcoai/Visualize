@@ -170,7 +170,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
       assert [{[:theme, :styles, :bad], {:contract, message}}] =
                Enum.filter(errors, &match?({[:theme | _], _}, &1))
 
-      assert message =~ "a role style paints with its own role"
+      assert message =~ "the role styles' colors must be distinct"
     end
 
     test "an inline theme cannot add a name, and an entry is a style node" do

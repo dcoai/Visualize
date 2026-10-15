@@ -84,6 +84,18 @@ release it merely follows.
 
 ### Changed
 
+- **Theme contracts on role styles are rewritten** (#666, D-173). A role style may now paint in
+  any color, since a theme restyles what a meaning looks like. In place of "a role paints with its
+  own role", a theme is refused when:
+  - two role styles differ only in hue (no dash, marker or weight between them);
+  - two role styles paint colors closer than ΔEOK 0.02;
+  - a role style's solid fill or stroke falls under 3:1 against the theme's background (WCAG
+    1.4.11), or its fill under 4.5:1 when the entry has a font (WCAG 1.4.3);
+  - a palette entry paints with a color name the theme's table lacks.
+
+  The refusal names the measured ratio and the rule. Every built-in theme passes. A host theme
+  with an off-white background and the light status greens may now be refused: the default's
+  `good` is 3.16:1 on white.
 - **Colors in a design are typed** (#664, D-173). A color position of a design always holds a
   literal string, `:none` or a typed color. `fill: :bad` is read as `fill: color(:bad)`, and
   `:contrast` as `contrast()`, the ink over whatever the text is drawn on (new:
