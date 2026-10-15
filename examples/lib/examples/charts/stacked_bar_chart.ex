@@ -90,7 +90,7 @@ defmodule Examples.Charts.StackedBarChart do
         chart(meta: %{name: "Stacked Bar Chart"}),
         source(:devices, [:year | keys]),
 
-        # A {:field, f} on a colour key is read per element, through the `color` scale.
+        # A {:field, f} on a color key is read per element, through the `color` scale.
         style(:segment, fill: {:field, :key}),
         cartesian(margin: %{top: 30, right: 100, bottom: 50, left: 50}),
         band_scale(:x, padding: 0.2),

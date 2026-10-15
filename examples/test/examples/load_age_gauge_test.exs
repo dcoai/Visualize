@@ -5,7 +5,7 @@ defmodule Examples.LoadAgeGaugeTest do
   order, one clock, the two source charts' own pieces, and a run on canvas of one plot per
   frame.
 
-  The general guards — validity, the round trip, the golden, the colour profiles — are
+  The general guards — validity, the round trip, the golden, the color profiles — are
   `Examples.ChartsTest`'s and apply to this chart like any other.
   """
   use ExUnit.Case, async: true
@@ -164,11 +164,11 @@ defmodule Examples.LoadAgeGaugeTest do
     test "it stands after Load, where Load + age stood, so Previous and Next reach it" do
       assert Gallery.module("load_age_gauge") == LoadAgeGauge
 
-      assert Gallery.neighbours("load_age_gauge") ==
+      assert Gallery.neighbors("load_age_gauge") ==
                {{LoadChart, "load"}, {ContextChart, "context"}}
 
-      assert {_previous, {LoadAgeGauge, "load_age_gauge"}} = Gallery.neighbours("load")
-      assert {{LoadAgeGauge, "load_age_gauge"}, _next} = Gallery.neighbours("context")
+      assert {_previous, {LoadAgeGauge, "load_age_gauge"}} = Gallery.neighbors("load")
+      assert {{LoadAgeGauge, "load_age_gauge"}, _next} = Gallery.neighbors("context")
 
       # The two charts it is made of stay in the gallery.
       assert Gallery.module("load_gauge") == LoadGauge

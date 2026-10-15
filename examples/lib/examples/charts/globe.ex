@@ -10,13 +10,13 @@ defmodule Examples.Charts.Globe do
   #349). The animation turns the projection's `rotate` — the globe spinning east with a
   slow nod — where the hand-written version rebuilt the projection each frame. The nod is
   a tilt, `rotate`'s `phi` as d3's `φ` (D-129): at rest the globe is seen from 20° N, the
-  north pole toward the viewer, and as it turns the centre's latitude swings ±15°. Its dark
+  north pole toward the viewer, and as it turns the center's latitude swings ±15°. Its dark
   page background and the highlight it painted on the glass are not the chart's.
 
   Its ocean is the theme's `:surface` (#422), the plane the data is laid on: not the page
-  (`:background` would make it vanish), not a data colour (the land reads through the
+  (`:background` would make it vanish), not a data color (the land reads through the
   series), and distinct from the `:grid` that strokes the graticule over it — so the map
-  follows the palette and the gallery names no absolute colour (#421).
+  follows the palette and the gallery names no absolute color (#421).
   """
 
   import Visualize.Chart.Build
@@ -36,7 +36,7 @@ defmodule Examples.Charts.Globe do
     radius = min(width, height) / 2 - 20
 
     # `rotate`'s `[lambda, phi, gamma]`: the central meridian, then d3's tilt — a negative
-    # `phi` brings that latitude north of the equator to the centre (spec/07 §1.4).
+    # `phi` brings that latitude north of the equator to the center (spec/07 §1.4).
     {lon, lat} =
       case opts[:animation_tick] do
         nil -> {0, -20}

@@ -5,7 +5,7 @@ defmodule Examples.Charts.StackedAreaChart do
   `Visualize.Shape.Stack` is a step of the mark's data pipeline rather than a call the
   caller makes (spec/14 §5.4.1): the transform yields one row per series per datum carrying
   `key`, `y0` and `y1`, the mark reads `y0` and `y1` as its baseline and top, and `key` as
-  its `series` channel — which both splits the paths and colours them from the `color`
+  its `series` channel — which both splits the paths and colors them from the `color`
   scale the legend explains.
 
   The legend draws in the right margin the chart reserves for it (spec/14 §4.5, #136).

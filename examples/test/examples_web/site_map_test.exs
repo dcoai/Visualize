@@ -5,9 +5,9 @@ defmodule ExamplesWeb.SiteMapTest do
   the only way to two pages once; with them gone, a new page reaches a reader through its
   tab or this test fails.
 
-  A redirect is not a page: its target must be reachable. A parameterised route is a
+  A redirect is not a page: its target must be reachable. A parameterized route is a
   family of pages, each of which must be linked; the expansions below say how to list
-  them, and a parameterised route with none fails until it has one.
+  them, and a parameterized route with none fails until it has one.
   """
   use ExUnit.Case, async: true
 
@@ -15,12 +15,12 @@ defmodule ExamplesWeb.SiteMapTest do
 
   @endpoint ExamplesWeb.Endpoint
 
-  # Every concrete page of a parameterised route.
+  # Every concrete page of a parameterized route.
   defp expand("/chart/:chart"),
     do: for({slug, _module} <- ExamplesWeb.ChartLive.charts(), do: "/chart/#{slug}")
 
   defp expand(path),
-    do: flunk("#{path} is parameterised and the site map cannot list its pages; add an expansion")
+    do: flunk("#{path} is parameterized and the site map cannot list its pages; add an expansion")
 
   defp pages do
     Phoenix.Router.routes(ExamplesWeb.Router)

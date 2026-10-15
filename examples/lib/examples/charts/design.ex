@@ -12,7 +12,7 @@ defmodule Examples.Charts.Design do
 
   - **The palette is the theme.** The gallery's `palette` option becomes the `theme:` of
     `Visualize.Chart.apply/2` (`Examples.ColorPalettes.theme/1`), so a mark that names no
-    colour paints in the palette's series slots and a palette swap recolors every chart.
+    color paints in the palette's series slots and a palette swap recolors every chart.
   - **The `<svg>` shell** is the library's: `Visualize.Chart.render/2` with `root: true`
     draws the accessible root of spec/02 §2.1 around the frame, titled from the design's
     `meta` (#131).
@@ -227,7 +227,7 @@ defmodule Examples.Charts.Design do
     {:ok, frames} = Chart.compile(applied, ceiling: 1)
 
     plots =
-      for {name, _realised} <- ordered(applied) do
+      for {name, _realized} <- ordered(applied) do
         compiled = Map.fetch!(frames, name)
         {payload, _compiled} = Visualize.Chart.Compiled.tick(compiled, applied.sources)
 
@@ -268,7 +268,7 @@ defmodule Examples.Charts.Design do
   A nested `%{name, value, children}` map as the flat node list a hierarchy transform reads
   (spec/14 §5.4.2): one row per node in pre-order — the dotted position as `id`, its
   parent's, the node's `name` and `value` (`0` when absent), and `branch`, the index of
-  the root's child it descends from, which is what a hierarchy's colour scale reads (D-46;
+  the root's child it descends from, which is what a hierarchy's color scale reads (D-46;
   `nil` for the root). The mapping `Visualize.Chart.Presets.sources/2` applies to a
   component's tree, for the gallery's own trees.
   """

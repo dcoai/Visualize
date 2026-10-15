@@ -114,7 +114,7 @@ defmodule ExamplesWeb.ChartLive do
       slug: chart_slug,
       title: module.title(),
       description: module.description(),
-      neighbours: Gallery.neighbours(chart_slug),
+      neighbors: Gallery.neighbors(chart_slug),
       animatable: chart_slug in @animatable_charts,
       hex_radius: 20,
       # The still chart (#362): the last frame rendered outside a run — on mount and on
@@ -191,7 +191,7 @@ defmodule ExamplesWeb.ChartLive do
     if params["field"] == true or params["modified"] == true do
       {:noreply, socket}
     else
-      {previous, next} = socket.assigns.neighbours
+      {previous, next} = socket.assigns.neighbors
       {_module, slug} = if key == "ArrowLeft", do: previous, else: next
       {:noreply, push_patch(socket, to: chart_path(slug))}
     end
@@ -868,7 +868,7 @@ defmodule ExamplesWeb.ChartLive do
     <main>
       <%!-- The gallery in its order, from any chart (spec/14 §12.6, #484): Previous / Next
             patch, so the view stays connected, and wrap; the arrow keys follow them. --%>
-      <% {{prev_module, prev_slug}, {next_module, next_slug}} = @neighbours %>
+      <% {{prev_module, prev_slug}, {next_module, next_slug}} = @neighbors %>
       <nav class="chart-nav" phx-window-keyup="key">
         <a href="/" class="back-link">
           <span>&larr;</span> Back to Gallery

@@ -15,7 +15,7 @@ defmodule Examples.Charts.LoadAgeGauge do
   hidden, so nothing of the age view is lost under the inset. The dial hugs its box — as
   wide as it is tall at its radius. The age view's key stays where it was, in the plot's
   top-right corner, with the width of the plot between the two, and the dial carries no
-  key of its own: its needles are the key's three colours.
+  key of its own: its needles are the key's three colors.
 
   The traces flatten towards the left as they do on the age view alone: an old point is
   its bucket's mean, so the ten-minute swing is averaged down with age (to about 40% at

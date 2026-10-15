@@ -4,7 +4,7 @@ defmodule Examples.Charts.BarChart do
 
   A bar is `x0` and `x1` on the same field: through a `:band` scale `x0` is the band's start
   and `x1` its end, so the rectangle is the band (spec/14 §5.2). `value` on a `:rect` reaches
-  the `color` scale, which is how each letter takes its own colour without a `rem/2` over a
+  the `color` scale, which is how each letter takes its own color without a `rem/2` over a
   palette, and the axis prints its percentages through `Visualize.Format`'s `.1%` rather than
   through a formatting function a design could not hold.
   """
@@ -101,7 +101,7 @@ defmodule Examples.Charts.BarChart do
         axis(:y, :left, ticks: 10, format: ".1%"),
 
         # x0 and x1 on the same field are the band's start and end: the bar is the band.
-        # `value` on a :rect reaches the colour scale.
+        # `value` on a :rect reaches the color scale.
         rect(:letters, %{x0: :letter, x1: :letter, y0: 0, y1: :frequency, value: :letter})
       ])
 

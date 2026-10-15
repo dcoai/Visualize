@@ -4,7 +4,7 @@ defmodule Examples.Charts.RidgelinePlot do
   `:line` mark (its crest), each over that ridge's rows through a `:filter` step.
 
   A ridge is an area drawn from its own baseline, and the baselines step up the plot with
-  the ridges overlapping by half their height. That offset is a modelling question the
+  the ridges overlapping by half their height. That offset is a modeling question the
   layer answers in the data rather than the mark: the `y` scale runs over *ridge heights*
   — the plot's height is `(n − 1) × (1 − overlap) + 1` of them — and every row carries its
   ridge's `base` and its density's `top` in that unit, so the `:area` reads `y0: :base,
@@ -15,7 +15,7 @@ defmodule Examples.Charts.RidgelinePlot do
   A ridge's crest belongs to its fill, so the marks go fill, crest, fill, crest down the
   plot; one `:area` and one `:line` over every ridge would draw every fill before any
   crest, and a hidden ridge's crest would then show through the fill in front of it. The
-  `color` scale's domain is the ridge index, so the colours run top to bottom. The basis
+  `color` scale's domain is the ridge index, so the colors run top to bottom. The basis
   curve is the style's.
   """
 

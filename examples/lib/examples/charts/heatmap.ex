@@ -6,7 +6,7 @@ defmodule Examples.Charts.Heatmap do
   A cell is the hour's rectangle — `x0` the hour, `x1` the hour after, on a linear scale
   over the day — in the day's band, and its `value` is what a `:rect`'s `value` channel is:
   the reading the frame's `color` scale maps to the element's fill (spec/14 §5.6). The
-  `:sequential` scale runs from the theme's background to its first series colour, so a
+  `:sequential` scale runs from the theme's background to its first series color, so a
   palette swap recolors the map; the legend that explains it sits in the top margin
   (`inside: false`, §4.5, #136), and the two axes are real axes where the hand-written
   version placed its labels by hand.
@@ -98,7 +98,7 @@ defmodule Examples.Charts.Heatmap do
         cartesian(margin: %{top: 36, right: 30, bottom: 45, left: 60}),
         linear_scale(:x, domain: [0, 24]),
         band_scale(:y, domain: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
-        # Background to the first series colour; a palette swap recolors the map.
+        # Background to the first series color; a palette swap recolors the map.
         sequential_scale(:color, domain: [0, :auto]),
         axis(:x, :bottom, ticks: 6),
         axis(:y, :left),

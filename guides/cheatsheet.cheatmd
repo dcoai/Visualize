@@ -27,7 +27,7 @@ svg = Visualize.Chart.render(applied, root: true)
 ```
 
 A design is a map. Every `Build` function returns a fragment, and `compose/1` folds them.
-`apply/2` validates, binds rows and realises the frames. `render/2` draws.
+`apply/2` validates, binds rows and realizes the frames. `render/2` draws.
 
 ### Store and reload
 
@@ -240,7 +240,7 @@ fruit = [
 {:ok, _} = Visualize.Chart.apply(stacked_area, sources: %{fruit: fruit})
 ```
 
-### Scatter, coloured by category
+### Scatter, colored by category
 
 ```elixir
 import Visualize.Chart.Build
@@ -341,7 +341,7 @@ group = Visualize.Chart.render(applied)
 document = Visualize.Chart.render(applied, root: true)
 ```
 
-Theme colours are CSS custom properties, so a stylesheet can re-theme the page.
+Theme colors are CSS custom properties, so a stylesheet can re-theme the page.
 
 ### Canvas and binary
 

@@ -5,7 +5,7 @@ defmodule Examples.Charts.BubbleChart do
 
   The pipeline does the work the caller used to: `:sort` draws the largest bubbles first,
   and a `:filter` on the radius is what makes only the big ones carry a name — a condition
-  on a *label* is a condition on the rows the labelling mark reads. That second mark is a
+  on a *label* is a condition on the rows the labeling mark reads. That second mark is a
   `:text` (spec/14 §5.2, #134); it once was a zero-radius circle carrying a label.
 
   The bubble's radius is a column, because a `:circle`'s `value` is user units and names no

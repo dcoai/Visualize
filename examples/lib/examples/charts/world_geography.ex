@@ -18,7 +18,7 @@ defmodule Examples.Charts.WorldGeography do
   @external_resource @land_file
 
   # Natural Earth's land features carry no names, so a row's `name` is its place in the
-  # file — stable while the file is — which the maps' colour scale reads as a category.
+  # file — stable while the file is — which the maps' color scale reads as a category.
   @land (for {feature, n} <- Enum.with_index(Jason.decode!(File.read!(@land_file))["features"], 1) do
            %{name: "land-#{n}", shape: feature}
          end)

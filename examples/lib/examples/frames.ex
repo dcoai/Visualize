@@ -224,7 +224,7 @@ defmodule Examples.Frames do
      }, %{state | compiled: Enum.reverse(compiled)}}
   end
 
-  # The design's node for one frame: what `tick/3` re-realises the frame at (#424).
+  # The design's node for one frame: what `tick/3` re-realizes the frame at (#424).
   defp node(design, name), do: get_in(design, [:frames, name])
 
   # A design whose *marks* move between ticks is a different chart, and the caller

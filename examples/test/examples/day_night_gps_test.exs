@@ -154,7 +154,7 @@ defmodule Examples.DayNightGpsTest do
   end
 
   describe "the clock and the rotation" do
-    test "a tick is 8 simulated minutes and 2° of the centre meridian" do
+    test "a tick is 8 simulated minutes and 2° of the center meridian" do
       assert DayNightGps.utc([]) == DayNightGps.rest_utc()
 
       assert DayNightGps.utc(animation_tick: 3) ==
@@ -178,7 +178,7 @@ defmodule Examples.DayNightGpsTest do
     end
 
     test "the night and the land move together: the night is the same on the land at any lambda" do
-      # The same instant drawn at two centre meridians: the night's rows are the same
+      # The same instant drawn at two center meridians: the night's rows are the same
       # earth-fixed polygon, and drawn, every land position is in the night at one
       # lambda exactly when it is at the other.
       utc = ~U[2026-03-01 06:00:00Z]

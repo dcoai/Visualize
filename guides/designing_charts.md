@@ -44,13 +44,13 @@ design.marks
 
 The result is just a map (`design.frames.main.scales` is
 `%{x: %{kind: :time}, y: %{kind: :linear, domain: [:auto, 100]}}`). The builder adds
-only schema checks: a misspelt option raises `ArgumentError` at the call.
+only schema checks: a misspelled option raises `ArgumentError` at the call.
 
 A design becomes a picture in three steps:
 
 1. **Compose** the fragments into a design map. Nothing is validated yet.
 2. **Apply** it to data with `Visualize.Chart.apply/2`. This validates the design, binds
-   its sources to rows, resolves its variables and realises its frames (infers domains,
+   its sources to rows, resolves its variables and realizes its frames (infers domains,
    builds the scales). The result is a `Visualize.Chart.Applied`.
 3. **Render** the applied chart with `Visualize.Chart.render/2`.
 
@@ -121,7 +121,7 @@ kinds are `cartesian/1`, `polar/1`, `geo/1` and `facet/1`. A design holds its fr
 name. The one-frame builders all write the frame `:main`.
 
 A **polar** frame maps `x` through its `angle` scale and `y` through `r`, and bends every
-ordinary mark around the centre. A **geo** frame takes a projection instead of position
+ordinary mark around the center. A **geo** frame takes a projection instead of position
 scales.
 
 Several frames are built with `in_frame/2`, which renames each fragment's frame and tags
@@ -180,7 +180,7 @@ scales are `angle` and `r`.
 - `domain:` defaults to `:auto`, inferred from every channel that names the scale.
   `[0, :auto]` fixes the low end and infers the high one.
 - `nice: true` rounds a continuous domain out to tidy ticks.
-- `range:` defaults to the plot area. On a colour scale it can name a colour scheme.
+- `range:` defaults to the plot area. On a color scale it can name a color scheme.
 - `adopt/2` shares another frame's scale: one domain over both frames' data, each frame
   with its own range.
 
@@ -232,7 +232,7 @@ specific to a type (an arc's `inner_radius`, a rect's `corner_radius`) go under
 
 **`series` works on every mark** (except `:percentile_band` and `:tiles`). It names the
 group a row belongs to. On a `:line` or `:area` it also splits the rows into one path per
-series. Either way, each element is painted its series' colour and carries a
+series. Either way, each element is painted its series' color and carries a
 `data-series` attribute, so a legend toggle hides every mark of that series together:
 the line and its dots below hide as one.
 
@@ -300,7 +300,7 @@ Contract: [spec/14 §4.4](https://github.com/dcoai/Visualize/blob/main/spec/14-d
 
 ## Styles, themes and the style grammar
 
-A colour, a font or a curve lives in a **style** and nowhere else. `style/2` declares a
+A color, a font or a curve lives in a **style** and nowhere else. `style/2` declares a
 named style under `styles`, and a mark, axis, legend or label refers to it with
 `style:`. A style is written in **parts**: `fill` and `stroke` (each a paint: a `type`,
 then a `color` or gradient stops, then an `opacity`; a stroke adds its `width`, `dash`,
@@ -308,20 +308,20 @@ then a `color` or gradient stops, then an `opacity`; a stroke adds its `width`, 
 `opacity`, `blend` and `class` for the whole element. `fill: :series_1` is short for
 `fill: %{type: :solid, color: :series_1}`, and `:none` is no paint. A value inside a part
 can be a literal (`"#3b6fa8"`, `2`), a **theme slot** (`:series_1`, `:axis`,
-`:background`, `:font_size`), `{:field, f}` read per datum (a colour through the `color`
+`:background`, `:font_size`), `{:field, f}` read per datum (a color through the `color`
 scale), a variable, or `:contrast` for text that stays readable on whatever it sits on. A
 fill can be a gradient written in place (`%{type: :linear, color: [a, b]}`) or one declared
 once with `gradient/3` and named with `paint/1`.
 
 - `extends:` derives one style from another, such as a built-in (`:axis`, `:grid`,
   `:label`, `:title`). The parent's parts are kept key by key: `%{extends: :axis, stroke:
-  %{width: 2}}` keeps the axis stroke's colour.
+  %{width: 2}}` keeps the axis stroke's color.
 - `style: [:series, :emphasis]` stacks styles at one site, the later winning, part by part.
   The theme's modifiers (`:bold`, `:italic`, `:thin`, `:thick`, `:dashed`, `:dotted`,
   `:outline`) each change one thing, to stack on a look: `[:bad, :outline]`.
 - `theme/1` names the theme (`:default` or `:dark`) or gives one inline. Slots render as CSS
   custom properties in SVG (`var(--vis-series-1, …)`), so a stylesheet can re-theme a page,
-  and as literal colours on a canvas.
+  and as literal colors on a canvas.
 
 ```elixir
 import Visualize.Chart.Build
@@ -403,8 +403,8 @@ an `x_band/3`, and a threshold a `rule/3` at `y`, a horizontal line across the p
 cartesian frame both are cut to the plot, so an event that began before the window does
 not cross the axis.
 
-Colour them by meaning, not by series. A mark's `scales: %{color: name}` gives it a colour
-scale of its own, so the lines keep their series' colours. An `:ordinal` scale whose
+Color them by meaning, not by series. A mark's `scales: %{color: name}` gives it a color
+scale of its own, so the lines keep their series' colors. An `:ordinal` scale whose
 `range` is a map pins each severity to a role, which every theme draws in its own tones.
 A feed's schema can supply that map, `range: fact(:events, :severity, :status)`, and a
 target line, `y: fact(:primary, :latency, :target)`.
@@ -447,10 +447,10 @@ Visualize.Chart.render(applied) =~ "var(--vis-bad"
 #=> true
 ```
 
-A threshold feeds the `y` domain, so it is always in view. `polarity:` on a colour scale over
+A threshold feeds the `y` domain, so it is always in view. `polarity:` on a color scale over
 a ramp (`range: {:ramp, :status}`) places the good end at the better end of the domain: a
 `:threshold` scale at a feed's target with `polarity: fact(:primary, :latency, :polarity)`
-colours a reading beyond the target `:bad`.
+colors a reading beyond the target `:bad`.
 
 The brush belongs to the design too. With `interaction(brush: :x)` the chart writes its plot
 area and its `x` mapping. `BrushHook` on a container around the rendered chart then pushes

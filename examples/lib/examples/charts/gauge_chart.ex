@@ -2,11 +2,11 @@ defmodule Examples.Charts.GaugeChart do
   @moduledoc """
   A gauge as a design (#389, #392): a polar frame whose `angle` scale sweeps 240° from
   −120° over the reading's domain (spec/14 §4.3), the axis drawn as an arc at 0.85 R with
-  its ticks outward, a band of three `:rect` sectors — the good, warning and bad zones, coloured
-  by the theme's roles (#533) and marked by each role's glyph, so they read in greyscale
+  its ticks outward, a band of three `:rect` sectors — the good, warning and bad zones, colored
+  by the theme's roles (#533) and marked by each role's glyph, so they read in grayscale
   (#560) —
   arced around the chart by the polar transform (§5.2), an arced `:rect` filled from zero
-  to the reading, and a `:needle` over the newest reading with the value labelled beyond
+  to the reading, and a `:needle` over the newest reading with the value labeled beyond
   its tip. Animated, the reading wanders and the needle follows.
   """
 

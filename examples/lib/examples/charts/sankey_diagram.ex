@@ -5,7 +5,7 @@ defmodule Examples.Charts.SankeyDiagram do
 
   The layout reads the flows as `source`, `target`, `value` and is a step of each mark's
   data pipeline (spec/14 §5.4.3): `output: :links` yields each ribbon as a ready path,
-  painted in its source's colour at a light opacity, and `output: :nodes` yields each
+  painted in its source's color at a light opacity, and `output: :nodes` yields each
   node's four edges, which the `:rect` reads directly. The nodes are split by a `:filter`
   on `height` so the end uses — the last column — are named to the left of their bar and
   every other node to the right, the edge anchors of §5.5. The node ids are the names

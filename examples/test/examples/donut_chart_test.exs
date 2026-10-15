@@ -1,7 +1,7 @@
 defmodule Examples.DonutChartTest do
   @moduledoc """
-  #487: the Donut is visible. Its slices are filled by category, the values its colour
-  scale's domain holds, so SVG and canvas both draw five coloured slices; and its ring is
+  #487: the Donut is visible. Its slices are filled by category, the values its color
+  scale's domain holds, so SVG and canvas both draw five colored slices; and its ring is
   sized from the plot area its legend's margin leaves, so no slice reaches past the plot.
   """
   use ExUnit.Case, async: true
@@ -18,7 +18,7 @@ defmodule Examples.DonutChartTest do
     Regex.scan(~r/<path d="([^"]+)" fill="([^"]+)"/, group, capture: :all_but_first)
   end
 
-  test "SVG draws five slices, each in its own series colour" do
+  test "SVG draws five slices, each in its own series color" do
     fills = DonutChart.render() |> arcs() |> Enum.map(fn [_d, fill] -> fill end)
 
     assert fills ==
@@ -28,7 +28,7 @@ defmodule Examples.DonutChartTest do
              )
   end
 
-  test "the canvas draws five slices, each filled in its own colour" do
+  test "the canvas draws five slices, each filled in its own color" do
     records = Decoder.decode(Base.decode64!(Design.canvas(DonutChart, [])))
 
     # The arc mark's records — one style with a fill, then the path and its fill, per
@@ -44,7 +44,7 @@ defmodule Examples.DonutChartTest do
     assert length(Enum.uniq(fills)) == 5, inspect(records, limit: :infinity)
   end
 
-  # The ring's centre is the polar group's translate; every slice's points lie within the
+  # The ring's center is the polar group's translate; every slice's points lie within the
   # outer radius of it, and the circle of that radius lies within the plot area — the box
   # less the legend's margin.
   for {width, height} <- [{400, 400}, {320, 220}, {600, 300}] do

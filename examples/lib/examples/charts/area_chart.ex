@@ -1,7 +1,7 @@
 defmodule Examples.Charts.AreaChart do
   @moduledoc """
   Area chart as a design (#125, #133): an `:area` mark under a `:line` over a cartesian
-  frame, the area filled with a vertical gradient from the series colour at 0.8 to 0.1 at
+  frame, the area filled with a vertical gradient from the series color at 0.8 to 0.1 at
   the baseline.
 
   The gradient is a paint the design declares under `defs` (spec/14 §2.7) and the area's

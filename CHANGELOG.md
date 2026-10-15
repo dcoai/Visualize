@@ -5,7 +5,7 @@ All notable changes to Visualize are recorded here, following
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 > **Note.** This file is written for a consumer of the library, so it says what changed in
-> the surface and in behaviour, not what changed in the repository. What the library *is*,
+> the surface and in behavior, not what changed in the repository. What the library *is*,
 > module by module, lives in
 > [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
 > source of truth for that and is not restated here.
@@ -44,7 +44,7 @@ release it merely follows.
 - **Units and defaults in the builder** (#684, D-178). A size in a style — a stroke's width,
   a font's size, a marker's size, a hatch's spacing — has a unit select beside its box
   (user units, px, pt, pc, mm, cm, in, em, and % where the size has a box), so `{12, :pt}`
-  reads `12 · pt`. A gradient's centre is two boxes, and a hatch's pattern is chosen by
+  reads `12 · pt`. A gradient's center is two boxes, and a hatch's pattern is chosen by
   its picture. Defaults are edited where their container is: a frame's and the design's on
   the frame's page, a layer's or a group's in the site's context — by part, and by mark
   kind (an entry added from **+ kind** and dropped with ×). A group's defaults now reach
@@ -59,7 +59,7 @@ release it merely follows.
   × to remove it; **+ step** adds `intensity`, `alpha`, `lighten`, `darken`, `saturate`,
   `shade`, `contrast` or `blend`, and a blend's operands are chains of their own. Picking a
   color for a field that holds a chain replaces its base and keeps the steps. The chain
-  edits through a new `colour_chain` event.
+  edits through a new `color_chain` event.
 
 - **Generators: styles and colors computed when a chart is drawn** (#680, #654, D-177). A
   design may store a call, `generate(:name, args)` (`import Visualize.Generators`), where
@@ -71,7 +71,7 @@ release it merely follows.
   `ctx` holds the theme, the design's variables and your `assigns:`; register the module
   with `config :visualize, generators: [MyApp.Generators]` or the `generators:` option of
   `Visualize.Chart.from_map/2`, `from_json/2`, `apply/2`, `compile/2`, a board's
-  `realise/4` and `Visualize.Board.Server` (which also takes `assigns:`). An unknown name or
+  `realize/4` and `Visualize.Board.Server` (which also takes `assigns:`). An unknown name or
   a wrong arity is a validation fault when the chart is built. A result of the wrong type
   applies nothing and is logged; a generator that raises is not rescued. Results are
   computed once per distinct arguments while a mark draws. `Visualize.Chart.explain/2`
@@ -122,17 +122,17 @@ release it merely follows.
   byte as before. New: `Visualize.IR.Motion`.
 
 - **A shadow's offset and color** (#674, D-175). `effect: %{type: :shadow, radius: 4,
-  offset: [pt(2), pt(3)], color: color(:text) |> alpha(0.4)}` moves and colours a shadow;
-  the offset takes #671's units (a `pct` is refused, there is no box), and a colour given
+  offset: [pt(2), pt(3)], color: color(:text) |> alpha(0.4)}` moves and colors a shadow;
+  the offset takes #671's units (a `pct` is refused, there is no box), and a color given
   carries its own opacity. Without them a shadow is what it was, byte for byte: offset half
   its radius, black at 0.35. SVG gets a filter per distinct shadow, the canvas commands set
   the shadow properties, and **the binary canvas now draws effects at all** — a shadow or a
   blur was dropped from the binary stream before — through a version 2 `effect` record
-  (`0x52`). `Visualize.IR.Element.drop_shadow/4` takes the colour.
+  (`0x52`). `Visualize.IR.Element.drop_shadow/4` takes the color.
 
 - **A hatch paint** (#673, D-175). `fill: %{type: :hatch, color: color(:bad), pattern:
   :crosshatch, angle: 45, spacing: pt(4), width: pt(1)}` fills an area with lines,
-  crossed lines or dots of one colour over an optional `background`, so a category or a
+  crossed lines or dots of one color over an optional `background`, so a category or a
   state reads without hue — in grayscale and on paper. `pattern` is `:lines` (the default),
   `:crosshatch` or `:dots`; `angle` defaults to `45`, `spacing` to `6` and `width` to `1`,
   and both sizes take the units of #671. It is written in a style or declared under `defs`
@@ -146,7 +146,7 @@ release it merely follows.
 
 - **Gradients draw on the canvas** (#672, D-175). A `:linear` or `:radial` paint — declared
   under `defs` or written in a style — now draws as a gradient on every canvas backend, not
-  as its first stop's colour: the `:json` and `:js` commands and the binary stream build it
+  as its first stop's color: the `:json` and `:js` commands and the binary stream build it
   over each element's own bounding box, matching SVG's `objectBoundingBox`, and a gradient on
   a group is built over each child. A `resolve: :literal` render (the PNG path) draws the
   gradient too. In an IR you build yourself, a `:fill` or `:stroke` may be a
@@ -170,7 +170,7 @@ release it merely follows.
   convert at CSS's ratios (96 px = 1 in = 72 pt). Every unit is resolved on the server, so SVG
   and canvas get the same number: `em` at a font size is relative to the inherited font size
   (the containers' defaults, else the theme's `font_size`), and elsewhere to the element's own;
-  `pct` is allowed only where a size has a box (a text offset of the labelled element, a marker
+  `pct` is allowed only where a size has a box (a text offset of the labeled element, a marker
   size of the mark's band, a font size of the inherited one). A `pct` stroke width, dash or
   effect radius is the new validator fault `{:no_box, key}`, and a unit at an opacity
   `{:no_unit, :opacity}`. A unit-valued marker size is the side of the square, not its area. In
@@ -242,7 +242,7 @@ release it merely follows.
   (`import Visualize.Color, only: [color: 1, …]`), since `Visualize.Color.to_string/1` would
   clash with `Kernel`'s.
 - **A style palette in the theme** (#636, D-171). `%Visualize.Theme{}` has a `styles` field: whole
-  looks under fixed names, as the colours already were — style series `:style_1` … `:style_n`
+  looks under fixed names, as the colors already were — style series `:style_1` … `:style_n`
   (`{:style, i}` cycles), the five roles, the view states `:hover`, `:focused`, `:selected`,
   `:active`, `:disabled`, `:muted`, `:emphasis` and `:breakpoint`, and the furniture styles
   `:axis`, `:grid`, `:label`, `:title`, `:caption`, `:value` and `:annotation`. Every built-in
@@ -250,7 +250,7 @@ release it merely follows.
   a theme lacks it) and `style_names/1` lists them. `Visualize.Theme.new/1` and `merge/2` take
   `styles:` and merge it key by key, and refuse an entry that breaks its contract with an
   `ArgumentError` naming the theme, the entry and the term: a role paints only with its own role,
-  a state style changes something besides colour, neighbouring style series differ besides hue,
+  a state style changes something besides color, neighboring style series differ besides hue,
   text furniture names a font and a size, `:grid` has a stroke, no `extends`, no new names.
   `check/1` and `violations/1` now also report palette faults, under `{:style, name}`.
 - **Designs name palette styles, by name and by data** (#637, #644, D-171). Every palette name is a
@@ -261,7 +261,7 @@ release it merely follows.
   draws each datum in the style its `health` names — an atom such as `:warning`, or the string
   `"warning"` as a feed sends it — resolved against the design's `styles` and then the theme's
   palette. A path per series takes its first datum's style, and a mark's inline label its
-  labelled datum's; a value that names no style, or `nil`, applies nothing and the mark keeps its
+  labeled datum's; a value that names no style, or `nil`, applies nothing and the mark keeps its
   own look. Every style site accepts the binding (`mark`, `label`, `mark_label`, `axis`,
   `legend`); where there is no datum it applies nothing. In JSON it is the usual
   `{"$field": "health"}`.
@@ -273,7 +273,7 @@ release it merely follows.
   writes `data-vis-hover` and `Visualize.Hooks.Keyboard.attrs/1` writes `data-vis-focused`: the
   palette's `:hover` and `:focused` as the chart's design and theme resolve them, a design's own
   `styles` entry of the name winning. `CrosshairHook`'s markers and `KeyboardHook`'s focus ring
-  draw with them — by default a 2-pixel ring in the theme's text colour, the focus ring dashed.
+  draw with them — by default a 2-pixel ring in the theme's text color, the focus ring dashed.
   New `Visualize.Hooks.Tooltip.attrs/1` gives `TooltipHook` the same `data-vis-hover`, with which
   it outlines the datum it shows; `Visualize.Components.Chart` writes it, so its charts now
   outline the hovered datum. A hook element without the attribute — markup a host writes by
@@ -393,13 +393,13 @@ release it merely follows.
   `fill: %{type: :linear, color: [:series_1, "#fff"], angle: 90}`. Short forms still work
   (`fill: :red`, `fill: :none`, `fill: {:paint, :fade}`, `curve: :step`). `extends:` and a
   stack merge a part key by key, so `%{extends: :warning, stroke: %{width: 3}}` keeps the
-  warning stroke's colour and dash; a part whose `type` changes is replaced, keeping its
+  warning stroke's color and dash; a part whose `type` changes is replaced, keeping its
   opacity and a stroke's line. **Nothing to migrate**: the flat keys of earlier versions
   (`stroke_width`, `fill_opacity`, `font_size`, `symbol`, `curve_opts`, …) are read as the parts
   they mean everywhere a style is read — a stored design, JSON, a design built in your code, a
   theme's `styles:`, `Visualize.Chart.Build.style/3` — and the 2 → 3 migration rewrites stored
   designs. Gradients under `defs` take the same words: `type`, `center`, and stops of
-  `%{at, color, opacity}` (`kind`, `centre`, `offset` and `colour` are read as these).
+  `%{at, color, opacity}` (`kind`, `centre`, `offset` and `colour` are read as these). <!-- spelling: allow -->
   `Visualize.Chart.Build.gradient/3` writes them. Charts render as before; a declared
   gradient's SVG id prefix changes once, being a hash of `defs`.
 - **The theme palette is written in parts, and gains modifiers** (#657, D-172).
@@ -423,8 +423,8 @@ release it merely follows.
   dashed stroke with no area under it, and a `font` on a bar writes nothing. **Draw the area
   under a line as an `:area` mark beneath it** with the same channels. A stored version 2
   design whose line had a fill is migrated to exactly that, the marks it moves keeping their
-  series colour; with a `series` channel the migrated area paints each series in its own
-  colour, as an area does.
+  series color; with a `series` channel the migrated area paints each series in its own
+  color, as an area does.
 - **Designs are treated as untrusted input** (#660, D-172). A font family holding `<`, `>`,
   `/`, `;`, `{`, `}`, `\` or a control character is a `{:unsafe, :font_family}` validation
   fault, and a `class` must be CSS class names (`{:unsafe, :class}`). A canvas now escapes
@@ -440,7 +440,7 @@ release it merely follows.
   that element's style, its resolved value, whether the mark kind draws it, and the chain of
   layers that set it — the palette or a declared style (with the names it was reached
   through by `extends` or a list), the style a field's value chose, a view state, the
-  site's local edit, or the mark's own series colour.
+  site's local edit, or the mark's own series color.
 - **New in `Visualize.Chart.Style`**: `drawn/2`, `normalize/1` (any spelling to the stored parts),
   `merge/2` (the part-by-part merge) and `project/1` (the parts as the flat element keys).
   `Visualize.Chart.Migration.current/0` is `3`, with `canonical/2`, `parts/2` and
@@ -453,7 +453,7 @@ release it merely follows.
   entry that ends each data mark's style stack and names the state, so a component restyles its board's selection by declaring
   `selected:` or `muted:` in its `styles`, and a theme's entries apply otherwise. The built-in
   `:muted` fades as before (`opacity` 0.25); the built-in `:selected` is now `stroke_width: 2`
-  alone, so a selected line or rule keeps its colour and draws heavier, and a bar, a point or a
+  alone, so a selected line or rule keeps its color and draws heavier, and a bar, a point or a
   text draws as before. Declare your own `selected:` for an outline. A cell that does not show
   the selection draws as before.
 

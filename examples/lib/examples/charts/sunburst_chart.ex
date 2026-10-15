@@ -13,9 +13,9 @@ defmodule Examples.Charts.SunburstChart do
 
   Two deliberate differences from the hand-built version, neither an approximation:
 
-  - **Colour follows the branch**, as `Visualize.Chart.Presets.sunburst_chart/1` does — the
+  - **Color follows the branch**, as `Visualize.Chart.Presets.sunburst_chart/1` does — the
     root child a node descends from. The hand-written scheme gave every node below the first
-    ring a darkened shade of one colour, so the outer ring told you nothing.
+    ring a darkened shade of one color, so the outer ring told you nothing.
   - **Labels are fitted to their sector** with `fit: :truncate` (spec/14 §5.5, #138): cut
     to the characters the arc's length at the label's radius holds, ending in `…`.
   """

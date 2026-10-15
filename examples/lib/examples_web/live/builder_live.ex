@@ -366,7 +366,7 @@ defmodule ExamplesWeb.BuilderLive do
         <em>Theme</em>
         on the chart bar, a <em>Theme::</em>
         entry, or <em>New → theme</em>
-        opens the theme mode: the theme's colours and fonts beside a sheet of sample charts
+        opens the theme mode: the theme's colors and fonts beside a sheet of sample charts
         drawn in it.
       </p>
       <p>

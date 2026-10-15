@@ -50,7 +50,7 @@ defmodule Examples.LoadGaugeTest do
     assert shown(done) == loads(1)
   end
 
-  test "the needle is drawn where it has travelled to, not where its row reads" do
+  test "the needle is drawn where it has traveled to, not where its row reads" do
     state = Frames.prepare(LoadGauge, [], :svg)
     {_frame, state} = Frames.frame(LoadGauge, [animation_tick: 0, at: 0], :svg, state)
     {_frame, state} = Frames.frame(LoadGauge, [animation_tick: 1, at: 0], :svg, state)

@@ -1,9 +1,9 @@
 defmodule Examples.RingLabelsTest do
   @moduledoc """
-  #489: the gallery's centred texts sit at the ring's centre, and no ring label leaves the
+  #489: the gallery's centered texts sit at the ring's center, and no ring label leaves the
   plot.
 
-  The Radial bar's and the Donut's centre texts are frame labels at `{:frame, :center}`,
+  The Radial bar's and the Donut's center texts are frame labels at `{:frame, :center}`,
   the polar origin whatever the `r` range (spec/14 §6.3). The Radial bar's and the Chord's
   names outside the ring are kept inside the plot by a ring sized from the plot and its
   longest label (`Examples.Charts.Design.ring_radius/4`, spec/14 §5.5) — held here by
@@ -17,9 +17,9 @@ defmodule Examples.RingLabelsTest do
 
   @fonts Path.expand("../../../test/support/fonts", __DIR__)
 
-  # The polar group's translate — the ring's centre — and the frame labels' points, in the
+  # The polar group's translate — the ring's center — and the frame labels' points, in the
   # frame's own coordinates, which both sit in.
-  defp centre(svg) do
+  defp center(svg) do
     [cx, cy] =
       Regex.run(~r/<g class="polar" transform="translate\(([-\d.]+),([-\d.]+)\)"/, svg,
         capture: :all_but_first
@@ -40,21 +40,21 @@ defmodule Examples.RingLabelsTest do
     end
   end
 
-  describe "the centre texts sit at the ring's centre (spec/14 §6.3)" do
+  describe "the center texts sit at the ring's center (spec/14 §6.3)" do
     test "the Radial bar's average and its word, though r's range starts at 50" do
       svg = RadialBarChart.render()
-      {cx, cy} = centre(svg)
+      {cx, cy} = center(svg)
       points = Map.new(label_points(svg))
 
-      # The text's x is the centre's; its baseline the centre's, nudged by the label's dy.
+      # The text's x is the center's; its baseline the center's, nudged by the label's dy.
       assert points["67.1"] == {cx, cy - 5}
       assert points["average"] == {cx, cy + 15}
       assert {cx, cy} == {200.0, 200.0}
     end
 
-    test "the Donut's total and its caption, centred in the plot its legend leaves" do
+    test "the Donut's total and its caption, centered in the plot its legend leaves" do
       svg = DonutChart.render()
-      {cx, cy} = centre(svg)
+      {cx, cy} = center(svg)
       points = Map.new(label_points(svg))
 
       assert points["$1000K"] == {cx, cy - 10}
@@ -63,7 +63,7 @@ defmodule Examples.RingLabelsTest do
       assert {cx, cy} == {140.0, 200.0}
     end
 
-    test "both centre texts are anchored at their middle" do
+    test "both center texts are anchored at their middle" do
       for svg <- [RadialBarChart.render(), DonutChart.render()] do
         texts = Regex.scan(~r/<text class="label"[^>]*>/, svg) |> List.flatten()
         assert texts != []
@@ -121,7 +121,7 @@ defmodule Examples.RingLabelsTest do
 
   # Every text's drawn bounding box by its content, `{x, y, w, h}` in the root's user
   # units: resvg's `--query-all` over the chart's literal SVG, each text given an id, the
-  # SVG on stdin through the rasteriser's own port (spec/09 §9.5).
+  # SVG on stdin through the rasterizer's own port (spec/09 §9.5).
   defp measured(module) do
     svg =
       module

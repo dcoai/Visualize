@@ -125,7 +125,7 @@ defmodule ExamplesWeb.Layouts do
           }
           code { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
         </style>
-        <%!-- The colours of every code block, ExamplesWeb.Highlight.code/1 (#506) --%>
+        <%!-- The colors of every code block, ExamplesWeb.Highlight.code/1 (#506) --%>
         <style><%= Phoenix.HTML.raw(ExamplesWeb.Highlight.css()) %></style>
         <script defer src="https://unpkg.com/phoenix_html@4.2.0/priv/static/phoenix_html.js"></script>
         <script defer src="https://unpkg.com/phoenix@1.7.21/priv/static/phoenix.min.js"></script>

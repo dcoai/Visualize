@@ -7,7 +7,7 @@ defmodule Examples.Charts.ContourPlot do
   the grid in row-major order, `field: :z` the height read from each, and the step yields
   one ring per threshold as a ready path scaled to the plot. Each ring's `value` is its
   threshold, and `fill: {:field, :value}` on the style reaches the `:sequential` `color`
-  scale (§3.4), so the bands run from the theme's background to its first series colour
+  scale (§3.4), so the bands run from the theme's background to its first series color
   and the legend in the right margin (`inside: false`, §4.5, #136) explains the heights.
   """
 
@@ -97,7 +97,7 @@ defmodule Examples.Charts.ContourPlot do
         sequential_scale(:color, domain: [0, :auto]),
         legend(:color, position: :right, inside: false, title: ["Height"]),
         # Marching squares over a 50 × 40 grid (spec/14 §5.4.4): one ring per threshold,
-        # its value the threshold, which the colour scale maps to the band's fill.
+        # its value the threshold, which the color scale maps to the band's fill.
         path(
           contour(from(:grid), :z, [50, 40], thresholds: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8]),
           %{path: :path},

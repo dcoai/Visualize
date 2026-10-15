@@ -126,8 +126,8 @@ canvas = Visualize.Chart.render(applied, backend: :canvas)
 
 ### A PNG, if resvg is installed
 
-`Visualize.Render.to_png/2` rasterises the chart. resvg cannot read the CSS variables the
-default SVG uses for theme colours, so generate the chart with literal colours first:
+`Visualize.Render.to_png/2` rasterizes the chart. resvg cannot read the CSS variables the
+default SVG uses for theme colors, so generate the chart with literal colors first:
 
 ```elixir
 root = Visualize.Chart.generate(applied, root: true, resolve: :literal)

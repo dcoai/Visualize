@@ -39,7 +39,7 @@ defmodule Examples.RidgelinePlotTest do
              for(ridge <- 0..(@ridges - 1), type <- ["area", "line"], do: {type, ridge})
 
     for [area, crest] <- Enum.chunk_every(paths, 2) do
-      # The crest is the fill's own top edge, in the fill's colour.
+      # The crest is the fill's own top edge, in the fill's color.
       assert area.key == "fill" and crest.key == "stroke"
       assert crest.paint == area.paint
       assert String.starts_with?(area.d, crest.d)
@@ -51,10 +51,10 @@ defmodule Examples.RidgelinePlotTest do
     assert length(Enum.uniq(baselines)) == @ridges
   end
 
-  test "the hybrid canvas fills and strokes in the same order, each crest in its fill's colour" do
+  test "the hybrid canvas fills and strokes in the same order, each crest in its fill's color" do
     %{canvas: canvas} = Design.hybrid(RidgelinePlot, [])
 
-    # Each draw with the colour it is drawn in: the last style record's fill before a
+    # Each draw with the color it is drawn in: the last style record's fill before a
     # `:fill`, its stroke before a `:stroke`.
     {draws, _style} =
       canvas
@@ -85,15 +85,15 @@ defmodule Examples.RidgelinePlotTest do
     for [{:fill, fill}, {:stroke, stroke}] <- pairs, do: assert(fill == stroke)
     assert Enum.all?(pairs, &match?([{:fill, _}, {:stroke, _}], &1))
 
-    # The same ridges in the same order as the SVG: the top ridge's colour first.
-    svg_colours =
+    # The same ridges in the same order as the SVG: the top ridge's color first.
+    svg_colors =
       for %{type: "area", paint: paint} <- paths(RidgelinePlot.render([])) do
         [hex] = Regex.run(~r/#([0-9a-f]{6})/, paint, capture: :all_but_first)
         <<r::8, g::8, b::8>> = Base.decode16!(hex, case: :lower)
         {r, g, b, 255}
       end
 
-    assert for([{:fill, fill}, _] <- pairs, do: fill) == svg_colours
-    assert length(Enum.uniq(svg_colours)) == @ridges
+    assert for([{:fill, fill}, _] <- pairs, do: fill) == svg_colors
+    assert length(Enum.uniq(svg_colors)) == @ridges
   end
 end
