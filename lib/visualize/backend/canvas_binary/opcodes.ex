@@ -44,4 +44,6 @@ defmodule Visualize.Backend.CanvasBinary.Opcodes do
   defmacro motion, do: 0x53
   @doc false
   defmacro motion_end, do: 0x54
+  @doc false
+  defmacro paint_state, do: 0x55
 end

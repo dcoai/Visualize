@@ -14,6 +14,8 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     and `stroke_paint:` indexes under bits 5 and 6
   - `{:effect, :shadow, radius, {dx, dy}, {r, g, b, a}}` and `{:effect, :blur, radius}` (§4.3.14)
   - `{:motion, json}` and `:motion_end`, a motion span and its end (§4.3.15, §4.3.16, #653)
+  - the version 3 record `{:paint_state, %{fill_alpha:, stroke_alpha:, cap:, join:, dash:}}`,
+    `nil` for an absent field (§4.3.17, #675)
   - the version 2 records `{:version, v}`, `{:paint, index, %{type:, geometry: [f32], stops:
     [{at, {r, g, b, a}}]}}` and `{:box, {x, y, w, h}}` (spec/09 §4.3.11–4.3.13)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
@@ -140,7 +142,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
        do: decode(rest, [{:transform, :matrix, {a, b, c, d, e, f}} | acc])
 
   # Version 2 (spec/09 §4.3.11–4.3.13): the version, a paint, a box.
-  defp decode(<<0x00, version::8, rest::binary>>, acc) when version in [1, 2],
+  defp decode(<<0x00, version::8, rest::binary>>, acc) when version in [1, 2, 3],
     do: decode(rest, [{:version, version} | acc])
 
   defp decode(<<0x00, version::8, _rest::binary>>, _acc),
@@ -193,6 +195,23 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     do: decode(rest, [{:motion, json} | acc])
 
   defp decode(<<0x54, rest::binary>>, acc), do: decode(rest, [:motion_end | acc])
+
+  # Version 3 (spec/09 §4.3.17, #675): the paint state the flags select.
+  defp decode(<<0x55, flags::8, rest::binary>>, acc) do
+    import Bitwise
+    {fill, rest} = if (flags &&& 0x01) != 0, do: f32(rest), else: {nil, rest}
+    {stroke, rest} = if (flags &&& 0x02) != 0, do: f32(rest), else: {nil, rest}
+
+    {cap, rest} =
+      if (flags &&& 0x04) != 0, do: named(rest, [:butt, :round, :square]), else: {nil, rest}
+
+    {join, rest} =
+      if (flags &&& 0x08) != 0, do: named(rest, [:miter, :round, :bevel]), else: {nil, rest}
+
+    {dash, rest} = if (flags &&& 0x10) != 0, do: lengths(rest), else: {nil, rest}
+    state = %{fill_alpha: fill, stroke_alpha: stroke, cap: cap, join: join, dash: dash}
+    decode(rest, [{:paint_state, state} | acc])
+  end
 
   defp decode(<<0x30, rest::binary>>, acc), do: decode(rest, [:save | acc])
   defp decode(<<0x31, rest::binary>>, acc), do: decode(rest, [:restore | acc])
@@ -270,6 +289,14 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
 
   defp rgba(<<r::8, g::8, b::8, a::8, rest::binary>>), do: {{r, g, b, a}, rest}
   defp f32(<<v::little-float-32, rest::binary>>), do: {v, rest}
+
+  defp named(<<i::8, rest::binary>>, names), do: {Enum.fetch!(names, i), rest}
+
+  defp lengths(<<count::8, rest::binary>>) do
+    size = count * 4
+    <<values::binary-size(^size), rest::binary>> = rest
+    {for(<<v::little-float-32 <- values>>, do: v), rest}
+  end
 
   # The sub-opcodes of spec/09 §4.3.2 with their IR command and the count of float
   # arguments, each `w` bits wide (64 for `path_cubic`, 32 for `path_cubic32`, §4.3.9).

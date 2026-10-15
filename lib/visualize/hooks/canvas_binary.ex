@@ -356,6 +356,8 @@ defmodule Visualize.Hooks.CanvasBinary do
         const paints = [];
         const scopes = [];
         let fillPaint = null, strokePaint = null, box = null;
+        // Version 3 (§4.3.17, #675): each paint's own alpha, state that save and restore scope.
+        let fillAlpha = 1, strokeAlpha = 1;
         // Where the open motion span's records begin (#678).
         let opened = 0;
 
@@ -488,25 +490,49 @@ defmodule Visualize.Hooks.CanvasBinary do
 
             case 0x30: // save
               ctx.save();
-              scopes.push([fillPaint, strokePaint]);
+              scopes.push([fillPaint, strokePaint, fillAlpha, strokeAlpha]);
               break;
 
             case 0x31: // restore
               ctx.restore();
-              [fillPaint, strokePaint] = scopes.pop() || [null, null];
+              [fillPaint, strokePaint, fillAlpha, strokeAlpha] = scopes.pop() || [null, null, 1, 1];
               break;
 
-            case 0x40: // fill, with the fill paint over the box when there is one
+            case 0x40: { // fill, with the fill paint over the box when there is one
+              const alpha = ctx.globalAlpha;
+              if (fillAlpha !== 1) ctx.globalAlpha = alpha * fillAlpha;
               if (fillPaint) drawVisualizePaint(ctx, 'fill', fillPaint, box);
               else if (motion && motion.span) VisualizeMotion.draw(motion, ctx, 'fill', () => ctx.fill());
               else ctx.fill();
+              if (fillAlpha !== 1) ctx.globalAlpha = alpha;
               break;
+            }
 
-            case 0x41: // stroke
+            case 0x41: { // stroke
+              const alpha = ctx.globalAlpha;
+              if (strokeAlpha !== 1) ctx.globalAlpha = alpha * strokeAlpha;
               if (strokePaint) drawVisualizePaint(ctx, 'stroke', strokePaint, box);
               else if (motion && motion.span) VisualizeMotion.draw(motion, ctx, 'stroke', () => ctx.stroke());
               else ctx.stroke();
+              if (strokeAlpha !== 1) ctx.globalAlpha = alpha;
               break;
+            }
+
+            case 0x55: { // paint_state, version 3 (§4.3.17, #675): alphas, cap, join, dash
+              const flags = bytes[offset++];
+              if (flags & 0x01) { fillAlpha = view.getFloat32(offset, true); offset += 4; }
+              if (flags & 0x02) { strokeAlpha = view.getFloat32(offset, true); offset += 4; }
+              if (flags & 0x04) ctx.lineCap = ['butt', 'round', 'square'][bytes[offset++]];
+              if (flags & 0x08) ctx.lineJoin = ['miter', 'round', 'bevel'][bytes[offset++]];
+              if (flags & 0x10) {
+                const count = bytes[offset++];
+                const dash = [];
+                for (let i = 0; i < count; i++) dash.push(view.getFloat32(offset + 4 * i, true));
+                offset += 4 * count;
+                ctx.setLineDash(dash);
+              }
+              break;
+            }
 
             case 0x53: { // motion: a span begins, its arguments as JSON (§4.3.15, #653)
               const length = view.getUint16(offset, true);
@@ -527,7 +553,7 @@ defmodule Visualize.Hooks.CanvasBinary do
 
             case 0x00: { // version (spec/09 §4.3.11)
               const version = bytes[offset++];
-              if (version > 2) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
+              if (version > 3) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
               break;
             }
 

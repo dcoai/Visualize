@@ -299,7 +299,7 @@ defmodule Visualize.Backend.Canvas do
     scoped(
       setup,
       [{:beginPath, []}, {:moveTo, [x1, y1]}, {:lineTo, [x2, y2]}] ++
-        stroke_commands(Map.get(Map.merge(inherited, style), :stroke), element)
+        line_stroke(Map.merge(inherited, style), element)
     )
   end
 
@@ -372,7 +372,7 @@ defmodule Visualize.Backend.Canvas do
            children: [_ | _] = lines,
            transform: transform
          },
-         _inherited
+         inherited
        ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
     x = attrs[:x] || 0
@@ -385,7 +385,7 @@ defmodule Visualize.Backend.Canvas do
         {acc ++ [{:fillText, [content || "", line[:x] || x, at]}], at}
       end)
 
-    scoped(setup, commands)
+    scoped(setup, alpha(commands, Map.merge(inherited, style), :fill_opacity))
   end
 
   defp element_to_commands(
@@ -396,13 +396,16 @@ defmodule Visualize.Backend.Canvas do
            content: content,
            transform: transform
          },
-         _inherited
+         inherited
        ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
     x = attrs[:x] || 0
     y = attrs[:y] || 0
 
-    scoped(setup, [{:fillText, [content || "", x, y]}])
+    scoped(
+      setup,
+      alpha([{:fillText, [content || "", x, y]}], Map.merge(inherited, style), :fill_opacity)
+    )
   end
 
   # A group's style is set after its transform, inside the save/restore pair, so children
@@ -616,6 +619,12 @@ defmodule Visualize.Backend.Canvas do
       end
 
     cmds =
+      case dash(style[:stroke_dasharray]) do
+        nil -> cmds
+        pattern -> cmds ++ [{:setLineDash, [pattern]}]
+      end
+
+    cmds =
       if style[:opacity],
         do: cmds ++ [{:set_globalAlpha, [style[:opacity]]}],
         else: cmds
@@ -625,8 +634,52 @@ defmodule Visualize.Backend.Canvas do
 
   defp style_apply_commands(style, _element) when map_size(style) == 0, do: []
 
-  defp style_apply_commands(style, element),
-    do: fill_commands(style[:fill], element) ++ stroke_commands(style[:stroke], element)
+  defp style_apply_commands(style, element) do
+    alpha(fill_commands(style[:fill], element), style, :fill_opacity) ++
+      alpha(stroke_commands(style[:stroke], element), style, :stroke_opacity)
+  end
+
+  # A line is always stroked (spec/09 §3.3.1), at its stroke's own opacity.
+  defp line_stroke(style, element),
+    do: alpha(stroke_commands(style[:stroke], element), style, :stroke_opacity)
+
+  # A paint's own opacity (spec/09 §3.3.3, #675, D-180): its draw at the element's alpha
+  # times the paint's, then the element's alpha back for the draw after it. The element's
+  # is its effective `opacity`, the one its setup or a group's set; a gradient's stops carry
+  # their own alpha, which the context multiplies with this.
+  defp alpha([], _style, _key), do: []
+
+  defp alpha(draw, style, key) do
+    case Map.get(style, key) do
+      a when is_number(a) and a != 1 ->
+        o = if is_number(style[:opacity]), do: style[:opacity], else: 1
+        [{:set_globalAlpha, [o * a]}] ++ draw ++ [{:set_globalAlpha, [o]}]
+
+      _opaque ->
+        draw
+    end
+  end
+
+  @doc false
+  # A dash pattern as the numbers `setLineDash` takes (spec/09 §3.3.3, #675): an SVG
+  # `stroke-dasharray` — lengths apart by spaces or commas, or a list — with `none` and an
+  # empty one the solid line `[]`; `nil` for one that does not read, which is not drawn.
+  @spec dash(term()) :: [number()] | nil
+  def dash(nil), do: nil
+  def dash(list) when is_list(list), do: if(Enum.all?(list, &is_number/1), do: list)
+
+  def dash(string) when is_binary(string) do
+    case String.split(string, ~r/[\s,]+/, trim: true) do
+      ["none"] ->
+        []
+
+      parts ->
+        numbers = Enum.map(parts, &Float.parse/1)
+        if Enum.all?(numbers, &match?({_n, ""}, &1)), do: Enum.map(numbers, &elem(&1, 0))
+    end
+  end
+
+  def dash(_other), do: nil
 
   defp fill_commands(fill, _element) when fill in [nil, :none], do: []
   defp fill_commands(%Paint{} = paint, element), do: paint_commands(paint, :fill, element)
@@ -778,6 +831,10 @@ defmodule Visualize.Backend.Canvas do
 
   defp command_to_js_line({:set_lineCap, [cap]}), do: ["ctx.lineCap = '", cap, "';"]
   defp command_to_js_line({:set_lineJoin, [join]}), do: ["ctx.lineJoin = '", join, "';"]
+
+  defp command_to_js_line({:setLineDash, [pattern]}),
+    do: ["ctx.setLineDash([", js_args(pattern), "]);"]
+
   defp command_to_js_line({:set_globalAlpha, [a]}), do: ["ctx.globalAlpha = ", format_num(a), ";"]
 
   defp command_to_js_line({:set_globalCompositeOperation, [op]}),

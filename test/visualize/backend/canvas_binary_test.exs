@@ -390,7 +390,8 @@ defmodule Visualize.Backend.CanvasBinaryTest do
              box: Opcodes.box(),
              effect: Opcodes.effect(),
              motion: Opcodes.motion(),
-             motion_end: Opcodes.motion_end()
+             motion_end: Opcodes.motion_end(),
+             paint_state: Opcodes.paint_state()
            ]
   end
 

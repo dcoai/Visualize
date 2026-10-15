@@ -415,6 +415,16 @@ release it merely follows.
 
 ### Fixed
 
+- **A translucent fill or stroke is translucent on a canvas too** (#690, D-180). Every
+  canvas ignored a paint's own opacity — `fill: %{color: …, opacity: 0.4}`,
+  `fill_opacity`/`stroke_opacity`, a theme's translucent band, a percentile band — and drew
+  it opaque where SVG drew it translucent. The JSON, script and binary canvases now draw each
+  fill and stroke at the element's opacity times the paint's, a gradient's stops included.
+  A dashed stroke (`stroke_dasharray`) is now dashed on every canvas, and the binary canvas
+  draws the line cap and join. A binary stream that carries any of these is **version 3**:
+  a page still running an older `CanvasBinaryChart` hook refuses it rather than drawing it
+  wrong, so redeploy the hooks with the library.
+
 - **A canvas draws each element in its own transform and style** (#689, D-179). On the
   JSON, script and binary canvases an element's own `translate`/`rotate`, and its alpha,
   colors, blend, shadow and font, stayed in force for the element drawn after it: a symbol
