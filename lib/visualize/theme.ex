@@ -228,7 +228,8 @@ defmodule Visualize.Theme do
       text: "#111111",
       background: "#ffffff",
       surface: "#ffffff",
-      ramps: %{@light_ramps | status: @safe_status}
+      ramps: %{@light_ramps | status: @safe_status},
+      styles: Palette.print()
     }
   end
 

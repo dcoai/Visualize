@@ -116,7 +116,11 @@ defmodule Visualize.ThemePaletteTest do
       for theme <- @themes, role <- @roles do
         entry = Theme.style(theme, role)
         cue = Theme.cue(role)
-        assert entry.fill == solid(role) and entry.stroke.color == {:color, role}
+        # The print theme hatches four role fills, in the role's colour (#673).
+        hatched? = theme.name == :print and role != :neutral
+        fill = if hatched?, do: Map.take(entry.fill, [:type, :color]), else: entry.fill
+        expected = if hatched?, do: %{type: :hatch, color: {:color, role}}, else: solid(role)
+        assert fill == expected and entry.stroke.color == {:color, role}
         assert entry.marker.shape == cue.glyph
         assert Map.get(entry.stroke, :dash) == cue.dash
       end

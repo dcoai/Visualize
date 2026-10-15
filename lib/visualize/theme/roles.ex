@@ -133,10 +133,12 @@ defmodule Visualize.Theme.Roles do
 
   # -- reading an entry -----------------------------------------------------------------
 
-  # The colour a solid paint part gives, `nil` for none, a gradient or `:none`.
+  # The colour a solid or a hatched paint part gives, `nil` for none, a gradient or `:none`.
   defp colour(entry, part) do
     case Map.get(entry, part) do
       %{type: :solid, color: colour} -> colour
+      # A hatch's lines are its colour, held to the same ratios (#673).
+      %{type: :hatch, color: colour} -> colour
       %{color: colour} = paint when not is_map_key(paint, :type) -> colour
       _other -> nil
     end

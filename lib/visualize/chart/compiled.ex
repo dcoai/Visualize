@@ -204,7 +204,12 @@ defmodule Visualize.Chart.Compiled do
     # once in `:css` here, so a `url(#id)` on either SVG layer resolves on the page.
     drawn = drawn(compiled, frame, sources, nil, true)
     static = layer(compiled, drawn, :static, false)
-    defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
+
+    defs =
+      Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)),
+        all: true
+      )
+
     compiled = %{compiled | defs: defs}
 
     %{

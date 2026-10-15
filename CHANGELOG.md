@@ -17,6 +17,20 @@ release it merely follows.
 
 ### Added
 
+- **A hatch paint** (#673, D-175). `fill: %{type: :hatch, color: color(:bad), pattern:
+  :crosshatch, angle: 45, spacing: pt(4), width: pt(1)}` fills an area with lines,
+  crossed lines or dots of one colour over an optional `background`, so a category or a
+  state reads without hue — in grayscale and on paper. `pattern` is `:lines` (the default),
+  `:crosshatch` or `:dots`; `angle` defaults to `45`, `spacing` to `6` and `width` to `1`,
+  and both sizes take the units of #671. It is written in a style or declared under `defs`
+  like a gradient, and draws the same on SVG (a `<pattern>`), the `:json`/`:js` canvas and
+  the binary canvas. It is a fill: a stroke has no hatch keys.
+  - **The print theme hatches its role fills**: `:good` and `:warning` diagonal lines,
+    `:bad` a crosshatch, `:info` dots (`:neutral` stays solid), so a role keeps its meaning
+    on a grayscale print. A chart drawn with `theme: :print` and `style: :bad` on a bar
+    therefore now shows a red crosshatch where it showed solid red.
+  - A frame now declares a paint written in place only when it draws it.
+
 - **Gradients draw on the canvas** (#672, D-175). A `:linear` or `:radial` paint — declared
   under `defs` or written in a style — now draws as a gradient on every canvas backend, not
   as its first stop's colour: the `:json` and `:js` commands and the binary stream build it

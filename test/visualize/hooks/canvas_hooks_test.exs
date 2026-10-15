@@ -93,7 +93,9 @@ defmodule Visualize.Hooks.CanvasHooksTest do
 
     test "composes a full matrix with ctx.transform and throws on an unknown byte" do
       decoder = Hooks.CanvasBinary.js_decoder()
-      refute decoder =~ "setTransform"
+      # The context's transform is composed, never set; a hatch's CanvasPattern has its own
+      # setTransform (#673).
+      refute decoder =~ "ctx.setTransform"
       assert decoder =~ ~r/case 0xFF:.*?ctx\.transform\(/s
       assert decoder =~ "throw new Error('Unknown canvas binary opcode"
     end

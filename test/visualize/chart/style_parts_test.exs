@@ -284,10 +284,10 @@ defmodule Visualize.Chart.StylePartsTest do
       assert Chart.from_json(back) == {:ok, chart}
     end
 
-    test "a paint under defs is a gradient" do
+    test "a paint under defs is a gradient or a hatch" do
       design = %{version: 3, frames: %{main: %{kind: :cartesian}}}
 
-      assert {:error, [{[:defs, :p, :type], {:enum, [:linear, :radial]}}]} =
+      assert {:error, [{[:defs, :p, :type], {:enum, [:linear, :radial, :hatch]}}]} =
                Validator.validate(
                  Map.put(design, :defs, %{p: %{type: :solid, color: "#f00", stops: []}})
                )

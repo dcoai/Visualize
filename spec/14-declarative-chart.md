@@ -286,8 +286,11 @@ A `:stop` is `at` (`:number`, required, `0` to `1`), `color` (`:colour`, require
 **A hatch** (#652, work item #673, D-175) paints an area with lines or dots in one colour, so a category or a state reads without hue — in grayscale, on paper, to a reader who cannot tell the hues apart:
 
 ```elixir
-fill: %{type: :hatch, color: color(:bad), background: :none, pattern: :crosshatch,
-        angle: 45, spacing: pt(4), width: pt(1)}
+import Visualize.Color, only: [color: 1]
+import Visualize.Units
+
+%{fill: %{type: :hatch, color: color(:bad), background: :none, pattern: :crosshatch,
+          angle: 45, spacing: pt(4), width: pt(1)}}
 ```
 
 `angle` is the direction the lines run, in degrees clockwise from horizontal, `45` when absent (the schema's `180` is a linear gradient's); `:crosshatch` adds the lines at right angles to them, and `:dots` puts a dot of radius `width` where they would cross. `spacing` and `width` are sizes of #651's units, resolved to user units when the frame resolves the paint: an absolute unit converted, an `em` against the theme's `font_size`, and a `pct`, with no box to be a share of, `{:no_box, key}`. The hatch is laid in the user space of the element it fills, from its origin, so neighbouring bars hatched alike line up. Like a gradient, a hatch is written in place or declared under `defs` (§2.7) and drawn from the frame's `defs`. It is a **fill**: a stroke's `width` is the line's, so a stroke node has no hatch keys and its `type` no `:hatch` — though a stroke may name a declared hatch, `{:paint, name}`, and is then drawn with it.

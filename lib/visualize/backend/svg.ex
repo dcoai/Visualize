@@ -286,6 +286,12 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:radialGradient, attrs, child_content, nil)
   end
 
+  # A hatch's tile (spec/09 §2.3, #673).
+  defp do_render_element(%Element{type: :pattern, attrs: attrs, children: children}) do
+    child_content = Enum.map(children, &do_render_element/1)
+    render_svg_tag(:pattern, attrs, child_content, nil)
+  end
+
   defp do_render_element(%Element{type: :filter, attrs: attrs, children: children}) do
     child_content = Enum.map(children, &do_render_element/1)
     render_svg_tag(:filter, attrs, child_content, nil)

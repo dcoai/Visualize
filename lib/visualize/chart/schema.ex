@@ -374,12 +374,13 @@ defmodule Visualize.Chart.Schema do
   # A paint (spec/14 §2.7, §3.2, D-172): what an area is filled with or a line drawn with,
   # in the words a person uses — a type, then a colour or stops and a gradient's geometry,
   # then an opacity. A `fill`, a `stroke` and a `defs` entry are each one.
-  defp design_node(:paint), do: paint_keys()
-  defp design_node(:gradient), do: paint_keys()
+  defp design_node(:paint), do: paint_keys(true)
+  defp design_node(:gradient), do: paint_keys(true)
 
-  # A stroke is a paint with the line it draws.
+  # A stroke is a paint with the line it draws; a hatch is a fill, since a stroke's `width`
+  # is its line's (spec/14 §3.1, #673).
   defp design_node(:stroke) do
-    paint_keys() ++
+    paint_keys(false) ++
       [
         spec(:width, :size, :style, range: {0, 20, 0.5}),
         # A dash's members may be unit values, never slots (spec/14 §3.9, #651).
@@ -572,11 +573,14 @@ defmodule Visualize.Chart.Schema do
   end
 
   # A paint's keys: `type` decides which of the others it reads — a colour for `:solid`,
-  # stops and geometry for `:linear` and `:radial`, a `defs` name for `:paint` — and
-  # `opacity` is every type's. `:none` is no paint.
-  defp paint_keys do
+  # stops and geometry for `:linear` and `:radial`, a colour, a pattern and its sizes for
+  # `:hatch` (#673), a `defs` name for `:paint` — and `opacity` is every type's. `:none` is
+  # no paint. A stroke's paint has no hatch (`hatch?` false).
+  defp paint_keys(hatch?) do
+    types = [:none, :solid, :linear, :radial] ++ if(hatch?, do: [:hatch], else: []) ++ [:paint]
+
     [
-      spec(:type, {:enum, [:none, :solid, :linear, :radial, :paint]}, :style),
+      spec(:type, {:enum, types}, :style),
       spec(:color, :colour, :style),
       spec(:stops, {:list, {:node, :stop}}, :style),
       spec(:angle, :number, :geometry, default: 180, range: {0, 360, 15}),
@@ -584,6 +588,15 @@ defmodule Visualize.Chart.Schema do
       spec(:radius, :number, :geometry, default: 0.5, range: {0, 1, 0.05}),
       spec(:name, {:ref, :paint}, :style),
       spec(:opacity, :size, :style, range: {0, 1, 0.05})
+    ] ++ if(hatch?, do: hatch_keys(), else: [])
+  end
+
+  defp hatch_keys do
+    [
+      spec(:pattern, {:enum, [:lines, :crosshatch, :dots]}, :style, default: :lines),
+      spec(:spacing, :size, :geometry, default: 6, range: {2, 40, 1}),
+      spec(:width, :size, :geometry, default: 1, range: {0.25, 10, 0.25}),
+      spec(:background, :colour, :style)
     ]
   end
 end

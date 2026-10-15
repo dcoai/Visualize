@@ -144,6 +144,23 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
   defp decode(<<0x00, version::8, _rest::binary>>, _acc),
     do: raise(ArgumentError, "canvas binary stream version #{version} is not known")
 
+  defp decode(
+         <<0x50, index::little-16, 0x03, pattern, angle::little-float-32,
+           spacing::little-float-32, width::little-float-32, r, g, b, a, br, bg, bb, ba,
+           rest::binary>>,
+         acc
+       ) do
+    hatch = %{
+      type: :hatch,
+      pattern: Map.fetch!(%{0x01 => :lines, 0x02 => :crosshatch, 0x03 => :dots}, pattern),
+      geometry: [angle, spacing, width],
+      color: {r, g, b, a},
+      background: {br, bg, bb, ba}
+    }
+
+    decode(rest, [{:paint, index, hatch} | acc])
+  end
+
   defp decode(<<0x50, index::little-16, kind::8, rest::binary>>, acc) do
     {type, arity} = Map.fetch!(%{0x01 => {:linear, 4}, 0x02 => {:radial, 3}}, kind)
     {geometry, <<count::8, rest::binary>>} = floats(32, rest, arity)

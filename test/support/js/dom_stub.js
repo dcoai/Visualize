@@ -56,6 +56,13 @@ const Stub = (() => {
           Object.defineProperty(gradient, 'addColorStop', {value: (at, colour) => gradient.stops.push([at, colour])});
           return gradient;
         } :
+        // A pattern likewise (#673): its tile canvas and the transform it is given.
+        name === 'createPattern' ? (...args) => {
+          log.push({on: canvas.id, kind: 'call', name, args});
+          const pattern = {pattern: args[0], repetition: args[1], transform: null};
+          Object.defineProperty(pattern, 'setTransform', {value: (m) => { pattern.transform = {...m}; }});
+          return pattern;
+        } :
         (...args) => { transforms(state, name, args); log.push({on: canvas.id, kind: 'call', name, args}); },
       set: (_t, name, value) => {
         props[name] = value;

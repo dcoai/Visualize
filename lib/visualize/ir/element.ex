@@ -54,6 +54,7 @@ defmodule Visualize.IR.Element do
           | :clip_path
           | :linear_gradient
           | :radial_gradient
+          | :pattern
           | :stop
           | :filter
           | :fe_drop_shadow

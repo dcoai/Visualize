@@ -339,4 +339,202 @@ defmodule Visualize.Backend.PaintTest do
       Enum.map([r, g, b], &String.to_integer/1)
     end
   end
+
+  # -- the hatch (#673) ------------------------------------------------------------------
+
+  defp hatch(pattern, background \\ nil) do
+    %Paint{
+      id: "hatch",
+      type: :hatch,
+      geometry: %{pattern: pattern, angle: 30, spacing: 8, width: 3},
+      color: "#1f77b4",
+      background: background
+    }
+  end
+
+  # The patterns a hook made: the style each was assigned to, its transform, and the size of
+  # its tile canvas.
+  defp patterns(log) do
+    for %{"kind" => "set", "name" => name, "value" => %{"pattern" => tile} = p} <- log do
+      size = for %{"on" => ^tile, "kind" => "set", "name" => "width", "value" => n} <- log, do: n
+      {name, p["transform"], List.last(size)}
+    end
+  end
+
+  describe "a hatch (spec/14 §3.1, spec/09 §3.3.3, #673)" do
+    test "SVG declares a <pattern> once per hatch, keyed by what it draws" do
+      definition = Paint.definition(hatch(:crosshatch, "#ffffff"))
+      assert definition.type == :pattern
+
+      assert %{
+               pattern_units: "userSpaceOnUse",
+               width: 8,
+               height: 8,
+               pattern_transform: "rotate(30)"
+             } =
+               definition.attrs
+
+      assert [:rect, :line, :line] = Enum.map(definition.children, & &1.type)
+      assert [:circle] = Enum.map(Paint.definition(hatch(:dots)).children, & &1.type)
+
+      design = fn fills ->
+        %{
+          version: 3,
+          sources: %{s: %{fields: [:k, :v]}},
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              scales: %{x: %{kind: :band, domain: [:a, :b]}, y: %{kind: :linear, domain: [0, 10]}}
+            }
+          },
+          marks:
+            for fill <- fills do
+              %{
+                type: :rect,
+                data: :s,
+                channels: %{x0: :k, x1: :k, y0: 0, y1: :v},
+                style: %{fill: fill}
+              }
+            end
+        }
+      end
+
+      rows = [%{k: :a, v: 4}, %{k: :b, v: 9}]
+      lines = %{type: :hatch, color: "#c00", spacing: 5}
+
+      patterns = fn fills ->
+        {:ok, chart} = Chart.from_map(design.(fills))
+        frame = Frame.new(chart, sources: %{s: rows}, size: {240, 200})
+
+        svg =
+          frame
+          |> Frame.generate(sources: %{s: rows}, resolve: :literal)
+          |> Visualize.Render.to_string()
+
+        Regex.scan(~r/<pattern /, svg) |> length()
+      end
+
+      assert patterns.([lines, lines]) == 1
+      assert patterns.([lines, %{lines | spacing: 6}]) == 2
+      # A hatch's spacing in a unit is resolved on the server: pt(6) is 8 user units.
+      {:ok, chart} = Chart.from_map(design.([%{lines | spacing: {6, :pt}}]))
+      frame = Frame.new(chart, sources: %{s: rows}, size: {240, 200})
+      svg = frame |> Frame.generate(sources: %{s: rows}) |> Visualize.Render.to_string()
+      assert svg =~ ~r/<pattern height="8.0"[^>]* width="8.0"/
+    end
+
+    test "the print theme's hatched roles are declared only where a chart draws one" do
+      design = fn style ->
+        %{
+          version: 3,
+          theme: :print,
+          sources: %{s: %{fields: [:k, :v]}},
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              scales: %{x: %{kind: :band, domain: [:a]}, y: %{kind: :linear, domain: [0, 10]}}
+            }
+          },
+          marks: [
+            %{type: :rect, data: :s, channels: %{x0: :k, x1: :k, y0: 0, y1: :v}, style: style}
+          ]
+        }
+      end
+
+      rows = [%{k: :a, v: 4}]
+
+      svg = fn style ->
+        {:ok, chart} = Chart.from_map(design.(style))
+        frame = Frame.new(chart, sources: %{s: rows}, size: {240, 200})
+        frame |> Frame.generate(sources: %{s: rows}) |> Visualize.Render.to_string()
+      end
+
+      refute svg.(:style_1) =~ "<pattern"
+      assert [_] = Regex.scan(~r/<pattern /, svg.(:bad))
+    end
+
+    test "the canvas commands draw it whatever the box; the binary stream round-trips it" do
+      assert [
+               {:save, []},
+               {:hatchPattern, ["fill", "crosshatch", 30, 8, 3, "rgba(31,119,180,1)", nil]},
+               {:fill, []},
+               {:restore, []}
+             ] =
+               Canvas.render_element(Element.rect(0, 0, 40, 0, %{fill: hatch(:crosshatch)}),
+                 format: :commands
+               )
+               |> Enum.drop(2)
+
+      records =
+        Element.rect(0, 0, 40, 20, %{fill: hatch(:dots, "#ffffff")})
+        |> CanvasBinary.encode_element!()
+        |> Decoder.decode()
+
+      assert [
+               {:version, 2},
+               {:paint, 0,
+                %{
+                  type: :hatch,
+                  pattern: :dots,
+                  geometry: [angle, 8.0, 3.0],
+                  color: {31, 119, 180, 255},
+                  background: {255, 255, 255, 255}
+                }}
+               | _
+             ] = records
+
+      assert_in_delta angle, 30, 1.0e-5
+    end
+
+    @tag :js
+    test "the hooks make the same pattern from :json, :js and the binary stream" do
+      tree = Element.group(shapes(hatch(:crosshatch, "#ffffff")))
+      [first | _] = json = patterns(from_json(tree))
+      assert length(json) == 3
+      assert json == patterns(from_js(tree))
+
+      for {{name, t, n}, {name2, t2, n2}} <- Enum.zip(json, patterns(from_binary(tree))) do
+        assert {name, n} == {name2, n2}
+        for k <- ~w(a b c d e f), do: assert_in_delta(t[k], t2[k], 1.0e-5)
+      end
+
+      # One period of user units per tile, turned by the angle: n = ⌈4·8⌉ pixels.
+      {"fillStyle", t, 32} = first
+      assert_in_delta :math.atan2(t["b"], t["a"]) * 180 / :math.pi(), 30, 1.0e-9
+      assert_in_delta :math.sqrt(t["a"] * t["a"] + t["b"] * t["b"]) * 32, 8, 1.0e-9
+    end
+
+    @tag :js
+    @tag :resvg
+    test "the canvas pattern is the SVG pattern, pixel for pixel" do
+      for pattern <- [:lines, :crosshatch] do
+        fill = hatch(pattern, "#ffffff")
+        rect = Element.rect(10, 10, 200, 80, %{fill: fill})
+        root = Element.root(220, 100, children: [Element.defs([Paint.definition(fill)]), rect])
+        {:ok, png, []} = Visualize.Render.to_png(root, scale: 1, background: "#ffffff")
+        [{"fillStyle", t, n}] = patterns(from_binary(rect))
+        {a, s} = {:math.atan2(t["b"], t["a"]), :math.sqrt(t["a"] ** 2 + t["b"] ** 2) * n}
+
+        for px <- 12..207//3, py <- 12..87//3 do
+          {x, y} = {px + 0.5, py + 0.5}
+          # The point in the tile's frame: turned back by the angle, then within one period.
+          {u, v} = {x * :math.cos(a) + y * :math.sin(a), -x * :math.sin(a) + y * :math.cos(a)}
+          d = fn c -> abs(c - s * Float.floor(c / s) - s / 2) end
+          distance = if pattern == :crosshatch, do: min(d.(v), d.(u)), else: d.(v)
+          {r, g, b, _} = Visualize.PNGPixels.pixel(png, px, py)
+
+          cond do
+            distance < 3 / 2 - 0.9 -> assert_close({r, g, b}, {31, 119, 180}, {px, py})
+            distance > 3 / 2 + 0.9 -> assert_close({r, g, b}, {255, 255, 255}, {px, py})
+            true -> :edge
+          end
+        end
+      end
+    end
+
+    defp assert_close(got, want, at) do
+      for {g, w} <- Enum.zip(Tuple.to_list(got), Tuple.to_list(want)),
+          do: assert(abs(g - w) <= 24, "#{inspect(at)}: #{inspect(got)} vs #{inspect(want)}")
+    end
+  end
 end

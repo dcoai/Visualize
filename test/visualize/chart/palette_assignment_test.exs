@@ -121,7 +121,17 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     test "a theme swap restyles a palette-styled mark" do
       for theme <- [Theme.default(), Theme.dark(), Theme.colour_safe(), Theme.print()] do
         {group, _} = elements(design(%{style: :bad}), :literal, theme: theme)
-        assert group.style.fill == lit(theme, :bad), inspect(theme.name)
+
+        # The print theme's :bad is a crosshatch in its colour (#673).
+        case group.style.fill do
+          {:paint, name} ->
+            assert theme.name == :print
+            frame = applied(design(%{style: :bad}), theme: theme).frame
+            assert %{type: :hatch, color: {:color, :bad}} = frame.defs[name]
+
+          fill ->
+            assert fill == lit(theme, :bad), inspect(theme.name)
+        end
       end
 
       house = Theme.new(name: :house, styles: %{bad: %{fill: :bad, stroke_width: 5}})

@@ -22,16 +22,18 @@ defmodule Visualize.IR.Paint do
   alias Visualize.Color
   alias Visualize.IR.{Element, Path}
 
-  @enforce_keys [:id, :type, :geometry, :stops]
-  defstruct [:id, :type, :geometry, :stops]
+  @enforce_keys [:id, :type, :geometry]
+  defstruct [:id, :type, :geometry, stops: [], color: nil, background: nil]
 
   @type stop :: {number(), String.t(), number()}
 
   @type t :: %__MODULE__{
           id: String.t(),
-          type: :linear | :radial,
-          geometry: %{atom() => number()},
-          stops: [stop()]
+          type: :linear | :radial | :hatch,
+          geometry: %{atom() => number() | atom()},
+          stops: [stop()],
+          color: String.t() | nil,
+          background: String.t() | nil
         }
 
   @typedoc "A box `{x, y, width, height}` in an element's user units."
@@ -43,7 +45,9 @@ defmodule Visualize.IR.Paint do
 
   @doc """
   The `:linear_gradient` or `:radial_gradient` element that defines the paint under its
-  id, in `objectBoundingBox` units, with one `:stop` per stop.
+  id, in `objectBoundingBox` units, with one `:stop` per stop; for a hatch, its `:pattern`:
+  a tile of its spacing in user units, turned by its angle, holding its background and,
+  centred, its line, its two lines or its dot (spec/14 §2.7, #673).
   """
   @spec definition(t()) :: Element.t()
   def definition(%__MODULE__{id: id, type: :linear, geometry: g} = paint) do
@@ -71,6 +75,36 @@ defmodule Visualize.IR.Paint do
     |> Element.set_attrs(%{gradient_units: "objectBoundingBox"})
   end
 
+  def definition(%__MODULE__{id: id, type: :hatch, geometry: g} = paint) do
+    s = g.spacing
+    half = s / 2
+    ink = %{stroke: paint.color, stroke_width: g.width, fill: :none}
+
+    ground =
+      if paint.background, do: [Element.rect(0, 0, s, s, %{fill: paint.background})], else: []
+
+    across = Element.line(0, half, s, half, ink)
+    down = Element.line(half, 0, half, s, ink)
+
+    marks =
+      case g.pattern do
+        :lines -> [across]
+        :crosshatch -> [across, down]
+        :dots -> [Element.circle(half, half, g.width, %{fill: paint.color})]
+      end
+
+    Element.new(:pattern,
+      attrs: %{
+        id: id,
+        pattern_units: "userSpaceOnUse",
+        width: s,
+        height: s,
+        pattern_transform: "rotate(#{Path.format_number(g.angle)})"
+      },
+      children: ground ++ marks
+    )
+  end
+
   defp stop_elements(%__MODULE__{stops: stops}) do
     for {at, colour, opacity} <- stops,
         do: Element.stop("#{round(at * 100)}%", colour, opacity: opacity)
@@ -80,6 +114,7 @@ defmodule Visualize.IR.Paint do
   # The colour a canvas fills a text with: the first stop's (spec/09 §3.3.3).
   @spec first_colour(t()) :: String.t()
   def first_colour(%__MODULE__{stops: [{_at, colour, _opacity} | _]}), do: colour
+  def first_colour(%__MODULE__{type: :hatch, color: colour}), do: colour
 
   @doc false
   # A stop as RGBA bytes, its opacity multiplied into the alpha; a colour
@@ -93,6 +128,14 @@ defmodule Visualize.IR.Paint do
       end
 
     {r, g, b, round(a * opacity * 255)}
+  end
+
+  @doc false
+  # A colour as a canvas takes it, `rgba(r,g,b,a)`; one it cannot read is opaque black.
+  @spec canvas_colour(String.t()) :: String.t()
+  def canvas_colour(colour) do
+    {r, g, b, a} = rgba({0, colour, 1})
+    "rgba(#{r},#{g},#{b},#{Path.format_number(a / 255)})"
   end
 
   @doc false
