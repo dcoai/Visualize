@@ -1,3 +1,14 @@
+defmodule Visualize.Board.ExportTest.Viewer do
+  @moduledoc false
+  # A host's generator that reads the viewer from the assigns (spec/14 §3.13), registered
+  # only on the board, never in app config (#681).
+  use Visualize.Generators
+
+  defgenerator viewer_stroke(ctx) do
+    %{stroke: %{width: if(get_in(ctx, [:assigns, :viewer]) == "globex", do: 3, else: 1)}}
+  end
+end
+
 defmodule Visualize.Board.ExportTest do
   @moduledoc """
   A board exported (spec/15 §12, #578, D-150): one SVG document whose cells are placed at
@@ -377,6 +388,95 @@ defmodule Visualize.Board.ExportTest do
   end
 
   # -- the runtime ----------------------------------------------------------------------------
+
+  describe "the board's generators and assigns (spec/15 §12, #681, D-181)" do
+    @viewer_line %{
+      version: 3,
+      sources: %{primary: %{fields: [:t, :v]}},
+      frames: %{
+        main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}
+      },
+      marks: [
+        %{
+          type: :line,
+          data: :primary,
+          channels: %{x: :t, y: :v},
+          style: {:generate, :viewer_stroke, []}
+        }
+      ]
+    }
+
+    @viewer_store %{{:composite, 1} => @viewer_line}
+    @gens [generators: [Visualize.Board.ExportTest.Viewer]]
+
+    defp viewer_snapshot do
+      board = board()
+
+      {:ok, snapshot} =
+        Snapshot.realise(
+          board,
+          @viewer_store,
+          pools(board),
+          [now: DateTime.add(@t0, 3600), schemas: cache(board)] ++ @gens
+        )
+
+      snapshot
+    end
+
+    test "a generator registered only on the board draws in the export" do
+      snapshot = viewer_snapshot()
+
+      # Without the board's generators the cells cannot be drawn: the call is unknown.
+      refute Snapshot.views(snapshot).a.state == :live
+      assert Snapshot.views(snapshot, @gens).a.state == :live
+      assert Export.svg(snapshot, @gens) =~ Snapshot.views(snapshot, @gens).a.svg
+    end
+
+    test "with the viewer's assigns the export is the viewer's drawing" do
+      snapshot = viewer_snapshot()
+      globex = Snapshot.views(snapshot, @gens ++ [assigns: %{viewer: "globex"}]).a.svg
+      nobody = Snapshot.views(snapshot, @gens).a.svg
+
+      assert globex != nobody
+      assert globex =~ ~s(stroke-width="3")
+      refute nobody =~ ~s(stroke-width="3")
+      assert Export.svg(snapshot, @gens ++ [assigns: %{viewer: "globex"}]) =~ globex
+
+      assert Enum.join(Export.pages(snapshot, @gens ++ [assigns: %{viewer: "globex"}])) =~
+               ~s(stroke-width="3")
+    end
+
+    test "a running board exports with its own generators and assigns, an option over them" do
+      {feed, agent} = Feeds.scripted(schema: @schema, rows: rows(20))
+      Process.unlink(agent)
+      on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+
+      {:ok, server} =
+        start(
+          [
+            store: @viewer_store,
+            feeds: %{f: feed},
+            binding: binding([:a, :b, :c], :f),
+            assigns: %{viewer: "globex"}
+          ] ++ @gens
+        )
+
+      {:ok, _info} = Server.subscribe(server)
+      live = view_until(:a, &(&1.state == :live))
+      assert live.svg =~ ~s(stroke-width="3")
+
+      # The live cell, byte for byte, in the board's own export.
+      assert Server.export(server, :svg) =~ live.svg
+
+      assert Server.export(server, :svg) ==
+               Export.svg(Server.snapshot(server), [assigns: %{viewer: "globex"}] ++ @gens)
+
+      # An option given wins over the board's: another viewer's export.
+      other = Server.export(server, :svg, assigns: %{viewer: "initech"})
+      refute other =~ live.svg
+      assert Snapshot.views(Server.snapshot(server)).a.state != :live
+    end
+  end
 
   defp start(opts) do
     sup = start_supervised!(Supervisor.child_spec(Visualize.Board.Supervisor, id: make_ref()))

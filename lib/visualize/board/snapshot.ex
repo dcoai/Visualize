@@ -205,21 +205,31 @@ defmodule Visualize.Board.Snapshot do
       `Visualize.Theme.print/0` for paper
     * `:system` - the unit system the cells' measures are shown in (default
       `:as_posted`): the reader's, so a snapshot does not record it (spec/14 §4.4, D-156)
+    * `:generators`, `:assigns` - the generator modules the cells' frames call, beside
+      `config :visualize, generators:`, and the host's assigns their context carries
+      (default `[]` and `%{}`): the board's own, so the cells draw what the board draws for
+      its viewer (spec/14 §3.13, spec/15 §12.2, D-181). A snapshot holds data, not modules
+      or a viewer, so it records neither
   """
   @spec views(t(), keyword()) :: %{atom() => View.t()}
   def views(%__MODULE__{} = snapshot, opts \\ []) do
     width = Keyword.get(opts, :width, snapshot.width)
     theme = Keyword.get(opts, :theme, snapshot.theme)
-    system = Keyword.get(opts, :system, :as_posted)
     boxes = Board.boxes(snapshot.board, width)
+
+    drawing = %{
+      system: Keyword.get(opts, :system, :as_posted),
+      generators: Keyword.get(opts, :generators, []),
+      assigns: Keyword.get(opts, :assigns, %{})
+    }
 
     Map.new(snapshot.cells, fn {name, cell} ->
       {_x, _y, w, h} = Map.fetch!(boxes, name)
-      {name, view(snapshot, name, cell, {w, h}, theme, system)}
+      {name, view(snapshot, name, cell, {w, h}, theme, drawing)}
     end)
   end
 
-  defp view(snapshot, name, %{crashed: reason}, size, theme, _system) when is_binary(reason) do
+  defp view(snapshot, name, %{crashed: reason}, size, theme, _drawing) when is_binary(reason) do
     crashed = {:crashed, reason}
 
     %View{
@@ -231,7 +241,7 @@ defmodule Visualize.Board.Snapshot do
     }
   end
 
-  defp view(snapshot, name, cell, size, theme, system) do
+  defp view(snapshot, name, cell, size, theme, drawing) do
     Draw.once(%{
       name: name,
       title: title(snapshot, name),
@@ -239,7 +249,9 @@ defmodule Visualize.Board.Snapshot do
       vars: cell.vars,
       size: size,
       theme: theme,
-      system: system,
+      system: drawing.system,
+      generators: drawing.generators,
+      assigns: drawing.assigns,
       now: snapshot.now,
       stale_after: snapshot.board.stale_after,
       slots: cell.slots
