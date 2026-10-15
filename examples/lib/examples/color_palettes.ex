@@ -4,7 +4,7 @@ defmodule Examples.ColorPalettes do
 
   Each palette provides a cohesive set of colors that work well together for data
   visualization. The `:default` and `:dark` palettes are `Visualize.Theme.default/0` and
-  `Visualize.Theme.dark/0`, and `:colour_safe` is `Visualize.Theme.colour_safe/0`; every
+  `Visualize.Theme.dark/0`, and `:color_safe` is `Visualize.Theme.color_safe/0`; every
   palette is available as a `Visualize.Theme` through `theme/1`, which is what the charts
   hand their axes.
   """
@@ -13,7 +13,7 @@ defmodule Examples.ColorPalettes do
 
   @light Theme.default()
   @dark Theme.dark()
-  @safe Theme.colour_safe()
+  @safe Theme.color_safe()
 
   # A UI font stack, ending in the generic family: the gallery's text is set in the first
   # face the viewer has, where the library's default theme names only `sans-serif` (#486).
@@ -33,7 +33,7 @@ defmodule Examples.ColorPalettes do
       grid: @light.grid,
       surface: @light.surface
     },
-    colour_safe: %{
+    color_safe: %{
       name: "Colour-safe",
       description: "The library's colour-vision-safe theme: status runs blue → orange → red",
       colors: @safe.series,

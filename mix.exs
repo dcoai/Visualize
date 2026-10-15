@@ -134,7 +134,9 @@ defmodule Visualize.MixProject do
       # The changelog records `Render.with_backend/2` as removed (D-2): a reference to a
       # function that no longer exists, on purpose, not a broken link. The rest of this list
       # served the specification's references to internal functions, and went with it (D-133).
-      skip_code_autolink_to: ["Visualize.Render.with_backend/2"],
+      # The British names #642 renamed outright (D-183) are recorded the same way: past
+      # entries and the rename table name functions that no longer exist.
+      skip_code_autolink_to: ["Visualize.Render.with_backend/2", "Visualize.Theme.colour_safe/0"],
       extras: [
         {"README.md", title: "README"},
         # The guides, in reading order, ahead of the reference material: where a newcomer

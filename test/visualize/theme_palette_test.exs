@@ -12,7 +12,7 @@ defmodule Visualize.ThemePaletteTest do
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.{Frame, Schema, Style}
 
-  @themes [Theme.default(), Theme.dark(), Theme.colour_safe(), Theme.print()]
+  @themes [Theme.default(), Theme.dark(), Theme.color_safe(), Theme.print()]
   @roles [:good, :warning, :bad, :info, :neutral]
   @states [:hover, :focused, :selected, :active, :disabled, :muted, :emphasis, :breakpoint]
   @furniture [:axis, :grid, :label, :title, :caption, :value, :annotation]
@@ -73,7 +73,7 @@ defmodule Visualize.ThemePaletteTest do
     end
 
     test "the default :muted is the board's dim and :selected is heavier only (#638)" do
-      for theme <- [Theme.default(), Theme.dark(), Theme.colour_safe(), Theme.print()] do
+      for theme <- [Theme.default(), Theme.dark(), Theme.color_safe(), Theme.print()] do
         assert Theme.style(theme, :muted) == %{opacity: 0.25}
         # No colour and no outline of its own, so a stroked mark keeps its paint.
         assert Theme.style(theme, :selected) == %{stroke: %{width: 2}}

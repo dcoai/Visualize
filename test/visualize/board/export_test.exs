@@ -308,7 +308,7 @@ defmodule Visualize.Board.ExportTest do
       assert theme.background == "#ffffff" and theme.surface == "#ffffff"
       assert Visualize.Theme.check(theme) == :ok
       assert Visualize.Theme.builtin(:print) == theme
-      assert theme.ramps.status == Visualize.Theme.colour_safe().ramps.status
+      assert theme.ramps.status == Visualize.Theme.color_safe().ramps.status
       assert Visualize.Theme.ink(theme, nil) == theme.text
     end
 

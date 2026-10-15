@@ -178,7 +178,7 @@ defmodule Visualize.Theme do
   @aa 4.5
   @size_slots [:font_size, :label_size, :title_size]
   @fixed_slots @colour_slots ++ @role_slots ++ [:font_family] ++ @size_slots
-  @builtin [:default, :dark, :colour_safe, :print]
+  @builtin [:default, :dark, :color_safe, :print]
 
   @doc "The light theme: dark text and axes on white (spec/08 §7.2)."
   @spec default() :: t()
@@ -206,9 +206,9 @@ defmodule Visualize.Theme do
   orange → red, which survives the commonest colour-vision deficiencies, in place of green
   → amber → red. Every role and ramp position a design names follows it unchanged.
   """
-  @spec colour_safe() :: t()
-  def colour_safe do
-    %__MODULE__{name: :colour_safe, ramps: %{@light_ramps | status: @safe_status}}
+  @spec color_safe() :: t()
+  def color_safe do
+    %__MODULE__{name: :color_safe, ramps: %{@light_ramps | status: @safe_status}}
   end
 
   @doc """
@@ -234,10 +234,10 @@ defmodule Visualize.Theme do
   end
 
   @doc """
-  The built-in theme of a name — `:default`, `:dark`, `:colour_safe` or `:print` — or `nil`.
+  The built-in theme of a name — `:default`, `:dark`, `:color_safe` or `:print` — or `nil`.
 
-      iex> Visualize.Theme.builtin(:colour_safe).name
-      :colour_safe
+      iex> Visualize.Theme.builtin(:color_safe).name
+      :color_safe
       iex> Visualize.Theme.builtin(:house)
       nil
 
@@ -245,7 +245,7 @@ defmodule Visualize.Theme do
   @spec builtin(atom()) :: t() | nil
   def builtin(:default), do: default()
   def builtin(:dark), do: dark()
-  def builtin(:colour_safe), do: colour_safe()
+  def builtin(:color_safe), do: color_safe()
   def builtin(:print), do: print()
   def builtin(_name), do: nil
 
@@ -868,7 +868,7 @@ defmodule Visualize.Theme do
       iex> css = Visualize.Theme.color_scheme(Visualize.Theme.default(), "#chart")
       iex> String.starts_with?(css, "@media (prefers-color-scheme: dark) {") and css =~ "--vis-series-1: #7fb3e6;"
       true
-      iex> Visualize.Theme.color_scheme(Visualize.Theme.colour_safe(), "#chart")
+      iex> Visualize.Theme.color_scheme(Visualize.Theme.color_safe(), "#chart")
       nil
 
   """

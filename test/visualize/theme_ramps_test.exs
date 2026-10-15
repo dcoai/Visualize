@@ -10,7 +10,7 @@ defmodule Visualize.ThemeRampsTest do
   alias Visualize.{Chart, Color, Scale, Theme}
   alias Visualize.Chart.{Frame, Style, Validator}
 
-  @themes [Theme.default(), Theme.dark(), Theme.colour_safe()]
+  @themes [Theme.default(), Theme.dark(), Theme.color_safe()]
 
   defp lch(hex), do: hex |> Color.parse() |> Color.to_hcl()
 
@@ -39,15 +39,15 @@ defmodule Visualize.ThemeRampsTest do
     end
 
     test "the status roles hold 3:1 on the light themes' white" do
-      for theme <- [Theme.default(), Theme.colour_safe()], role <- [:good, :warning, :bad] do
+      for theme <- [Theme.default(), Theme.color_safe()], role <- [:good, :warning, :bad] do
         colour = Color.parse(Theme.resolve(theme, role, :literal))
         assert Color.contrast(colour, Color.parse(theme.background)) >= 3, "#{theme.name} #{role}"
       end
     end
 
     test "builtin/1 names the three, and nothing else" do
-      assert Enum.map([:default, :dark, :colour_safe], &Theme.builtin(&1).name) ==
-               [:default, :dark, :colour_safe]
+      assert Enum.map([:default, :dark, :color_safe], &Theme.builtin(&1).name) ==
+               [:default, :dark, :color_safe]
 
       assert Theme.builtin(:house) == nil
     end
@@ -176,8 +176,8 @@ defmodule Visualize.ThemeRampsTest do
       assert Theme.resolve(theme, :bad, :css) == "var(--vis-bad, #c23238)"
       assert Theme.resolve(theme, :neutral, :literal) == "#6f7480"
       assert Theme.stylesheet(theme) =~ "\n  --vis-warning: #bd7407;\n"
-      assert Theme.stylesheet(Theme.colour_safe()) =~ ".vis-theme-colour_safe {\n"
-      assert Theme.stylesheet(Theme.colour_safe()) =~ "\n  --vis-good: #5996d6;\n"
+      assert Theme.stylesheet(Theme.color_safe()) =~ ".vis-theme-color_safe {\n"
+      assert Theme.stylesheet(Theme.color_safe()) =~ "\n  --vis-good: #5996d6;\n"
     end
 
     test "a ramp position between anchors is Lab-interpolated, a literal in both modes" do
@@ -411,10 +411,10 @@ defmodule Visualize.ThemeRampsTest do
       assert {:error, [{[:theme, :colors, :info], {:contract, _}}]} = Validator.validate(roles)
     end
 
-    test "theme: :colour_safe is built in, and its roles are slots" do
+    test "theme: :color_safe is built in, and its roles are slots" do
       design =
         status_design([:good, :warning, :bad])
-        |> Map.put(:theme, :colour_safe)
+        |> Map.put(:theme, :color_safe)
         |> put_in([:styles, :by_state, :stroke], :bad)
 
       assert Validator.validate(design) == :ok

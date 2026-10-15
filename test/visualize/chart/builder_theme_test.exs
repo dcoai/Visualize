@@ -256,7 +256,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
       assert Themes.derive_choices(Looks) == [
                {"default", "builtin:default"},
                {"dark", "builtin:dark"},
-               {"colour_safe", "builtin:colour_safe"},
+               {"color_safe", "builtin:color_safe"},
                {"print", "builtin:print"},
                {"Looks::house", "theme:1"}
              ]
@@ -295,7 +295,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
     end
 
     test "the status sample is coloured by the five roles" do
-      theme = Theme.colour_safe()
+      theme = Theme.color_safe()
       html = render_component(&ThemeSheet.sheet/1, %{id: "s", theme: theme})
 
       for role <- Theme.role_names() do
@@ -326,7 +326,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
     end
 
     test "every sample applies under every built-in theme" do
-      for theme <- [Theme.default(), Theme.dark(), Theme.colour_safe()],
+      for theme <- [Theme.default(), Theme.dark(), Theme.color_safe()],
           %{design: design, sources: sources, title: title} <- ThemeSheet.samples() do
         assert {:ok, _applied} = Visualize.Chart.apply(design, sources: sources, theme: theme),
                title

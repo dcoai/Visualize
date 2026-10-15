@@ -242,7 +242,7 @@ defmodule ExamplesWeb.ChartLive do
         "spring" -> :spring
         "summer" -> :summer
         "dark" -> :dark
-        "colour_safe" -> :colour_safe
+        "color_safe" -> :color_safe
         _ -> :default
       end
 

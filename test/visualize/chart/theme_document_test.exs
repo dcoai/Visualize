@@ -21,7 +21,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
            roles: %{info: "#2f5d8a"}
          )
 
-  @themes [Theme.default(), Theme.dark(), Theme.colour_safe(), @house]
+  @themes [Theme.default(), Theme.dark(), Theme.color_safe(), @house]
 
   describe "round trips" do
     test "every built-in theme and a host theme read back as themselves, in both forms" do
@@ -70,7 +70,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
     end
 
     test "a name reads as the built-in theme, any other name is not a theme" do
-      assert Document.from_map(%{theme: :colour_safe}) == {:ok, Theme.colour_safe()}
+      assert Document.from_map(%{theme: :color_safe}) == {:ok, Theme.color_safe()}
 
       assert Document.from_map(%{theme: :house}) ==
                {:error, [{[:theme], {:unknown_theme, :house}}]}
