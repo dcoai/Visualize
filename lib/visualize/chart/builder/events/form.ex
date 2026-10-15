@@ -34,7 +34,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @events ~w(
       toggle_axis toggle_grid add_style_entry remove_style_entry select_style_entry
       edit_style add_style select_style edit submitted set_var set_key list_add
-      list_remove style_item edit_defaults choose_palette_style override_style
+      list_remove style_item edit_defaults choose_palette_style override_style style_entry_key
     )
 
     @doc false
@@ -102,6 +102,56 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # -- style stacks and the palette ----------------------------------------------------
+
+    # A `{:field, f}` entry from the site's data columns (spec/14 §18.18, #686).
+    def handle_event("add_style_entry", %{"field" => submitted}, socket) do
+      case Editor.parse(:field, String.trim(submitted)) do
+        {:ok, field} -> {:noreply, restacked(socket, &(&1 ++ [{:field, field}]))}
+        :error -> {:noreply, assign(socket, :notice, "a field entry needs a column")}
+      end
+    end
+
+    # A generator entry, checked against the generators the builder knows (§18.18, #686).
+    def handle_event("add_style_entry", %{"generator" => submitted} = params, socket) do
+      known = StyleStack.generators(socket.assigns.generators)
+
+      with {name, count} <- Enum.find(known, fn {n, a} -> "#{n}/#{a}" == submitted end),
+           {:ok, args} <- arguments(Map.get(params, "args", "")),
+           true <- length(args) == count do
+        {:noreply, restacked(socket, &(&1 ++ [{:generate, name, args}]))}
+      else
+        nil -> {:noreply, assign(socket, :notice, "#{submitted} is not a generator here")}
+        :error -> {:noreply, assign(socket, :notice, "a generator's arguments are a list")}
+        false -> {:noreply, assign(socket, :notice, "#{submitted} takes that many arguments")}
+      end
+    end
+
+    # A focused entry moved by a key, the twin of the drag; the local entry stays last
+    # (spec/14 §18.18, D-98, #686).
+    def handle_event("style_entry_key", %{"key" => key, "index" => index}, socket)
+        when key in ["ArrowUp", "ArrowDown"] do
+      %{style_site: site} = editing(socket.assigns)
+      stack = (site && site.stack) || []
+      from = position(index)
+      to = if key == "ArrowUp", do: from - 1, else: from + 1
+      last = length(stack) - 1
+      local? = fn i -> is_map(Enum.at(stack, i)) and not is_struct(Enum.at(stack, i)) end
+
+      cond do
+        to < 0 or to > last ->
+          {:noreply, socket}
+
+        local?.(from) or (to == last and local?.(last)) ->
+          {:noreply,
+           assign(socket, :notice, "the local style stays last: it is the site's own edit")}
+
+        true ->
+          {entry, rest} = List.pop_at(stack, from)
+          {:noreply, restacked(socket, fn _ -> List.insert_at(rest, to, entry) end)}
+      end
+    end
+
+    def handle_event("style_entry_key", _params, socket), do: {:noreply, socket}
 
     def handle_event("add_style_entry", %{"name" => submitted}, socket) do
       case Editor.parse({:ref, :style}, String.trim(submitted)) do
@@ -567,6 +617,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         notice: nil
       )
       |> opened("styles." <> to_string(name))
+    end
+
+    # A generator's arguments as typed: a literal list (§18.6), blank for none.
+    defp arguments(typed) do
+      case String.trim(typed) do
+        "" ->
+          {:ok, []}
+
+        text ->
+          case Editor.parse(:term, text) do
+            {:ok, args} when is_list(args) -> {:ok, args}
+            _other -> :error
+          end
+      end
     end
 
     # A name of the theme's palette, read without making an atom (§18.14).

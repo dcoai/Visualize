@@ -128,6 +128,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         store: nil,
         on_save: :visualize_chart_saved,
         on_deploy: :visualize_chart_deployed,
+        generators: [],
         source_defaults: true,
         tick_ms: 500,
         catalog: nil,
@@ -334,6 +335,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         fallback={@style_site.fallback}
         design={@design}
         theme={@theme}
+        columns={@style_site.columns}
+        generators={@style_site.generators}
         open={@style_entry}
         target={@target}
       />
@@ -555,6 +558,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 catalog={@catalog}
                 vars={@bindings}
                 theme={@preview_theme}
+                generators={@generators}
                 selected={@entry.label}
                 steps={@steps}
                 target={@myself}
@@ -911,6 +915,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         </menu>
         <div class="vis-builder-tray">
           <Palette.panel id={@id <> "-palette"} design={@design} theme={@palette_theme} open={@open_style} chosen={@palette_chosen} target={@myself} />
+          <Inspector.look :if={@look} id={@id <> "-look"} look={@look} label={@entry.label} />
           <Inspector.panel id={@id <> "-inspector"} layers={@layers} target={@myself} />
           <Document.panel id={@id <> "-document"} design={@design} kind={@kind} target={@myself} />
         </div>
