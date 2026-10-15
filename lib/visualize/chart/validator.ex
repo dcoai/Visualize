@@ -18,7 +18,7 @@ defmodule Visualize.Chart.Validator do
 
   """
 
-  alias Visualize.Chart.{Fact, Migration, Schema, Text, Var}
+  alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
   alias Visualize.Chart.Validator.{Domain, Frames, Palette, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
@@ -86,19 +86,37 @@ defmodule Visualize.Chart.Validator do
   # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
   @style_kinds [:style, :paint, :stroke, :font, :text_layout, :effect, :marker, :curve]
 
-  @doc "`:ok`, or every fault of the design ordered by path."
+  @doc "`:ok`, or every fault of the design ordered by path; URLs under the application's policy."
   @spec validate(term()) :: :ok | {:error, [error(), ...]}
-  def validate(map) when is_map(map) and not is_struct(map) do
+  def validate(map) when is_map(map) and not is_struct(map), do: design(map, Urls.policy())
+
+  def validate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
+
+  @doc """
+  `validate/1` of a design with the URL policy of a read (spec/14 §10.3): the
+  application's `config :visualize, urls: [...]` made stricter by `urls:` — `http: true`
+  only where the application allows `http:`, a `hosts` list within the application's.
+
+      iex> design = %{version: 3, frames: %{main: %{kind: :cartesian}}}
+      iex> Visualize.Chart.Validator.validate(design, :design, urls: [hosts: ["tile.example"]])
+      :ok
+  """
+  @spec validate(term(), :design, keyword()) :: :ok | {:error, [error(), ...]}
+  def validate(map, :design, opts) when is_map(map) and not is_struct(map),
+    do: design(map, Urls.policy(Keyword.get(opts, :urls, [])))
+
+  def validate(_map, :design, _opts), do: {:error, [{[], {:type, {:node, :design}}}]}
+
+  defp design(map, urls) do
     # Read in the shape this library writes: a style's flat keys are its parts (§3.1, §9).
     map = Migration.parts(map, :design)
+    ctx = Map.put(context(map), :urls, urls)
 
-    case node(:design, map, [], context(map)) ++ cycles(map) ++ Domain.faults(map) do
+    case node(:design, map, [], ctx) ++ cycles(map) ++ Domain.faults(map) do
       [] -> :ok
       errors -> {:error, Enum.sort_by(errors, &elem(&1, 0))}
     end
   end
-
-  def validate(_), do: {:error, [{[], {:type, {:node, :design}}}]}
 
   @doc """
   `:ok`, or every fault of a fragment read as a kind — **per-kind validity** (spec/14 §19.8).
@@ -431,7 +449,7 @@ defmodule Visualize.Chart.Validator do
   defp held(:mark, %{type: type, tiles: _}, path, _ctx) when is_atom(type),
     do: [{path ++ [:tiles], {:invalid_for, type}}]
 
-  defp held(:tiles, map, path, _ctx) do
+  defp held(:tiles, map, path, ctx) do
     attribution =
       case Map.get(map, :attribution) do
         text when is_binary(text) ->
@@ -456,7 +474,7 @@ defmodule Visualize.Chart.Validator do
           []
       end
 
-    attribution ++ url
+    attribution ++ url ++ policy(map, path, ctx)
   end
 
   defp held(:scale, map, path, _ctx) do
@@ -733,6 +751,22 @@ defmodule Visualize.Chart.Validator do
       end
 
     check(spec.type, defs, path, ctx) ++ List.flatten(gradients)
+  end
+
+  # Strings a style or a theme sends to SVG, CSS or a canvas hold only what their contexts
+  # can carry (spec/14 §10.3, #660): a font family no markup, rule or escape characters, a
+  # class only CSS class names.
+  defp check_key(kind, %{key: key} = spec, family, path, ctx)
+       when {kind, key} in [{:font, :family}, {:theme, :font_family}] and is_binary(family) do
+    if Regex.match?(~r/[<>\/;{}\\\x00-\x1f\x7f]/, family),
+      do: [{path, {:unsafe, :font_family}}],
+      else: check(spec.type, family, path, ctx)
+  end
+
+  defp check_key(:style, %{key: :class}, class, path, _ctx) when is_binary(class) do
+    if Regex.match?(~r/\A-?[_a-zA-Z][_a-zA-Z0-9-]*( +-?[_a-zA-Z][_a-zA-Z0-9-]*)*\z/, class),
+      do: [],
+      else: [{path, {:unsafe, :class}}]
   end
 
   # A theme needs at least one series colour (spec/08 §7.2).
@@ -1121,4 +1155,17 @@ defmodule Visualize.Chart.Validator do
   defp plural(:frame), do: :frames
   defp plural(:ramp), do: :ramps
   defp plural(:role), do: :roles
+
+  # The URL policy of §10.3 (#660): the fault names the field and the reason, never the URL.
+  defp policy(%{url: url} = map, path, ctx) when is_binary(url) do
+    subdomains = Map.get(map, :subdomains, Schema.default(:tiles, :subdomains))
+    subdomains = if is_list(subdomains), do: Enum.filter(subdomains, &is_binary/1), else: []
+
+    case Urls.check(url, Map.get(ctx, :urls) || Urls.policy(), subdomains) do
+      :ok -> []
+      {:error, reason} -> [{path ++ [:url], {:url, reason}}]
+    end
+  end
+
+  defp policy(_map, _path, _ctx), do: []
 end

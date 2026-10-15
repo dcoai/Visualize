@@ -219,7 +219,8 @@ defmodule Visualize.ChartGen do
       blend: member_of([:normal, :multiply, :screen, :overlay, :darken, :lighten]),
       effect: member_of([:none, :shadow, :blur]),
       effect_radius: size,
-      class: text_string(),
+      # A class is CSS class names (spec/14 §10.3).
+      class: map(text_string(), &("c" <> &1)),
       curve: member_of(Schema.curve_types()),
       curve_opts: optional_map(%{tension: number(), alpha: number()}),
       symbol: member_of(Schema.symbol_types()),

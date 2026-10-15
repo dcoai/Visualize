@@ -722,7 +722,16 @@ defmodule Visualize.Theme do
   end
 
   defp css_value(:size, n), do: "#{n}px"
+  defp css_value(_kind, value) when is_binary(value), do: css_escape(value)
   defp css_value(_kind, value), do: value
+
+  # A value never ends its declaration or its rule, nor a `<style>` around the sheet
+  # (spec/14 §10.3, #660): those characters are written as CSS escapes.
+  defp css_escape(value) do
+    String.replace(value, ["<", ">", ";", "{", "}", "\\"], fn char ->
+      "\\" <> (char |> :binary.first() |> Integer.to_string(16)) <> " "
+    end)
+  end
 
   defp series_atom(k), do: :"series_#{k}"
 

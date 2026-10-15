@@ -671,7 +671,7 @@ defmodule Visualize.Backend.Canvas do
     do: ["ctx.shadowOffsetY = ", format_num(y), ";"]
 
   defp command_to_js_line({:set_filter, [f]}), do: ["ctx.filter = '", f, "';"]
-  defp command_to_js_line({:set_font, [font]}), do: ["ctx.font = '", font, "';"]
+  defp command_to_js_line({:set_font, [font]}), do: ["ctx.font = '", escape_js(font), "';"]
   defp command_to_js_line({:set_textAlign, [align]}), do: ["ctx.textAlign = '", align, "';"]
   defp command_to_js_line({:beginPath, []}), do: "ctx.beginPath();"
   defp command_to_js_line({:closePath, []}), do: "ctx.closePath();"
@@ -853,11 +853,18 @@ defmodule Visualize.Backend.Canvas do
     |> String.replace("\t", "\\t")
   end
 
+  # A string in a single-quoted JavaScript literal (spec/14 §10.3, #660): its quote, the
+  # escape, every line break and `<`, so a design's text never ends the literal, the line
+  # or a `</script>` around the program.
   defp escape_js(str) do
     str
     |> String.replace("\\", "\\\\")
     |> String.replace("'", "\\'")
     |> String.replace("\n", "\\n")
+    |> String.replace("\r", "\\r")
+    |> String.replace("\u2028", "\\u2028")
+    |> String.replace("\u2029", "\\u2029")
+    |> String.replace("<", "\\x3c")
   end
 
   # The one number formatter of every serialiser (spec/09 §1.3, D-12, D-32).

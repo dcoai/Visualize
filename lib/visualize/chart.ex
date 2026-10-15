@@ -174,16 +174,16 @@ defmodule Visualize.Chart do
 
     with :ok <- readable(map),
          :ok <- within(Limits.structure(map, limits)) do
-      read(map, limits)
+      read(map, limits, Keyword.get(opts, :urls, []))
     end
   end
 
   # The steps after the document's structure is known to be within its limits: shared
   # by `from_json/2`, which checks the structure on the parsed JSON before decoding it.
-  defp read(map, limits) do
+  defp read(map, limits, urls) do
     with {:ok, map} <- Migration.migrate(map),
          :ok <- within(Limits.counts(map, limits)),
-         :ok <- Validator.validate(map) do
+         :ok <- Validator.validate(map, :design, urls: urls) do
       {:ok, struct(__MODULE__, Map.take(map, @design_keys))}
     end
   end
@@ -236,7 +236,7 @@ defmodule Visualize.Chart do
         {:ok, term} ->
           with :ok <- readable(term),
                :ok <- within(Limits.structure(term, limits)) do
-            read(Codec.decode(term), limits)
+            read(Codec.decode(term), limits, Keyword.get(opts, :urls, []))
           end
 
         {:error, error} ->
