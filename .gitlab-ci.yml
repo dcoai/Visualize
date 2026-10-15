@@ -124,6 +124,15 @@ verify:citations:
   script:
     - mix vis.citations
 
+# Everything the library names and writes is spelled American (spec/12 §3, #642, D-183).
+verify:spelling:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.spelling
+
 verify:models:
   extends: .elixir
   stage: verify
