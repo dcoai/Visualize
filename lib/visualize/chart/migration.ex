@@ -11,6 +11,7 @@ defmodule Visualize.Chart.Migration do
   `Visualize.Chart.from_map/1`, which migrates before it validates.
   """
 
+  alias Visualize.Chart.Migration.FilledLines
   alias Visualize.Chart.{Schema, Text, Validator}
   alias Visualize.Chart.Style.Parts
 
@@ -90,7 +91,9 @@ defmodule Visualize.Chart.Migration do
   # takes the paint's words (`type`, `center`, a stop's `at` and `color`). The same rewrite
   # runs in `canonical/1` at every version, so a design a host builds at version 3 in the
   # flat keys is rewritten too; this step makes a stored version 2 design whole on its own.
-  defp step(map, 2), do: map |> Map.put(:version, 3) |> canonical()
+  # A line whose style gave a fill drew the area under it, and a version 3 line draws none,
+  # so this step alone also gives such a line an `:area` beneath it (§5.6, #659).
+  defp step(map, 2), do: map |> Map.put(:version, 3) |> canonical() |> FilledLines.rewrite()
 
   defp step(map, from) do
     raise ArgumentError, "no migration from version #{from} for #{inspect(map)}"

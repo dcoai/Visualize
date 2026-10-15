@@ -436,6 +436,30 @@ defmodule Visualize.Chart.Style.Parts do
 
   defp gradient(acc, _key, _paint), do: acc
 
+  # -- the parts a mark kind draws ------------------------------------------------------
+
+  # The projected keys of each part a kind may not draw (spec/14 §5.6, D-172).
+  @projected %{
+    fill: [:fill, :fill_opacity],
+    marker: [:symbol, :symbol_size],
+    font: [:font_family, :font_size, :font_weight, :font_style, :line_height],
+    text: [:text_anchor, :vertical_align, :margin_x, :margin_y, :text_angle]
+  }
+  @stroked [:line, :rule]
+
+  @doc false
+  # A projected style node without the keys of the parts a mark of `type` does not draw:
+  # a line and a rule draw no fill, only a symbol draws a marker, only a text and a label
+  # a font and a text placement. A part a kind does not draw is ignored, never an error.
+  @spec drawn(map(), atom()) :: map()
+  def drawn(node, type),
+    do: Map.drop(node, Enum.flat_map(undrawn(type), &Map.fetch!(@projected, &1)))
+
+  defp undrawn(type) when type in @stroked, do: [:fill, :marker, :font, :text]
+  defp undrawn(:symbol), do: [:font, :text]
+  defp undrawn(:text), do: [:marker]
+  defp undrawn(_closed), do: [:marker, :font, :text]
+
   # -- gradients written inline ---------------------------------------------------------
 
   @doc false

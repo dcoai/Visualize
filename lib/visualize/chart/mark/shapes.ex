@@ -39,8 +39,6 @@ defmodule Visualize.Chart.Mark.Shapes do
   # A path per series takes a style named by data from the series' first datum (spec/14
   # §3.6): `own` is the mark's context with that datum's style, the mark's own otherwise.
   defp line(ctx) do
-    baseline = Channels.baseline(ctx)
-
     ctx
     |> Channels.pixels()
     |> series(ctx, [:x, :y])
@@ -58,38 +56,9 @@ defmodule Visualize.Chart.Mark.Shapes do
 
       anchor = last_point(rows, :x, :y)
 
-      # A filled line is the area under it (spec/14 §5.6): the area to the baseline first,
-      # then the line itself, unfilled. The series' paint and `data-series` are the mark's
-      # (`Visualize.Chart.Mark.Series`), as on every type.
-      if filled?(ctx) do
-        [
-          child(under(rows, baseline, ctx), rows, %{class: "line-fill", stroke: :none}, anchor),
-          child(Element.path(path), rows, %{fill: :none}, anchor)
-        ]
-      else
-        [child(Element.path(path), rows, %{}, anchor)]
-      end
+      # A line draws its stroke; the area under it is an `:area` mark (spec/14 §5.6, #659).
+      [child(Element.path(path), rows, %{}, anchor)]
     end)
-  end
-
-  # Whether the style gives the line a fill: a static one other than none, or a binding.
-  defp filled?(%{static: static, bound: bound}) do
-    Map.has_key?(bound, :fill) or (Map.has_key?(static, :fill) and static.fill != :none)
-  end
-
-  # The area from a series' line down to the baseline, in the line's curve.
-  defp under(rows, baseline, ctx) do
-    rows = Enum.map(rows, &Map.merge(&1, %{x0: &1.x, x1: &1.x, y0: baseline, y1: &1.y}))
-
-    Area.new()
-    |> Area.x0(:x0)
-    |> Area.x1(:x1)
-    |> Area.y0(:y0)
-    |> Area.y1(:y1)
-    |> curve(ctx, &Area.curve/3)
-    |> defined(rows, [:x0, :x1, :y0, :y1], &Area.defined/2)
-    |> Area.generate_path(rows)
-    |> Element.path()
   end
 
   defp area(ctx) do

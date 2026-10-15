@@ -35,7 +35,7 @@ defmodule Visualize.Chart.MarkTest do
     Chart.from_map!(
       Map.merge(
         %{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v, :lo, :hi, :lo2, :hi2, :k, :s]}},
           frames: %{main: @frame},
           marks: [Map.merge(%{data: :primary}, mark)]
@@ -591,7 +591,7 @@ defmodule Visualize.Chart.MarkTest do
     defp area_of(mark, frame, rows) do
       chart =
         Chart.from_map!(%{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v]}},
           frames: %{main: frame},
           marks: [Map.merge(%{data: :primary}, mark)]
@@ -667,7 +667,7 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v]}},
           frames: %{main: frame},
           marks: [
@@ -684,7 +684,7 @@ defmodule Visualize.Chart.MarkTest do
     test "it round-trips through JSON as a tagged term (spec/14 §11.2, #554)" do
       chart =
         Chart.from_map!(%{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v]}},
           frames: %{main: offset_frame(%{y: %{kind: :linear, domain: [50, 150]}})},
           marks: [
@@ -714,7 +714,7 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :v]}},
           frames: %{main: frame},
           marks: [%{data: :primary, type: :area, channels: %{x: :t, y: :v}}]
@@ -755,7 +755,7 @@ defmodule Visualize.Chart.MarkTest do
 
       chart =
         Chart.from_map!(%{
-          version: 2,
+          version: 3,
           sources: %{primary: %{fields: [:t, :base, :top]}},
           frames: %{
             main: %{@frame | scales: %{@frame.scales | x: %{kind: :linear, domain: [0, 2]}}}
@@ -779,23 +779,14 @@ defmodule Visualize.Chart.MarkTest do
     end
   end
 
-  describe "a filled line is the area under it (spec/14 §5.6)" do
-    test "a fill on a line draws the area to the baseline beneath an unfilled line" do
-      styles = %{s: %{fill: "#abc", curve: :step_after}}
+  describe "each mark kind draws its own parts (spec/14 §5.6, #659)" do
+    test "a fill on a line is ignored: one path, its stroke, no area" do
+      styles = %{s: %{fill: "#abc", stroke: %{color: "#123", dash: [3, 1]}, curve: :step_after}}
       group = generate(%{type: :line, channels: %{x: :t, y: :v}, style: :s}, %{styles: styles})
-      [area, line] = group.children
+      [line] = group.children
 
-      assert area.style == %{class: "line-fill", stroke: :none}
-      assert line.style == %{fill: :none}
-      assert group.style.fill == "#abc"
-
-      assert d(area) ==
-               Area.new()
-               |> Area.x(px(:t))
-               |> Area.y0(Scale.apply(y(), 0))
-               |> Area.y1(py(:v))
-               |> Area.curve(:step_after)
-               |> Area.generate(@rows)
+      assert group.style.fill == :none
+      assert group.style.stroke == "#123" and group.style.stroke_dasharray == "3 1"
 
       assert d(line) ==
                Line.new()
@@ -803,30 +794,39 @@ defmodule Visualize.Chart.MarkTest do
                |> Line.y(py(:v))
                |> Line.curve(:step_after)
                |> Line.generate(@rows)
+    end
 
-      # A line with no fill, or fill none, is one path as before.
-      [only] = generate(%{type: :line, channels: %{x: :t, y: :v}}).children
-      refute Map.has_key?(only.style, :fill)
+    test "a role style on a line draws the stroked line with no area; on a rect it fills" do
+      line = generate(%{type: :line, channels: %{x: :t, y: :v}, style: :bad})
+      assert [_one] = line.children
+      assert line.style.fill == :none
+      assert line.style.stroke == "var(--vis-bad, #c23238)"
 
-      [only] =
-        generate(%{type: :line, channels: %{x: :t, y: :v}, style: :n}, %{
-          styles: %{n: %{fill: :none}}
-        }).children
+      rect =
+        generate(%{type: :rect, channels: %{x0: :t, x1: :t, y0: 0, y1: :v}, style: :bad})
 
-      assert only.style == %{}
+      assert rect.style.fill == "var(--vis-bad, #c23238)"
+      assert rect.style.stroke == "var(--vis-bad, #c23238)"
+    end
 
-      # Per series, the area comes before each series' line and carries its series.
-      group =
-        generate(%{type: :line, channels: %{x: :t, y: :v, series: :k}, style: :s}, %{
+    test "a part a kind does not draw writes nothing, and is never an error" do
+      styles = %{s: %{fill: "#abc", font: %{size: 20, weight: :bold}, marker: %{shape: :star}}}
+
+      rect =
+        generate(%{type: :rect, channels: %{x0: :t, x1: :t, y0: 0, y1: :v}, style: :s}, %{
           styles: styles
         })
 
-      assert Enum.map(group.children, &{&1.style[:class], &1.attrs["data-series"]}) == [
-               {"line-fill", "k0"},
-               {nil, "k0"},
-               {"line-fill", "k1"},
-               {nil, "k1"}
-             ]
+      refute Map.has_key?(rect.style, :font_size)
+      refute Map.has_key?(rect.style, :font_weight)
+      assert rect.style.fill == "#abc"
+
+      text =
+        generate(%{type: :text, channels: %{x: :t, y: :v, value: :v}, style: :s}, %{
+          styles: styles
+        })
+
+      assert text.style.font_size == 20
     end
   end
 
@@ -1008,7 +1008,7 @@ defmodule Visualize.Chart.MarkTest do
 
     test "the node validates: an undeclared field is reported, and it round-trips the map" do
       design = %{
-        version: 2,
+        version: 3,
         sources: %{primary: %{fields: [:t, :v]}},
         frames: %{main: @frame},
         marks: [
@@ -1471,7 +1471,7 @@ defmodule Visualize.Chart.MarkTest do
       # A built-in theme, whose slots the validator checks, accepts it: it is not a slot.
       on_dark = fn fill ->
         Chart.from_map(%{
-          version: 2,
+          version: 3,
           theme: :dark,
           sources: %{p: %{fields: [:t]}},
           frames: %{main: @frame},

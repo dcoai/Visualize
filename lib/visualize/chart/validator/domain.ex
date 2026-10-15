@@ -186,7 +186,13 @@ defmodule Visualize.Chart.Validator.Domain do
   # (D-172).
   @doc false
   @spec cascade(term(), map()) :: map()
-  def cascade(entries, styles), do: entries |> entry(styles, []) |> Parts.project()
+  def cascade(entries, styles), do: entries |> parts(styles) |> Parts.project()
+
+  @doc false
+  # `cascade/2` before the projection: the stack's style in its parts, laid by the same
+  # walk that never raises — what the version 2 migration reads a line's fill from.
+  @spec parts(term(), map()) :: map()
+  def parts(entries, styles), do: entry(entries, styles, [])
 
   # A list stacks wherever it stands — the site, a named style's entry, `extends` (#658).
   defp entry(entries, styles, seen) when is_list(entries) do

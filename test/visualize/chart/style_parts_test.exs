@@ -232,7 +232,9 @@ defmodule Visualize.Chart.StylePartsTest do
              }
 
       assert v3.theme.styles.muted == %{opacity: 0.3, stroke: %{dash: "2 2"}}
-      assert hd(v3.marks).style == [:s, %{marker: %{shape: :star}}]
+      # The line drew its fill as the area under it: an `:area` before it now (#659).
+      assert [%{type: :area, style: %{fill: %{type: :paint, name: :fade}}}, line] = v3.marks
+      assert line.style == [:s, %{marker: %{shape: :star}}]
     end
 
     test "a design built at version 3 in the flat keys is read in parts too" do
