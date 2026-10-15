@@ -60,6 +60,8 @@ defmodule Visualize.Chart.Schema do
     :var,
     :theme,
     :style,
+    :defaults,
+    :kind_defaults,
     :paint,
     :stroke,
     :font,
@@ -319,6 +321,8 @@ defmodule Visualize.Chart.Schema do
       spec(:theme, {:one_of, [:name, {:node, :theme}]}, :style, default: :default),
       spec(:styles, {:map, style_entry()}, :style, default: %{}, merge: :union),
       spec(:defs, {:map, {:node, :paint}}, :style, default: %{}, merge: :union),
+      # What every element inherits under its style (spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style),
       # The grid the frames are placed on, in place of arithmetic (spec/14 §2.8, #384).
       spec(:layout, {:node, :layout}, :geometry, default: %{}),
       # How the chart behaves beside others on a page: its sync group (spec/14 §2.9, #466).
@@ -454,6 +458,8 @@ defmodule Visualize.Chart.Schema do
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.
       spec(:styles, {:map, style_entry()}, :style, default: theme.styles),
+      # The theme's own root defaults (spec/08 §7.1, spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style, default: theme.defaults),
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),
@@ -467,20 +473,19 @@ defmodule Visualize.Chart.Schema do
 
   # A style in its parts (spec/14 §3.1, D-172).
   defp design_node(:style) do
-    [
-      spec(:extends, {:one_of, [{:ref, :style}, {:list, {:ref, :style}}]}, :style),
-      spec(:fill, {:node, :paint}, :style),
-      spec(:stroke, {:node, :stroke}, :style),
-      spec(:font, {:node, :font}, :style),
-      spec(:text, {:node, :text_layout}, :style),
-      spec(:effect, {:node, :effect}, :style),
-      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
-      spec(:blend, {:enum, @blends}, :style),
-      spec(:marker, {:node, :marker}, :style),
-      spec(:curve, {:node, :curve}, :style),
-      spec(:class, :string, :style)
-    ]
+    [spec(:extends, {:one_of, [{:ref, :style}, {:list, {:ref, :style}}]}, :style)] ++
+      part_keys() ++ [spec(:class, :string, :style)]
   end
+
+  # What a container's elements inherit (spec/14 §3.8, #651, D-174): a style's parts, and
+  # one entry per mark type but `:text` — `text` is the part — of the same parts. No
+  # `extends` and no `class`: defaults are not a style that is named, derived or stacked.
+  defp design_node(:defaults) do
+    part_keys() ++
+      for(type <- Mark.types() -- [:text], do: spec(type, {:node, :kind_defaults}, :style))
+  end
+
+  defp design_node(:kind_defaults), do: part_keys()
 
   # The flat style every earlier version wrote, one key per element attribute (spec/14 §9,
   # D-172), in the groups the builder's form shows them in.
@@ -541,7 +546,24 @@ defmodule Visualize.Chart.Schema do
       spec(:dy, :number, :geometry, default: 0),
       spec(:rotate, Mark.rotate_type(), :geometry),
       spec(:id, :name, :content),
-      spec(:frame, {:ref, :frame}, :binding)
+      spec(:frame, {:ref, :frame}, :binding),
+      # The defaults of the layers and groups it was placed from (spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style)
+    ]
+  end
+
+  # The parts of a style, a style's and a defaults node's alike (spec/14 §3.1, §3.8).
+  defp part_keys do
+    [
+      spec(:fill, {:node, :paint}, :style),
+      spec(:stroke, {:node, :stroke}, :style),
+      spec(:font, {:node, :font}, :style),
+      spec(:text, {:node, :text_layout}, :style),
+      spec(:effect, {:node, :effect}, :style),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:blend, {:enum, @blends}, :style),
+      spec(:marker, {:node, :marker}, :style),
+      spec(:curve, {:node, :curve}, :style)
     ]
   end
 

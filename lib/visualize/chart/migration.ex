@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Migration do
 
   alias Visualize.Chart.Migration.FilledLines
   alias Visualize.Chart.{Schema, Text, Validator}
-  alias Visualize.Chart.Style.Parts
+  alias Visualize.Chart.Style.{Defaults, Parts}
 
   @current 3
 
@@ -189,6 +189,16 @@ defmodule Visualize.Chart.Migration do
 
     walk(:theme, map |> Map.delete(:roles) |> Map.put(:colors, colors), text?)
   end
+
+  # A defaults node's parts are read as a style's (spec/14 §3.8, #651); its entries per mark
+  # kind are left for the walk, which reads each as a node of parts.
+  defp node(:defaults, map, text?) when is_map(map) and not is_struct(map) do
+    {entries, parts} = Map.split(map, Defaults.kinds())
+    walk(:defaults, Map.merge(Parts.normalize(parts), entries), text?)
+  end
+
+  defp node(:kind_defaults, map, text?) when is_map(map) and not is_struct(map),
+    do: walk(:kind_defaults, Parts.normalize(map), text?)
 
   defp node(kind, map, text?)
        when kind in [:paint, :gradient] and is_map(map) and not is_struct(map),

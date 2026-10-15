@@ -31,7 +31,8 @@ defmodule Visualize.Chart.Presets do
 
   """
 
-  import Visualize.Chart.Build
+  # `defaults/1` is this module's own: a preset's default assigns (§15), not a design's.
+  import Visualize.Chart.Build, except: [defaults: 1]
 
   alias Visualize.Chart
   alias Visualize.Data.Table

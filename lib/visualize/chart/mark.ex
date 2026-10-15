@@ -44,6 +44,7 @@ defmodule Visualize.Chart.Mark do
   alias Visualize.Chart.Frame.Scales
   alias Visualize.Chart.Mark.{Bend, Generic, Label, Series, Shapes, Strokes, Styled, Tiles}
   alias Visualize.Chart.{Style, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Theme
@@ -116,13 +117,16 @@ defmodule Visualize.Chart.Mark do
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
     realised = rows(frame, mark, sources)
     rows = panel(realised, frame, Keyword.fetch(opts, :panel))
-    style_node = frame.styles |> Style.node(Map.get(mark, :style)) |> Style.drawn(type)
+    # The defaults the mark's containers lay under its style (spec/14 §3.8, D-174).
+    base = Defaults.at(frame, Map.get(mark, :defaults), type)
+    style_node = base |> Style.over(frame.styles, Map.get(mark, :style)) |> Style.drawn(type)
 
     ctx =
       %{
         frame: frame,
         mark: mark,
         type: type,
+        base: base,
         rows: rows,
         mode: mode,
         index: index,

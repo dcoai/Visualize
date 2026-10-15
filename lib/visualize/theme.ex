@@ -121,6 +121,8 @@ defmodule Visualize.Theme do
             ramps: @light_ramps,
             colors: @light_colors,
             styles: Palette.builtin(),
+            # The theme's own root defaults, laid under every container's (spec/14 §3.8).
+            defaults: %{},
             font_family: "sans-serif",
             font_size: 10,
             label_size: 12,
@@ -159,6 +161,7 @@ defmodule Visualize.Theme do
           ramps: %{optional(ramp_name()) => [String.t()]},
           colors: %{optional(atom()) => String.t() | Color.value()},
           styles: %{optional(atom()) => map()},
+          defaults: map(),
           font_family: String.t(),
           font_size: number(),
           label_size: number(),
@@ -249,6 +252,21 @@ defmodule Visualize.Theme do
   # The names `builtin/1` knows, for the validator and the builder.
   @spec builtins() :: [atom(), ...]
   def builtins, do: @builtin
+
+  @doc """
+  The theme's root defaults, every part defined (spec/08 §7.1, spec/14 §3.8, D-174): the
+  library's base — what an element with no value for a key already draws — with the
+  theme's own `defaults` laid over it by the merge rule.
+
+      iex> Visualize.Theme.default() |> Visualize.Theme.defaults() |> Map.fetch!(:stroke)
+      %{opacity: 1, width: 1, join: :miter, cap: :butt, placement: :center}
+      iex> Visualize.Theme.new(defaults: %{stroke: %{width: 1.5}}) |> Visualize.Theme.defaults() |> get_in([:stroke, :width])
+      1.5
+  """
+  @spec defaults(t()) :: map()
+  def defaults(%__MODULE__{defaults: own}) do
+    Visualize.Chart.Style.Defaults.layer([Visualize.Chart.Style.Defaults.base(), own], nil)
+  end
 
   @doc "The four ramps whose meaning the library fixes (spec/08 §7.5)."
   @spec ramp_names() :: [ramp_name(), ...]

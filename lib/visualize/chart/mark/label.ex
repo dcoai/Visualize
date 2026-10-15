@@ -8,6 +8,7 @@ defmodule Visualize.Chart.Mark.Label do
   alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.Mark.{Series, Styled}
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.Chart.Text
   alias Visualize.Color
   alias Visualize.Data.Table
@@ -36,14 +37,16 @@ defmodule Visualize.Chart.Mark.Label do
   @doc false
   # The label's resolved style, for the datum it labels when there is one.
   @spec style(map(), map() | nil) :: map()
-  def style(%{label: label, frame: frame, mode: mode}, datum \\ nil) do
-    Style.resolve(node(frame, label || %{}, datum), frame.theme, mode)
+  def style(%{label: label, frame: frame, mode: mode} = ctx, datum \\ nil) do
+    Style.resolve(node(ctx, label || %{}, datum), frame.theme, mode)
   end
 
-  # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum.
-  defp node(frame, label, datum) do
+  # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum,
+  # over the `text` defaults the mark's containers lay (spec/14 §3.8).
+  defp node(%{frame: frame, mark: mark}, label, datum) do
     stack = Map.get(label, :style, Schema.default(:mark_label, :style))
-    Styled.node(frame.styles, stack, datum)
+    base = Defaults.at(frame, Map.get(mark, :defaults), :text)
+    Styled.node(frame.styles, stack, datum, base)
   end
 
   @doc false
@@ -98,7 +101,7 @@ defmodule Visualize.Chart.Mark.Label do
     label = ctx.label || %{}
     datum = Map.get(shape, :datum)
     style = style(%{ctx | label: label}, datum)
-    style_node = node(frame, label, datum)
+    style_node = node(ctx, label, datum)
 
     anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)
@@ -162,19 +165,19 @@ defmodule Visualize.Chart.Mark.Label do
   @spec under([map()], [Element.t()], map()) :: [map()]
   def under(children, _bound, %{label: nil}), do: children
 
-  def under(children, bound, %{label: label, frame: frame} = ctx) do
+  def under(children, bound, %{label: label} = ctx) do
     stack = Map.get(label, :style, Schema.default(:mark_label, :style))
 
     case Style.by_data(stack) do
       [] ->
-        if contrast?(node(frame, label, nil)),
+        if contrast?(node(ctx, label, nil)),
           do: Enum.zip_with(children, bound, &Map.put(&1, :under, under(&2, ctx))),
           else: children
 
       # A style named by data inks each label by its own datum's style (§3.6).
       _entries ->
         Enum.zip_with(children, bound, fn child, element ->
-          if contrast?(node(frame, label, child.datum)),
+          if contrast?(node(ctx, label, child.datum)),
             do: Map.put(child, :under, under(element, ctx)),
             else: child
         end)

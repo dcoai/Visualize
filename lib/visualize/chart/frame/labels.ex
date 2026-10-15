@@ -7,6 +7,7 @@ defmodule Visualize.Chart.Frame.Labels do
   alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.Chart.Text
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -37,7 +38,8 @@ defmodule Visualize.Chart.Frame.Labels do
 
   defp label(frame, node, mode) do
     default_style = if node.anchor == :title, do: :title, else: Schema.default(:label, :style)
-    style_node = Style.node(frame.styles, Map.get(node, :style, default_style))
+    base = Defaults.at(frame, Map.get(node, :defaults), :text)
+    style_node = Style.over(base, frame.styles, Map.get(node, :style, default_style))
     style = Style.resolve(style_node, frame.theme, mode)
     dx = Map.get(node, :dx, 0)
     dy = Map.get(node, :dy, 0)

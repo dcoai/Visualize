@@ -432,14 +432,15 @@ A design whose stack holds no field entry draws byte for byte as before: the per
 ```elixir
 %{
   version: 3,
+  sources: %{load: %{fields: [:t, :v, :host]}},
   defaults: %{
     stroke: %{width: 2, cap: :round},
     font:   %{family: "Inter", size: 12},
     line:   %{stroke: %{width: 1.5}},       # every line in this design
     rect:   %{stroke: :none}                # and no outline on a rect
   },
-  frames: %{main: %{kind: :cartesian, defaults: %{font: %{size: 11}}, …}},
-  …
+  frames: %{main: %{kind: :cartesian, defaults: %{font: %{size: 11}}}},
+  marks: [%{type: :line, data: :load, channels: %{x: :t, y: :v, series: :host}}]
 }
 ```
 
@@ -1876,6 +1877,7 @@ A style is looked up by name among the declared styles and then the palette of t
 | `Visualize.Chart.Build.layout/1` | `layout(opts)`: `%{layout: node}`, the grid of §2.8 — `columns`, `rows`, `gap` — that a frame's `cell` places it on. |
 | `Visualize.Chart.Build.interaction/1` | `interaction(opts)`: `%{interaction: node}`, the `:interaction` node of §2.9 — `sync:` the group, `frame:` the frame whose `x` it reads. |
 | `Visualize.Chart.Build.theme/1` | `theme(theme)`: `%{theme: theme}`, a theme name or an inline `:theme` node (§2.5). |
+| `Visualize.Chart.Build.defaults/1` | `defaults(node)`: `%{defaults: node}`, the design's `:defaults` node (§3.8, #651). |
 | `Visualize.Chart.Build.cartesian/0` | As `cartesian/1` with `[]`. |
 | `Visualize.Chart.Build.cartesian/1` | `cartesian(opts)`: `%{frames: %{main: %{kind: :cartesian}}}`; `opts` are the frame's remaining keys (§4.1). A frame carries no size — the render gives it (§4.2). |
 | `Visualize.Chart.Build.cartesian/2` | `cartesian(name, opts)`: the same frame under `name` (§4.1, #383) — `%{frames: %{name => %{kind: :cartesian}}}` — which is how a design of several frames is built. |

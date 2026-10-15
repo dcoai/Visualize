@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Frame.Legend do
   alias Visualize.{Axis, Scale, Theme}
   alias Visualize.Chart.Frame
   alias Visualize.Chart.{Schema, Style, Text, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.IR.{Element, Transform}
 
   @swatch 12
@@ -27,7 +28,9 @@ defmodule Visualize.Chart.Frame.Legend do
   def generate(%{legend: nil}, _mode, _paths?), do: []
 
   def generate(frame, mode, paths?) do
-    layout = layout(frame.legend, frame.scales, frame.plot.width, frame.styles, frame.theme, mode)
+    layout =
+      layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, mode)
+
     {x, y} = place(layout, frame.plot)
 
     [
@@ -48,7 +51,7 @@ defmodule Visualize.Chart.Frame.Legend do
 
   def extent(frame),
     do:
-      layout(frame.legend, frame.scales, frame.plot.width, frame.styles, frame.theme, :literal).extent
+      layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, :literal).extent
 
   @doc false
   # The margin a frame takes for its legend (spec/14 §4.5, D-169): the given one, with a top
@@ -56,11 +59,11 @@ defmodule Visualize.Chart.Frame.Legend do
   # `ArgumentError` for what cannot be fitted — a side margin narrower than the legend's
   # estimated width, a row too wide for the plot with `wrap: false`, a single cell wider
   # than the plot — naming the side and the size needed.
-  @spec fit!(map() | nil, map(), map(), map(), map(), Theme.t()) :: map()
-  def fit!(nil, _scales, margin, _plot, _styles, _theme), do: margin
+  @spec fit!(map(), map()) :: map()
+  def fit!(%{legend: nil}, margin), do: margin
 
-  def fit!(node, scales, margin, plot, styles, theme) do
-    layout = layout(node, scales, plot.width, styles, theme, :literal)
+  def fit!(%{legend: node, scales: scales, plot: plot, theme: theme} = frame, margin) do
+    layout = layout(node, scales, plot.width, styles(frame), theme, :literal)
 
     cond do
       layout.inside? ->
@@ -93,8 +96,13 @@ defmodule Visualize.Chart.Frame.Legend do
   # The legend laid out against the plot's width: its elements, where it sits and its
   # extent. The one place every question about the legend's shape is answered, so the
   # frame's margin and the drawing cannot disagree.
-  defp layout(node, scales, plot_width, styles, theme, mode) do
-    style_node = Style.node(styles, Map.get(node, :style, Schema.default(:legend, :style)))
+  # The frame's styles, and the defaults its containers lay under the legend's style: the
+  # part defaults alone, a legend being furniture (spec/14 §3.8).
+  defp styles(frame), do: {frame.styles, Defaults.at(frame, nil, nil)}
+
+  defp layout(node, scales, plot_width, {styles, base}, theme, mode) do
+    stack = Map.get(node, :style, Schema.default(:legend, :style))
+    style_node = Style.over(base, styles, stack)
     style = Style.resolve(style_node, theme, mode)
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))

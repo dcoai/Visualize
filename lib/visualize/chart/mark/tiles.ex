@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Mark.Tiles do
   # fetches anything: the browser loads each `href`.
 
   alias Visualize.Chart.{Frame, Schema, Style, Var}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.Geo.Tiles
   alias Visualize.IR.Element
 
@@ -40,7 +41,8 @@ defmodule Visualize.Chart.Mark.Tiles do
   # The attribution, always drawn (§5.2): the mark's style over the built-in `:label`,
   # anchored at its end in the plot's bottom-right corner.
   defp attribution(frame, mark, node, mode) do
-    style_node = Style.node(frame.styles, [:label | List.wrap(Map.get(mark, :style))])
+    base = Defaults.at(frame, Map.get(mark, :defaults), :tiles)
+    style_node = Style.over(base, frame.styles, [:label | List.wrap(Map.get(mark, :style))])
 
     style =
       style_node

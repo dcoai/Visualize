@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.{Labels, Position}
   alias Visualize.Chart.{Schema, Style}
+  alias Visualize.Chart.Style.Defaults
   alias Visualize.IR.{Element, Path, Transform}
 
   @stroke_keys [
@@ -85,7 +86,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     if lines == [],
       do: [],
-      else: [group(lines, "grid", Style.resolve(style(frame, :grid), frame.theme, mode))]
+      else: [group(lines, "grid", Style.resolve(style(frame, :grid, nil), frame.theme, mode))]
   end
 
   @doc false
@@ -289,13 +290,17 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   # A style other than the built-in `:axis` reaches the axis's elements by kind, and its
   # `text_angle` turns each tick label about its own point (spec/14 §6.3).
+  # The axis as drawn is the built-in `:axis` style; defaults its containers give restyle it
+  # like a style would (spec/14 §3.8).
   defp restyle(element, frame, node, mode) do
     name = Map.get(node, :style, Schema.default(:axis, :style))
+    own = Map.get(node, :defaults)
 
-    if name == :axis and not Map.has_key?(frame.design_styles, :axis) do
+    if name == :axis and not Map.has_key?(frame.design_styles, :axis) and
+         Defaults.at(frame, own, nil) == %{} do
       element
     else
-      style_node = style(frame, name)
+      style_node = style(frame, name, own)
 
       element
       |> apply_style(Style.resolve(style_node, frame.theme, mode))
@@ -319,7 +324,8 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   defp apply_style(element, _style), do: element
 
-  defp style(frame, name), do: Style.node(frame.styles, name)
+  # A furniture style over the part defaults the containers lay (spec/14 §3.8).
+  defp style(frame, name, own), do: Style.over(Defaults.at(frame, own, nil), frame.styles, name)
 
   # -- grid -----------------------------------------------------------------------------
 
@@ -332,7 +338,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     if lines == [] do
       []
     else
-      [group(lines, "grid", Style.resolve(style(frame, :grid), frame.theme, mode))]
+      [group(lines, "grid", Style.resolve(style(frame, :grid, nil), frame.theme, mode))]
     end
   end
 
@@ -460,7 +466,8 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   defp polar_axis(frame, node, axis, mode) do
-    style = Style.resolve(style(frame, Map.get(node, :style, :axis)), frame.theme, mode)
+    style_node = style(frame, Map.get(node, :style, :axis), Map.get(node, :defaults))
+    style = Style.resolve(style_node, frame.theme, mode)
     text_anchor = if node.scale == :angle, do: :middle, else: spoke_anchor(spoke_direction(node))
 
     group_style =

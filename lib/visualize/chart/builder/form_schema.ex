@@ -11,10 +11,14 @@ defmodule Visualize.Chart.Builder.FormSchema do
 
   @doc false
   @spec describe(Schema.kind()) :: [Schema.key_spec(), ...]
-  def describe(kind), do: Schema.describe(form(kind))
+  # A node's `defaults` (spec/14 §3.8, #651) have no form until #655, as the parts have none:
+  # the builder neither shows nor writes them, and a fragment that carries them keeps them.
+  def describe(kind),
+    do: kind |> form() |> Schema.describe() |> Enum.reject(&(&1.key == :defaults))
 
   @doc false
   @spec key(Schema.kind(), atom()) :: Schema.key_spec() | nil
+  def key(_kind, :defaults), do: nil
   def key(kind, key), do: Schema.key(form(kind), key)
 
   @doc false

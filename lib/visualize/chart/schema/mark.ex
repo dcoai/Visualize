@@ -176,7 +176,9 @@ defmodule Visualize.Chart.Schema.Mark do
       # A `:tiles` mark's provider: required of that type, invalid on any other (§5.2).
       spec(:tiles, {:node, :tiles}, :content),
       spec(:id, :name, :content),
-      spec(:frame, {:ref, :frame}, :binding)
+      spec(:frame, {:ref, :frame}, :binding),
+      # The defaults of the layers and groups it was placed from (spec/14 §3.8, #651).
+      spec(:defaults, {:node, :defaults}, :style)
     ]
   end
 
