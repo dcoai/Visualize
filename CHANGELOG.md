@@ -465,6 +465,15 @@ release it merely follows.
 
 ### Fixed
 
+- **The builder no longer slows down with the size of the color table** (#704, D-184).
+  Every builder event and render rebuilt and sorted the theme's ~190 color names once for
+  each name the color chooser listed, and rebuilt a node kind's key specs on every schema
+  lookup, so one editing pass cost about five times what it needed (5.6 million reductions
+  on a board with eight cells, now 2.5 million; the chooser's table alone 332,000, now
+  21,000). The schema's tables are now built when the library compiles, and the new
+  `Visualize.Theme.color_name?/2` tests a name against the theme's table without building
+  the list — use it in place of `name in Theme.color_names(theme)`.
+
 - **A board's export draws what the live board draws for its viewer** (#691, D-181).
   A snapshot export (SVG, PNG, printed pages) resolved `generate(...)` with only
   `config :visualize, generators:` and no assigns, so a board started with its own

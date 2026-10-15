@@ -2272,3 +2272,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A host that calls a renamed function or matches `{:type, :colour}` changes the name, by the CHANGELOG's table. A host passing `theme: :colour_safe` in code passes `:color_safe`; a stored design that names it keeps working.
 - New code and docs are held to American spelling by the gate.
 <!-- spelling: end -->
+
+## 184. D-184 — A table that is a function of nothing, or of the theme alone, is built once, and the builder's editing pass is held to a reduction budget
+
+**Context.** #704; work item #706. Main's `examples:test` timed out in the board-mode builder test (`builder_live_test.exs:293`, ExUnit's 60 s) with the stack in `Theme.color_names/1` under `Builder.Chain.resolved/2` under `Builder.Picker.groups/1` under `Builder.Editing.editing/1`. Measured on that test's board, one editing pass cost about 5.6 million reductions and the test 18 s alone. An eprof of one pass found two tables rebuilt per call: `Chain.resolved/2` rebuilt, de-duplicated and sorted the theme's ~190 color names for every name the picker's groups resolved (213 rebuilds a pass), and `Schema.describe/1` rebuilt a node kind's key specs on every call — about 12,000 calls and 150,000 key specs a pass, the larger half of its work — while `Schema.key/2` scanned the rebuilt list. Every builder event derives the pass at least once and every render once more, so the test, which binds every component to every feed, paid it hundreds of times.
+
+**Decision.**
+- **A table that depends on nothing is a compile-time constant.** The schema's tables are built when the library compiles (`Visualize.Chart.Schema.Design`, `Schema.Frame`, `Schema.Mark`, sharing `Schema.Spec`), each with its keys by name, and `describe/1` and `key/2` look them up (spec/14 §14.2).
+- **A membership test builds no list.** `Visualize.Theme.color_name?/2` answers `name in color_names(theme)` from the theme's slots, its own and the default's `colors` and a compile-time set of the CSS names (spec/08 §7.6). The picker's chain and groups and the legend's swatch use it.
+- **A value that is a function of the theme alone is derived once per editing pass** and shared by every field that reads it: the picker's groups (spec/14 §19.10).
+- **The editing pass has a reduction budget** (spec/12 §6): `Editing.editing/1` on the builder fixture's design with a color field selected, the second of two counts (#703), within a budget set from the measured cost after the fix with headroom.
+
+**Rejected.**
+- **Raising the test's timeout.** The test was near its limit because the code was quadratic; a longer timeout hides the next table rebuilt per call the same way.
+- **A lazily filled cache (`:persistent_term`) of the schema's tables.** It would work, but it is shared mutable state whose first filler pays the cost — the kind #703 suspects of moving the gallery's counts — where a compile-time table is a constant of the code.
+- **Memoizing the picker's groups across passes in the socket's assigns.** Once per pass is linear in the table and a few thousand reductions after the fix; carrying a derived value in assigns would need invalidating on every theme change.
+
+**Consequences.**
+- One editing pass on the board test's board costs a fraction of what it did, and the board-mode test runs well inside its timeout (numbers on #704).
+- A node kind's table is changed in `Schema.Design`, `Schema.Frame` or `Schema.Mark`; a table may call any pure function at compile time, and none may read the application's environment, since a compile-time table could not see it.
+- A per-name or per-field rebuild that returns fails `builder_cost_test.exs` by name.

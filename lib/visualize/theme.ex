@@ -108,6 +108,8 @@ defmodule Visualize.Theme do
                })
   # The CSS named colors, the table's base (spec/08 §1.2, §7.1).
   @css_names Enum.map(Color.named_colors(), &String.to_atom/1)
+  # The same names as a set, for a membership test that does not scan the list (D-184).
+  @css_set Map.new(@css_names, &{&1, true})
   # A name a theme adds is written into CSS as a custom property: plain words only.
   @css_word ~r/^[a-z][a-z0-9_]*$/
 
@@ -701,6 +703,34 @@ defmodule Visualize.Theme do
     |> Enum.sort()
   end
 
+  @doc """
+  Whether `name` is of the theme's color table (spec/08 §7.1, §7.6): `name in
+  color_names(theme)`, answered without building the list — so a caller that tests many
+  names does not rebuild and sort the table per name (#704, D-184).
+
+      iex> theme = Visualize.Theme.default()
+      iex> Enum.map([:red, :bad, :axis, :series_3, :steelblue], &Visualize.Theme.color_name?(theme, &1))
+      [true, true, true, true, true]
+      iex> Enum.map([:series_99, :thick, "red"], &Visualize.Theme.color_name?(theme, &1))
+      [false, false, false]
+
+  """
+  @spec color_name?(t(), term()) :: boolean()
+  def color_name?(%__MODULE__{} = theme, name) when is_atom(name) do
+    name in @color_slots or name in @role_slots or Map.has_key?(@css_set, name) or
+      Map.has_key?(@light_colors, name) or Map.has_key?(own_colors(theme), name) or
+      series_slot?(theme, name)
+  end
+
+  def color_name?(%__MODULE__{}, _name), do: false
+
+  defp series_slot?(%__MODULE__{series: series}, name) do
+    case series_index(name) do
+      k when is_integer(k) -> k >= 1 and k <= length(series) and name == series_atom(k)
+      nil -> false
+    end
+  end
+
   @doc "The `:series_k` slot the positive index `i` cycles to over the theme's series."
   @spec series_slot(t(), pos_integer()) :: atom()
   def series_slot(%__MODULE__{series: series}, i) when is_integer(i) and i >= 1 do
@@ -756,7 +786,7 @@ defmodule Visualize.Theme do
   def css_name(slot) when slot in @fixed_slots, do: "--vis-" <> hyphenated(slot)
 
   def css_name(slot) when is_atom(slot) do
-    known? = slot in @css_names or Map.has_key?(@light_colors, slot)
+    known? = Map.has_key?(@css_set, slot) or Map.has_key?(@light_colors, slot)
 
     case series_index(slot) do
       k when is_integer(k) and k >= 1 -> "--vis-" <> hyphenated(slot)
@@ -962,7 +992,7 @@ defmodule Visualize.Theme do
   # the table has no such name.
   defp lookup(theme, name) do
     Map.get(own_colors(theme), name) || Map.get(@light_colors, name) ||
-      if(name in @css_names, do: Color.named(Atom.to_string(name)))
+      if(Map.has_key?(@css_set, name), do: Color.named(Atom.to_string(name)))
   end
 
   # A name's literal. `seen` carries the names on the way, so an entry that reaches itself

@@ -2,7 +2,7 @@ defmodule Visualize.Chart.Schema.Mark do
   @moduledoc false
   # The marks' node kinds (spec/14 §5): reached through `Visualize.Chart.Schema`.
 
-  import Visualize.Chart.Schema, only: [spec: 3, spec: 4, style_stack: 0]
+  import Visualize.Chart.Schema.Spec, only: [spec: 3, spec: 4, style_stack: 0]
 
   # Type, required channels, optional channels, option keys (spec/14 §5.2-5.3). `series`
   # is a channel of every type that draws rows (D-126).
