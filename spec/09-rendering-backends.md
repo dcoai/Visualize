@@ -93,6 +93,8 @@ Tags, attributes and text are rendered by the functions of `Visualize.SVG.Render
 
 ### 2.5 Style and transform serialisation
 
+A colour value reaches the SVG backend already resolved for `:css` (spec/08 §1.9, §7.3). A theme name arrives as `var(--vis-…, literal)`, and a typed color's transform as the CSS that computes it, `color-mix(in oklab, …)` or a relative `oklch(from …)` (#665). The backend writes either as it writes any string. A canvas backend is given `:literal` colours, where a transform is the literal it computes.
+
 `style_to_attrs/1` drops `nil` values and converts atoms that have SVG spellings:
 
 | Style key | Atom value | Emitted |
