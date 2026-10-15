@@ -19,20 +19,12 @@ defmodule Visualize.Chart.Validator do
   """
 
   alias Visualize.Chart.{Fact, Migration, Schema, Text, Urls, Var}
-
-  alias Visualize.Chart.Validator.{
-    Colors,
-    Defaults,
-    Domain,
-    Frames,
-    Motion,
-    Palette,
-    Units,
-    Words
-  }
-
+  alias Visualize.Chart.Validator.{Colors, Defaults, Domain, Frames, Palette, Units, Words}
   alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
+
+  # The motion parts' node kinds, whose times and names Validator.Motion checks (spec/14 §3.10).
+  @motion_kinds Visualize.Chart.Validator.Motion.kinds()
 
   @typedoc """
   Keys and list indexes from the design to a value; `[]` is the design. A path into a
@@ -533,9 +525,8 @@ defmodule Visualize.Chart.Validator do
     end
   end
 
-  defp held(kind, map, path, _ctx)
-       when kind in [:style_transition, :part_transition, :style_animation],
-       do: Motion.check(map, path)
+  defp held(kind, map, path, _ctx) when kind in @motion_kinds,
+    do: Visualize.Chart.Validator.Motion.check(map, path)
 
   defp held(_kind, _map, _path, _ctx), do: []
 

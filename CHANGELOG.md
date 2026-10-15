@@ -17,6 +17,20 @@ release it merely follows.
 
 ### Added
 
+- **Enter and exit by identity** (#678, D-176). `enter: %{name: :grow}` (or `:fade`) and
+  `exit: %{name: :explode}` (or `:fade`, `:shrink`, or a host's keyframes) say how a row's
+  element arrives and leaves: a row whose identity a drawing gains enters, one it loses
+  exits. Enter is a CSS animation on the new element's wrapper; exit is played by the new
+  **`MotionHook`**, which copies each leaving element before a LiveView patch and plays the
+  copy in an overlay over the chart — `:explode` cuts it into sixteen pieces that fly
+  outward, turn and fade. `Visualize.Components.Chart` and a board's cell put `MotionHook`
+  around any drawing whose elements carry `data-vis-id`, so a board whose feed loses a row
+  explodes it with no host code. The canvas hooks draw a gone identity again while its exit
+  plays. Reduced motion shows neither. **A compiled chart's SVG layers** — a board cell's
+  drawing among them — now write a style's transitions and animations as the frame does;
+  before, they reached a board's SVG as nothing. The examples' interaction page has a
+  bar per service that fades between states, pulses in error, and explodes when clicked.
+
 - **Style animations** (#677, D-176). `animation: %{name: :pulse, duration: 1200}` runs a
   motion while the style holds — `:pulse`, `:blink`, `:shake`, `:spin`, or a string naming
   the host's own keyframes — with `easing`, `iterations` (`:infinite` by default) and
@@ -36,7 +50,7 @@ release it merely follows.
   it (`error: %{fill: color(:red), transition: %{duration: 300}}`), and `defaults` give it
   to every element below. In `:css` SVG each distinct transition is one class and one rule
   in a `<style>` the frame writes, the easing as CSS `linear()` sampled from the same
-  curve, and a moving element's colours are written as `oklch()` so the browser blends
+  curve, and a moving element's colors are written as `oklch()` so the browser blends
   them in OKLab. On a canvas, `CanvasChart` and `CanvasBinaryChart` move each element in a
   `requestAnimationFrame` loop, keyed by the row's identity, which a moving mark's
   elements now carry as `data-vis-id` (the slot's declared identity, else the series);

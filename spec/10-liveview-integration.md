@@ -253,7 +253,7 @@ The radius is `min(width, height)/2`. The summed hierarchy is laid out by `Visua
 
 | Function | Contract |
 |---|---|
-| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the motion loop `VisualizeMotion` (`Visualize.Hooks.Motion.js_motion/0`, 4.5), the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, `KeyboardHook`, `BoardHook`, then one `export default { … }` object listing the twelve hooks — each name is exported exactly once (D-40, D-48). |
+| `Visualize.Hooks.js_code/0` | Returns the complete ES-module source: a header comment, `ZoomHook`, the sync bus `VisualizeSync` (`Visualize.Hooks.Sync.js_bus/0`, 4.3) — before every hook that uses it — `BrushHook`, the motion loop `VisualizeMotion` (`Visualize.Hooks.Motion.js_motion/0`, 4.5), the binary decoder (`Visualize.Hooks.CanvasBinary.js_decoder/0`), `CanvasChart`, `CanvasBinaryChart`, `CanvasIncrementalChart`, `ResizeHook`, `TooltipHook`, `CrosshairHook`, `LegendHook`, `BuilderHook`, `KeyboardHook`, `BoardHook`, `MotionHook`, then one `export default { … }` object listing the thirteen hooks — each name is exported exactly once (D-40, D-48). |
 | `Visualize.Hooks.Sync.js_bus/0` | Returns the source of `const VisualizeSync = {…}`, the bus of 4.3 that `TooltipHook`, `CrosshairHook` and `BrushHook` share. It is not exported: it is the hooks' own, and a host joins a group through a design key, not through it. |
 | `Visualize.Hooks.Motion.js_motion/0` | Returns the source of `const VisualizeMotion = {…}`, the frame loop of 4.5 that `CanvasChart` and `CanvasBinaryChart` share. Like the bus it is the hooks' own and not exported. |
 | `Visualize.Hooks.default_path/0` | Returns `"assets/js/visualize_hooks.js"`, relative to the current working directory. |
@@ -342,19 +342,22 @@ A member maps a received extent through its own five numbers, **clipped to its d
 **A draw.** A hook replays a stream with the state: `begin(state, now)` before it (the clock, `reduced` read from `matchMedia('(prefers-reduced-motion: reduce)')` when the page has one, nothing active); the `motion` command or record sets `state.span` to `{id, box, transitions}` and `motionEnd` clears it; and every `fill` and `stroke` inside a span is made through `draw(state, ctx, op, fn)`. For a `fill` the properties are `fillStyle` (the transition's `fill`) and `globalAlpha` (its `opacity`); for a `stroke`, `strokeStyle` and `lineWidth` (its `stroke`) and `globalAlpha`. For each, the context's current value is the **target**:
 
 - an identity's first draw shows its target, and starts nothing;
-- a target that differs from the motion's `to` starts a motion from the value **shown now** — so a change in the middle of one goes on from where it stands — to the target, over the property's duration, unless the property does not move (no entry, a duration of `0`), the reader prefers reduced motion, or the two values cannot be mixed (a gradient, a hatch, a colour it cannot parse), when it shows the target at once;
-- the value shown is `from` mixed with `to` at the eased fraction of the time gone: the samples read piecewise linearly — the curve CSS's `linear()` draws — numbers mixed linearly and colours in OKLab, written `rgba(r, g, b, a)`; a colour is read from `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`, the forms a context answers.
+- a target that differs from the motion's `to` starts a motion from the value **shown now** — so a change in the middle of one goes on from where it stands — to the target, over the property's duration, unless the property does not move (no entry, a duration of `0`), the reader prefers reduced motion, or the two values cannot be mixed (a gradient, a hatch, a color it cannot parse), when it shows the target at once;
+- the value shown is `from` mixed with `to` at the eased fraction of the time gone: the samples read piecewise linearly — the curve CSS's `linear()` draws — numbers mixed linearly and colors in OKLab, written `rgba(r, g, b, a)`; a color is read from `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`, the forms a context answers.
 
 `draw` sets the shown values, calls `fn`, and puts the targets back, so a draw after the span is untouched. `end(state)` drops every motion whose key the replay did not draw — an identity gone from the stream — and answers whether any motion is still running.
 
 **The loop.** After a replay that leaves a motion running, the hook requests one animation frame, and that frame replays the same stream — its parsed commands or decoded bytes, kept — with the clock advanced; a new stream arriving meanwhile is drawn at once and the loop goes on with it. A replay that leaves nothing running requests nothing, so **a stream without a span costs one draw and no frame**, as before #653. `destroyed()` cancels a pending frame.
 
-**Animations** (#677, spec/14 §3.11). `open` saves the context; when the span carries an animation and the reader does not prefer reduced motion, it reads the values at the time since the identity first drew it with that animation, less its delay — each property between the two keyframes about the fraction through the iteration that name it, the segment eased by the samples — translates by `x` and `y`, turns by `rotate` and scales by `scale` about the box's centre, and keeps `opacity` as a factor `draw` multiplies `globalAlpha` by; `close` restores. A running animation keeps `active`, so the loop runs while any has iterations left. `VisualizeMotion.register(name, keyframes)` registers a host's keyframes — `[[offset, {opacity, x, y, rotate, scale}], …]`, a property absent where a keyframe does not name it — under the name a design's `animation.name` gives as a string; the hooks look a span's `null` keyframes up there, and run nothing for a name nobody registered.
+**Animations** (#677, spec/14 §3.11). `open` saves the context; when the span carries an animation and the reader does not prefer reduced motion, it reads the values at the time since the identity first drew it with that animation, less its delay — each property between the two keyframes about the fraction through the iteration that name it, the segment eased by the samples — translates by `x` and `y`, turns by `rotate` and scales by `scale` about the box's center, and keeps `opacity` as a factor `draw` multiplies `globalAlpha` by; `close` restores. A running animation keeps `active`, so the loop runs while any has iterations left. `VisualizeMotion.register(name, keyframes)` registers a host's keyframes — `[[offset, {opacity, x, y, rotate, scale}], …]`, a property absent where a keyframe does not name it — under the name a design's `animation.name` gives as a string; the hooks look a span's `null` keyframes up there, and run nothing for a name nobody registered.
+
+**Enter and exit** (#678, spec/14 §3.12). A span's enter starts the first time the hook draws its identity — a key it has not shown — and runs once, its keyframes' values applied as an animation's are and composed with them. A span with an exit is recorded at `close`: the transform, the paint, the stroke, the width and the alpha the span opened with, its box, and a function that draws its commands again (`CanvasChart`: the parsed commands between the span's `motion` and `motionEnd`; `CanvasBinaryChart`: `executeVisualizeBinary` over the span's bytes, without motion). `end(state, ctx)` turns every recorded identity the replay did not draw into a **ghost** and draws every ghost over the stream: under the recorded state, its keyframes' values for `:fade`, `:shrink` and a registered name, and for `:explode` the sixteen pieces of spec/14 §3.12, each clipped to its cell; a finished ghost is dropped, and a running one keeps the loop. A reader who prefers reduced motion gets no enter and no ghost.
 
 **Reduced motion** is read at every replay, so a reader who turns it on mid-motion sees the targets on the next frame, and no animation.
 
 
-`test/visualize/hooks/motion_test.exs` executes it under the harness of spec/12 §6, whose stub runs `requestAnimationFrame` on its manual clock: a fill moving from one colour to another through OKLab and reaching its end, a width moving numerically, a change in the middle, reduced motion, and a stream without a span requesting no frame; a pulse changing the alpha over time and repeating, a finite blink stopping, a spin turning about the box's centre, a registered keyframe running, and reduced motion running none (#677).
+
+`test/visualize/hooks/motion_test.exs` executes it under the harness of spec/12 §6, whose stub runs `requestAnimationFrame` on its manual clock: a fill moving from one color to another through OKLab and reaching its end, a width moving numerically, a change in the middle, reduced motion, and a stream without a span requesting no frame; a pulse changing the alpha over time and repeating, a finite blink stopping, a spin turning about the box's center, a registered keyframe running, and reduced motion running none (#677).
 
 ## 5. Visualize.Hooks.Zoom
 
@@ -952,6 +955,8 @@ end
 
 A click it cannot resolve sends nothing. A chart whose marks declare no event needs no component: it renders as SVG as before, under a `TooltipHook` of the page's own for its tooltips.
 
+**Motion** (#678, spec/14 §3.12): when the drawing names identities — it holds `data-vis-id` — the SVG sits inside a `<div id="<id>-motion" phx-hook="MotionHook">` within the tooltip's element, so a row that leaves plays its exit (20); a drawing without one renders as before.
+
 ### 19.4 Functions
 
 | Function | Contract |
@@ -963,3 +968,25 @@ A click it cannot resolve sends nothing. A chart whose marks declare no event ne
 | `Visualize.Event.name/1` | A declared name, an atom or a string, as the event's string. |
 | `Visualize.Event.identity/3` | `identity(mark, row, schema)`: the row's identity in the board's selection form — `{field, value}`, a map for a composite declared identity, or `nil` — by the declared identity, else the inference (spec/15 §13.2); `schema` a `Visualize.Data.Schema` or `nil`. |
 | `Visualize.Event.item/2` | `item(mark, identity)`: `{mark's id or type, identity}` with the identity bare for one field, or `nil` for a `nil` identity (19.1). |
+
+## 20. Visualize.Hooks.Motion: MotionHook
+
+**Implemented** (#653, work item #678, D-176 amended). The hook that plays a chart's exits and restarts its enters (spec/14 §3.12). It draws outside the patched subtree, as every hook does (D-75): a leaving element is no longer in the markup a patch leaves.
+
+### 20.1 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.Hooks.Motion.js_hook/0` | Returns the source of `export const MotionHook = {…}` (20.2). |
+
+### 20.2 `MotionHook` behaviour
+
+Attach with `phx-hook="MotionHook"` and an `id` on an element holding a chart's `<svg>`. It reads no attribute of its own: the elements carry `data-vis-id` and, with an exit, `data-vis-exit` (spec/14 §3.12).
+
+- **Before a patch** (`beforeUpdate()`): every element under the hook element carrying `data-vis-id` is recorded with the identity it carries; one that also carries `data-vis-exit` is copied — deeply, inside shallow copies of each ancestor up to the chart's `<svg>`, which bring its transforms and inherited paint — with the `<svg>`'s `viewBox` and bounding rectangle.
+- **After a patch** (`updated()`): each recorded identity with an exit that no element carries now is played in the overlay; and each element that carried another identity before the patch has its nearest `vis-enter-` wrapper's class taken off and put back, after a layout read, so the browser runs its enter again.
+- **The overlay** is one `<svg>` appended to `document.body` the first time an exit plays, positioned absolutely over the chart's rectangle (page coordinates, the page's scroll added), `pointer-events: none`, of the chart's `viewBox`. An exit's copy is appended under a wrapper `<g>`; the hook's frame loop (`requestAnimationFrame`) sets the wrapper's `opacity` and `transform` from the built-in's keyframes at the eased fraction of the time gone (spec/10 §4.5), or, for `:explode`, sixteen pieces — each a moving `<g>` over a `<g clip-path>` of its cell's `<clipPath>` holding a copy — moved, turned and faded as spec/14 §3.12 says; a host's name runs as `animation: <name> <duration>ms <easing> forwards` on the wrapper. At its end the wrapper is removed.
+- **Reduced motion** (`matchMedia('(prefers-reduced-motion: reduce)')`): nothing is recorded or played, and no enter is restarted.
+- `destroyed()` cancels the frame loop and removes the overlay.
+
+`test/visualize/hooks/motion_hook_test.exs` executes it under the harness of spec/12 §6, over markup a board's cell rendered before and after its rows lost one: the gone row's copy is placed and exploded, its pieces moving outward and fading, and removed at the end; a `:fade` and a `:shrink`; an element that a patch gave another identity restarting its enter; and reduced motion placing nothing.

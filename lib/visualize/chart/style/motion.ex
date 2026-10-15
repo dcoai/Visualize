@@ -16,7 +16,7 @@ defmodule Visualize.Chart.Style.Motion do
   @doc false
   # The element keys a motion part projects to.
   @spec keys() :: [atom(), ...]
-  def keys, do: [:transition, :animation]
+  def keys, do: [:transition, :animation, :enter, :exit]
 
   @doc false
   # Whether a resolved element style carries motion.
@@ -60,6 +60,21 @@ defmodule Visualize.Chart.Style.Motion do
   end
 
   def animation(_node), do: nil
+
+  @doc false
+  # An `enter` or an `exit` part as the element carries it (spec/14 §3.12): its name, its
+  # duration and its easing, the defaults in place; `nil` for a part without a name.
+  @spec presence(term()) :: map() | nil
+  def presence(%{name: name} = node)
+      when not is_struct(node) and ((is_atom(name) and name != nil) or is_binary(name)) do
+    %{
+      name: name,
+      duration: Map.get(node, :duration) || 400,
+      easing: Map.get(node, :easing) || :cubic_out
+    }
+  end
+
+  def presence(_node), do: nil
 
   defp entry(node, property, whole?) do
     case Map.get(node, property) do

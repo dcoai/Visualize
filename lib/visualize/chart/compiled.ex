@@ -51,6 +51,7 @@ defmodule Visualize.Chart.Compiled do
   alias Visualize.Chart.{Applied, Frame, Mark}
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
+  alias Visualize.Chart.Frame.Motion, as: FrameMotion
   alias Visualize.Chart.Transform.Force
   alias Visualize.Data.Delivery
   alias Visualize.IR.{Element, Transform}
@@ -363,11 +364,11 @@ defmodule Visualize.Chart.Compiled do
       width: compiled.size.width,
       height: compiled.size.height,
       margin: compiled.margin,
-      static: compiled.defs ++ layer(compiled, drawn, :static, false),
+      static: moving(compiled.defs ++ layer(compiled, drawn, :static, false)),
       dynamic: if(canvas == [], do: nil, else: canvas),
       dynamic_style: %{},
       canvas_format: format(compiled),
-      dynamic_svg: layer(compiled, drawn, :dynamic_svg, false),
+      dynamic_svg: moving(layer(compiled, drawn, :dynamic_svg, false)),
       backdrop: layer(compiled, drawn, :backdrop, false)
     }
   end
@@ -381,7 +382,7 @@ defmodule Visualize.Chart.Compiled do
   def svg(%__MODULE__{} = compiled, sources) when is_map(sources) do
     sources = sources!(compiled, sources)
     {frame, hi} = realise(compiled, sources, nil)
-    children = layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true)
+    children = moving(layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true))
 
     Element.group(compiled.defs ++ children,
       style: %{class: "frame"},
@@ -405,7 +406,9 @@ defmodule Visualize.Chart.Compiled do
     {frame, hi} = realise(compiled, sources, Keyword.get(opts, :now))
     compiled = %{compiled | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
-    children = layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true)
+
+    children =
+      moving(layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true))
 
     group =
       Element.group(compiled.defs ++ children,
@@ -900,8 +903,16 @@ defmodule Visualize.Chart.Compiled do
       width: size.width,
       height: size.height,
       margin: %{margin | left: margin.left + box.x, top: margin.top + box.y},
-      static: elements
+      static: moving(elements)
     )
+  end
+
+  # An SVG layer's motion as its classes and the one `<style>` they need (spec/14
+  # §3.10–§3.12, D-176), as `Visualize.Chart.Frame.generate/2` writes a frame's; a layer
+  # without motion is the elements it was.
+  defp moving(elements) do
+    {group, sheet} = FrameMotion.apply(Element.group(elements), :css)
+    sheet ++ group.children
   end
 
   defp format(%{targets: targets}) do

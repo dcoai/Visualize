@@ -18,7 +18,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
 
   import Phoenix.ConnTest, only: [build_conn: 0, init_test_session: 2, html_response: 2]
 
-  alias ExamplesWeb.InteractionLive
+  alias ExamplesWeb.{InteractionLive, MotionDemo}
 
   @endpoint ExamplesWeb.Endpoint
   alias Visualize.Backend.CanvasBinary.Decoder
@@ -197,6 +197,39 @@ defmodule ExamplesWeb.InteractionLiveTest do
              )
   end
 
+  # The motion demo (#653): its bars name their services, change state with a fade, pulse
+  # in error and explode when deleted, through MotionHook around the chart's SVG.
+  test "the motion demo's bars carry their identities and leave by exploding, through MotionHook" do
+    {tag, rest} = page({720, 380}) |> element("motion-chart")
+    assert tag =~ ~s(phx-hook="TooltipHook")
+    assert rest =~ ~s(<div id="motion-chart-motion" phx-hook="MotionHook">)
+    assert rest =~ ~s(data-vis-id="main.1.name=db")
+    assert rest =~ "data-vis-exit=\"[&quot;explode&quot;,800,"
+    assert rest =~ "vis-enter-"
+    assert rest =~ "@keyframes vis-enter-grow"
+
+    rows = MotionDemo.rows()
+    errored = rows |> MotionDemo.next_state(0) |> MotionDemo.next_state(0)
+    assert hd(errored).state == :error
+
+    svg = Visualize.Chart.render(MotionDemo.applied(errored, {720, 380}), root: true)
+    assert svg =~ "@keyframes vis-pulse"
+    assert svg =~ ~r/<g class="vis-animation-[0-9a-z]+"><rect/
+
+    # A click on a bar is the page's delete: the row goes, and the chart with it.
+    socket = %Phoenix.LiveView.Socket{
+      assigns: %{__changed__: %{}, motion_rows: rows, motion_turn: 0, size: {720, 380}}
+    }
+
+    event = %Visualize.Event{event: "delete", row: %{name: "db", load: 0, state: :ok}}
+
+    assert {:noreply, %{assigns: %{motion_rows: left, motion_chart: chart}}} =
+             InteractionLive.handle_info({:visualize_event, "motion-chart", event}, socket)
+
+    assert Enum.map(left, & &1.name) == Enum.map(rows, & &1.name) -- ["db"]
+    refute Visualize.Chart.render(chart) =~ ~s(data-vis-id="main.1.name=db")
+  end
+
   # Every demo's panel, its heading and the id of the chart it holds (#505); the code
   # section holds its markup in place of a chart.
   @panels [
@@ -204,6 +237,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
     {"panel-crosshair-svg", "Crosshair over the SVG", "crosshair-svg"},
     {"panel-crosshair-canvas", "Crosshair over the canvas", "crosshair-canvas"},
     {"panel-legend", "Legend toggling", "legend-chart"},
+    {"panel-motion", "Motion by identity", "motion-chart"},
     {"panel-code", "The design and the markup", nil}
   ]
 

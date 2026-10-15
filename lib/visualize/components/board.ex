@@ -381,6 +381,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
             crosshair: (view && view.crosshair) || %{},
             keyboard: (view && view.keyboard) || %{},
             drawn: view && view.drawn,
+            # A drawing that names identities plays its exits and enters (spec/15 §9.1).
+            motion:
+              view != nil and is_binary(view.svg) and String.contains?(view.svg, "data-vis-id"),
             label: label(assigns.title, assigns.cell, state)
           )
 
@@ -419,7 +422,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   data-tooltip-target={@myself}
                   data-tooltip-drawn={@drawn}
                 >
-                  {Phoenix.HTML.raw(@svg)}
+                  <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">
+                    {Phoenix.HTML.raw(@svg)}
+                  </div>
+                  {if @motion, do: nil, else: Phoenix.HTML.raw(@svg)}
                 </div>
               </div>
             </div>

@@ -6,6 +6,7 @@ defmodule Visualize.Chart.Validator.Motion do
   # stylesheet.
 
   @times [:duration, :delay, :iterations]
+  @kinds [:style_transition, :part_transition, :style_animation, :style_enter, :style_exit]
   @identifier ~r/\A-?[_a-zA-Z][_a-zA-Z0-9-]*\z/
 
   @doc false
@@ -27,6 +28,11 @@ defmodule Visualize.Chart.Validator.Motion do
   end
 
   defp name(_name, _path), do: []
+
+  @doc false
+  # The node kinds of the motion parts.
+  @spec kinds() :: [atom(), ...]
+  def kinds, do: @kinds
 
   @doc false
   # Whether a host's keyframes name may be written into a stylesheet.

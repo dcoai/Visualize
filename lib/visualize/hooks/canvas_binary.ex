@@ -356,6 +356,8 @@ defmodule Visualize.Hooks.CanvasBinary do
         const paints = [];
         const scopes = [];
         let fillPaint = null, strokePaint = null, box = null;
+        // Where the open motion span's records begin (#678).
+        let opened = 0;
 
         while (offset < maxOffset) {
           const cmd = bytes[offset++];
@@ -513,12 +515,15 @@ defmodule Visualize.Hooks.CanvasBinary do
                 VisualizeMotion.open(motion, ctx, VisualizeMotion.parseSpan(text));
               }
               offset += 2 + length;
+              opened = offset;
               break;
             }
 
-            case 0x54: // motion_end (§4.3.16)
-              if (motion) VisualizeMotion.close(motion, ctx);
+            case 0x54: { // motion_end (§4.3.16): a span with an exit keeps its bytes (#678)
+              const [s, e] = [opened, offset - 1];
+              if (motion) VisualizeMotion.close(motion, ctx, () => (c, m) => executeVisualizeBinary(c, bytes, s, e, m));
               break;
+            }
 
             case 0x00: { // version (spec/09 §4.3.11)
               const version = bytes[offset++];
@@ -704,7 +709,7 @@ defmodule Visualize.Hooks.CanvasBinary do
           reportVisualizeError(this.el, error);
           throw error;
         }
-        if (VisualizeMotion.end(this.motion)) this.loop();
+        if (VisualizeMotion.end(this.motion, ctx)) this.loop();
       },
       loop() {
         if (this.motionFrame !== null) return;

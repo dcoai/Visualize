@@ -4,7 +4,7 @@ defmodule Visualize.HooksTest do
 
   alias Visualize.Hooks
 
-  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook TooltipHook CrosshairHook LegendHook BuilderHook KeyboardHook BoardHook)
+  @hooks ~w(ZoomHook BrushHook CanvasChart CanvasBinaryChart CanvasIncrementalChart ResizeHook TooltipHook CrosshairHook LegendHook BuilderHook KeyboardHook BoardHook MotionHook)
 
   test "every export name appears once, so a bundler accepts the file" do
     names =

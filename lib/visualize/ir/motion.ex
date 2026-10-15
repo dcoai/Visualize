@@ -80,23 +80,23 @@ defmodule Visualize.IR.Motion do
   end
 
   @doc """
-  A colour as `oklch()`, so CSS interpolates it in OKLab (spec/14 §3.10): a literal
+  A color as `oklch()`, so CSS interpolates it in OKLab (spec/14 §3.10): a literal
   `Visualize.Color.parse/1` reads as its coordinates, an `oklch(…)` as it is, anything
   else — a theme's `var(--vis-…, literal)`, a transform's `color-mix(…)` — as the relative
-  colour `oklch(from <value> l c h / alpha)`. `:none`, `:current_color`, a paint and any
+  color `oklch(from <value> l c h / alpha)`. `:none`, `:current_color`, a paint and any
   value that is not a string pass through.
   """
   @spec oklch(term()) :: term()
-  def oklch("oklch(" <> _ = colour), do: colour
+  def oklch("oklch(" <> _ = color), do: color
 
-  def oklch(colour) when is_binary(colour) do
-    case Color.parse(colour) do
+  def oklch(color) when is_binary(color) do
+    case Color.parse(color) do
       nil ->
-        "oklch(from #{colour} l c h / alpha)"
+        "oklch(from #{color} l c h / alpha)"
 
       parsed ->
         %{l: l, c: c, h: h, opacity: a} = Color.to_oklch(parsed)
-        # A grey has no hue: `0`, which is what CSS reads a powerless hue as.
+        # A gray has no hue: `0`, which is what CSS reads a powerless hue as.
         h = if c < 1.0e-4, do: 0, else: h
         c = if c < 1.0e-4, do: 0, else: c
         coords = Enum.map_join([tidy(l), tidy(c), tidy(Float.round(h * 1.0, 2))], " ", &num/1)
@@ -115,11 +115,40 @@ defmodule Visualize.IR.Motion do
   @spec span(String.t(), Element.t(), map()) :: list()
   def span(id, %Element{} = element, style) do
     transitions = transitions(Map.get(style, :transition) || [])
+    animation = style[:animation] && animation(style.animation)
+    enter = style[:enter] && presence(:enter, style.enter)
+    exit = style[:exit] && presence(:exit, style.exit)
 
-    case Map.get(style, :animation) do
-      %{} = animation -> [id, box(element), transitions, animation(animation)]
-      nil -> [id, box(element), transitions]
-    end
+    # Trailing absent motions are not written, so a span says only what it carries.
+    [id, box(element), transitions, animation, enter, exit]
+    |> Enum.reverse()
+    |> Enum.drop_while(&is_nil/1)
+    |> Enum.reverse()
+  end
+
+  # An entrance or an exit as the span carries it (spec/09 §3.3.5): the name, the duration,
+  # the samples and a built-in's keyframes, `nil` for `:explode` and a host's (#678).
+  defp presence(kind, %{name: name} = p),
+    do: [to_string(name), p.duration, samples(p.easing), wire_keyframes({kind, name})]
+
+  @doc """
+  The text of `data-vis-exit` for `element` leaving with `exit` (spec/14 §3.12): the name,
+  the duration, the samples, the element's box as drawn and a built-in's keyframes, as
+  JSON.
+
+      iex> exit = %{name: :fade, duration: 300, easing: :linear}
+      iex> Visualize.IR.Motion.exit_attribute(exit, Visualize.IR.Element.rect(0, 0, 4, 2))
+      ~s(["fade",300,[0,1],[0,0,4,2],[[0,1,null,null,null,null],[1,0,null,null,null,null]]])
+  """
+  @spec exit_attribute(map(), Element.t()) :: String.t()
+  def exit_attribute(%{name: name} = exit, %Element{} = element) do
+    json([
+      to_string(name),
+      exit.duration,
+      samples(exit.easing),
+      box(element),
+      wire_keyframes({:exit, name})
+    ])
   end
 
   # The element's tight box as drawn: its bounds mapped through its own transform, the
@@ -156,6 +185,8 @@ defmodule Visualize.IR.Motion do
   end
 
   defp wire_keyframes(name) when is_binary(name), do: nil
+  defp wire_keyframes({_kind, name}) when is_binary(name), do: nil
+  defp wire_keyframes({:exit, :explode}), do: nil
 
   defp wire_keyframes(name) do
     for {offset, values} <- keyframes(name),
@@ -165,7 +196,7 @@ defmodule Visualize.IR.Motion do
   @doc """
   A built-in animation's keyframes (spec/14 §3.11): offsets from `0` to `1`, each with the
   values there of `:opacity`, `:x`, `:y` (a translation in user units), `:rotate` (degrees,
-  about the centre of the element's box as drawn) and `:scale`.
+  about the center of the element's box as drawn) and `:scale`.
 
       iex> Visualize.IR.Motion.keyframes(:pulse)
       [{0, %{opacity: 1}}, {0.5, %{opacity: 0.35}}, {1, %{opacity: 1}}]
@@ -183,6 +214,12 @@ defmodule Visualize.IR.Motion do
 
   def keyframes(:spin), do: [{0, %{rotate: 0}}, {1, %{rotate: 360}}]
 
+  # An entrance's and an exit's (spec/14 §3.12, #678); `:explode` is drawn by the hooks.
+  def keyframes({:enter, :fade}), do: [{0, %{opacity: 0}}, {1, %{opacity: 1}}]
+  def keyframes({:enter, :grow}), do: [{0, %{scale: 0}}, {1, %{scale: 1}}]
+  def keyframes({:exit, :fade}), do: [{0, %{opacity: 1}}, {1, %{opacity: 0}}]
+  def keyframes({:exit, :shrink}), do: [{0, %{scale: 1}}, {1, %{scale: 0}}]
+
   @doc """
   A built-in's keyframes as CSS: `@keyframes vis-<name> { … }`, each offset a percentage,
   `opacity` as itself, `x` and `y` as `translate`, `rotate` and `scale` as the individual
@@ -191,15 +228,18 @@ defmodule Visualize.IR.Motion do
       iex> Visualize.IR.Motion.css_keyframes(:spin)
       "@keyframes vis-spin { 0% { rotate: 0deg; } 100% { rotate: 360deg; } }"
   """
-  @spec css_keyframes(atom()) :: String.t()
+  @spec css_keyframes(atom() | {:enter, atom()}) :: String.t()
   def css_keyframes(name) do
     frames =
       Enum.map_join(keyframes(name), " ", fn {offset, values} ->
         "#{num(tidy(offset * 100))}% { #{css_values(values)} }"
       end)
 
-    "@keyframes vis-#{name} { #{frames} }"
+    "@keyframes #{keyframes_name(name)} { #{frames} }"
   end
+
+  defp keyframes_name({kind, name}), do: "vis-#{kind}-#{name}"
+  defp keyframes_name(name), do: "vis-#{name}"
 
   defp css_values(values) do
     [

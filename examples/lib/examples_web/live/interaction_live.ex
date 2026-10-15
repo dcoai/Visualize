@@ -14,7 +14,7 @@ defmodule ExamplesWeb.InteractionLive do
   """
   use Phoenix.LiveView
 
-  alias ExamplesWeb.{Highlight, Panel}
+  alias ExamplesWeb.{Highlight, MotionDemo, Panel}
   alias Visualize.Chart
   alias Visualize.Event
   alias Visualize.Hooks.Crosshair
@@ -91,7 +91,21 @@ defmodule ExamplesWeb.InteractionLive do
   # The page at its one size; a session may name another, as its tests draw it at two (#507).
   def mount(_params, session, socket) do
     size = Map.get(session, "size", @size)
-    {:ok, socket |> assign(build(size)) |> assign(picked: nil, hovered: nil, hidden: %{})}
+
+    {:ok,
+     socket
+     |> assign(build(size))
+     |> assign(picked: nil, hovered: nil, hidden: %{}, size: size)
+     |> motion(MotionDemo.rows(), 0)}
+  end
+
+  # The motion demo's rows, the next service whose state changes, and its chart (#653).
+  defp motion(socket, rows, turn) do
+    assign(socket,
+      motion_rows: rows,
+      motion_turn: turn,
+      motion_chart: MotionDemo.applied(rows, socket.assigns.size)
+    )
   end
 
   # A click on a point, resolved by the chart's component to the row drawn (D-170).
@@ -100,6 +114,21 @@ defmodule ExamplesWeb.InteractionLive do
         socket
       ) do
     {:noreply, assign(socket, picked: {row.series, row.hour, row.value})}
+  end
+
+  # A click on a bar deletes its row, which leaves by exploding (spec/14 §3.12).
+  def handle_info({:visualize_event, "motion-chart", %Event{event: "delete", row: row}}, socket) do
+    rows = MotionDemo.delete(socket.assigns.motion_rows, row.name)
+    {:noreply, motion(socket, rows, socket.assigns.motion_turn)}
+  end
+
+  def handle_event("motion_next", _params, socket) do
+    %{motion_rows: rows, motion_turn: turn} = socket.assigns
+    {:noreply, motion(socket, MotionDemo.next_state(rows, turn), turn + 1)}
+  end
+
+  def handle_event("motion_reset", _params, socket) do
+    {:noreply, motion(socket, MotionDemo.rows(), 0)}
   end
 
   def handle_event("hover", %{"index" => index}, socket) do
@@ -271,6 +300,33 @@ defmodule ExamplesWeb.InteractionLive do
           </p>
         </Panel.panel>
 
+        <Panel.panel id="panel-motion">
+          <:title>Motion by identity</:title>
+          <p class="panel-note">
+            Each bar's <code>state</code>
+            names its style. <em>Next state</em>
+            moves one service on: its bar fades to the new color (<code>transition</code>),
+            and a service in error pulses while it is (<code>animation</code>). A click on a bar
+            deletes its row; <code>MotionHook</code>
+            keeps a copy of it and explodes it over the chart
+            (<code>exit: :explode</code>). A reader who asks for less motion sees each change at once.
+          </p>
+
+          <div class="chart-container">
+            <.live_component
+              module={Visualize.Components.Chart}
+              id="motion-chart"
+              chart={@motion_chart}
+            />
+          </div>
+
+          <p class="picked">
+            <button phx-click="motion_next">Next state</button>
+            <button phx-click="motion_reset">Reset</button>
+            {length(@motion_rows)} services drawn.
+          </p>
+        </Panel.panel>
+
         <Panel.panel id="panel-code" class="panel-wide">
           <:title>The design and the markup</:title>
           <p class="panel-note">
@@ -294,6 +350,7 @@ defmodule ExamplesWeb.InteractionLive do
       .crosshair-rule { stroke-dasharray: 3 3; }
       .picked { margin-top: 1rem; color: #444; }
       #tooltip-chart .mark-circle circle { cursor: pointer; }
+      #motion-chart .mark-rect rect { cursor: pointer; }
       #crosshair-svg, #crosshair-canvas { display: inline-block; }
       #crosshair-canvas canvas { max-width: 100%; height: auto; }
     </style>

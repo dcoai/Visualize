@@ -2,7 +2,7 @@ defmodule Visualize.Hooks do
   @moduledoc """
   Phoenix LiveView JavaScript hooks for interactive visualizations.
 
-  This module bundles twelve hooks:
+  This module bundles thirteen hooks:
   - `ZoomHook` — zoom and pan interactions (`Visualize.Hooks.Zoom`)
   - `BrushHook` — brush selection (`Visualize.Hooks.Brush`)
   - `CanvasChart` — replays Canvas commands or a script (`Visualize.Hooks.Canvas`)
@@ -22,6 +22,8 @@ defmodule Visualize.Hooks do
     region (`Visualize.Hooks.Keyboard`)
   - `BoardHook` — a live board's width pushed to its component, and focus moved across its
     cells (`Visualize.Hooks.Board`)
+  - `MotionHook` — a chart's exits played over it and its enters restarted, by identity
+    (`Visualize.Hooks.Motion`)
 
   `TooltipHook` and `CrosshairHook` share hover, and `BrushHook` the brushed window, across
   the charts of a sync group over one bus, `VisualizeSync` (`Visualize.Hooks.Sync`), which
@@ -200,8 +202,10 @@ defmodule Visualize.Hooks do
 
     #{Board.js_hook()}
 
+    #{Motion.js_hook()}
+
     // Default export for convenience
-    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook, BuilderHook, KeyboardHook, BoardHook };
+    export default { ZoomHook, BrushHook, CanvasChart, CanvasBinaryChart, CanvasIncrementalChart, ResizeHook, TooltipHook, CrosshairHook, LegendHook, BuilderHook, KeyboardHook, BoardHook, MotionHook };
     """
   end
 

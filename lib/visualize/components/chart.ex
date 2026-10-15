@@ -38,7 +38,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Hooks.Tooltip
 
     @impl true
-    def mount(socket), do: {:ok, assign(socket, drawing: nil, drawn: nil, svg: nil, hover: %{})}
+    def mount(socket),
+      do: {:ok, assign(socket, drawing: nil, drawn: nil, svg: nil, hover: %{}, motion: false)}
 
     @impl true
     def update(%{id: id, chart: %Applied{} = chart} = assigns, socket) do
@@ -57,11 +58,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp draw(%{assigns: %{drawing: drawing}} = socket, drawing), do: socket
 
     defp draw(socket, {chart, render_opts} = drawing) do
+      svg = Chart.render(chart, [root: true] ++ render_opts)
+
       assign(socket,
         drawing: drawing,
         drawn: Integer.to_string(System.unique_integer([:positive, :monotonic])),
-        svg: Chart.render(chart, [root: true] ++ render_opts),
-        hover: Tooltip.attrs(chart.frame)
+        svg: svg,
+        hover: Tooltip.attrs(chart.frame),
+        # A drawing that names identities plays its exits and enters (spec/10 §19.3, §20).
+        motion: String.contains?(svg, "data-vis-id")
       )
     end
 
@@ -90,7 +95,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         data-tooltip-class={@tooltip_class}
         {@hover}
       >
-        {Phoenix.HTML.raw(@svg)}
+        <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">{Phoenix.HTML.raw(@svg)}</div>
+        {if @motion, do: nil, else: Phoenix.HTML.raw(@svg)}
       </div>
       """
     end

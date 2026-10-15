@@ -99,9 +99,9 @@ defmodule Visualize.Hooks.MotionTest do
     Enum.map([r, g, bl], &round/1)
   end
 
-  # A colour a context was given, as its three channels: `#rrggbb` or `rgba()`.
-  defp channels(colour) do
-    %{r: r, g: g, b: b} = Visualize.Color.parse(colour)
+  # A color a context was given, as its three channels: `#rrggbb` or `rgba()`.
+  defp channels(color) do
+    %{r: r, g: g, b: b} = Visualize.Color.parse(color)
     Enum.map([r, g, b], &round/1)
   end
 
@@ -128,7 +128,7 @@ defmodule Visualize.Hooks.MotionTest do
       assert {:ok, %{"log" => log, "report" => %{"times" => times}}} =
                run(scenario(@hook, @key, first, second))
 
-      # Where the point was: its series' colour, before its row chose `error`.
+      # Where the point was: its series' color, before its row chose `error`.
       was = log |> at_draws("fillStyle", "fill") |> Enum.at(1)
       [{start, shown_at_start} | rest] = moving_fills(log, times)
       # The first draw after the update shows where the point was.
@@ -244,7 +244,7 @@ defmodule Visualize.Hooks.MotionTest do
       assert List.last(alphas) == 1
     end
 
-    test "a spin turns about the centre of the element's box" do
+    test "a spin turns about the center of the element's box" do
       assert {:ok, %{"log" => log}} = run(running(animated(%{name: :spin, duration: 400})))
 
       angles = for [a] <- calls(log, "rotate"), do: a
@@ -275,6 +275,98 @@ defmodule Visualize.Hooks.MotionTest do
 
       assert calls(log, "rotate") == []
       assert length(alphas(log)) == 1
+    end
+  end
+
+  describe "enter and exit (#678)" do
+    # Two 10×20 rects naming their identities, with `style`; `ids` picks which are drawn.
+    defp present(ids, style, encode) do
+      rects =
+        for {id, x} <- [{"a", 0}, {"b", 40}], id in ids do
+          Visualize.IR.Element.rect(x, 0, 10, 20, Map.merge(%{fill: "#336699"}, style))
+          |> Visualize.IR.Element.put_attr("data-vis-id", id)
+        end
+
+      group = Visualize.IR.Element.group(rects)
+
+      case encode do
+        :json ->
+          group |> Visualize.Backend.Canvas.render_element(format: :json) |> IO.iodata_to_binary()
+
+        :binary ->
+          group |> CanvasBinary.encode_element!() |> CanvasBinary.to_base64()
+      end
+    end
+
+    @exit_fade %{exit: %{name: :fade, duration: 400, easing: :linear}}
+    @explode %{exit: %{name: :explode, duration: 400, easing: :linear}}
+
+    for {hook, key, encode} <- [
+          {"CanvasChart", "commands", :json},
+          {"CanvasBinaryChart", "binary", :binary}
+        ] do
+      @hook hook
+      @key key
+      @encode encode
+
+      test "#{hook} draws a gone identity again while its exit fades it, then not at all" do
+        first = present(["a", "b"], @exit_fade, @encode)
+        second = present(["a"], @exit_fade, @encode)
+
+        assert {:ok, %{"log" => log, "report" => %{"times" => times}}} =
+                 run(scenario(@hook, @key, first, second))
+
+        after_update = after_mark(log, "update")
+        # Each frame draws `a`, then `b`'s ghost at the fading alpha, for 400 ms.
+        alphas = after_update |> at_draws("globalAlpha", "fill") |> Enum.map(&(&1 || 1))
+
+        ghosts =
+          alphas |> Enum.chunk_every(2) |> Enum.map(&Enum.at(&1, 1)) |> Enum.reject(&is_nil/1)
+
+        assert hd(ghosts) == 1
+        assert Enum.any?(ghosts, &(&1 > 0.2 and &1 < 0.8))
+        assert ghosts == Enum.sort(ghosts, :desc)
+        assert length(times) in 25..27
+        # The ghost is drawn where `b` was: its rect at x 40.
+        assert [40, 0, 10, 20] in calls(after_update, "rect")
+      end
+
+      test "#{hook} explodes a gone identity into sixteen clipped pieces" do
+        first = present(["a", "b"], @explode, @encode)
+        second = present(["a"], @explode, @encode)
+
+        assert {:ok, %{"log" => log}} = run(scenario(@hook, @key, first, second))
+        after_update = after_mark(log, "update")
+        clips = for %{"kind" => "call", "name" => "clip"} <- after_update, do: 1
+        # Sixteen pieces a frame over about 25 frames.
+        assert rem(length(clips), 16) == 0 and length(clips) >= 16 * 24
+        # The first piece's cell is the box's corner quarter-cell, at x 40.
+        assert [40, 0, 2.5, 5] in calls(after_update, "rect")
+      end
+    end
+
+    test "a new identity grows from its center when it is first drawn" do
+      style = %{enter: %{name: :grow, duration: 160, easing: :linear}}
+      first = present(["a"], style, :json)
+      second = present(["a", "b"], style, :json)
+
+      assert {:ok, %{"log" => log}} = run(scenario("CanvasChart", "commands", first, second))
+      scales = for [s, s] <- calls(after_mark(log, "update"), "scale"), do: s
+      # `a` entered at mount and has done; `b` grows from nothing to whole.
+      assert hd(scales) == 0 or hd(scales) < 0.1
+      assert scales == Enum.sort(scales)
+      assert [45, 10] in calls(after_mark(log, "update"), "translate")
+    end
+
+    test "reduced motion: no ghost, no entrance" do
+      first = present(["a", "b"], @explode, :json)
+      second = present(["a"], @explode, :json)
+
+      assert {:ok, %{"log" => log, "report" => %{"times" => times}}} =
+               run(scenario("CanvasChart", "commands", first, second, reduced: true))
+
+      assert calls(after_mark(log, "update"), "clip") == []
+      assert length(times) == 1
     end
   end
 end

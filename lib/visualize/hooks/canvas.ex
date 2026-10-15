@@ -79,35 +79,43 @@ defmodule Visualize.Hooks.Canvas do
         if (this.parsed) {
           const motion = this.motion;
           VisualizeMotion.begin(motion, performance.now());
-          this.parsed.forEach(({cmd, args}) => {
-            if (cmd === 'motion') {
-              // A motion span (spec/09 §3.3.5): its fills and strokes drawn at the shown values.
-              VisualizeMotion.open(motion, ctx, args);
-            } else if (cmd === 'motionEnd') {
-              VisualizeMotion.close(motion, ctx);
-            } else if (cmd === 'fill' || cmd === 'stroke') {
-              VisualizeMotion.draw(motion, ctx, cmd, () => ctx[cmd](...args));
-            } else if (cmd.startsWith('set_')) {
-              ctx[cmd.slice(4)] = args[0];
-            } else if (cmd === 'nonScalingLineWidth') {
-              // A stroke that keeps its width on screen (spec/09 §3.3.3).
-              const t = ctx.getTransform();
-              ctx.lineWidth = args[0] / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
-            } else if (cmd === 'hatchPattern') {
-              // A hatch's pattern (spec/09 §3.3.3, #673): target, then the hatch.
-              visualizePattern(ctx, ...args);
-            } else if (cmd === 'linearGradient' || cmd === 'radialGradient') {
-              // A gradient in user units (spec/09 §3.3.3, #652): target, geometry, stops.
-              const [target, ...rest] = args;
-              const stops = rest.pop();
-              visualizeGradient(ctx, target, cmd === 'linearGradient' ? 'linear' : 'radial', rest, stops);
-            } else {
-              ctx[cmd](...args);
-            }
-          });
-          if (VisualizeMotion.end(motion)) this.loop();
+          this.run(ctx, this.parsed, 0, this.parsed.length, motion);
+          if (VisualizeMotion.end(motion, ctx)) this.loop();
         } else {
           new Function('ctx', this.el.dataset.script)(ctx);
+        }
+      },
+      // The commands from `from` up to `to` on the context, a motion span's fills and strokes
+      // at the shown values (spec/09 §3.3.5); a span with an exit keeps how to draw it again.
+      run(ctx, commands, from, to, motion) {
+        let opened = from;
+        for (let i = from; i < to; i++) {
+          const {cmd, args} = commands[i];
+          if (cmd === 'motion') {
+            opened = i + 1;
+            VisualizeMotion.open(motion, ctx, args);
+          } else if (cmd === 'motionEnd') {
+            const [s, e] = [opened, i];
+            VisualizeMotion.close(motion, ctx, () => (c, m) => this.run(c, commands, s, e, m));
+          } else if (cmd === 'fill' || cmd === 'stroke') {
+            VisualizeMotion.draw(motion, ctx, cmd, () => ctx[cmd](...args));
+          } else if (cmd.startsWith('set_')) {
+            ctx[cmd.slice(4)] = args[0];
+          } else if (cmd === 'nonScalingLineWidth') {
+            // A stroke that keeps its width on screen (spec/09 §3.3.3).
+            const t = ctx.getTransform();
+            ctx.lineWidth = args[0] / Math.sqrt(Math.abs(t.a * t.d - t.b * t.c));
+          } else if (cmd === 'hatchPattern') {
+            // A hatch's pattern (spec/09 §3.3.3, #673): target, then the hatch.
+            visualizePattern(ctx, ...args);
+          } else if (cmd === 'linearGradient' || cmd === 'radialGradient') {
+            // A gradient in user units (spec/09 §3.3.3, #652): target, geometry, stops.
+            const [target, ...rest] = args;
+            const stops = rest.pop();
+            visualizeGradient(ctx, target, cmd === 'linearGradient' ? 'linear' : 'radial', rest, stops);
+          } else {
+            ctx[cmd](...args);
+          }
         }
       },
       loop() {
