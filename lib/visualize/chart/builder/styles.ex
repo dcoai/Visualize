@@ -1981,6 +1981,67 @@ if Code.ensure_loaded?(Phoenix.Component) do
       gap: 6px;
     }
 
+    /* The color table by name, a group per use (spec/14 §19.10); the CSS names folded. */
+    .vis-builder-colour-group {
+      margin: 0 0 8px;
+    }
+
+    .vis-builder-colour-group-title {
+      margin: 0 0 4px;
+      color: var(--vis-builder-muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    /* A color's chain (spec/14 §19.10): the base, then each step with the color reached so
+       far, its amount and its ×; a blend's operands are chains inset beneath it. */
+    .vis-builder-chain {
+      margin: 0 0 10px;
+      padding: 8px;
+      border: 1px solid var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+    }
+
+    .vis-builder-chain-steps,
+    .vis-builder-chain-operands {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .vis-builder-chain-operands {
+      margin-top: 6px;
+      padding-left: 12px;
+      border-left: 2px solid var(--vis-builder-line);
+    }
+
+    .vis-builder-chain-step {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .vis-builder-chain-operands {
+      flex-basis: 100%;
+    }
+
+    .vis-builder-chain-word {
+      min-width: 64px;
+      font-family: var(--vis-builder-mono);
+      font-size: 12px;
+    }
+
+    .vis-builder-chain-start {
+      margin: 0 0 8px;
+    }
+
     .vis-builder-swatch {
       position: relative;
       width: 28px;

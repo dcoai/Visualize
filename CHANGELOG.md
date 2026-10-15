@@ -17,6 +17,17 @@ release it merely follows.
 
 ### Added
 
+- **The builder's color chooser picks by name and builds transforms** (#683, D-178). The
+  chooser lists the theme's color table by name, grouped by use — series, roles,
+  furniture, the theme's own colors, and the CSS names folded away — each patch in the
+  color the design's theme gives it. Picking a name writes `color(:name)`. A color written
+  as a pipe of transforms (`color(:red) |> shade(700) |> alpha(0.8)`) is shown as a chain:
+  the base, then each step with the color reached so far, its amount as a slider, and an
+  × to remove it; **+ step** adds `intensity`, `alpha`, `lighten`, `darken`, `saturate`,
+  `shade`, `contrast` or `blend`, and a blend's operands are chains of their own. Picking a
+  color for a field that holds a chain replaces its base and keeps the steps. The chain
+  edits through a new `colour_chain` event.
+
 - **Generators: styles and colors computed when a chart is drawn** (#680, #654, D-177). A
   design may store a call, `generate(:name, args)` (`import Visualize.Generators`), where
   it cannot know the value in advance — each chat message in its sender's tenant style,

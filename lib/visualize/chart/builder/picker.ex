@@ -16,8 +16,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Glyphs, Store}
+    alias Visualize.Chart.Builder.{Chain, Glyphs, Store}
     alias Visualize.Chart.Var
+    alias Visualize.Theme
 
     # Faces a person can name without a font panel of their own: the generic families,
     # and the faces every platform ships one of.
@@ -47,7 +48,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:value, :any, default: nil, doc: "the field's current value, or nil")
-    attr(:swatches, :list, default: [], doc: "`{slot, colour}` for the theme's colour slots")
+
+    attr(:groups, :list,
+      default: [],
+      doc: "the theme's color table by name, grouped by use: `{group, [{name, colour}]}`"
+    )
+
+    attr(:theme, :any, default: nil, doc: "the theme a chain's steps are previewed through")
     attr(:recent, :list, default: [], doc: "the colour literals the design already uses")
     attr(:refs, :map, default: %{}, doc: "the names and ids a reference may take, by kind")
     attr(:entries, :list, default: [], doc: "the library's entries, for a reference's names")
@@ -63,10 +70,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
           face: face(assigns),
           word: word(assigns.value),
           hues: hues(),
-          off?: is_nil(assigns.key)
+          off?: is_nil(assigns.key),
+          chain?: assigns.key != nil and chain?(assigns.value)
         )
 
       ~H"""
+      <form
+        :if={@face == :colour and @chain?}
+        id={@id <> "-chain"}
+        class="vis-builder-chain"
+        phx-change="colour_chain"
+        phx-target={@target}
+        phx-submit="submitted"
+      >
+        <input type="hidden" name="field" value={@key} />
+        <.chain value={@value} theme={@theme} path={[]} field={@key} target={@target} />
+      </form>
       <form
         id={@id}
         class="vis-builder-picker"
@@ -84,25 +103,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         <%= case @face do %>
           <% :colour -> %>
-            <div class="vis-builder-swatches" role="radiogroup" aria-label="theme slots">
-              <label
-                :for={{slot, colour} <- @swatches}
-                class={"vis-builder-swatch" <> if(@word == slot, do: " vis-builder-swatch-on", else: "")}
-                title={slot}
-                style={"--vis-builder-swatch: #{colour}"}
-                draggable="true"
-                data-builder-colour={slot}
-              >
-                <input
-                  type="radio"
-                  name={"#{@key}.slot"}
-                  value={slot}
-                  checked={@word == slot}
-                  disabled={@off?}
-                  aria-label={slot}
-                />
-              </label>
-            </div>
+            <p :if={!@off? and !@chain?} class="vis-builder-chain-start">
+              <select name={"#{@key}.step"} aria-label="add a step: transform this color" phx-change="colour_chain" phx-value-field={@key} phx-target={@target}>
+                <option value="">+ step</option>
+                <option :for={step <- Chain.steps()} value={step}>{step}</option>
+              </select>
+            </p>
+            <details
+              :for={{group, names} <- @groups}
+              class="vis-builder-colour-group"
+              open={group != "CSS names"}
+            >
+              <summary class="vis-builder-colour-group-title">{group}</summary>
+              <div class="vis-builder-swatches" role="radiogroup" aria-label={group}>
+                <label
+                  :for={{name, colour} <- names}
+                  class={"vis-builder-swatch" <> if(@word == name, do: " vis-builder-swatch-on", else: "")}
+                  title={"#{name} · #{colour || "not in this theme"}"}
+                  style={"--vis-builder-swatch: #{colour || "transparent"}"}
+                  draggable="true"
+                  data-builder-colour={name}
+                >
+                  <input
+                    type="radio"
+                    name={"#{@key}.slot"}
+                    value={name}
+                    checked={@word == name}
+                    disabled={@off?}
+                    aria-label={name}
+                  />
+                </label>
+              </div>
+            </details>
             <div :if={@recent != []} class="vis-builder-swatches" role="radiogroup" aria-label="colours in this chart">
               <label
                 :for={colour <- @recent}
@@ -186,6 +218,134 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       </form>
       """
+    end
+
+    attr(:value, :any, required: true)
+    attr(:theme, :any, default: nil)
+    attr(:path, :list, required: true)
+    attr(:field, :string, required: true)
+    attr(:target, :any, default: nil)
+
+    # A color's chain (spec/14 §19.10): its base — a blend's operands each a chain of their
+    # own — then each step with the color reached so far, its amount and its ×, then + step.
+    defp chain(assigns) do
+      assigns =
+        assign(assigns, rows: Chain.rows(assigns.value, assigns.theme), at: path(assigns.path))
+
+      ~H"""
+      <ol class="vis-builder-chain-steps" data-builder-chain={@at}>
+        <li :for={row <- @rows} class={"vis-builder-chain-step" <> if(row.op == nil, do: " vis-builder-chain-base", else: "")}>
+          <span
+            class={"vis-builder-swatch vis-builder-chain-swatch" <> if(row.colour, do: "", else: " vis-builder-well-empty")}
+            style={"--vis-builder-swatch: #{row.colour || "transparent"}"}
+            title={row.colour || "not resolved in this theme"}
+            role="img"
+            aria-label={"#{row.word}: #{row.colour || "not resolved"}"}
+          ></span>
+          <span class="vis-builder-chain-word">{row.word}</span>
+          <span :if={row.amount != nil} class="vis-builder-ranged">
+            <input type="text" name={"amount|#{@at}|#{row.index}"} value={row.amount} aria-label={"#{row.word} amount"} />
+            <input
+              type="range"
+              name={"amount|#{@at}|#{row.index}"}
+              class="vis-builder-range vis-builder-scrubber"
+              min={elem(row.span, 0)}
+              max={elem(row.span, 1)}
+              step={elem(row.span, 2)}
+              value={row.amount}
+              aria-label={"#{row.word} amount, dragged"}
+            />
+          </span>
+          <button
+            :if={row.op != nil}
+            type="button"
+            class="vis-builder-item-remove"
+            phx-click="colour_chain"
+            phx-value-field={@field}
+            phx-value-path={@at}
+            phx-value-op="remove"
+            phx-value-index={row.index}
+            phx-target={@target}
+            aria-label={"remove #{row.word}"}
+          >×</button>
+          <ol :if={row.operands != []} class="vis-builder-chain-operands">
+            <li :for={{operand, i} <- Enum.with_index(row.operands)} class="vis-builder-chain-operand">
+              <.chain value={operand} theme={@theme} path={@path ++ [i]} field={@field} target={@target} />
+              <button
+                :if={length(row.operands) > 1}
+                type="button"
+                class="vis-builder-item-remove"
+                phx-click="colour_chain"
+                phx-value-field={@field}
+                phx-value-path={@at}
+                phx-value-op="operand_remove"
+                phx-value-index={i}
+                phx-target={@target}
+                aria-label={"remove operand #{i}"}
+              >×</button>
+            </li>
+            <li>
+              <button
+                type="button"
+                class="vis-builder-part-add"
+                phx-click="colour_chain"
+                phx-value-field={@field}
+                phx-value-path={@at}
+                phx-value-op="operand_add"
+                phx-target={@target}
+              >+ operand</button>
+            </li>
+          </ol>
+        </li>
+        <li class="vis-builder-chain-add">
+          <select name={"add|#{@at}"} aria-label="add a step">
+            <option value="">+ step</option>
+            <option :for={step <- Chain.steps()} value={step}>{step}</option>
+          </select>
+        </li>
+      </ol>
+      """
+    end
+
+    defp path(path), do: Enum.map_join(path, ".", &to_string/1)
+
+    # A chain worth drawing: a transform, or a blend.
+    defp chain?(value) do
+      case Chain.split(value) do
+        {{:blend, _operands}, _steps} -> true
+        {_base, steps} -> steps != []
+      end
+    end
+
+    @doc """
+    The theme's color table by name, grouped by use (spec/14 §19.10): its series, the five
+    roles, the furniture, the theme's own colors, and the CSS named colors — each name with
+    the color the theme gives it, `nil` where it gives none.
+
+        iex> groups = Visualize.Chart.Builder.Picker.groups(Visualize.Theme.default())
+        iex> Enum.map(groups, &elem(&1, 0))
+        ["series", "roles", "furniture", "the theme's colors", "CSS names"]
+        iex> groups |> List.keyfind("roles", 0) |> elem(1) |> hd()
+        {"good", "#4ca34b"}
+    """
+    @spec groups(Theme.t()) :: [{String.t(), [{String.t(), String.t() | nil}]}]
+    def groups(%Theme{} = theme) do
+      series = Enum.map(1..length(theme.series)//1, &:"series_#{&1}")
+      roles = Theme.role_names()
+      furniture = [:axis, :grid, :text, :background, :surface]
+      own = theme.colors |> Map.keys() |> Enum.reject(&(&1 in roles)) |> Enum.sort()
+      css = Enum.map(Visualize.Color.named_colors(), &String.to_atom/1) -- own
+
+      for {group, names} <- [
+            {"series", series},
+            {"roles", roles},
+            {"furniture", furniture},
+            {"the theme's colors", own},
+            {"CSS names", Enum.sort(css)}
+          ],
+          names != [] do
+        {group, Enum.map(names, &{to_string(&1), Chain.resolved({:color, &1}, theme)})}
+      end
     end
 
     @doc """
@@ -308,8 +468,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> then(&("#" <> &1))
     end
 
-    # An atom's word, for the controls that carry words: a slot, a glyph's value.
+    # A value's word, for the controls that carry words: a name — a chain's base's — or a
+    # glyph's value.
+    defp word({:color, name}) when is_atom(name), do: to_string(name)
     defp word(value) when is_atom(value) and not is_nil(value), do: to_string(value)
+
+    defp word(value) when is_tuple(value) do
+      case Chain.split(value) do
+        {^value, []} -> nil
+        {base, _steps} -> word(base)
+      end
+    end
+
     defp word(_value), do: nil
 
     defp hex("#" <> _ = colour), do: colour

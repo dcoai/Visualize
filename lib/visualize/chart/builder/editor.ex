@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Fields, Store, StyleForm}
+    alias Visualize.Chart.Builder.{Chain, Fields, Store, StyleForm}
     alias Visualize.Chart.{Fragment, Schema, Validator, Var}
     alias Visualize.Theme
 
@@ -360,7 +360,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     `key` is the typed control and reads by `parse/2`; an unchecked checkbox submits
     nothing, which is `false` and not a removal, and every other control's blank removes
-    the key. `key.slot` is a colour's slot face, `key.range` a number's slider and
+    the key. `key.slot` is a colour's name face (written `color(:name)`), `key.range` a number's slider and
     `key.other` a name the list lacks, each read as the key. A variable reaches a field as
     a chip dropped on it (§19.9), never as a control of the form, so there is no
     `key.mode` or `key.var`. A style's controls are named by their path and read by
@@ -425,10 +425,43 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def changes(kind, %{"_target" => [target]} = params, node, seed) do
       if StyleForm.kind?(kind),
         do: StyleForm.changes(kind, target, params[target], node, seed || node),
-        else: List.wrap(change(kind, params))
+        else: kind |> change(params) |> List.wrap() |> Enum.map(&picked(kind, &1, node))
     end
 
     def changes(_kind, _params, _node, _seed), do: []
+
+    # A color picked for a key holding a chain is the chain's new base (spec/14 §19.10).
+    defp picked(kind, {key, {:ok, color}} = write, node) do
+      case key_spec(kind, to_string(key)) do
+        %{type: :colour} when is_map(node) ->
+          {key, {:ok, Chain.rebase(Map.get(node, key), color)}}
+
+        _other ->
+          write
+      end
+    end
+
+    defp picked(_kind, write, _node), do: write
+
+    @doc """
+    A name of the color table, as a picked patch submits it, read as the typed color it
+    names, `color(:name)` (spec/08 §1.9, spec/14 §19.10); a blank is `:error`, a removal.
+
+        iex> Visualize.Chart.Builder.Editor.named("axis")
+        {:ok, {:color, :axis}}
+
+        iex> Visualize.Chart.Builder.Editor.named("")
+        :error
+    """
+    @spec named(String.t() | nil) :: {:ok, term()} | :error
+    def named(nil), do: :error
+
+    def named(string) when is_binary(string) do
+      case parse(:slot, string) do
+        {:ok, name} -> {:ok, {:color, name}}
+        :error -> :error
+      end
+    end
 
     @doc false
     # The key spec a field's name reads as, and its path within the node (spec/14 §18.7,
@@ -548,9 +581,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def submitted(type, nil), do: if(widget(type) == :checkbox, do: {:ok, false}, else: :error)
     def submitted(type, string), do: parse(type, string)
 
-    # A colour's slot face: a theme slot chosen by name, or — blank — the key removed.
-    defp slot_face(nil), do: :error
-    defp slot_face(string) when is_binary(string), do: parse(:slot, string)
+    # A colour's name face: a name of the theme's color table, typed, or — blank — the key removed.
+    defp slot_face(string), do: named(string)
 
     @doc """
     A typed variable name as the variable it names, or `:error` for a blank — a removal.

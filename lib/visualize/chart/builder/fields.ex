@@ -13,7 +13,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Editor, Glyphs, Store}
+    alias Visualize.Chart.Builder.{Chain, Editor, Glyphs, Store}
     alias Visualize.Chart.{Text, Validator, Var}
     alias Visualize.{Color, Theme}
 
@@ -671,10 +671,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{colour: nil, none?: false, word: nil}
 
         is_struct(theme, Theme) and resolvable?(value, theme) ->
-          %{colour: Color.resolve(value, theme, :literal), none?: false, word: word(value)}
+          %{
+            colour: Color.resolve(value, theme, :literal),
+            none?: false,
+            word: Chain.expression(value)
+          }
 
         true ->
-          %{colour: nil, none?: false, word: word(value)}
+          %{colour: nil, none?: false, word: Chain.expression(value)}
       end
     end
 
@@ -682,19 +686,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       names = Theme.colour_slots(theme)
       value |> Color.Typed.names() |> Enum.all?(&(&1 in names))
     end
-
-    @doc false
-    # A colour value as a person reads it: a name, a literal, a transform as its call.
-    def word({:color, name}), do: to_string(name)
-    def word({:series, i}), do: "series #{i}"
-    def word({:ramp, name, t}), do: "ramp(#{name}, #{t})"
-    def word({:blend, list}), do: "blend(" <> Enum.map_join(list, ", ", &word/1) <> ")"
-    def word({:contrast, :under}), do: "contrast()"
-    def word({:contrast, c}), do: "contrast(#{word(c)})"
-    def word({op, c, t}) when is_atom(op), do: "#{op}(#{word(c)}, #{t})"
-    def word(value) when is_binary(value), do: value
-    def word(value) when is_atom(value), do: to_string(value)
-    def word(value), do: inspect(value)
 
     # The points between lines a line height means (§18.6): size × (line_height − 1), from
     # the font's size or the theme's.
