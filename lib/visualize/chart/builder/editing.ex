@@ -25,12 +25,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Writes, only: [at: 2, owned: 3, pool: 1]
 
     alias Visualize.{Chart, Theme}
-    alias Visualize.Chart.{Fragment, Use, Validator}
+    alias Visualize.Chart.{Fragment, Schema, Use, Validator}
 
     alias Visualize.Chart.Builder.{
       Axes,
       Editor,
-      FormSchema,
       Modes,
       Palette,
       Preview,
@@ -173,7 +172,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{
         style: Palette.names(design) ++ ids.(:style),
         scale: scale_names(design) ++ ids.(:scale),
-        source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source)
+        source: Map.keys(Map.get(design, :sources, %{})) ++ ids.(:source),
+        # A `defs` paint a paint of type `:paint` names (spec/14 §2.7, §18.6).
+        paint: design |> Map.get(:defs, %{}) |> Map.keys() |> Enum.sort()
       }
     end
 
@@ -202,21 +203,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp colour(%{field: field}, entry, node, design) do
       theme = design |> Map.get(:theme, :default) |> theme()
 
-      spec =
-        field &&
-          Enum.find(
-            FormSchema.describe(entry.kind),
-            &(to_string(&1.key) == field and &1.type == :colour)
-          )
-
-      # A stop well of a fill's gradient (§18.6): the chooser writes `fill.stop.<i>`.
-      stop = field && stop_colour(field, node, design)
+      # The selected field, when it is a colour: a key of the node, or a part's key by its
+      # path (`stroke.color`, `fill.stops.0.color`, §18.7).
+      located =
+        case field && Editor.locate(entry.kind, field) do
+          %{spec: %{type: :colour}} = located -> located
+          _other -> nil
+        end
 
       %{
         theme: theme,
-        key: (spec && spec.key) || (stop && field),
-        spec: spec || %{type: :colour, range: nil},
-        value: if(spec && is_map(node), do: Map.get(node, spec.key), else: stop && stop.colour),
+        key: located && field,
+        spec: (located && located.spec) || %{type: :colour, range: nil},
+        value: located && Editor.value_at(entry.kind, node, located.path),
         swatches:
           Enum.map(
             Theme.colour_slots(theme),
@@ -226,30 +225,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
       }
     end
 
-    # The colour of a gradient stop the selected field names, from the fill of the node
-    # being edited (§18.6); nil when the field is not a stop well.
-    defp stop_colour("fill.stop." <> i, node, design) do
-      with {index, ""} <- Integer.parse(i),
-           {:paint, name} <- is_map(node) && Map.get(node, :fill),
-           %{stops: stops} when is_list(stops) <- get_in(design, [:defs, name]),
-           %{color: colour} <- Enum.at(stops, index) do
-        %{colour: colour}
-      else
-        _other -> nil
-      end
-    end
-
-    defp stop_colour(_field, _node, _design), do: nil
-
-    # Every "#rrggbb" the design's styles carry, once each, in order of first use.
+    # Every "#rrggbb" the design's styles carry, at any depth of their parts, once each, in
+    # order of first use.
     defp recent_colours(design) do
       design
       |> Map.get(:styles, %{})
       |> Map.values()
-      |> Enum.flat_map(fn style -> if is_map(style), do: Map.values(style), else: [] end)
-      |> Enum.filter(&(is_binary(&1) and String.starts_with?(&1, "#")))
+      |> Enum.flat_map(&literals/1)
       |> Enum.uniq()
     end
+
+    defp literals("#" <> _ = colour), do: [colour]
+
+    defp literals(map) when is_map(map) and not is_struct(map),
+      do: Enum.flat_map(Map.values(map), &literals/1)
+
+    defp literals(list) when is_list(list), do: Enum.flat_map(list, &literals/1)
+    defp literals(_other), do: []
 
     # The theme the wells show colours through, built unchecked: a theme being edited may
     # break a contract for a moment, and the editor says so rather than the render raising
@@ -498,15 +490,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp style_site(entry, node) do
-      case FormSchema.key(entry.kind, :style) do
+      case Schema.key(entry.kind, :style) do
         nil ->
           nil
 
         %{default: fallback} ->
           value = is_map(node) && Map.get(node, :style)
-          %{value: value, fallback: fallback, stack: current_stack(value || nil, fallback)}
+
+          %{
+            value: value,
+            fallback: fallback,
+            stack: current_stack(value || nil, fallback),
+            drawn_by: drawn_by(entry.kind, node)
+          }
       end
     end
+
+    # The kind of element a site's style draws, whose undrawn parts its form grays (spec/14
+    # §5.6, §18.7): a mark's type, a label's text; the furniture grays nothing.
+    defp drawn_by(:mark, %{type: type}) when is_atom(type), do: type
+    defp drawn_by(kind, _node) when kind in [:label, :mark_label], do: :text
+    defp drawn_by(_kind, _node), do: nil
 
     defp variables(layers, design) do
       declared = design |> Map.get(:vars, %{}) |> Map.keys()

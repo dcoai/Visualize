@@ -46,12 +46,8 @@ defmodule Visualize.Chart.Schema do
           default: term(),
           required: boolean(),
           merge: merge(),
-          range: {number(), number(), number()} | nil,
-          group: group() | nil
+          range: {number(), number(), number()} | nil
         }
-
-  @typedoc "The heading a style key is shown under in a form (spec/14 §3.1, §14.2)."
-  @type group :: :fill | :stroke | :font | :position | :effects
 
   @design_kinds [
     :design,
@@ -125,7 +121,7 @@ defmodule Visualize.Chart.Schema do
   @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
   @builtin_styles [:axis, :grid, :label, :title]
   # The flat style of every earlier version (spec/14 §9, D-172): no design is stored in it,
-  # but the migration reads it by these types and the builder's form edits it until #655.
+  # but the migration reads it by these types. The builder edits a style in its parts (D-178).
   # `:gradient` is the library's kind for a stored paint (spec/14 §19.2), read as a `:paint`.
   @hidden_kinds [:flat_style, :curve_opts, :gradient]
   @column_types [:time, :number, :category, :text]
@@ -245,41 +241,8 @@ defmodule Visualize.Chart.Schema do
       default: Keyword.get(opts, :default),
       required: Keyword.get(opts, :required, false),
       merge: Keyword.get(opts, :merge, :override),
-      range: Keyword.get(opts, :range),
-      group: Keyword.get(opts, :group)
+      range: Keyword.get(opts, :range)
     }
-  end
-
-  @doc """
-  The group a key is shown under, or `nil` (spec/14 §14.2). The flat style the builder's
-  form edits groups its keys; a style in parts is grouped by its parts (D-172).
-
-      iex> Visualize.Chart.Schema.group(:flat_style, :stroke_linecap)
-      :stroke
-
-      iex> Visualize.Chart.Schema.group(:flat_style, :extends)
-      nil
-  """
-  @spec group(atom(), atom()) :: group() | nil
-  def group(kind, key) do
-    case key(kind, key) do
-      nil -> nil
-      spec -> spec.group
-    end
-  end
-
-  @doc """
-  The groups a node kind's keys carry, once each, in table order (spec/14 §14.2).
-
-      iex> Visualize.Chart.Schema.groups(:flat_style)
-      [:fill, :stroke, :font, :position, :effects]
-
-      iex> Visualize.Chart.Schema.groups(:mark)
-      []
-  """
-  @spec groups(atom()) :: [group()]
-  def groups(kind) do
-    kind |> describe() |> Enum.map(& &1.group) |> Enum.reject(&is_nil/1) |> Enum.uniq()
   end
 
   # The alternative of a `{:one_of, types}` whose shape the value has, or `nil`. The
@@ -531,35 +494,33 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:kind_defaults), do: part_keys()
 
   # The flat style every earlier version wrote, one key per element attribute (spec/14 §9,
-  # D-172), in the groups the builder's form shows them in.
+  # D-172): the types the migration reads them by.
   defp design_node(:flat_style) do
     [
       spec(:extends, {:ref, :style}, :style),
-      spec(:fill, :colour, :style, group: :fill),
-      spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}, group: :fill),
-      spec(:stroke_style, {:enum, [:single, :double, :inside, :outside]}, :style, group: :stroke),
-      spec(:stroke_width, :size, :style, range: {0, 20, 0.5}, group: :stroke),
-      spec(:stroke, :colour, :style, group: :stroke),
-      spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}, group: :stroke),
-      spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style, group: :stroke),
-      spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style, group: :stroke),
-      spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style, group: :stroke),
-      spec(:font_family, :font, :style, group: :font),
-      spec(:font_size, :size, :style, range: {6, 72, 1}, group: :font),
-      spec(:font_weight, {:one_of, [:integer, {:enum, @weights}]}, :style, group: :font),
-      spec(:font_style, {:enum, [:normal, :italic]}, :style, group: :font),
-      spec(:line_height, :number, :style, range: {0.8, 3, 0.1}, group: :font),
-      spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style, group: :position),
-      spec(:vertical_align, {:enum, [:top, :middle, :baseline, :bottom]}, :style,
-        group: :position
-      ),
-      spec(:margin_x, :number, :style, range: {0, 40, 1}, group: :position),
-      spec(:margin_y, :number, :style, range: {0, 40, 1}, group: :position),
-      spec(:text_angle, :number, :style, range: {-180, 180, 5}, group: :position),
-      spec(:opacity, :size, :style, range: {0, 1, 0.05}, group: :effects),
-      spec(:blend, {:enum, @blends}, :style, group: :effects),
-      spec(:effect, {:enum, [:none, :shadow, :blur]}, :style, group: :effects),
-      spec(:effect_radius, :size, :style, range: {0, 20, 0.5}, group: :effects),
+      spec(:fill, :colour, :style),
+      spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:stroke_style, {:enum, [:single, :double, :inside, :outside]}, :style),
+      spec(:stroke_width, :size, :style, range: {0, 20, 0.5}),
+      spec(:stroke, :colour, :style),
+      spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style),
+      spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style),
+      spec(:stroke_linecap, {:enum, [:butt, :round, :square]}, :style),
+      spec(:font_family, :font, :style),
+      spec(:font_size, :size, :style, range: {6, 72, 1}),
+      spec(:font_weight, {:one_of, [:integer, {:enum, @weights}]}, :style),
+      spec(:font_style, {:enum, [:normal, :italic]}, :style),
+      spec(:line_height, :number, :style, range: {0.8, 3, 0.1}),
+      spec(:text_anchor, {:enum, [:start, :middle, :end]}, :style),
+      spec(:vertical_align, {:enum, [:top, :middle, :baseline, :bottom]}, :style),
+      spec(:margin_x, :number, :style, range: {0, 40, 1}),
+      spec(:margin_y, :number, :style, range: {0, 40, 1}),
+      spec(:text_angle, :number, :style, range: {-180, 180, 5}),
+      spec(:opacity, :size, :style, range: {0, 1, 0.05}),
+      spec(:blend, {:enum, @blends}, :style),
+      spec(:effect, {:enum, [:none, :shadow, :blur]}, :style),
+      spec(:effect_radius, :size, :style, range: {0, 20, 0.5}),
       spec(:class, :string, :style),
       spec(:curve, {:enum, @curve_types}, :style),
       spec(:curve_opts, {:node, :curve_opts}, :style),

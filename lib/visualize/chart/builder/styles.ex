@@ -1072,9 +1072,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       gap: 10px;
     }
 
-    /* A run of keys under one heading (spec/14 §18.7): a block spanning the form's
-       width, its fields in the same grid the form lays loose fields in. */
-    .vis-builder-block {
+    /* A style in its parts (spec/14 §18.7, D-178): the whole element's keys in the form's
+       grid, then a fieldset per part spanning the form's width, its fields in the same
+       grid; a node inside a part — a transition's per property — a fieldset of its own. */
+    .vis-builder-style-form {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .vis-builder-part {
       grid-column: 1 / -1;
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1086,7 +1095,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
       min-width: 0;
     }
 
-    .vis-builder-block-name {
+    /* A part the element does not draw (spec/14 §5.6): muted, still editable. */
+    .vis-builder-part-undrawn {
+      border-style: dashed;
+      opacity: 0.6;
+    }
+
+    .vis-builder-part-note {
+      grid-column: 1 / -1;
+      margin: 0;
+    }
+
+    /* A list of nodes in a part — a gradient's stops (spec/14 §18.6): a row per item, its
+       fields across and its × at the end, and a + beneath. */
+    .vis-builder-part-rows {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .vis-builder-part-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)) auto;
+      gap: 8px;
+      align-items: end;
+      min-width: 0;
+    }
+
+    .vis-builder-part-add {
+      align-self: start;
+      padding: 2px 8px;
+      border: 1px dashed var(--vis-builder-line);
+      border-radius: var(--vis-builder-radius);
+      background: transparent;
+      color: var(--vis-builder-muted);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .vis-builder-part-add:hover {
+      color: var(--vis-builder-ink);
+      border-color: var(--vis-builder-accent);
+    }
+
+    .vis-builder-part-name {
       padding: 0 4px;
       color: var(--vis-builder-muted);
       font-size: 11px;
@@ -2244,24 +2299,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     .vis-builder-well.vis-builder-field-over {
       box-shadow: 0 0 0 2px var(--vis-builder-panel), 0 0 0 4px var(--vis-builder-accent);
-    }
-
-    /* The fill block (spec/14 §18.6): the style row across, the colours left, the numbers
-       right; a gradient's stop wells stack in the colours column. */
-    .vis-builder-block-fill {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    }
-
-    .vis-builder-fill-colours,
-    .vis-builder-fill-numbers {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .vis-builder-well-stop + .vis-builder-well-stop {
-      margin-top: 4px;
     }
 
     .vis-builder-pair {

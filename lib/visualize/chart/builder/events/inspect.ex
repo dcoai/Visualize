@@ -13,7 +13,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Selection, only: [aimed: 2, opened: 2, position: 1, select: 2]
     import Visualize.Chart.Builder.Writes, only: [owned: 3]
 
-    alias Visualize.Chart.Builder.{Editor, FormSchema, Stack}
+    alias Visualize.Chart.Builder.{Editor, Stack}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -126,7 +126,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event("facet", %{"facet" => facet}, socket) do
       %{entry: entry} = editing(socket.assigns)
-      facets = Enum.map(FormSchema.describe(entry.kind), & &1.facet)
+      facets = Editor.facets(entry.kind)
       {:noreply, assign(socket, facet: Enum.find(facets, &(to_string(&1) == facet)), field: nil)}
     end
 
@@ -139,17 +139,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp context_for(socket, key) do
       %{entry: entry} = editing(socket.assigns)
 
-      stop? = is_binary(key) and String.starts_with?(key, "fill.stop.")
-
-      case Enum.find(FormSchema.describe(entry.kind), &(to_string(&1.key) == key)) do
-        nil when stop? ->
-          :colour
-
-        %{type: :colour} ->
-          :colour
-
-        _other ->
-          socket.assigns.context
+      # A part's key by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
+      case Editor.locate(entry.kind, key) do
+        %{spec: %{type: :colour}} -> :colour
+        _other -> socket.assigns.context
       end
     end
 

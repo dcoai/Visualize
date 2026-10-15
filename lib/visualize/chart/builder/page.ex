@@ -16,7 +16,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Editor, FormSchema}
+    alias Visualize.Chart.Builder.{Editor, StyleForm}
     alias Visualize.Chart.Var
 
     @facets [:binding, :channel, :geometry, :style, :content]
@@ -267,7 +267,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec sections(map()) :: [map()]
     def sections(%{kind: :frame} = page) do
       node = page.node
-      specs = FormSchema.describe(:frame)
+      specs = Editor.describe(:frame)
 
       parts =
         for spec <- specs,
@@ -345,7 +345,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def sections(page) do
-      specs = FormSchema.describe(page.kind)
+      if StyleForm.kind?(page.kind), do: style_sections(page), else: facet_sections(page)
+    end
+
+    # A style is one section, its form in its parts, never sections of its keys (§18.7,
+    # D-178).
+    defp style_sections(page) do
+      [
+        %{
+          key: "#{page.label}:style",
+          name: "style",
+          title: "the style in its parts (§18.7)",
+          bare: false,
+          keys: Enum.map(Editor.describe(page.kind), & &1.key),
+          forms: [],
+          children: [],
+          needs: 0
+        }
+      ]
+    end
+
+    defp facet_sections(page) do
+      specs = Editor.describe(page.kind)
       node = page.node || %{}
 
       for facet <- @facets, own = Enum.filter(specs, &(&1.facet == facet)), own != [] do

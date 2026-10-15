@@ -9,7 +9,6 @@ defmodule Visualize.Chart.Builder.EditorTest do
   use ExUnit.Case, async: true
 
   doctest Visualize.Chart.Builder.Editor
-  doctest Visualize.Chart.Builder.Fills
   doctest Visualize.Chart.Builder.Sources
   doctest Visualize.Chart.Builder.Page
   doctest Visualize.Chart.Builder.Stack
@@ -87,10 +86,10 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
     test "every value of every drawn key has a picture, and an undrawn key has none" do
       drawn = [
-        fill_style: [:none, :solid, :linear, :radial],
+        paint_type: [:none, :solid, :linear, :radial, :hatch, :paint],
         effect: [:none, :shadow, :blur],
         vertical_align: [:top, :middle, :baseline, :bottom],
-        stroke_style: [:single, :double, :inside, :outside],
+        stroke_style: [:center, :single, :double, :inside, :outside],
         stroke_linejoin: [:miter, :round, :bevel],
         stroke_linecap: [:butt, :round, :square],
         curve: Schema.curve_types(),
@@ -133,34 +132,40 @@ defmodule Visualize.Chart.Builder.EditorTest do
       html =
         render_component(&Editor.panel/1, %{
           kind: :style,
-          node: %{stroke_linejoin: :round, curve: :step},
+          node: %{stroke: %{join: :round}, curve: %{type: :step}},
           path: [:styles, :series],
           facet: :style
         })
 
+      # A part's key is drawn by the part and the key (§18.6, D-178): `stroke.join`.
       assert html =~
-               ~s(<span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke_linejoin">)
+               ~s(<span class="vis-builder-glyphs" role="radiogroup" aria-label="stroke.join">)
 
       assert html =~ ~s(<label class="vis-builder-glyph vis-builder-glyph-on" title="round">)
 
       assert html =~
-               ~s(<input type="radio" name="stroke_linejoin" value="round" checked aria-label="round">)
+               ~s(<input type="radio" name="stroke.join" value="round" checked aria-label="round">)
 
       assert html =~
-               ~s(<input type="radio" name="stroke_linejoin" value="miter" aria-label="miter">)
+               ~s(<input type="radio" name="stroke.join" value="miter" aria-label="miter">)
 
       assert html =~ ~s(stroke-linejoin="bevel")
-      refute html =~ ~s(<select name="stroke_linejoin">)
+      refute html =~ ~s(<select name="stroke.join">)
 
       # A curve is drawn by the library's own line generator.
       assert html =~
-               ~s(<input type="radio" name="curve" value="monotone_x" aria-label="monotone_x">)
+               ~s(<input type="radio" name="curve.type" value="monotone_x" aria-label="monotone_x">)
 
-      assert length(Regex.scan(~r/name="curve" value=/, html)) == length(Schema.curve_types())
+      assert length(Regex.scan(~r/name="curve.type" value=/, html)) ==
+               length(Schema.curve_types())
 
-      # And it submits the word the select would.
-      assert Editor.change(:style, %{"_target" => ["curve"], "curve" => "natural"}) ==
-               {:curve, {:ok, :natural}}
+      # And it submits the word the select would, into the part.
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["curve.type"], "curve.type" => "natural"},
+               %{}
+             ) ==
+               [curve: {:ok, %{type: :natural}}]
     end
 
     test "a scale's kind stays a select: its values have no picture" do
@@ -190,7 +195,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       html =
         render_component(&Editor.panel/1, %{
           kind: :style,
-          node: %{opacity: 0.4, stroke_width: :label_size},
+          node: %{opacity: 0.4, stroke: %{width: :label_size}},
           path: [:styles, :series],
           facet: :style
         })
@@ -201,7 +206,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
       # A slot word has no place on a slider: it stands at the floor; the box shows the word.
       assert html =~
-               ~s(name="stroke_width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0")
+               ~s(name="stroke.width.range" class="vis-builder-range vis-builder-scrubber" style="--vis-builder-scrub: 0.0%" min="0" max="20" step="0.5" value="0")
 
       # The stylesheet lays it over the box: full height, mostly transparent, a dot that
       # alone takes the pointer.
@@ -213,20 +218,31 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert css =~
                ~r/\.vis-builder-scrubber::-webkit-slider-thumb \{[^}]*border-radius: 50%;[^}]*pointer-events: auto;/s
 
-      assert html =~ ~s(<input type="text" name="stroke_width" value="label_size">)
+      assert html =~ ~s(<input type="text" name="stroke.width" value="label_size">)
 
-      assert Editor.change(:style, %{"_target" => ["opacity.range"], "opacity.range" => "0.75"}) ==
-               {:opacity, {:ok, 0.75}}
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["opacity.range"], "opacity.range" => "0.75"},
+               %{}
+             ) ==
+               [opacity: {:ok, 0.75}]
+
+      assert Editor.changes(
+               :style,
+               %{"_target" => ["stroke.width.range"], "stroke.width.range" => "3"},
+               %{}
+             ) ==
+               [stroke: {:ok, %{width: 3}}]
 
       # A key with no range has no slider.
-      refute html =~ ~s(name="stroke.range")
+      refute html =~ ~s(name="stroke.dash.range")
     end
 
     test "a dash pattern is drawn beside its box" do
       html =
         render_component(&Editor.panel/1, %{
           kind: :style,
-          node: %{stroke_dasharray: [4, 2]},
+          node: %{stroke: %{dash: [4, 2]}},
           path: [:styles, :series],
           facet: :style
         })
@@ -414,73 +430,55 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert html =~ ~s(<input type="checkbox" name="grid" value="true">)
     end
 
-    test "a style's keys are five blocks under their headings, the ungrouped on their own" do
+    test "a style is a fieldset per part, the whole element's keys first (D-178)" do
       html = render_component(&Editor.panel/1, %{kind: :style, node: %{}, facet: :style})
 
-      blocks =
-        ~r/<legend class="vis-builder-block-name">(\w+)<\/legend>/
+      parts =
+        ~r/<legend class="vis-builder-part-name">(\w+)<\/legend>/
         |> Regex.scan(html)
-        |> Enum.map(fn [_, group] -> group end)
+        |> Enum.map(fn [_, part] -> part end)
 
-      assert blocks == ~w(fill stroke font position effects)
-      # The builder's form edits the flat style until #655 (D-172).
-      assert blocks == Enum.map(Schema.groups(:flat_style), &to_string/1)
+      assert parts ==
+               ~w(fill stroke font text effect marker curve transition fill stroke opacity
+                  animation enter exit)
 
-      # Each block holds its run of keys in table order; extends stands before the first
-      # block and class after the last.
-      keys =
-        ~r/<span class="vis-builder-key">\s*(\w+)/
-        |> Regex.scan(html)
-        |> Enum.map(fn [_, key] -> key end)
-
-      # The fill block opens with the fill style, in a row of its own (§18.6).
-      assert html =~
-               ~r|<legend class="vis-builder-block-name">fill</legend>\s*<div class="vis-builder-field vis-builder-field-fill-style">\s*<span class="vis-builder-key">style</span>|
-
-      fill_row =
-        html
-        |> String.split(~s(phx-value-field="fill"))
-        |> Enum.at(1)
-        |> String.split("</label>")
-        |> hd()
-
-      refute fill_row =~ ~s(name="fill_style")
-
-      assert keys ==
-               ~w(extends style opacity colour stroke_style stroke_width stroke stroke_opacity
-                  stroke_dasharray stroke_linejoin stroke_linecap font_family font_size
-                  font_weight line_height text_anchor vertical_align margin_x margin_y
-                  text_angle opacity blend effect effect_radius class curve curve_opts symbol
-                  symbol_size)
+      # The parts are the schema's node-typed keys of a style, in its order; nothing in
+      # the form lists them (§18.7). A transition's per-property entries nest in it.
+      assert Enum.take(parts, 7) ++ ["transition", "animation", "enter", "exit"] ==
+               for(%{type: {:node, _}, key: key} <- Schema.describe(:style), do: to_string(key))
 
       {extends, _} = :binary.match(html, ~s(phx-value-field="extends"))
-      {first, _} = :binary.match(html, ~s(<fieldset class="vis-builder-block))
+      {first, _} = :binary.match(html, ~s(<fieldset class="vis-builder-part"))
       assert extends < first
 
       stroke =
         html
-        |> String.split(~s(<legend class="vis-builder-block-name">stroke</legend>))
+        |> String.split(~s(<legend class="vis-builder-part-name">stroke</legend>))
         |> Enum.at(1)
         |> String.split("</fieldset>")
         |> hd()
 
-      assert stroke =~ ~s(phx-value-field="stroke_linecap")
-      refute stroke =~ ~s(phx-value-field="font_family")
+      # A part's controls are named by their path; a paint with no type shows its type
+      # and what every type reads — a stroke's line — and no colour.
+      assert stroke =~ ~s(phx-value-field="stroke.type")
+      assert stroke =~ ~s(phx-value-field="stroke.cap")
+      refute stroke =~ ~s(phx-value-field="stroke.color")
+      refute stroke =~ ~s(phx-value-field="font.family")
 
-      # A kind whose keys carry no group has no block.
+      # A kind that is not a style has no parts.
       refute render_component(&Editor.panel/1, %{kind: :axis, node: %{}}) =~
-               ~s(<fieldset class="vis-builder-block)
+               ~s(<fieldset class="vis-builder-part")
     end
 
     test "line height shows the points between lines it means" do
       html =
         render_component(&Editor.panel/1, %{
           kind: :style,
-          node: %{font_size: 20, line_height: 1.5},
+          node: %{font: %{size: 20, line_height: 1.5}},
           facet: :style
         })
 
-      assert html =~ ~s(name="line_height.range")
+      assert html =~ ~s(name="font.line_height.range")
       assert html =~ "10.0 pt between lines"
 
       # Without a font size the theme's stands in, and without a line height the default.

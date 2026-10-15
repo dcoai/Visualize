@@ -102,8 +102,10 @@ defmodule Visualize.Hooks.BuilderTest do
 
     refute html =~ ~s(phx-click="select_field")
     assert html =~ ~s(phx-keyup="select_field")
-    # The style row is not a label, so a click on its word picks no radio.
-    assert html =~ ~s(<div class="vis-builder-field vis-builder-field-fill-style">)
+    # A paint's type is a radio group of glyphs, not a label, so a click on its word picks
+    # no radio (§18.7, D-178).
+    assert html =~
+             ~s(<div class="vis-builder-field" data-builder-bind="fill.type" phx-keyup="select_field" phx-value-field="fill.type">)
   end
 
   test "nothing is logged and no element outside the hook takes part" do

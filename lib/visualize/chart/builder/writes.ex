@@ -160,6 +160,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # Every write an edit at a node means — `{key, parsed}`, a style's parts among them
+    # (spec/14 §18.7) — each through the ownership rule, in order.
+    @doc false
+    def update_node(socket, path, writes) do
+      Enum.reduce(writes, socket, fn {key, parsed}, acc ->
+        update_layer(acc, path, key, parsed)
+      end)
+    end
+
     # The composed design, or `%{}` where the stack does not compose.
     @doc false
     def composed(socket) do

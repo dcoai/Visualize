@@ -21,8 +21,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.Component
 
-    alias Visualize.Chart.Builder.{Fills, FormSchema, Glyphs, Store}
-    alias Visualize.Chart.{Fragment, Schema, Text, Validator, Var}
+    alias Visualize.Chart.Builder.{Fields, Store, StyleForm}
+    alias Visualize.Chart.{Fragment, Schema, Validator, Var}
     alias Visualize.Theme
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
@@ -73,8 +73,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       [%{path: path, kind: kind, label: label(path)} | children(node, kind, path)]
     end
 
+    # A style's parts are its form's, not nodes of the strip (§18.7, D-178).
+    defp children(_node, kind, _path) when kind in [:style, :defaults, :kind_defaults], do: []
+
     defp children(node, kind, path) do
-      Enum.flat_map(FormSchema.describe(kind), fn spec ->
+      Enum.flat_map(describe(kind), fn spec ->
         case Map.fetch(node, spec.key) do
           {:ok, value} -> descend(spec.type, value, path ++ [spec.key])
           :error -> []
@@ -210,7 +213,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp read({:one_of, [first | _rest]}, string), do: read(first, string)
+    # A choice of types reads as the first alternative that takes the string, the first
+    # first: an animation's `iterations` is a number or `infinite` (spec/14 §3.11).
+    defp read({:one_of, alternatives}, string) do
+      Enum.reduce_while(alternatives, :error, fn alternative, :error ->
+        case read(alternative, string) do
+          {:ok, value} -> {:halt, {:ok, value}}
+          :error -> {:cont, :error}
+        end
+      end)
+    end
 
     # A channel: a number is the constant, a bare name the field, anything else a literal.
     defp read(:channel, string) do
@@ -348,17 +360,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     `key` is the typed control and reads by `parse/2`; an unchecked checkbox submits
     nothing, which is `false` and not a removal, and every other control's blank removes
-    the key. `key.slot` is a colour's slot face and `key.range` a number's slider, both
-    read as the key. A variable reaches a field as a chip dropped on it (§19.9), never as
-    a control of the form, so there is no `key.mode` or `key.var`.
+    the key. `key.slot` is a colour's slot face, `key.range` a number's slider and
+    `key.other` a name the list lacks, each read as the key. A variable reaches a field as
+    a chip dropped on it (§19.9), never as a control of the form, so there is no
+    `key.mode` or `key.var`. A style's controls are named by their path and read by
+    `changes/3` (§18.7).
 
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["stroke_width"], "stroke_width" => "5"})
-        {:stroke_width, {:ok, 5}}
+        iex> Visualize.Chart.Builder.Editor.change(:mark, %{"_target" => ["data"], "data" => "rows"})
+        {:data, {:ok, :rows}}
 
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["fill.slot"], "fill.slot" => ""})
-        {:fill, :error}
+        iex> Visualize.Chart.Builder.Editor.change(:theme, %{"_target" => ["axis.slot"], "axis.slot" => ""})
+        {:axis, :error}
 
-        iex> Visualize.Chart.Builder.Editor.change(:style, %{"_target" => ["nonsense"], "nonsense" => "1"})
+        iex> Visualize.Chart.Builder.Editor.change(:mark, %{"_target" => ["nonsense"], "nonsense" => "1"})
         nil
     """
     @spec change(atom(), map()) :: {atom(), {:ok, term()} | :error} | nil
@@ -369,6 +383,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         [key, "other"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
         [_key, "add"] -> nil
         [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
+        _other -> nil
       end
     end
 
@@ -386,35 +401,86 @@ if Code.ensure_loaded?(Phoenix.Component) do
     ]
 
     @doc """
-    Every write a change to the form means (spec/14 §18.6): one for most controls, as
-    `change/2` reads it, and two for a `font_face` — the weight word and the style word
-    of the face picked — since a face is one control over two keys.
+    Every write a change to the form means (spec/14 §18.6, §18.7), for the node the write
+    lands in: one for most controls, as `change/2` reads it; for a style, the top-level
+    parts the change rewrites (`Visualize.Chart.Builder.StyleForm.changes/5`) — a font's
+    `face` both its keys, a node in the flat keys of version 2 every part. `seed` is the
+    style the site resolves to, which a paint's type change starts from.
 
-        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["font_face"], "font_face" => "light_italic"})
-        [font_weight: {:ok, :light}, font_style: {:ok, :italic}]
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["font.face"], "font.face" => "light_italic"}, %{})
+        [font: {:ok, %{weight: :light, style: :italic}}]
 
-        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["font_face"], "font_face" => "regular"})
-        [font_weight: {:ok, :normal}, font_style: {:ok, :normal}]
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["stroke.width"], "stroke.width" => "5"}, %{stroke: %{color: "#111"}})
+        [stroke: {:ok, %{type: :solid, color: "#111", width: 5}}]
 
-        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["stroke_width"], "stroke_width" => "5"})
-        [stroke_width: {:ok, 5}]
+        iex> Visualize.Chart.Builder.Editor.changes(:mark, %{"_target" => ["data"], "data" => "rows"}, %{})
+        [data: {:ok, :rows}]
 
-        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["nonsense"], "nonsense" => "1"})
+        iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["nonsense"], "nonsense" => "1"}, %{})
         []
     """
-    @spec changes(atom(), map()) :: [{atom(), {:ok, term()} | :error}]
-    def changes(kind, %{"_target" => ["font_face"], "font_face" => picked} = _params) do
-      with true <-
-             FormSchema.key(kind, :font_weight) != nil and
-               FormSchema.key(kind, :font_style) != nil,
-           {_face, weight, style} <- Enum.find(@faces, &(to_string(elem(&1, 0)) == picked)) do
-        [font_weight: {:ok, weight}, font_style: {:ok, style}]
+    @spec changes(atom(), map(), term(), term()) :: [{atom(), {:ok, term()} | :error}]
+    def changes(kind, params, node, seed \\ nil)
+
+    def changes(kind, %{"_target" => [target]} = params, node, seed) do
+      if StyleForm.kind?(kind),
+        do: StyleForm.changes(kind, target, params[target], node, seed || node),
+        else: List.wrap(change(kind, params))
+    end
+
+    def changes(_kind, _params, _node, _seed), do: []
+
+    @doc false
+    # The key spec a field's name reads as, and its path within the node (spec/14 §18.7,
+    # D-178): a key of the kind, or — for a style — a part's key by its path. `nil` for a
+    # name the kind has no key for.
+    @spec locate(atom(), String.t()) :: %{path: list(), spec: map()} | nil
+    def locate(kind, name) when is_binary(name) do
+      if StyleForm.kind?(kind) do
+        case StyleForm.locate(kind, name) do
+          %{spec: _spec} = located -> located
+          _face_or_none -> nil
+        end
       else
-        _other -> []
+        case key_spec(kind, name) do
+          nil -> nil
+          spec -> %{path: [spec.key], spec: spec, suffix: nil}
+        end
       end
     end
 
-    def changes(kind, params), do: List.wrap(change(kind, params))
+    def locate(_kind, _name), do: nil
+
+    @doc false
+    # The writes a value at a path of a node means: the key's own, or for a style the parts
+    # it rewrites (§18.7).
+    @spec write(atom(), term(), list(), {:ok, term()} | :error) :: [
+            {atom(), {:ok, term()} | :error}
+          ]
+    def write(kind, node, path, parsed) do
+      case {StyleForm.kind?(kind), path} do
+        {true, _path} -> StyleForm.write(node, path, parsed, node)
+        {false, [key]} -> [{key, parsed}]
+      end
+    end
+
+    @doc false
+    # The value at a field's path of a node, the node read in its parts for a style.
+    @spec value_at(atom(), term(), list()) :: term()
+    def value_at(kind, node, path) do
+      node =
+        if StyleForm.kind?(kind) and is_map(node),
+          do: Visualize.Chart.Style.normalize(node),
+          else: node
+
+      Visualize.Chart.Builder.Writes.at(node, path)
+    end
+
+    @doc false
+    # The schema as the form shows it: a node's `defaults` (spec/14 §3.8, #651) wait for
+    # their editor (#684), and a fragment that carries them keeps them.
+    @spec describe(atom()) :: [Schema.key_spec()]
+    def describe(kind), do: kind |> Schema.describe() |> Enum.reject(&(&1.key == :defaults))
 
     @doc """
     The eight faces in order, each with the weight and style it writes (spec/14 §18.6).
@@ -461,7 +527,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp weight_word(_other), do: :normal
 
     defp key_spec(kind, submitted) do
-      Enum.find(FormSchema.describe(kind), &(to_string(&1.key) == submitted))
+      Enum.find(describe(kind), &(to_string(&1.key) == submitted))
     end
 
     defp typed(nil, _value), do: nil
@@ -522,7 +588,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec facets(atom()) :: [Schema.facet()]
     def facets(kind) do
-      specs = FormSchema.describe(kind)
+      specs = describe(kind)
       Enum.filter(@facets, fn facet -> Enum.any?(specs, &(&1.facet == facet)) end)
     end
 
@@ -581,6 +647,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:label, :string, default: nil, doc: "the node's label, carried by the form (§18.16)")
     attr(:only, :list, default: nil, doc: "the keys to show; nil for the open facet's")
 
+    attr(:drawn_by, :atom,
+      default: nil,
+      doc: "for a style, the kind of the element it draws: its undrawn parts are grayed (§18.7)"
+    )
+
     attr(:columns, :map,
       default: %{},
       doc: "the columns the pool's rows have, by source name (§18.6)"
@@ -624,302 +695,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
       </div>
       """
     end
-
-    attr(:field, :map, required: true)
-    attr(:label, :string, default: nil, doc: "the title shown instead of the key's name")
-
-    attr(:node_label, :string,
-      default: nil,
-      doc: "the node's label, aimed at by the field's events"
-    )
-
-    attr(:selected, :string, default: nil)
-    attr(:found, :string, default: nil)
-    attr(:origins, :map, default: %{})
-    attr(:target, :any, default: nil)
-
-    # One key of the form: its name, its control, its chip or its errors (spec/14 §18.7).
-    defp field(assigns) do
-      ~H"""
-      <label
-        class={field_class(@field, @selected, @found)}
-        title={if(Map.get(@field, :guess?), do: "guessed from the source's fields — check it")}
-        data-builder-ref={@field.ref && to_string(@field.key)}
-        data-builder-bind={@field.key}
-        phx-keyup="select_field"
-        phx-value-field={@field.key}
-        phx-target={@target}
-      >
-        <span class="vis-builder-key">
-          {@label || @field.key}<span
-            :if={@origins[@field.key]}
-            class="vis-builder-origin"
-          >{@origins[@field.key]}</span>
-          <span
-            :if={is_nil(@field.variable) and @field.value != nil}
-            class="vis-builder-field-handle"
-            draggable="true"
-            data-builder-promote={@field.key}
-            title="drag to the variables panel to make a variable of this value"
-            aria-hidden="true"
-          >⠿</span>
-        </span>
-        <span :if={@field.variable} class="vis-builder-var-chip vis-builder-var-chip-bound">
-          var(:{@field.variable})
-          <button
-            type="button"
-            class="vis-builder-var-unbind"
-            phx-click="unbind_field"
-            phx-value-field={@field.key}
-            phx-value-node={@node_label}
-            phx-target={@target}
-            aria-label={"unbind #{@field.key} from #{@field.variable}"}
-            title="unbind"
-          >×</button>
-        </span>
-        <span
-          :for={stop <- gradient_stops(@field)}
-          class={well_class(stop.well) <> " vis-builder-well-stop"}
-          style={"--vis-builder-swatch: #{stop.well.colour || "transparent"}"}
-          title={stop.well.word || "no colour set"}
-          role="img"
-          aria-label={"stop #{stop.index}: #{stop.well.word || "not set"}"}
-          data-builder-well={"fill.stop.#{stop.index}"}
-        ></span>
-        <input
-          :if={is_nil(@field.variable) and @field.widget == :checkbox}
-          type="checkbox"
-          name={@field.key}
-          value="true"
-          checked={@field.checked}
-        />
-        <span :if={is_nil(@field.variable) and ranged?(@field)} class="vis-builder-ranged">
-          <input
-            :if={@field.widget == :number}
-            type="number"
-            name={@field.key}
-            value={@field.value}
-            placeholder={@field.placeholder}
-          />
-          <input
-            :if={@field.widget == :text}
-            type="text"
-            name={@field.key}
-            value={@field.value}
-            placeholder={@field.placeholder}
-          />
-          <input
-            type="range"
-            name={"#{@field.key}.range"}
-            class="vis-builder-range vis-builder-scrubber"
-            style={scrub(@field.slider, @field.range.min, @field.range.max)}
-            min={@field.range.min}
-            max={@field.range.max}
-            step={@field.range.step}
-            value={@field.slider}
-            aria-label={"#{@field.key}, dragged"}
-          />
-        </span>
-        <input
-          :if={is_nil(@field.variable) and @field.widget == :number and not ranged?(@field)}
-          type="number"
-          name={@field.key}
-          value={@field.value}
-          placeholder={@field.placeholder}
-        />
-        <select
-          :if={is_nil(@field.variable) and @field.widget == :faces}
-          name="font_face"
-          class="vis-builder-face-select"
-          style={Enum.find_value(@field.faces, &(&1.on? and &1.css))}
-          aria-label="face"
-        >
-          <option :for={row <- @field.faces} value={row.face} style={row.css} selected={row.on?}>
-            {row.label}
-          </option>
-        </select>
-        <input
-          :if={is_nil(@field.variable) and @field.widget == :text and not ranged?(@field)}
-          type="text"
-          name={@field.key}
-          value={@field.value}
-          placeholder={@field.placeholder}
-          data-builder-text={@field.text? && "true"}
-        />
-        <span :if={is_nil(@field.variable) and @field.points != nil} class="vis-builder-item-text">
-          {@field.points} pt between lines
-        </span>
-        <svg
-          :if={is_nil(@field.variable) and @field.dash != nil}
-          class="vis-builder-dash"
-          viewBox="0 0 120 8"
-          width="120"
-          height="8"
-          aria-hidden="true"
-        >
-          <path
-            d="M2 4 H118"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-dasharray={@field.dash}
-          />
-        </svg>
-        <span
-          :if={is_nil(@field.variable) and @field.widget == :colour and gradient_stops(@field) == []}
-          class={well_class(@field.well)}
-          style={"--vis-builder-swatch: #{@field.well.colour || "transparent"}"}
-          title={@field.well.word || "no colour set"}
-          role="img"
-          aria-label={"#{@field.key}: #{@field.well.word || "not set"}"}
-          data-builder-well={@field.key}
-        ></span>
-        <div :if={is_nil(@field.variable) and @field.widget == :pool} class="vis-builder-pool" role="radiogroup" aria-label={to_string(@field.key)}>
-          <label class={"vis-builder-pool-name" <> if(@field.value == nil, do: " vis-builder-pool-name-on", else: "")}>
-            <input type="radio" name={@field.key} value="" checked={@field.value == nil} />
-            none
-          </label>
-          <label
-            :for={{value, label} <- @field.options}
-            class={"vis-builder-pool-name" <> if(@field.value == value, do: " vis-builder-pool-name-on", else: "")}
-          >
-            <input type="radio" name={@field.key} value={value} checked={@field.value == value} />
-            {label}
-          </label>
-        </div>
-        <input
-          :if={is_nil(@field.variable) and @field.widget == :pool}
-          type="text"
-          name={"#{@field.key}.other"}
-          class="vis-builder-declared-name"
-          placeholder="or a name the pool lacks"
-          aria-label={"#{@field.key}, a name the pool lacks"}
-        />
-        <select
-          :if={is_nil(@field.variable) and @field.widget == :select and @field.glyphs == []}
-          name={@field.key}
-        >
-          <option value=""></option>
-          <option
-            :for={{value, label} <- @field.options}
-            value={value}
-            selected={@field.value == value}
-          >{label}</option>
-        </select>
-        <span
-          :if={is_nil(@field.variable) and @field.widget == :select and @field.glyphs != []}
-          class="vis-builder-glyphs"
-          role="radiogroup"
-          aria-label={to_string(@field.key)}
-        >
-          <label
-            :for={{value, svg} <- @field.glyphs}
-            class={"vis-builder-glyph" <> if(@field.value == value, do: " vis-builder-glyph-on", else: "")}
-            title={value}
-          >
-            <input
-              type="radio"
-              name={@field.key}
-              value={value}
-              checked={@field.value == value}
-              aria-label={value}
-            />
-            {Phoenix.HTML.raw(svg)}
-          </label>
-        </span>
-        <div
-          :if={is_nil(@field.variable) and @field.widget == :items and @field.picks}
-          class="vis-builder-pool vis-builder-picks"
-          role="group"
-          aria-label={"#{@field.key}: the columns the rows have"}
-        >
-          <label
-            :for={pick <- @field.picks}
-            class={"vis-builder-pool-name" <> if(pick.on?, do: " vis-builder-pool-name-on", else: "") <> if(pick.missing?, do: " vis-builder-pool-name-missing", else: "")}
-            title={if(pick.missing?, do: "#{pick.name} — not in the rows", else: pick.name)}
-          >
-            <input type="checkbox" name={"#{@field.key}.pick[]"} value={pick.name} checked={pick.on?} />
-            {pick.name}
-          </label>
-        </div>
-        <div :if={is_nil(@field.variable) and @field.widget == :items} class="vis-builder-items">
-          <span :for={{item, index} <- Enum.with_index(@field.items)} :if={!@field.picks or item.chip} class="vis-builder-item-row">
-            <span :if={item.chip} class="vis-builder-var-chip vis-builder-var-chip-bound">var(:{item.chip})</span>
-            <span :if={!item.chip} class="vis-builder-item-text">{item.text}</span>
-            <button
-              type="button"
-              class="vis-builder-item-remove"
-              phx-click="list_remove"
-              phx-value-field={@field.key}
-              phx-value-node={@node_label}
-              phx-value-index={index}
-              phx-target={@target}
-              aria-label={"remove #{item.text || item.chip} from #{@field.key}"}
-            >×</button>
-          </span>
-          <span class="vis-builder-item-add" data-builder-bind={@field.key}>
-            <input
-              type="text"
-              name={"#{@field.key}.add"}
-              class="vis-builder-item-box"
-              placeholder="+ add"
-              aria-label={"add to #{@field.key}"}
-              phx-keydown="list_add"
-              phx-key="Enter"
-              phx-value-field={@field.key}
-              phx-value-node={@node_label}
-              phx-target={@target}
-            />
-          </span>
-        </div>
-        <textarea
-          :if={is_nil(@field.variable) and @field.widget == :textarea}
-          name={@field.key}
-          placeholder={@field.placeholder}
-        >{@field.value}</textarea>
-        <ul :if={@field.errors != []} class="vis-builder-key-errors">
-          <li :for={line <- @field.errors} class="vis-builder-error">{line}</li>
-        </ul>
-      </label>
-      """
-    end
-
-    # The scrubber's bar (§18.6): the value's fraction of its range, as a custom property.
-    defp scrub(value, min, max)
-         when is_number(value) and is_number(min) and is_number(max) and max > min do
-      fraction = (value - min) / (max - min)
-      "--vis-builder-scrub: #{Float.round(min(max(fraction, 0), 1) * 100 * 1.0, 1)}%"
-    end
-
-    defp scrub(_value, _min, _max), do: "--vis-builder-scrub: 0%"
-
-    # A gradient fill's wells are its first and last stops (§18.6); nothing otherwise.
-    defp gradient_stops(%{variable: nil, fill: %{gradient: gradient, stops: [_ | _] = stops}})
-         when is_map(gradient) do
-      case stops do
-        [one] -> [one]
-        many -> [List.first(many), List.last(many)]
-      end
-    end
-
-    defp gradient_stops(_field), do: []
-
-    # A ranged number's box and slider share one span, the slider over the box (§18.6).
-    defp ranged?(field), do: field.range != nil and field.widget in [:number, :text]
-
-    # The fill block opens with the fill style (§18.6): the fill field's view, when it has one.
-    defp fill_style(:fill, fields) do
-      case Enum.find(fields, &(&1.key == :fill)) do
-        %{variable: nil, fill: fill} -> fill
-        _other -> nil
-      end
-    end
-
-    defp fill_style(_group, _fields), do: nil
-
-    # The open tab's fields as runs of one group (spec/14 §18.7): a run with a group is a
-    # block under its heading; a run with none is fields on their own.
-    defp blocks(fields), do: Enum.chunk_by(fields, & &1.group) |> Enum.map(&{hd(&1).group, &1})
 
     @doc """
     One node's form alone (spec/14 §18.7): the fields of one facet — or, with `only`, of the
@@ -983,16 +758,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     attr(:target, :any, default: nil)
 
+    attr(:drawn_by, :atom,
+      default: nil,
+      doc: "for a style, the kind of the element it draws: its undrawn parts are grayed (§18.7)"
+    )
+
     def form_body(assigns) do
-      specs = FormSchema.describe(assigns.kind)
       facets = facets(assigns.kind)
       open = if assigns.facet in facets, do: assigns.facet, else: List.first(facets)
+      style? = StyleForm.kind?(assigns.kind)
+      only = Map.get(assigns, :only)
+
+      fields =
+        if style?,
+          do: [],
+          else:
+            assigns.kind
+            |> describe()
+            |> Enum.filter(&if(only, do: &1.key in only, else: &1.facet == open))
+            |> Fields.views(assigns)
 
       assigns =
         assigns
         |> assign(:open, open)
+        |> assign(:style?, style?)
         |> assign(:form_id, form_id(assigns))
-        |> assign(:blocks, blocks(fields(specs, open, assigns)))
+        |> assign(:fields, fields)
 
       ~H"""
         <form
@@ -1015,106 +806,32 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <button :if={@unlock != nil} type="button" class="vis-builder-section-select-button" title="unlock — copy the entry into this chart and edit it here (spec/14 §18.8)" phx-click="unlock_site" phx-value-index={@unlock} phx-target={@target}>unlock</button>
           </p>
           <fieldset class={"vis-builder-form-body" <> if(@locked, do: " vis-builder-form-locked", else: "")} disabled={@locked}>
-          <%= for {group, fields} <- @blocks do %>
-            <fieldset :if={group} class={"vis-builder-block" <> if(fill_style(group, fields), do: " vis-builder-block-fill", else: "")}>
-              <legend class="vis-builder-block-name">{group}</legend>
-              <%= if fill = fill_style(group, fields) do %>
-                <div class="vis-builder-field vis-builder-field-fill-style">
-                  <span class="vis-builder-key">style</span>
-                  <span class="vis-builder-glyphs" role="radiogroup" aria-label="fill style">
-                    <label
-                      :for={{style, svg} <- fill.glyphs}
-                      class={"vis-builder-glyph" <> if(fill.style == style, do: " vis-builder-glyph-on", else: "")}
-                      title={style}
-                    >
-                      <input type="radio" name="fill_style" value={style} checked={fill.style == style} aria-label={style} />
-                      {Phoenix.HTML.raw(svg)}
-                    </label>
-                  </span>
-                </div>
-                <.field
-                  :for={field <- fields}
-                  :if={field.key == :fill_opacity}
-                  field={field}
-                  node_label={@label}
-                  label="opacity"
-                  selected={@selected}
-                  found={@found}
-                  origins={@origins}
-                  target={@target}
-                />
-                <div class="vis-builder-fill-colours">
-                  <.field
-                    :for={field <- fields}
-                    :if={field.key == :fill}
-                    field={field}
-                    node_label={@label}
-                    label="colour"
-                    selected={@selected}
-                    found={@found}
-                    origins={@origins}
-                    target={@target}
-                  />
-                </div>
-                <div class="vis-builder-fill-numbers">
-                  <.field
-                    :for={field <- fields}
-                    :if={field.key not in [:fill, :fill_opacity]}
-                    field={field}
-                    node_label={@label}
-                    selected={@selected}
-                    found={@found}
-                    origins={@origins}
-                    target={@target}
-                  />
-                  <label :if={fill.style == :linear} class="vis-builder-field">
-                    <span class="vis-builder-key">angle</span>
-                    <span class="vis-builder-ranged">
-                      <input type="text" name="fill.angle" value={fill.angle} aria-label="angle" />
-                      <input
-                        type="range"
-                        name="fill.angle.range"
-                        class="vis-builder-range vis-builder-scrubber"
-                        style={scrub(fill.angle, 0, 360)}
-                        min="0"
-                        max="360"
-                        step="5"
-                        value={fill.angle}
-                        aria-label="angle, dragged"
-                      />
-                    </span>
-                  </label>
-                  <label :if={fill.style == :radial} class="vis-builder-field">
-                    <span class="vis-builder-key">centre</span>
-                    <span class="vis-builder-pair">
-                      <input type="number" name="fill.centre.x" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 0)} aria-label="centre x" />
-                      <input type="number" name="fill.centre.y" min="0" max="1" step="0.05" value={Enum.at(fill.centre, 1)} aria-label="centre y" />
-                    </span>
-                  </label>
-                </div>
-              <% else %>
-                <.field
-                  :for={field <- fields}
-                  field={field}
-                  node_label={@label}
-                  selected={@selected}
-                  found={@found}
-                  origins={@origins}
-                  target={@target}
-                />
-              <% end %>
-            </fieldset>
-            <.field
-              :for={field <- fields}
-              :if={is_nil(group)}
-              field={field}
-              node_label={@label}
-              selected={@selected}
-              found={@found}
-              origins={@origins}
-              target={@target}
-            />
-          <% end %>
+          <StyleForm.body
+            :if={@style?}
+            kind={@kind}
+            node={@node}
+            path={@path}
+            label={@label}
+            errors={@errors}
+            refs={@refs}
+            selected={@selected}
+            found={@found}
+            theme={@theme}
+            defs={@defs}
+            origins={@origins}
+            guessed={@guessed}
+            event={@event}
+            drawn_by={@drawn_by}
+            target={@target}
+          />
+          <Fields.field
+            :for={field <- @fields}
+            field={field}
+            node_label={@label}
+            selected={@selected}
+            found={@found}
+            target={@target}
+          />
           </fieldset>
         </form>
       """
@@ -1142,6 +859,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       :channel_columns,
       :event,
       :origins,
+      :drawn_by,
       :target
     ]
     defp form_assigns(assigns), do: Map.take(assigns, @form_keys)
@@ -1165,332 +883,22 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp tab(facet, facet), do: "vis-builder-tab vis-builder-tab-open"
     defp tab(_facet, _open), do: "vis-builder-tab"
 
-    # One field per key of the open tab: the control, what it shows, and the key's errors.
-    defp fields(specs, open, %{node: node, path: path, errors: errors} = assigns) do
-      refs = Map.get(assigns, :refs) || %{}
-
-      faced? = Enum.any?(specs, &(&1.key == :font_style))
-
-      pool = Map.get(assigns, :pool) || []
-
-      hidden = if assigns.kind == :source, do: Map.get(assigns, :hidden) || [], else: []
-
-      only = Map.get(assigns, :only)
-
-      for spec <- specs,
-          if(only, do: spec.key in only, else: spec.facet == open),
-          spec.key not in hidden,
-          not (faced? and spec.key == :font_style) do
-        widget =
-          pooled(assigns.kind, spec.key, pool) || columned(assigns, spec) ||
-            referenced(spec.type, refs)
-
-        %{
-          key: spec.key,
-          guess?:
-            MapSet.member?(
-              Map.get(assigns, :guessed) || MapSet.new(),
-              guess_label(assigns, spec.key)
-            ),
-          faces: if(faced? and spec.key == :font_weight, do: face_rows(node), else: []),
-          # The face list stands in for the weight's box (§18.6).
-          widget: if(faced? and spec.key == :font_weight, do: :faces, else: shape(widget)),
-          group: spec.group,
-          ref: ref_field(spec.type),
-          text?: spec.type == :text,
-          glyphs: glyphs(spec.key, widget),
-          range: range(spec.range),
-          slider: slider(Map.fetch(node, spec.key), spec),
-          dash: dash(spec.key, Map.get(node, spec.key)),
-          items: items(widget, Map.get(node, spec.key)),
-          options: options(widget),
-          checked: Map.get(node, spec.key) == true,
-          value: shown(widget, as_text(spec, Map.fetch(node, spec.key))),
-          well:
-            well(
-              widget,
-              Map.get(node, spec.key),
-              Map.get(assigns, :theme),
-              Map.get(assigns, :defs) || %{}
-            ),
-          fill: fill_view(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
-          points: points(spec.key, node, Map.get(assigns, :theme)),
-          picks: picks(assigns.kind, spec.key, Map.get(node, spec.key), assigns),
-          variable: if(spec.type == :text, do: nil, else: variable_name(Map.get(node, spec.key))),
-          placeholder: placeholder(assigns, spec, widget),
-          errors: key_errors(errors, path ++ [spec.key])
-        }
-      end
-    end
-
-    # A source's default is a pool name, chosen where the host's pool is known (§19.10).
-    defp pooled(:source, :default, [_ | _] = pool), do: {:pool, pool}
-    defp pooled(_kind, _key, _pool), do: nil
-
-    # A channel on a mark whose source the editor knows picks from its columns (§18.6,
-    # #371): the select when the value is unbound or one of them, else the text box with
-    # the value as it is, so a literal or a lost column is never hidden.
-    defp columned(%{kind: :channels, node: node, path: path} = assigns, %{key: key}) do
-      case Map.get(Map.get(assigns, :channel_columns) || %{}, path) do
-        [_ | _] = columns ->
-          value = Map.get(node, key)
-
-          if value == nil or Enum.any?(columns, &(&1.name == value)),
-            do: {:columns, columns},
-            else: nil
-
-        _none ->
-          nil
-      end
-    end
-
-    defp columned(_assigns, _spec), do: nil
-
-    # A channel with no source to pick from says what to do first.
-    defp placeholder(%{kind: :channels} = assigns, _spec, :text) do
-      if Map.get(Map.get(assigns, :channel_columns) || %{}, assigns.path) in [nil, []],
-        do: "bind data first",
-        else: nil
-    end
-
-    defp placeholder(_assigns, spec, widget), do: shown(widget, default(spec))
-
-    # A reference is a choice among the names something declares, so where the caller knows
-    # them it is a select rather than a box to spell a name into (spec/14 §18.14). `widget/1`
-    # itself stays a function of the type alone, which is what makes it total over the schema.
-    defp referenced({:ref, kind} = type, refs) do
-      case Map.get(refs, kind) do
-        [_ | _] = names -> {:select, names}
-        _none -> widget(type)
-      end
-    end
-
-    # A key whose type merely *admits* a reference — a style site takes a reference, an
-    # inline node or a list of them (spec/14 §3.6) — is still a choice among declared names
-    # wherever the caller knows them.
-    defp referenced({:one_of, alts} = type, refs) do
-      case Enum.find_value(alts, fn alt -> match?({:ref, _}, alt) and alt end) do
-        {:ref, _kind} = ref -> narrowed(referenced(ref, refs), type)
-        nil -> widget(type)
-      end
-    end
-
-    defp referenced(type, _refs), do: widget(type)
-
-    defp narrowed({:select, names}, _type), do: {:select, names}
-    defp narrowed(_other, type), do: widget(type)
-
-    # A field whose value is a variable is shown as one (spec/14 §19.9), never as the
-    # struct's text in a textarea.
-    defp variable_name(%Var{name: name}), do: to_string(name)
-    defp variable_name(_value), do: nil
-
-    defp shape({:select, _allowed}), do: :select
-    defp shape({:columns, _columns}), do: :select
-    defp shape({:pool, _names}), do: :pool
-    defp shape({:items, _scalar}), do: :items
-    defp shape(widget), do: widget
-
-    # The label a guess is kept under: the node's label and the key (§18.16).
-    defp guess_label(%{label: label}, key) when is_binary(label), do: "#{label}.#{key}"
-    defp guess_label(_assigns, key), do: to_string(key)
-
-    defp field_class(field, selected, found) do
-      ["vis-builder-field"]
-      |> then(&if field.errors != [], do: &1 ++ ["vis-builder-field-needs"], else: &1)
-      |> then(&if Map.get(field, :guess?), do: &1 ++ ["vis-builder-field-guess"], else: &1)
-      |> then(
-        &if selected == to_string(field.key), do: &1 ++ ["vis-builder-field-selected"], else: &1
-      )
-      |> then(
-        &if found != nil and field.variable == found,
-          do: &1 ++ ["vis-builder-field-found"],
-          else: &1
-      )
-      |> Enum.join(" ")
-    end
-
-    defp range(nil), do: nil
-    defp range({min, max, step}), do: %{min: min, max: max, step: step}
-
-    # The slider stands at the value when it is a number, else at the default or the
-    # range's floor: a slot word has no place on a slider, and the box still shows it.
-    defp slider(_value, %{range: nil}), do: nil
-    defp slider({:ok, n}, _spec) when is_number(n), do: n
-    defp slider(_other, %{default: d}) when is_number(d), do: d
-    defp slider(_other, %{range: {min, _max, _step}}), do: min
-
-    # A dash pattern is seen, not decoded: the value as the SVG attribute it becomes.
-    defp dash(:stroke_dasharray, value) when is_binary(value), do: value
-    defp dash(:stroke_dasharray, value) when is_list(value), do: Enum.join(value, " ")
-    defp dash(_key, _value), do: nil
-
-    # A drawn enum is chosen by its picture (§18.6): one glyph per allowed value, where the
-    # key is drawn and every value has one — `kind` is drawn for a frame and not a scale.
-    defp glyphs(key, {:select, allowed}) do
-      if Glyphs.drawn?(key) do
-        pictures = Enum.map(allowed, &{option(&1), Glyphs.glyph(key, &1)})
-        if Enum.all?(pictures, fn {_v, svg} -> svg != nil end), do: pictures, else: []
-      else
-        []
-      end
-    end
-
-    defp glyphs(_key, _widget), do: []
-
-    # A reference field is a drop target for a library entry of its kind (§19.10).
-    defp ref_field({:ref, kind}), do: to_string(kind)
-    defp ref_field({:one_of, alts}), do: Enum.find_value(alts, &ref_field/1)
-    defp ref_field(_type), do: nil
-
-    # An option is what the control submits and what a person reads: an id is spelt as the
-    # DOM carries one, and read back through the same table (§19.2).
-    defp options({:select, allowed}), do: Enum.map(allowed, &{option(&1), option(&1)})
-
-    defp options({:columns, columns}),
-      do: Enum.map(columns, &{to_string(&1.name), column_word(&1)})
-
-    defp options({:pool, names}), do: Enum.map(names, &{&1, &1})
-    defp options(_widget), do: []
-
-    defp option({kind, n}) when is_atom(kind) and is_integer(n), do: Store.encode_id({kind, n})
-    defp option(value), do: to_string(value)
-
-    defp column_word(%{name: name, type: nil}), do: to_string(name)
-    defp column_word(%{name: name, type: type}), do: "#{name} · #{type}"
-
-    # The face list's rows (§18.6): each face with its picture's weight and slant, the
-    # node's own face marked.
-    defp face_rows(node) do
-      shown = face(Map.get(node, :font_weight), Map.get(node, :font_style))
-
-      for {face, weight, style} <- @faces do
-        %{
-          face: face,
-          on?: face == shown,
-          css: "font-weight: #{css_weight(weight)}; font-style: #{style}",
-          label: face |> to_string() |> String.replace("_", " ")
-        }
-      end
-    end
-
-    defp css_weight(:light), do: 300
-    defp css_weight(:normal), do: 400
-    defp css_weight(:medium), do: 500
-    defp css_weight(:bold), do: 700
-
-    # A source's fields as the columns its rows have (§18.6): every column and every
-    # declared name, sorted, the declared ones on, a declared name the rows lack marked;
-    # nil when the source has no rows to offer.
-    defp picks(:source, :fields, value, assigns) do
-      name =
-        Map.get(assigns, :source_name) ||
-          case Map.get(assigns, :path) do
-            [:sources, name] -> name
-            _other -> nil
-          end
-
-      case name && Map.get(Map.get(assigns, :columns) || %{}, name) do
-        columns when is_list(columns) and columns != [] ->
-          declared = for item <- List.wrap(value), is_atom(item), do: to_string(item)
-
-          for column <- Enum.sort(Enum.uniq(columns ++ declared)) do
-            %{name: column, on?: column in declared, missing?: column not in columns}
-          end
-
-        _none ->
-          nil
-      end
-    end
-
-    defp picks(_kind, _key, _value, _assigns), do: nil
-
-    # A list of scalars as its rows: a chip for a variable, the text for anything else.
-    defp items({:items, _scalar}, list) when is_list(list) do
-      Enum.map(list, fn
-        %Var{name: name} -> %{chip: to_string(name), text: nil}
-        item when is_binary(item) -> %{chip: nil, text: item}
-        item -> %{chip: nil, text: to_string(item)}
-      end)
-    end
-
-    defp items(_widget, _value), do: []
-
-    # A text shows as its string whichever form holds it (§7.1): a list of parts, or a
-    # whole variable, is written as the string with its holes.
-    defp as_text(%{type: :text}, {:ok, value}) when is_list(value) or is_struct(value, Var),
-      do: {:ok, Text.unparse(List.wrap(value))}
-
-    # An extent is `auto` or `min, max`; a channel that is neither a name nor a number is
-    # its literal (#371).
-    defp as_text(%{type: :extent}, {:ok, value}), do: {:ok, extent_text(value)}
-
-    defp as_text(%{type: :channel}, {:ok, value}) when not (is_atom(value) or is_number(value)),
-      do: {:ok, inspect(value)}
-
-    defp as_text(_spec, value), do: value
-
-    defp extent_text(:auto), do: "auto"
-    defp extent_text([lo, hi]), do: "#{bound_text(lo)}, #{bound_text(hi)}"
-    defp extent_text(other), do: inspect(other)
-
-    defp bound_text(:auto), do: "auto"
-    defp bound_text(%DateTime{} = at), do: DateTime.to_iso8601(at)
-    defp bound_text(n) when is_number(n), do: to_string(n)
-    defp bound_text(other), do: inspect(other)
-
-    # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
-    defp well(:colour, {:paint, name}, theme, defs) do
-      case Map.get(defs, name) do
-        %{stops: [%{color: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
-        _other -> %{colour: nil, none?: false, word: to_string(name)}
-      end
-    end
-
-    defp well(:colour, value, theme, _defs), do: well(value, theme)
-    defp well(_widget, _value, _theme, _defs), do: %{colour: nil, none?: false, word: nil}
-
-    # The points between lines a line height means (§18.6): font_size × (line_height − 1),
-    # from the node's font size or the theme's.
-    defp points(:line_height, node, theme) do
-      height =
-        number_or(Map.get(node, :line_height), FormSchema.default(:style, :line_height) || 1.2)
-
-      size = number_or(Map.get(node, :font_size), (theme && theme.font_size) || 12)
-      Float.round(size * (height - 1) * 1.0, 1)
-    end
-
-    defp points(_key, _node, _theme), do: nil
-
-    defp number_or(n, _default) when is_number(n), do: n
-    defp number_or(_other, default), do: default
-
-    # A style's fill is a fill style (§18.6); any other colour is a well alone.
-    defp fill_view(:style, :fill, value, assigns) when not is_struct(value, Var) do
-      defs = Map.get(assigns, :defs) || %{}
-      view = Fills.view(value, defs, Fills.name(assigns.path))
-      theme = Map.get(assigns, :theme)
-
-      %{view | stops: Enum.map(view.stops, &Map.put(&1, :well, well(&1.colour, theme)))}
-      |> Map.put(:glyphs, Enum.map(Fills.styles(), &{&1, Glyphs.glyph(:fill_style, &1)}))
-    end
-
-    defp fill_view(_kind, _key, _value, _assigns), do: nil
-
-    defp well_class(%{none?: true}), do: "vis-builder-well vis-builder-well-none"
-    defp well_class(%{colour: nil}), do: "vis-builder-well vis-builder-well-empty"
-    defp well_class(_well), do: "vis-builder-well"
-
     @doc """
     What a colour well shows for a value (spec/14 §19.10): the colour it resolves to — a
-    slot through the theme, a literal as itself — with the value's word as the title;
-    `:none` as no paint; anything else, or no theme for a slot, as nothing.
+    slot or a typed colour through the theme, a literal as itself — with the value's word
+    as the title; `:none` as no paint; anything else, or no theme for a slot, as nothing.
 
         iex> Visualize.Chart.Builder.Editor.well("#3b6fa8", Visualize.Theme.default())
         %{colour: "#3b6fa8", none?: false, word: "#3b6fa8"}
 
         iex> Visualize.Chart.Builder.Editor.well(:series_1, Visualize.Theme.default())
         %{colour: "#3b6fa8", none?: false, word: "series_1"}
+
+        iex> Visualize.Chart.Builder.Editor.well({:color, :series_1}, Visualize.Theme.default())
+        %{colour: "#3b6fa8", none?: false, word: "series_1"}
+
+        iex> Visualize.Chart.Builder.Editor.well({:alpha, "#ff0000", 0.5}, Visualize.Theme.default())
+        %{colour: "#ff000080", none?: false, word: "alpha(#ff0000, 0.5)"}
 
         iex> Visualize.Chart.Builder.Editor.well(:none, nil)
         %{colour: nil, none?: true, word: "none"}
@@ -1503,49 +911,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             none?: boolean(),
             word: String.t() | nil
           }
-    def well(nil, _theme), do: %{colour: nil, none?: false, word: nil}
-    def well(:none, _theme), do: %{colour: nil, none?: true, word: "none"}
-    def well("#" <> _ = hex, _theme), do: %{colour: hex, none?: false, word: hex}
-
-    def well({:series, i}, %Theme{} = theme) when is_integer(i) and i >= 1,
-      do: well(Theme.series_slot(theme, i), theme)
-
-    def well(slot, %Theme{} = theme) when is_atom(slot) do
-      if slot in Theme.colour_slots(theme),
-        do: %{colour: Theme.resolve(theme, slot, :literal), none?: false, word: to_string(slot)},
-        else: %{colour: nil, none?: false, word: to_string(slot)}
-    end
-
-    def well(slot, _theme) when is_atom(slot),
-      do: %{colour: nil, none?: false, word: to_string(slot)}
-
-    def well(value, _theme) when is_binary(value), do: %{colour: value, none?: false, word: value}
-    def well(_value, _theme), do: %{colour: nil, none?: false, word: nil}
-
-    defp default(%{required: true}), do: :error
-    defp default(%{default: nil}), do: :error
-    defp default(%{default: value}), do: {:ok, value}
-
-    defp shown(_widget, :error), do: nil
-    # A variable is shown by the name box, not the typed control (spec/14 §19.9).
-    defp shown(_widget, {:ok, %Var{}}), do: nil
-    # A colour is the well's to show, never a control's.
-    defp shown(:colour, {:ok, _value}), do: nil
-    # Whole: a literal `inspect/1` cut short at its default limit would read back as less
-    # than it is — a theme's palette in its parts is well over fifty terms.
-    defp shown(:textarea, {:ok, value}),
-      do: inspect(value, limit: :infinity, printable_limit: :infinity)
-
-    defp shown({:select, _}, {:ok, value}), do: option(value)
-    defp shown({:columns, _}, {:ok, value}), do: to_string(value)
-    defp shown({:pool, _}, {:ok, value}), do: option(value)
-    defp shown({:items, _}, {:ok, _value}), do: nil
-    defp shown(:items, {:ok, _value}), do: nil
-    defp shown(:select, {:ok, value}), do: option(value)
-    defp shown(_widget, {:ok, value}), do: to_string(value)
-
-    defp key_errors(errors, path) do
-      for {at, _reason} = error <- errors, at == path, do: Validator.format(error)
-    end
+    def well(value, theme), do: Fields.well(value, theme)
   end
 end
