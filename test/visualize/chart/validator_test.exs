@@ -43,7 +43,9 @@ defmodule Visualize.Chart.ValidatorTest do
         text: %{anchor: :middle, offset: [2, 0]},
         effect: %{type: :shadow, radius: 3},
         transition: %{duration: 200, easing: :cubic_out, fill: %{duration: 400}},
-        animation: %{name: :pulse, duration: 1200, iterations: :infinite, delay: 0}
+        animation: %{name: :pulse, duration: 1200, iterations: :infinite, delay: 0},
+        enter: %{name: :grow, duration: 300, easing: :cubic_out},
+        exit: %{name: :explode, duration: 700}
       },
       wash: %{fill: %{type: :paint, name: :fade}}
     },
@@ -159,6 +161,8 @@ defmodule Visualize.Chart.ValidatorTest do
     style_transition: [:styles, :muted, :transition],
     part_transition: [:styles, :muted, :transition, :fill],
     style_animation: [:styles, :muted, :animation],
+    style_enter: [:styles, :muted, :enter],
+    style_exit: [:styles, :muted, :exit],
     stop: [:defs, :fade, :stops, 0],
     label: [:labels, 0],
     layout: [:layout],

@@ -72,6 +72,8 @@ defmodule Visualize.Chart.Schema do
     :style_transition,
     :part_transition,
     :style_animation,
+    :style_enter,
+    :style_exit,
     :stop,
     :label,
     :layout,
@@ -472,6 +474,11 @@ defmodule Visualize.Chart.Schema do
     ]
   end
 
+  # A style's entrance and exit (spec/14 §3.12): a built-in's name or the host's, how long,
+  # along which curve.
+  defp design_node(:style_enter), do: presence_keys([:fade, :grow])
+  defp design_node(:style_exit), do: presence_keys([:fade, :shrink, :explode])
+
   defp design_node(:theme) do
     theme = Theme.default()
 
@@ -600,7 +607,18 @@ defmodule Visualize.Chart.Schema do
       # How a change of the look is reached (spec/14 §3.10, #653).
       spec(:transition, {:node, :style_transition}, :style),
       # A motion run while the style holds (spec/14 §3.11, #653).
-      spec(:animation, {:node, :style_animation}, :style)
+      spec(:animation, {:node, :style_animation}, :style),
+      # How an element arrives and leaves by its row's identity (spec/14 §3.12, #653).
+      spec(:enter, {:node, :style_enter}, :style),
+      spec(:exit, {:node, :style_exit}, :style)
+    ]
+  end
+
+  defp presence_keys(names) do
+    [
+      spec(:name, {:one_of, [{:enum, names}, :string]}, :style),
+      spec(:duration, :number, :style, range: {0, 5000, 50}),
+      spec(:easing, {:enum, Visualize.Ease.names()}, :style)
     ]
   end
 

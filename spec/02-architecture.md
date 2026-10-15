@@ -108,7 +108,7 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Motion.exit_attribute/2` | `exit_attribute(exit, element)`: the text of `data-vis-exit` for an element leaving with `exit`, `[name, duration, samples, box, keyframes]` as JSON, `box` the element's as drawn ([14-declarative-chart](14-declarative-chart.md) §3.12). |
 | `Visualize.IR.Motion.css_keyframes/1` | `@keyframes vis-<name> { … }` of a built-in — `vis-enter-<name>` for `{:enter, name}` —: each offset as a percentage, `opacity`, `translate: Xpx Ypx`, `rotate: Ddeg`, `scale: S`. |
 | `Visualize.IR.Motion.css_animation/1` | The CSS `animation` value of a resolved animation: `<keyframes> <duration>ms <easing> <delay>ms <iterations>`. |
-| `Visualize.IR.Motion.oklch/1` | A colour string as `oklch()`: a literal `Visualize.Color.parse/1` reads as `oklch(L C H)` (`/ alpha` below `1`), an `oklch(…)` as it is, anything else as `oklch(from <value> l c h / alpha)`; `:none`, `:current_color` and a paint as they are. |
+| `Visualize.IR.Motion.oklch/1` | A color string as `oklch()`: a literal `Visualize.Color.parse/1` reads as `oklch(L C H)` (`/ alpha` below `1`), an `oklch(…)` as it is, anything else as `oklch(from <value> l c h / alpha)`; `:none`, `:current_color` and a paint as they are. |
 
 ### 2.2 `Visualize.IR.Path`
 

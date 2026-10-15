@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Frame.Motion do
   #
   # A transition's class is the element's own, and its rule reaches the element and, at no
   # specificity, everything under it — a mark's group moves its children, and a child's own
-  # class still wins. The fill and the stroke of an element whose colour moves, and of
+  # class still wins. The fill and the stroke of an element whose color moves, and of
   # everything under it, are written `oklch()`, so the browser interpolates them in OKLab.
   #
   # An animation's class is a wrapper's, `<g class="vis-animation-<h>">` around the element,
@@ -18,12 +18,14 @@ defmodule Visualize.Chart.Frame.Motion do
   # `:literal` mode nothing is written: a canvas reads the keys.
 
   alias Visualize.Chart.Validator
-  alias Visualize.IR.{Element, Motion}
+  alias Visualize.IR.{Element, Motion, Path}
 
   @reduced_transitions "@media (prefers-reduced-motion: reduce) { [class*=\"vis-transition-\"], " <>
                          "[class*=\"vis-transition-\"] * { transition: none !important; } }"
   @reduced_animations "@media (prefers-reduced-motion: reduce) { [class*=\"vis-animation-\"] " <>
                         "{ animation: none !important; } }"
+  @reduced_entrances "@media (prefers-reduced-motion: reduce) { [class*=\"vis-enter-\"] " <>
+                       "{ animation: none !important; } }"
 
   @doc false
   # The tree with every motion written as its class, and the `<style>` the classes need —
@@ -39,18 +41,24 @@ defmodule Visualize.Chart.Frame.Motion do
         rules = rules |> Enum.uniq() |> Enum.sort()
         transitions = for {:transition, class, t} <- rules, do: transition_rule(class, t)
         animations = for {:animation, class, a} <- rules, do: animation_rule(class, a)
+        entrances = for {:enter, class, e} <- rules, do: enter_rule(class, e)
 
         keyframes =
-          for {:animation, _class, %{name: name}} <- rules, is_atom(name), uniq: true do
-            Motion.css_keyframes(name)
+          for {kind, _class, %{name: name}} <- rules,
+              kind in [:animation, :enter],
+              is_atom(name),
+              uniq: true do
+            Motion.css_keyframes(if kind == :enter, do: {:enter, name}, else: name)
           end
 
         css =
           transitions ++
             keyframes ++
             animations ++
+            entrances ++
             if(transitions == [], do: [], else: [@reduced_transitions]) ++
-            if(animations == [], do: [], else: [@reduced_animations])
+            if(animations == [], do: [], else: [@reduced_animations]) ++
+            if(entrances == [], do: [], else: [@reduced_entrances])
 
         {tree, [Element.stylesheet(Enum.join(css, "\n"))]}
     end
@@ -62,18 +70,25 @@ defmodule Visualize.Chart.Frame.Motion do
     do: ".#{class}, :where(.#{class}) * { transition: #{Motion.css_transition(transition)}; }"
 
   defp animation_rule(class, %{name: name} = animation) do
-    if is_binary(name) and not Validator.Motion.identifier?(name) do
-      raise ArgumentError,
-            "animation name #{inspect(name)} is not a CSS identifier (spec/14 §10.3)"
-    end
+    if is_binary(name), do: identifier!(name)
 
     ".#{class} { animation: #{Motion.css_animation(animation)}; " <>
       "transform-box: fill-box; transform-origin: center; }"
   end
 
-  # `moving` is the colour keys the nearest transition above moves.
+  # An entrance runs once, when the element is inserted (spec/14 §3.12).
+  defp enter_rule(class, %{name: name} = enter) do
+    keyframes = if is_binary(name), do: identifier!(name), else: "vis-enter-#{name}"
+
+    ".#{class} { animation: #{keyframes} #{Path.format_number(enter.duration)}ms #{Motion.css_easing(enter.easing)} 0ms 1; " <>
+      "transform-box: fill-box; transform-origin: center; }"
+  end
+
+  # `moving` is the color keys the nearest transition above moves.
   defp walk(%Element{style: style, children: children} = element, moving) do
     {animation, style} = Map.pop(style, :animation)
+    {enter, style} = Map.pop(style, :enter)
+    {exit, style} = Map.pop(style, :exit)
 
     {style, rules, moving} =
       case Map.pop(style, :transition) do
@@ -97,18 +112,39 @@ defmodule Visualize.Chart.Frame.Motion do
         {child, acc ++ found}
       end)
 
-    element = %{element | style: style, children: children}
+    element = exiting(%{element | style: style, children: children}, exit)
 
-    case animation do
-      %{} ->
-        class = class("animation", animation)
+    {element, rules} = wrap(element, :animation, animation, rules)
+    {element, rules} = wrap(element, :enter, enter, rules)
+    {element, rules ++ below}
+  end
 
-        {Element.group([element], style: %{class: class}),
-         [{:animation, class, animation} | rules] ++ below}
+  # An element that leaves by its identity says how (spec/14 §3.12): the hook that holds
+  # the chart reads `data-vis-exit` before a patch removes it.
+  defp exiting(%Element{attrs: %{"data-vis-id" => _}} = element, %{} = exit) do
+    if is_binary(exit.name), do: identifier!(exit.name)
+    Element.put_attr(element, "data-vis-exit", Motion.exit_attribute(exit, element))
+  end
 
-      nil ->
-        {element, rules ++ below}
-    end
+  defp exiting(element, _exit), do: element
+
+  # An animation and an entrance are a wrapper's, so the box they turn and grow about is
+  # the element's as drawn, its own transform included (spec/14 §3.11, §3.12).
+  defp wrap(element, _kind, nil, rules), do: {element, rules}
+
+  defp wrap(element, kind, motion, rules) do
+    class = class(Atom.to_string(kind), motion)
+    {Element.group([element], style: %{class: class}), [{kind, class, motion} | rules]}
+  end
+
+  defp identifier!(name) do
+    if Validator.Motion.identifier?(name),
+      do: name,
+      else:
+        raise(
+          ArgumentError,
+          "keyframes name #{inspect(name)} is not a CSS identifier (spec/14 §10.3)"
+        )
   end
 
   defp class(kind, motion) do

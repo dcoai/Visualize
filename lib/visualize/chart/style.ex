@@ -69,7 +69,9 @@ defmodule Visualize.Chart.Style do
     :vector_effect,
     # A style's motion, resolved (spec/14 §3.10, §3.11, #653).
     :transition,
-    :animation
+    :animation,
+    :enter,
+    :exit
   ]
 
   @doc """
@@ -88,7 +90,9 @@ defmodule Visualize.Chart.Style do
     |> Map.take(@element_keys)
     |> Map.new(fn {key, value} -> {key, value(key, value, theme, mode)} end)
     # A motion part that moves nothing is no key, so a style without one resolves as before.
-    |> Map.reject(fn {key, value} -> key in [:transition, :animation] and value in [[], nil] end)
+    |> Map.reject(fn {key, value} ->
+      key in [:transition, :animation, :enter, :exit] and value in [[], nil]
+    end)
   end
 
   @doc """
@@ -393,6 +397,7 @@ defmodule Visualize.Chart.Style do
   # A transition is the list of the properties it moves (§3.10, D-176).
   def value(:transition, node, _theme, _mode), do: Motion.transition(node)
   def value(:animation, node, _theme, _mode), do: Motion.animation(node)
+  def value(key, node, _theme, _mode) when key in [:enter, :exit], do: Motion.presence(node)
   # The weight words CSS lacks are their numbers; normal and bold are CSS's own (§3.4).
   def value(:font_weight, :light, _theme, _mode), do: 300
   def value(:font_weight, :medium, _theme, _mode), do: 500

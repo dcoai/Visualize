@@ -36,12 +36,12 @@ defmodule Visualize.Chart.Mark.Identity do
     end
   end
 
-  # The mark's own animation on an element that has none of its own: an animation is each
-  # element's, run about its own box (spec/14 §3.11).
-  defp animated(element, %{animation: animation}),
-    do: %{element | style: Map.put_new(element.style, :animation, animation)}
-
-  defp animated(element, _static), do: element
+  # The mark's own animation, entrance and exit on an element that has none of its own:
+  # each is the element's, run about its own box (spec/14 §3.11, §3.12).
+  defp animated(element, static) do
+    own = Map.take(static, [:animation, :enter, :exit])
+    %{element | style: Map.merge(own, element.style)}
+  end
 
   # Whether the mark moves: its own style carries a motion part, or its stack names a style
   # by data and any style the frame knows — the design's, the theme's palette — carries one.

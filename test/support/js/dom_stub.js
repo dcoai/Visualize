@@ -185,6 +185,16 @@ const Stub = (() => {
       this.fire('focus', {target: this});
     }
     removeChild(child) { child.remove(); return child; }
+    // A copy, as a browser's: its attributes, dataset and classes, and its children when
+    // deep; unattached (#678).
+    cloneNode(deep) {
+      const copy = new Element(this.tagName.toLowerCase(), this.dataset);
+      copy.attributes = {...this.attributes};
+      this.classList.forEach((c) => copy.classList.add(c));
+      copy.rect = {...this.rect};
+      if (deep) this.children.forEach((c) => copy.appendChild(c.cloneNode(true)));
+      return copy;
+    }
     remove() {
       if (this.parentNode) this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
       this.parentNode = null;
