@@ -1617,6 +1617,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.compose/2` | `compose(a, b)`: `{:ok, map}`, the second fragment merged over the first by the merge rule of every key (§8.1), else `{:error, errors}` with `:conflict` at the path of every `:union` name the two declare differently. |
 | `Visualize.Chart.stack/1` | `stack(layers)`: the layers cascaded left to right, the later the higher (§8.2); `%{}` for `[]` and the layer itself for one. The cascade cannot fail, so the result is the fragment, not an ok tuple. |
 | `Visualize.Chart.stack/2` | `stack(lower, higher)`: the higher fragment cascaded over the lower by the rule of every key (§8.2) — a `:union` name both declare taken from the higher, a node both give as a map cascading key by key. |
+| `Visualize.Chart.explain/2` | `explain(applied, at: path, datum: datum, state: state)`: for one element's style, each part's resolved value, whether the kind draws it, and the chain of layers that set it (§17.3). |
 | `Visualize.Chart.explain/1` | `explain(layers)`: one `t:Visualize.Chart.provenance/0` per leaf path of `stack/1` of the layers — the value, the layer that set it and the layers it overrode — ordered by path (§17.1). |
 | `Visualize.Chart.free_vars/1` | `free_vars(design)`: one `t:Visualize.Chart.free_var/0` per variable still in a fragment, a chart or a stack of layers — its default, whether it is required, and every path it stands at with the schema's expectation there and the layer it came from — ordered by name (§17.2). |
 | `Visualize.Chart.compile/1` | As `compile/2` with `[]` options: an applied chart compiled as it is, or a design applied with no options first. |
@@ -2214,6 +2215,26 @@ A use's `expects` is the schema's type at that path (§1.4) — `:colour` for a 
 The walk is `Visualize.Chart.apply/2`'s own (§7.3), which is the point of the function: it descends into nodes, name-keyed declarations, lists and text parts and stops where resolution stops, so `free_vars/1` lists exactly the variables `apply/2` will demand and no others. A variable the schema's walk does not reach — inside an `:extent`, inside a value another variable is bound to — is not listed, because resolution does not reach it either; the validator is what reports those (§7.1).
 
 A variable is *free* whether or not it has a default: `required` is what separates the two, since a default is a value the caller may still override. A stack in which a higher layer writes a literal over a lower layer's variable has one use fewer, and a higher layer that writes a variable over a lower layer's literal has one more — a variable and a literal override each other in a stack like any other value (§8.2), and that is the whole of the interaction between variables and the cascade.
+
+### 17.3 `explain/2`: where an element's look came from
+
+**Implemented** (#661, D-172). `Visualize.Chart.explain/1` says which *layer of a stack of fragments* set each value of a design; `Visualize.Chart.explain/2` says, for one **element** of an applied chart, where each **part of its style** came from — the question a person asks of a bar drawn in a colour they did not expect. It takes a `%Visualize.Chart.Applied{}` and options:
+
+| Option | What |
+|---|---|
+| `at:` | the path of the node whose style is explained (required): a mark `[:marks, i]`, a mark's inline label `[:marks, i, :label]`, a frame label `[:labels, i]`, an axis `[:frames, f, :axes, i]` or a legend `[:frames, f, :legend]` — the paths `data-node` carries (§4.7) |
+| `datum:` | the element's datum, which a `{:field, f}` entry reads (§3.6); without it a field entry lays nothing, as where there is no datum |
+| `state:` | a view state laid at its layer (§3.7), as the board and the hooks lay one — `:hover`, `:focused`, `:selected`, `:muted`, … — or `nil` |
+
+It answers `%{at: path, kind: kind, state: state, parts: parts}`, `kind` the mark's type (`:text` for a label, `:axis`, `:legend`). `parts` holds, for each part the resolved style has — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve`, and `opacity`, `blend` and `class` — a map of:
+
+| Key | What |
+|---|---|
+| `value` | the part as resolved: the merge of every contribution below by the rule of §3.5 |
+| `drawn` | whether the kind draws the part (§5.6); a part a kind ignores is still explained |
+| `chain` | the contributions to it, lowest first, each `%{layer, style, via, field, value, set}` |
+
+A contribution's `layer` is its layer of §3.7: `:mark` for the mark's own paint, the theme's series colour for its position, which lies under every style when none gives one (§5.6); `:palette` for a palette entry the design does not declare (§3.3); `:style` for a style the design declares, by name or in a list; `:field` for the style a datum's value named, with `field` the `{:field, f}` and `value` the datum's reading; `:state` for a view state, laid by `state:` or named by a field whose value is a state; `:inline` for an inline node of the stack; and `:local` for the inline node a stack ends with, the site's local edit (§3.6). `style` is the style's name where the contribution has one, `via` the names the style reached it through — its `extends` chain and the names in its lists, in the order they were laid — and `set` the keys of the part this contribution wrote, which the ones above it may have overwritten. Nothing is drawn and nothing is validated: like `explain/1` it is a reading of what the frame resolves, by the same resolution, so it cannot drift from it.
 
 ## 18. The builder component
 
