@@ -186,13 +186,12 @@ defmodule Visualize.Chart.Validator.Domain do
   # (D-172).
   @doc false
   @spec cascade(term(), map()) :: map()
-  def cascade(entries, styles) when is_list(entries) do
-    entries
-    |> Enum.reduce(%{}, fn entry, node -> Parts.merge(node, entry(entry, styles, [])) end)
-    |> Parts.project()
-  end
+  def cascade(entries, styles), do: entries |> entry(styles, []) |> Parts.project()
 
-  def cascade(entry, styles), do: entry |> entry(styles, []) |> Parts.project()
+  # A list stacks wherever it stands — the site, a named style's entry, `extends` (#658).
+  defp entry(entries, styles, seen) when is_list(entries) do
+    Enum.reduce(entries, %{}, fn entry, node -> Parts.merge(node, entry(entry, styles, seen)) end)
+  end
 
   defp entry(%Var{}, _styles, _seen), do: %{}
 
@@ -206,18 +205,10 @@ defmodule Visualize.Chart.Validator.Domain do
   end
 
   defp entry(name, styles, seen) when is_atom(name) and is_map_key(styles, name) do
-    if name in seen, do: %{}, else: named(styles[name], styles, [name | seen])
+    if name in seen, do: %{}, else: entry(styles[name], styles, [name | seen])
   end
 
   defp entry(_entry, _styles, _seen), do: %{}
-
-  defp named(%{} = node, styles, seen) when not is_struct(node) do
-    node = Parts.normalize(node)
-    parent = if Map.has_key?(node, :extends), do: entry(node[:extends], styles, seen), else: %{}
-    Parts.merge(parent, Map.delete(node, :extends))
-  end
-
-  defp named(_node, _styles, _seen), do: %{}
 
   # -- domains and columns --------------------------------------------------------------
 

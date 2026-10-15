@@ -218,7 +218,7 @@ defmodule Visualize.Chart.StyleTest do
     test "a cycle raises at resolution, having been reported by the validator" do
       styles = styles(%{a: %{extends: :b}, b: %{extends: :a}})
 
-      assert_raise ArgumentError, ~r/style :a extends itself/, fn -> Style.node(styles, :a) end
+      assert_raise ArgumentError, ~r/style :a reaches itself/, fn -> Style.node(styles, :a) end
     end
   end
 
@@ -283,7 +283,7 @@ defmodule Visualize.Chart.StyleTest do
     test "a cycle through extends still raises, from inside a stack" do
       styles = %{a: %{extends: :b}, b: %{extends: :a}}
 
-      assert_raise ArgumentError, ~r/style :a extends itself/, fn ->
+      assert_raise ArgumentError, ~r/style :a reaches itself/, fn ->
         Style.node(styles, [:a])
       end
     end

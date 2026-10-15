@@ -28,8 +28,8 @@ defmodule Visualize.Board.Cell do
   - **The selection** (spec/15 §13.2, D-151, D-171). A cell whose rows hold the board's
     selection draws its data in the palette's view states: its rows gain a
     `:"$vis_state"` column, `:selected` where the selection is and `:muted` elsewhere,
-    and each mark with `data` ends its style stack with `{:field, :"$vis_state"}`, the
-    style the column names (#644). A cell that does not hold it draws as before.
+    and each mark with `data` lays `{:field, :"$vis_state"}` in its style stack, the
+    style the column names (#644), before a trailing local edit (spec/14 §3.7). A cell that does not hold it draws as before.
   - **A pick**, `{:pick, from, ref, series, index}`, is answered to `from` as `{ref,
     reply}`: the row behind that keyboard point, its identity, item and frame, or `:error`.
   - **A click**, `{:event, from, ref, click}`, is answered the same way (spec/15 §9.2,
@@ -42,7 +42,7 @@ defmodule Visualize.Board.Cell do
 
   alias Visualize.Board.Draw
   alias Visualize.Chart
-  alias Visualize.Chart.{Compiled, Summary}
+  alias Visualize.Chart.{Compiled, Style, Summary}
   alias Visualize.Data.{Schema, Table}
   alias Visualize.Event
 
@@ -256,15 +256,16 @@ defmodule Visualize.Board.Cell do
   end
 
   # The style grammar's own style by data (spec/14 §3.6, D-171, #644): the state column,
-  # whose value names the style, laid last in each data mark's stack, the column declared
-  # on every source that declares its fields. The names resolve as any palette name does,
-  # so a design's own `selected:` or `muted:` wins over the theme's.
+  # whose value names the style, laid in each data mark's stack at the view states' layer —
+  # over its names and field entries, under a trailing local edit (spec/14 §3.7, D-172) —
+  # the column declared on every source that declares its fields. The names resolve as any
+  # palette name does, so a design's own `selected:` or `muted:` wins over the theme's.
   defp stated(%Chart{marks: marks, sources: sources} = chart) do
     entry = {:field, @state}
 
     marks =
       Enum.map(marks, fn
-        %{data: _} = mark -> Map.update(mark, :style, [entry], &(List.wrap(&1) ++ [entry]))
+        %{data: _} = mark -> Map.put(mark, :style, Style.with_state(Map.get(mark, :style), entry))
         mark -> mark
       end)
 

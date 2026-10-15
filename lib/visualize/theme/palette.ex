@@ -124,6 +124,43 @@ defmodule Visualize.Theme.Palette do
   def modifiers, do: @modifiers
 
   @doc false
+  # The entry `name` of a palette as one style node in its parts (spec/08 §7.7, #658): a
+  # node as it is, a name or a list of palette names and nodes stacked left to right by the
+  # merge rule — each name the palette's own entry, else the built-in one. `{:error,
+  # message}` for a name the palette does not have, a list that reaches itself, or an
+  # element that is no style.
+  @spec compose(map(), atom()) :: {:ok, map()} | {:error, String.t()}
+  def compose(styles, name), do: compose(styles, name, [])
+
+  defp compose(styles, name, seen) do
+    entry = Map.get(styles, name) || Map.get(@builtin, name)
+
+    cond do
+      name in seen -> {:error, "a list that reaches itself through #{inspect(name)}"}
+      entry == nil -> {:error, "#{inspect(name)} in a list is not a name of the palette"}
+      true -> layer(styles, entry, [name | seen])
+    end
+  end
+
+  defp layer(styles, entries, seen) when is_list(entries) do
+    Enum.reduce_while(entries, {:ok, %{}}, fn entry, {:ok, node} ->
+      case layer(styles, entry, seen) do
+        {:ok, laid} -> {:cont, {:ok, Parts.merge(node, laid)}}
+        error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp layer(styles, name, seen) when is_atom(name) and name not in [nil, true, false],
+    do: compose(styles, name, seen)
+
+  defp layer(_styles, node, _seen) when is_map(node) and not is_struct(node),
+    do: {:ok, Parts.normalize(node)}
+
+  defp layer(_styles, other, _seen),
+    do: {:error, "an entry is a style node, a map of style keys, got #{inspect(other)}"}
+
+  @doc false
   # The style series names a palette holds, `:style_1` up to the first gap, in order; the
   # default palette's when it holds none (spec/08 §7.7, Fallback).
   @spec series(map()) :: [atom()]
@@ -172,7 +209,7 @@ defmodule Visualize.Theme.Palette do
     entries =
       for name <- known,
           {:ok, entry} <- [Map.fetch(styles, name)],
-          {:error, message} <- [entry(name, entry)],
+          {:error, message} <- [entry(name, entry, styles)],
           do: {{:style, name}, message}
 
     unknown =
@@ -184,15 +221,31 @@ defmodule Visualize.Theme.Palette do
 
   # -- one entry ------------------------------------------------------------------------
 
-  defp entry(_name, entry) when not is_map(entry) or is_struct(entry),
+  # A list — or a name — is held to the contracts by what it stacks into (#658); a node
+  # in it, as a node alone, may not use `extends`.
+  defp entry(name, entry, styles) when is_list(entry) or (is_atom(entry) and entry != nil) do
+    with :ok <- no_extends(List.wrap(entry)),
+         {:ok, node} <- layer(styles, entry, [name]) do
+      entry(name, node, styles)
+    end
+  end
+
+  defp entry(_name, entry, _styles) when not is_map(entry) or is_struct(entry),
     do: {:error, "an entry is a style node, a map of style keys, got #{inspect(entry)}"}
 
-  defp entry(_name, %{extends: parent}),
+  defp entry(_name, %{extends: parent}, _styles),
     do:
       {:error, "a palette entry is flat and may not use extends, got extends: #{inspect(parent)}"}
 
-  defp entry(name, entry) do
+  defp entry(name, entry, _styles) do
     with :ok <- cues(name, entry), do: group(name, entry)
+  end
+
+  defp no_extends(entries) do
+    case Enum.find(entries, &match?(%{extends: _}, &1)) do
+      nil -> :ok
+      %{extends: parent} -> entry(nil, %{extends: parent}, %{})
+    end
   end
 
   # Where a role's cue may stand: its stroke's dash and its marker's shape.
@@ -368,9 +421,8 @@ defmodule Visualize.Theme.Palette do
       end
 
     for {a, b} <- pairs,
-        entry_a = Map.fetch!(styles, a),
-        entry_b = Map.fetch!(styles, b),
-        is_map(entry_a) and is_map(entry_b),
+        {:ok, entry_a} <- [compose(styles, a)],
+        {:ok, entry_b} <- [compose(styles, b)],
         hueless(entry_a) == hueless(entry_b),
         do: {{:style, b}, neighbour(a, b)}
   end

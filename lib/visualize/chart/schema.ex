@@ -204,6 +204,16 @@ defmodule Visualize.Chart.Schema do
     {:one_of, entry ++ [{:list, {:one_of, entry}}]}
   end
 
+  @doc false
+  # The type a named style takes — a `styles` entry, a theme's palette entry (spec/14 §2.6,
+  # #658): a style node, the name of another, or a list of names and nodes stacked left to
+  # right. A field entry is a site's, so a named style's list holds none.
+  @spec style_entry() :: type()
+  def style_entry do
+    entry = [{:node, :style}, {:ref, :style}]
+    {:one_of, entry ++ [{:list, {:one_of, Enum.reverse(entry)}}]}
+  end
+
   @doc "The style names every design declares (spec/14 §3.3)."
   @spec builtin_styles() :: [atom(), ...]
   def builtin_styles, do: @builtin_styles
@@ -303,7 +313,7 @@ defmodule Visualize.Chart.Schema do
       spec(:sources, {:map, {:node, :source}}, :binding, default: %{}, merge: :union),
       spec(:vars, {:map, {:node, :var}}, :binding, default: %{}, merge: :union),
       spec(:theme, {:one_of, [:name, {:node, :theme}]}, :style, default: :default),
-      spec(:styles, {:map, {:node, :style}}, :style, default: %{}, merge: :union),
+      spec(:styles, {:map, style_entry()}, :style, default: %{}, merge: :union),
       spec(:defs, {:map, {:node, :paint}}, :style, default: %{}, merge: :union),
       # The grid the frames are placed on, in place of arithmetic (spec/14 §2.8, #384).
       spec(:layout, {:node, :layout}, :geometry, default: %{}),
@@ -438,7 +448,7 @@ defmodule Visualize.Chart.Schema do
       spec(:roles, {:map, :string}, :style, default: theme.roles),
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.
-      spec(:styles, {:map, {:node, :style}}, :style, default: theme.styles),
+      spec(:styles, {:map, style_entry()}, :style, default: theme.styles),
       spec(:font_family, :string, :style, default: theme.font_family),
       spec(:font_size, :number, :style, default: theme.font_size, range: {6, 72, 1}),
       spec(:label_size, :number, :style, default: theme.label_size, range: {6, 72, 1}),
@@ -449,7 +459,7 @@ defmodule Visualize.Chart.Schema do
   # A style in its parts (spec/14 §3.1, D-172).
   defp design_node(:style) do
     [
-      spec(:extends, {:ref, :style}, :style),
+      spec(:extends, {:one_of, [{:ref, :style}, {:list, {:ref, :style}}]}, :style),
       spec(:fill, {:node, :paint}, :style),
       spec(:stroke, {:node, :stroke}, :style),
       spec(:font, {:node, :font}, :style),
