@@ -692,6 +692,7 @@ Monotonic means either way: the contract fixes that lightness carries the order,
 | `Visualize.Theme.style_names/1` | The theme's palette names: `:style_1` … `:style_n`, then the roles, the state styles and the furniture styles, each group in the order of 7.7. |
 | `Visualize.Theme.slots/1` | The theme's slot names in the order of 7.1. |
 | `Visualize.Theme.color_names/1` | Every name of the theme's color table (7.1): its color slots, its own and the default theme's `colors`, and the CSS named colors, sorted. |
+| `Visualize.Theme.color_name?/2` | `color_name?(theme, name)`: whether `name` is of the theme's color table — `name in color_names(theme)` — answered without building the list, so a caller that tests many names does not rebuild and sort the table per name (#704, D-184). |
 | `Visualize.Theme.color_slots/1` | The theme's color slots alone — the series, then axis, grid, text, background and surface, then the five roles — for a control that offers a color as a slot (spec/14 §19.10). |
 | `Visualize.Theme.series_slot/2` | `series_slot(theme, i)`: the `:series_k` atom the positive index `i` cycles to (7.1). |
 | `Visualize.Theme.resolve/3` | The slot's or color name's value as a literal or as a CSS reference with the literal fallback; a ramp position `{:ramp, name, t}` as its literal, a status role's position as the role (7.3). |
