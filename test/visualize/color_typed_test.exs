@@ -333,7 +333,7 @@ defmodule Visualize.ColorTypedTest do
   describe "resolution of names" do
     test "a name resolves exactly as the theme's slot does, in both modes" do
       for theme <- [Theme.default(), Theme.dark()],
-          slot <- Theme.colour_slots(theme),
+          slot <- Theme.color_slots(theme),
           mode <- [:css, :literal] do
         assert Color.resolve(color(slot), theme, mode) == Theme.resolve(theme, slot, mode)
       end

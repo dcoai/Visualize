@@ -81,5 +81,5 @@ defmodule Visualize.Chart.Mark.Series do
     do: Theme.resolve(frame.theme, {:series, Map.fetch!(index, value)}, mode)
 
   defp colour_or_slot(colour, frame, mode, _index, _value),
-    do: Style.colour(colour, frame.theme, mode)
+    do: Style.color(colour, frame.theme, mode)
 end

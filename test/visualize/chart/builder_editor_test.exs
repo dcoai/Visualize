@@ -25,7 +25,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
   alias Visualize.Chart.Builder.Editor
   alias Visualize.Chart.Schema
 
-  @widgets [:checkbox, :number, :text, :textarea, :colour]
+  @widgets [:checkbox, :number, :text, :textarea, :color]
   @shaped [:select, :items]
 
   for name <- ~w(editor_design editor_mark editor_style_errors)a do
@@ -341,8 +341,8 @@ defmodule Visualize.Chart.Builder.EditorTest do
     end
 
     test "a colour, a size and a font read loosely: an atom, a number, or the string" do
-      assert Editor.parse(:colour, "#3b6fa8") == {:ok, "#3b6fa8"}
-      assert Editor.parse(:colour, ":series_1") == {:ok, :series_1}
+      assert Editor.parse(:color, "#3b6fa8") == {:ok, "#3b6fa8"}
+      assert Editor.parse(:color, ":series_1") == {:ok, :series_1}
       assert Editor.parse(:size, "2") == {:ok, 2}
       assert Editor.parse(:size, "1.5") == {:ok, 1.5}
       assert Editor.parse(:font, "sans-serif") == {:ok, "sans-serif"}

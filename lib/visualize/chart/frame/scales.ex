@@ -13,7 +13,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
   @discrete [:ordinal, :band, :quantize, :quantile, :threshold]
   @continuous [:linear, :log, :power, :sqrt, :symlog, :radial, :quantize, :threshold]
-  @colour [:sequential, :diverging]
+  @color [:sequential, :diverging]
   @epoch ~U[1970-01-01 00:00:00Z]
 
   # The scale each channel names, by frame kind (spec/14 §4.3).
@@ -61,7 +61,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
   @doc false
   # Every scale of the frame node realised: `%{name => struct}`.
-  @spec realise(
+  @spec realize(
           map(),
           map(),
           [map()],
@@ -74,7 +74,7 @@ defmodule Visualize.Chart.Frame.Scales do
           map()
         ) ::
           %{atom() => struct()}
-  def realise(design, frame, marks, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
+  def realize(design, frame, marks, kind, plot, theme, sources, styles, ctx, given \\ %{}) do
     axes = Map.get(frame, :axes, [])
     # A scale adopted from another frame is that frame's node, read here (spec/14 §4.3,
     # #384): the node is said once and its domain is shared, while the range below is
@@ -290,7 +290,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
         Transform.apply(transforms(mark.data), rows,
           size: ctx.size,
-          centre: ctx.centre,
+          center: ctx.center,
           projection: ctx.projection,
           sources: sources,
           now: Map.get(ctx, :now),
@@ -435,7 +435,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
   defp pinned(kind, name, _colours, _domain) do
     raise ArgumentError,
-          "scale #{inspect(name)} (#{kind}) cannot range over a map of colours: a map pins " <>
+          "scale #{inspect(name)} (#{kind}) cannot range over a map of colors: a map pins " <>
             "categories, which an :ordinal scale has; list the colours instead"
   end
 
@@ -516,7 +516,7 @@ defmodule Visualize.Chart.Frame.Scales do
   defp with_domain(scale, _kind, domain), do: Scale.domain(scale, domain)
 
   # A colour scale's range is the interpolator it was constructed over.
-  defp with_range(scale, kind, _range) when kind in @colour, do: scale
+  defp with_range(scale, kind, _range) when kind in @color, do: scale
   defp with_range(scale, _kind, range), do: Scale.range(scale, range)
 
   defp flag(scale, :nice, true), do: Scale.nice(scale)
@@ -543,7 +543,7 @@ defmodule Visualize.Chart.Frame.Scales do
   defp infer(:quantile, _name, values), do: values
   defp infer(:time, name, values), do: time_extent(name, Enum.map(values, &temporal(&1, name)))
 
-  defp infer(kind, name, values) when kind in @continuous or kind in @colour do
+  defp infer(kind, name, values) when kind in @continuous or kind in @color do
     Enum.each(values, fn v ->
       is_number(v) or
         raise ArgumentError,
@@ -614,7 +614,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # A colour scale's `:auto` range is theme-derived whatever its name: its output is a
   # colour, the plot area has nothing to offer it, and the theme's ramp of that meaning is
   # the colour that promises "more" or "either side of the middle" (spec/14 §4.3, D-135).
-  defp range(kind, name, :auto, _plot, theme, _axes, worth) when kind in @colour,
+  defp range(kind, name, :auto, _plot, theme, _axes, worth) when kind in @color,
     do: over_ramp(kind, name, kind, [], theme, worth)
 
   defp range(kind, name, range, plot, theme, axes, _worth),
@@ -656,7 +656,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # threshold scale its buckets, each to a ramp position the theme resolves in the render
   # target's mode like any slot. A scale whose range length is its bucket count has no count
   # to take from a ramp, and a position scale has no use for a colour.
-  defp over_ramp(kind, name, ramp, _domain, theme, worth) when kind in @colour do
+  defp over_ramp(kind, name, ramp, _domain, theme, worth) when kind in @color do
     known_ramp!(name, ramp)
     fn t -> Theme.ramp(theme, ramp, worth.(t)) end
   end

@@ -145,7 +145,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def widget(:boolean), do: :checkbox
     def widget(type) when type in [:integer, :number], do: :number
     def widget({:enum, allowed}), do: {:select, allowed}
-    def widget(:colour), do: :colour
+    def widget(:color), do: :color
     def widget(type) when type in @text_types, do: :text
     def widget({:ref, _kind}), do: :text
     # A channel is a field's name or a constant, an extent `auto` or `min, max` (#371).
@@ -170,7 +170,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         {:ok, 42}
         iex> Visualize.Chart.Builder.Editor.parse({:ref, :style}, "series")
         {:ok, :series}
-        iex> Visualize.Chart.Builder.Editor.parse(:colour, "#3b6fa8")
+        iex> Visualize.Chart.Builder.Editor.parse(:color, "#3b6fa8")
         {:ok, "#3b6fa8"}
         iex> Visualize.Chart.Builder.Editor.parse(:extent, "[0, 100]")
         {:ok, [0, 100]}
@@ -204,7 +204,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp read(type, string) when type in [:colour, :size, :font], do: {:ok, loose(string)}
+    defp read(type, string) when type in [:color, :size, :font], do: {:ok, loose(string)}
 
     defp read({:enum, allowed}, string) do
       case Enum.find(allowed, &(to_string(&1) == string)) do
@@ -433,7 +433,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A color picked for a key holding a chain is the chain's new base (spec/14 §19.10).
     defp picked(kind, {key, {:ok, color}} = write, node) do
       case key_spec(kind, to_string(key)) do
-        %{type: :colour} when is_map(node) ->
+        %{type: :color} when is_map(node) ->
           {key, {:ok, Chain.rebase(Map.get(node, key), color)}}
 
         _other ->
@@ -921,25 +921,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     as the title; `:none` as no paint; anything else, or no theme for a slot, as nothing.
 
         iex> Visualize.Chart.Builder.Editor.well("#3b6fa8", Visualize.Theme.default())
-        %{colour: "#3b6fa8", none?: false, word: "#3b6fa8"}
+        %{color: "#3b6fa8", none?: false, word: "#3b6fa8"}
 
         iex> Visualize.Chart.Builder.Editor.well(:series_1, Visualize.Theme.default())
-        %{colour: "#3b6fa8", none?: false, word: "series_1"}
+        %{color: "#3b6fa8", none?: false, word: "series_1"}
 
         iex> Visualize.Chart.Builder.Editor.well({:color, :series_1}, Visualize.Theme.default())
-        %{colour: "#3b6fa8", none?: false, word: "series_1"}
+        %{color: "#3b6fa8", none?: false, word: "series_1"}
 
         iex> Visualize.Chart.Builder.Editor.well({:alpha, "#ff0000", 0.5}, Visualize.Theme.default())
-        %{colour: "#ff000080", none?: false, word: "alpha(#ff0000, 0.5)"}
+        %{color: "#ff000080", none?: false, word: "alpha(#ff0000, 0.5)"}
 
         iex> Visualize.Chart.Builder.Editor.well(:none, nil)
-        %{colour: nil, none?: true, word: "none"}
+        %{color: nil, none?: true, word: "none"}
 
         iex> Visualize.Chart.Builder.Editor.well(nil, nil)
-        %{colour: nil, none?: false, word: nil}
+        %{color: nil, none?: false, word: nil}
     """
     @spec well(term(), Theme.t() | nil) :: %{
-            colour: String.t() | nil,
+            color: String.t() | nil,
             none?: boolean(),
             word: String.t() | nil
           }

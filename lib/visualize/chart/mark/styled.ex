@@ -209,7 +209,7 @@ defmodule Visualize.Chart.Mark.Styled do
   defp pick({:field, _}, nil, _names, _frame, _opts), do: nil
   defp pick({:field, _} = entry, datum, names, _frame, _opts), do: pick(entry, datum, names)
 
-  defp pick({:colour, call}, datum, _names, frame, opts),
+  defp pick({:leaf, call}, datum, _names, frame, opts),
     do: Generated.resolve(frame, :leaf, call, datum, opts)
 
   defp pick(call, datum, _names, frame, opts),
@@ -221,7 +221,7 @@ defmodule Visualize.Chart.Mark.Styled do
 
     pick = fn
       {:field, _} = entry -> Map.get(chosen, entry)
-      {:colour, call} -> Generated.resolve(ctx.frame, :leaf, call, datum, opts)
+      {:leaf, call} -> Generated.resolve(ctx.frame, :leaf, call, datum, opts)
       call -> Generated.resolve(ctx.frame, :entry, call, datum, opts)
     end
 

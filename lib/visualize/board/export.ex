@@ -4,7 +4,7 @@ defmodule Visualize.Board.Export do
   D-150).
 
   Everything here draws a `Visualize.Board.Snapshot` — taken from a running board with
-  `Visualize.Board.Server.snapshot/1`, or purely with `Visualize.Board.Snapshot.realise/4`
+  `Visualize.Board.Server.snapshot/1`, or purely with `Visualize.Board.Snapshot.realize/4`
   — so an export needs no store, no feed and no process, and shows exactly the data the
   snapshot froze.
 

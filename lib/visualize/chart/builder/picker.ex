@@ -5,7 +5,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     A field is selected by clicking into it, and the panel shows the control its *type*
     deserves at a size the form cannot afford: a colour's patches above its picker, each
-    patch draggable onto any colour well of the form (`drop_colour`), a font's
+    patch draggable onto any colour well of the form (`drop_color`), a font's
     faces in their own face, an enum's glyphs, a reference's local keys and library
     entries, a ranged number's slider. Every control here writes through the same `edit`
     the form does, under the same names — `key`, `key.slot`, `key.range`, `key.var` — so
@@ -43,7 +43,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     )
 
     attr(:spec, :map,
-      default: %{type: :colour, range: nil},
+      default: %{type: :color, range: nil},
       doc: "the key's spec, as `Schema.describe/1` gives it"
     )
 
@@ -76,10 +76,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <form
-        :if={@face == :colour and @chain?}
+        :if={@face == :color and @chain?}
         id={@id <> "-chain"}
         class="vis-builder-chain"
-        phx-change="colour_chain"
+        phx-change="color_chain"
         phx-target={@target}
         phx-submit="submitted"
       >
@@ -93,28 +93,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
         phx-hook="BuilderHook"
         phx-target={@target}
         data-builder-target={@target}
-        data-builder-scope="colour"
+        data-builder-scope="color"
        phx-submit="submitted">
-        <h3 class="vis-builder-context-title">{@key || "colour"}</h3>
+        <h3 class="vis-builder-context-title">{@key || "color"}</h3>
         <p :if={@off?} class="vis-builder-context-note">
           click a colour well to set it here, or drag a patch onto any well
         </p>
         <p :if={!@off?} class="vis-builder-picker-reads">{reads(@value)}</p>
 
         <%= case @face do %>
-          <% :colour -> %>
+          <% :color -> %>
             <p :if={!@off? and !@chain?} class="vis-builder-chain-start">
-              <select name={"#{@key}.step"} aria-label="add a step: transform this color" phx-change="colour_chain" phx-value-field={@key} phx-target={@target}>
+              <select name={"#{@key}.step"} aria-label="add a step: transform this color" phx-change="color_chain" phx-value-field={@key} phx-target={@target}>
                 <option value="">+ step</option>
                 <option :for={step <- Chain.steps()} value={step}>{step}</option>
               </select>
             </p>
             <details
               :for={{group, names} <- @groups}
-              class="vis-builder-colour-group"
+              class="vis-builder-color-group"
               open={group != "CSS names"}
             >
-              <summary class="vis-builder-colour-group-title">{group}</summary>
+              <summary class="vis-builder-color-group-title">{group}</summary>
               <div class="vis-builder-swatches" role="radiogroup" aria-label={group}>
                 <label
                   :for={{name, colour} <- names}
@@ -122,7 +122,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   title={"#{name} · #{colour || "not in this theme"}"}
                   style={"--vis-builder-swatch: #{colour || "transparent"}"}
                   draggable="true"
-                  data-builder-colour={name}
+                  data-builder-color={name}
                 >
                   <input
                     type="radio"
@@ -142,7 +142,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 title={colour}
                 style={"--vis-builder-swatch: #{colour}"}
                 draggable="true"
-                data-builder-colour={colour}
+                data-builder-color={colour}
               >
                 <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
               </label>
@@ -154,14 +154,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 title={colour}
                 style={"--vis-builder-swatch: #{colour}"}
                 draggable="true"
-                data-builder-colour={colour}
+                data-builder-color={colour}
               >
                 <input type="radio" name={@key} value={colour} checked={@value == colour} disabled={@off?} aria-label={colour} />
               </label>
             </div>
             <label class="vis-builder-picker-row">
               <span class="vis-builder-control-label">any colour</span>
-              <input type="color" name={@key} class="vis-builder-colour" value={hex(@value)} disabled={@off?} />
+              <input type="color" name={@key} class="vis-builder-color" value={hex(@value)} disabled={@off?} />
             </label>
           <% :font -> %>
             <div class="vis-builder-faces" role="radiogroup" aria-label="faces">
@@ -236,11 +236,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <ol class="vis-builder-chain-steps" data-builder-chain={@at}>
         <li :for={row <- @rows} class={"vis-builder-chain-step" <> if(row.op == nil, do: " vis-builder-chain-base", else: "")}>
           <span
-            class={"vis-builder-swatch vis-builder-chain-swatch" <> if(row.colour, do: "", else: " vis-builder-well-empty")}
-            style={"--vis-builder-swatch: #{row.colour || "transparent"}"}
-            title={row.colour || "not resolved in this theme"}
+            class={"vis-builder-swatch vis-builder-chain-swatch" <> if(row.color, do: "", else: " vis-builder-well-empty")}
+            style={"--vis-builder-swatch: #{row.color || "transparent"}"}
+            title={row.color || "not resolved in this theme"}
             role="img"
-            aria-label={"#{row.word}: #{row.colour || "not resolved"}"}
+            aria-label={"#{row.word}: #{row.color || "not resolved"}"}
           ></span>
           <span class="vis-builder-chain-word">{row.word}</span>
           <span :if={row.amount != nil} class="vis-builder-ranged">
@@ -260,7 +260,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :if={row.op != nil}
             type="button"
             class="vis-builder-item-remove"
-            phx-click="colour_chain"
+            phx-click="color_chain"
             phx-value-field={@field}
             phx-value-path={@at}
             phx-value-op="remove"
@@ -275,7 +275,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 :if={length(row.operands) > 1}
                 type="button"
                 class="vis-builder-item-remove"
-                phx-click="colour_chain"
+                phx-click="color_chain"
                 phx-value-field={@field}
                 phx-value-path={@at}
                 phx-value-op="operand_remove"
@@ -288,7 +288,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               <button
                 type="button"
                 class="vis-builder-part-add"
-                phx-click="colour_chain"
+                phx-click="color_chain"
                 phx-value-field={@field}
                 phx-value-path={@at}
                 phx-value-op="operand_add"
@@ -353,18 +353,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     colour, a font, a drawn enum's glyphs, an enum's words, a reference, a ranged number,
     or a plain box.
 
-        iex> Visualize.Chart.Builder.Picker.face(%{key: :fill, spec: %{type: :colour, range: nil}})
-        :colour
+        iex> Visualize.Chart.Builder.Picker.face(%{key: :fill, spec: %{type: :color, range: nil}})
+        :color
 
         iex> Visualize.Chart.Builder.Picker.face(%{key: :curve, spec: %{type: {:enum, [:linear]}, range: nil}})
         :glyphs
     """
     @spec face(%{key: atom(), spec: map()}) ::
-            :colour | :font | :glyphs | :enum | :reference | :range | :plain
+            :color | :font | :glyphs | :enum | :reference | :range | :plain
     def face(%{key: key, spec: spec}) do
       cond do
-        spec.type == :colour ->
-          :colour
+        spec.type == :color ->
+          :color
 
         spec.type == :font or key == :font_family ->
           :font

@@ -297,7 +297,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A color picked for a field holding a chain is the chain's new base (spec/14 §19.10):
     # the field's own value, else the one the site resolves to.
-    defp picked({:ok, color}, %{type: :colour}, path, node, seed) do
+    defp picked({:ok, color}, %{type: :color}, path, node, seed) do
       current =
         Writes.at(Parts.normalize(map_or_empty(node)), path) ||
           Writes.at(Parts.normalize(map_or_empty(seed)), path)

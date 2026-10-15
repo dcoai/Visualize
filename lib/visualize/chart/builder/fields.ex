@@ -195,9 +195,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           />
         </svg>
         <span
-          :if={is_nil(@field.variable) and @field.widget == :colour}
+          :if={is_nil(@field.variable) and @field.widget == :color}
           class={well_class(@field.well)}
-          style={"--vis-builder-swatch: #{@field.well.colour || "transparent"}"}
+          style={"--vis-builder-swatch: #{@field.well.color || "transparent"}"}
           title={@field.well.word || "no colour set"}
           role="img"
           aria-label={"#{@field.name}: #{@field.well.word || "not set"}"}
@@ -723,21 +723,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp bound_text(other), do: inspect(other)
 
     # A paint's well shows its gradient's first stop, under the paint's name (§18.6).
-    defp well(:colour, {:paint, name}, theme, defs) do
+    defp well(:color, {:paint, name}, theme, defs) do
       case Map.get(defs, name) do
         %{stops: [%{color: colour} | _]} -> %{well(colour, theme) | word: to_string(name)}
-        _other -> %{colour: nil, none?: false, word: to_string(name)}
+        _other -> %{color: nil, none?: false, word: to_string(name)}
       end
     end
 
-    defp well(:colour, value, theme, _defs), do: well(value, theme)
-    defp well(_widget, _value, _theme, _defs), do: %{colour: nil, none?: false, word: nil}
+    defp well(:color, value, theme, _defs), do: well(value, theme)
+    defp well(_widget, _value, _theme, _defs), do: %{color: nil, none?: false, word: nil}
 
     @doc false
     # What a colour well shows for a value (spec/14 §19.10); `Editor.well/2` is its face.
-    def well(nil, _theme), do: %{colour: nil, none?: false, word: nil}
-    def well(:none, _theme), do: %{colour: nil, none?: true, word: "none"}
-    def well("#" <> _ = hex, _theme), do: %{colour: hex, none?: false, word: hex}
+    def well(nil, _theme), do: %{color: nil, none?: false, word: nil}
+    def well(:none, _theme), do: %{color: nil, none?: true, word: "none"}
+    def well("#" <> _ = hex, _theme), do: %{color: hex, none?: false, word: hex}
 
     def well({:series, i}, %Theme{} = theme) when is_integer(i) and i >= 1,
       do: well(Theme.series_slot(theme, i), theme)
@@ -746,37 +746,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def well({:color, name}, theme) when is_atom(name), do: well(name, theme)
 
     def well(slot, %Theme{} = theme) when is_atom(slot) do
-      if slot in Theme.colour_slots(theme),
-        do: %{colour: Theme.resolve(theme, slot, :literal), none?: false, word: to_string(slot)},
-        else: %{colour: nil, none?: false, word: to_string(slot)}
+      if slot in Theme.color_slots(theme),
+        do: %{color: Theme.resolve(theme, slot, :literal), none?: false, word: to_string(slot)},
+        else: %{color: nil, none?: false, word: to_string(slot)}
     end
 
     def well(slot, _theme) when is_atom(slot),
-      do: %{colour: nil, none?: false, word: to_string(slot)}
+      do: %{color: nil, none?: false, word: to_string(slot)}
 
-    def well(value, _theme) when is_binary(value), do: %{colour: value, none?: false, word: value}
+    def well(value, _theme) when is_binary(value), do: %{color: value, none?: false, word: value}
 
     # A transform of colours (D-173): the colour it computes to, under its expression, where
     # every name it reads is the theme's; else the expression alone.
     def well(value, theme) do
       cond do
         not Color.value?(value) ->
-          %{colour: nil, none?: false, word: nil}
+          %{color: nil, none?: false, word: nil}
 
         is_struct(theme, Theme) and resolvable?(value, theme) ->
           %{
-            colour: Color.resolve(value, theme, :literal),
+            color: Color.resolve(value, theme, :literal),
             none?: false,
             word: Chain.expression(value)
           }
 
         true ->
-          %{colour: nil, none?: false, word: Chain.expression(value)}
+          %{color: nil, none?: false, word: Chain.expression(value)}
       end
     end
 
     defp resolvable?(value, theme) do
-      names = Theme.colour_slots(theme)
+      names = Theme.color_slots(theme)
       value |> Color.Typed.names() |> Enum.all?(&(&1 in names))
     end
 
@@ -794,7 +794,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp number_or(_other, default), do: default
 
     defp well_class(%{none?: true}), do: "vis-builder-well vis-builder-well-none"
-    defp well_class(%{colour: nil}), do: "vis-builder-well vis-builder-well-empty"
+    defp well_class(%{color: nil}), do: "vis-builder-well vis-builder-well-empty"
     defp well_class(_well), do: "vis-builder-well"
 
     defp default(%{required: true}), do: :error
@@ -805,7 +805,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A variable is shown by the name box, not the typed control (spec/14 §19.9).
     defp shown(_widget, {:ok, %Var{}}), do: nil
     # A colour is the well's to show, never a control's.
-    defp shown(:colour, {:ok, _value}), do: nil
+    defp shown(:color, {:ok, _value}), do: nil
     # Whole: a literal `inspect/1` cut short at its default limit would read back as less
     # than it is — a theme's palette in its parts is well over fifty terms.
     defp shown(:textarea, {:ok, value}),

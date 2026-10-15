@@ -125,12 +125,12 @@ defmodule Visualize.Chart.Frame.Defs do
       {:ok, %{type: :hatch} = node} ->
         case Map.get(node, :background) do
           background when background in [nil, :none] -> nil
-          background -> Style.colour(background, theme, :literal)
+          background -> Style.color(background, theme, :literal)
         end
 
       {:ok, node} ->
         [first | _] = stops(node)
-        Style.colour(colour(first), theme, :literal)
+        Style.color(colour(first), theme, :literal)
 
       :error ->
         nil
@@ -149,7 +149,7 @@ defmodule Visualize.Chart.Frame.Defs do
     background =
       case Map.get(node, :background) do
         background when background in [nil, :none] -> nil
-        background -> Style.colour(unvar(background), theme, mode)
+        background -> Style.color(unvar(background), theme, mode)
       end
 
     %Paint{
@@ -161,7 +161,7 @@ defmodule Visualize.Chart.Frame.Defs do
         spacing: size.(:spacing),
         width: size.(:width)
       },
-      color: Style.colour(unvar(Map.fetch!(node, :color)), theme, mode),
+      color: Style.color(unvar(Map.fetch!(node, :color)), theme, mode),
       background: background
     }
   end
@@ -169,7 +169,7 @@ defmodule Visualize.Chart.Frame.Defs do
   defp paint(node, id, theme, mode) do
     stops =
       for stop <- stops(node) do
-        {Map.fetch!(stop, :at) * 1.0, Style.colour(colour(stop), theme, mode),
+        {Map.fetch!(stop, :at) * 1.0, Style.color(colour(stop), theme, mode),
          Map.get(stop, :opacity, Schema.default(:stop, :opacity))}
       end
 

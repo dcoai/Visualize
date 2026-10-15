@@ -38,7 +38,7 @@ defmodule Visualize.Chart.Validator.Words do
       "turns a brushed pixel into a value by linear interpolation (spec/14 §2.9)"
   end
 
-  def words({:colour_map, kind}) do
+  def words({:color_map, kind}) do
     "is a map of colours on a #{inspect(kind)} scale; a map pins categories, which an " <>
       ":ordinal scale has (spec/14 §4.3)"
   end
@@ -327,16 +327,16 @@ defmodule Visualize.Chart.Validator.Words do
       "{:data, [x, y]}"
   end
 
-  defp type_words(:colour) do
+  defp type_words(:color) do
     "a colour string, :none, a typed color — color(name), ramp(name, t) with t in 0..1, " <>
       "contrast() — a transform of colors with every number in 0..1, or a paint"
   end
 
   defp type_words(:counterpart), do: "a theme's name, or nil for none"
 
-  defp type_words(:theme_colour),
+  defp type_words(:theme_color),
     do:
-      type_words(:colour) <>
+      type_words(:color) <>
         ", or a map of pinned steps, an integer in 0..1000 to a colour string"
 
   defp type_words(:ramp), do: "{:ramp, name} with name one of #{list(Theme.ramp_names())}"

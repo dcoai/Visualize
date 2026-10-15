@@ -1,6 +1,6 @@
 defmodule Visualize.IR.Paint do
   @moduledoc """
-  A paint that is not one colour: the value of an element's `:fill` or `:stroke` when it is
+  A paint that is not one color: the value of an element's `:fill` or `:stroke` when it is
   a gradient (spec/02 §2.1, #652, D-175).
 
   `id` names the definition an SVG document holds for it — the SVG backend writes

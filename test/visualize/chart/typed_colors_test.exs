@@ -76,6 +76,7 @@ defmodule Visualize.Chart.TypedColorsTest do
         frames: %{
           main: %{kind: :cartesian, scales: %{c: %{kind: :ordinal, range: %{"down" => :bad}}}}
         },
+        # spelling: allow — version 2's stop word.
         defs: %{fade: %{kind: :linear, stops: [%{offset: 0, colour: :series_1}]}},
         styles: %{s: %{stroke: :good}}
       }
@@ -149,7 +150,7 @@ defmodule Visualize.Chart.TypedColorsTest do
 
     test "a transform of the wrong shape or an unreadable literal operand is no colour" do
       for bad <- [{:alpha, color(:red), 2}, {:blend, []}, alpha("currentColor", 0.5)] do
-        assert {:error, [{[:styles, :s, :fill, :color], {:type, :colour}}]} =
+        assert {:error, [{[:styles, :s, :fill, :color], {:type, :color}}]} =
                  Validator.validate(design(%{fill: bad}))
       end
 
@@ -216,7 +217,7 @@ defmodule Visualize.Chart.TypedColorsTest do
       # A known tag whose name is not plain words is no atom, and no color.
       bad = String.replace(json, ~s("color":"#000"), ~s("color":{"$color":"a b"}))
 
-      assert {:error, [{[:styles, :s, :fill, :color], {:type, :colour}}]} =
+      assert {:error, [{[:styles, :s, :fill, :color], {:type, :color}}]} =
                Chart.from_json(bad)
     end
   end

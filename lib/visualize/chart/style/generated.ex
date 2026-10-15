@@ -5,7 +5,7 @@ defmodule Visualize.Chart.Style.Generated do
   # and what the frame does with a stored `{:generate, name, args}`.
   #
   # A generator call stands in two places: as a **stack entry**, whose result must be a
-  # style, and as a **leaf** in a style's `:colour` position, whose result must be a typed
+  # style, and as a **leaf** in a style's `:color` position, whose result must be a typed
   # color. `reached/3` finds the calls a stack reaches, each tagged by its place; `memo/4`
   # calls every distinct `(name, arguments)` of a site's rows once; `resolve/5` answers one
   # call's checked result for the style resolution's `pick`, or `nil` — the call applies
@@ -220,7 +220,7 @@ defmodule Visualize.Chart.Style.Generated do
   def pick(frame, path) do
     fn
       {:field, _} -> nil
-      {:colour, call} -> resolve(frame, :leaf, call, nil, path: path)
+      {:leaf, call} -> resolve(frame, :leaf, call, nil, path: path)
       call -> resolve(frame, :entry, call, nil, path: path)
     end
   end

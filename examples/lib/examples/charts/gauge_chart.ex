@@ -56,7 +56,7 @@ defmodule Examples.Charts.GaugeChart do
         polar(margin: @margin),
         linear_scale(:angle, domain: [0, 100], start: -120, sweep: 240),
         linear_scale(:r, domain: [0, 1], range: [0, outer]),
-        # The zones are status, so they take the theme's roles, not series colours: every
+        # The zones are status, so they take the theme's roles, not series colors: every
         # theme renders good, warning and bad in its own tones (spec/08 §7.5).
         ordinal_scale(:color, domain: ["ok", "warm", "hot"], range: [:good, :warning, :bad]),
         axis(:angle, :bottom, ticks: 5, radius: 0.85, unit: "%", style: :dial),

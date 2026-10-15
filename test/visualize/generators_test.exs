@@ -195,7 +195,7 @@ defmodule Visualize.GeneratorsTest do
 
       defaults = Map.put(design(:style_1), :defaults, %{fill: generate(:brand_color, ["acme"])})
 
-      assert {:error, [{[:defaults, :fill, :color], {:type, :colour}}]} =
+      assert {:error, [{[:defaults, :fill, :color], {:type, :color}}]} =
                Chart.from_map(defaults, @gens)
     end
 
@@ -456,10 +456,10 @@ defmodule Visualize.GeneratorsTest do
                 {[:cells, :chat, :ref, :marks, 0, :style],
                  {:undeclared, :generator, :tenant_style}}
               ]} =
-               Visualize.Board.realise(board, store, %{chat: %{s: @rows}})
+               Visualize.Board.realize(board, store, %{chat: %{s: @rows}})
 
       {:ok, %{chat: applied}, _cache} =
-        Visualize.Board.realise(board, store, %{chat: %{s: @rows}},
+        Visualize.Board.realize(board, store, %{chat: %{s: @rows}},
           generators: [Tenants],
           assigns: %{viewer: "globex"}
         )

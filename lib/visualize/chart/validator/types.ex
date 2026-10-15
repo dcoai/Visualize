@@ -140,24 +140,24 @@ defmodule Visualize.Chart.Validator.Types do
     if term?(x) and term?(y), do: [], else: [{path, {:type, :anchor}}]
   end
 
-  def check(:colour, v, _path, _ctx) when is_binary(v) or v in [:none, :contrast], do: []
+  def check(:color, v, _path, _ctx) when is_binary(v) or v in [:none, :contrast], do: []
   # A paint names a gradient of `defs` (spec/14 §2.7, §3.2).
-  def check(:colour, {:paint, name}, path, ctx) when is_atom(name),
+  def check(:color, {:paint, name}, path, ctx) when is_atom(name),
     do: ref(:paint, name, path, ctx)
 
   # A ramp position is a meaning the theme renders (spec/14 §3.2, D-135).
-  def check(:colour, {:ramp, name, t}, path, _ctx) do
+  def check(:color, {:ramp, name, t}, path, _ctx) do
     if name in Theme.ramp_names() and is_number(t) and t >= 0 and t <= 1,
       do: [],
-      else: [{path, {:type, :colour}}]
+      else: [{path, {:type, :color}}]
   end
 
   # A typed color (spec/14 §3.2, spec/08 §1.9, #664): its shape, its literal operands and
   # every name it reads from the theme's color table.
-  def check(:colour, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colours,
+  def check(:color, v, path, ctx) when is_tuple(v) and elem(v, 0) in @typed_colours,
     do: Colors.check(v, path, ctx.colors)
 
-  def check(:colour, v, path, ctx), do: slot_or(:colour, v, path, ctx)
+  def check(:color, v, path, ctx), do: slot_or(:color, v, path, ctx)
 
   def check(:ramp, {:ramp, name}, path, _ctx) do
     if name in Theme.ramp_names(), do: [], else: [{path, {:type, :ramp}}]
@@ -170,16 +170,16 @@ defmodule Visualize.Chart.Validator.Types do
   def check(:counterpart, _v, path, _ctx), do: [{path, {:type, :counterpart}}]
 
   # A theme's color (spec/08 §7.1, #667): a colour, or the steps it pins of a name.
-  def check(:theme_colour, map, path, _ctx) when is_map(map) and not is_struct(map),
+  def check(:theme_color, map, path, _ctx) when is_map(map) and not is_struct(map),
     do: Colors.steps(map, path)
 
-  def check(:theme_colour, v, path, ctx), do: check(:colour, v, path, ctx)
+  def check(:theme_color, v, path, ctx), do: check(:color, v, path, ctx)
 
   # A map of colours (spec/14 §4.3, D-143): each category's colour as a style takes one,
   # checked at the category's own path.
-  def check(:colour_map, map, path, ctx) when is_map(map) and not is_struct(map) do
+  def check(:color_map, map, path, ctx) when is_map(map) and not is_struct(map) do
     Enum.flat_map(map, fn {category, colour} ->
-      check(:colour, colour, path ++ [category], ctx)
+      check(:color, colour, path ++ [category], ctx)
     end)
   end
 

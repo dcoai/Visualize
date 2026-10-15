@@ -42,7 +42,7 @@ defmodule Visualize.Hooks.Builder do
     between rows of the stack, or with `"into" => string` on one dropped on a container's
     row — linked, as every drop is (spec/14 §18.17, #381)
   - `inspect` with `%{"path" => string, "layer" => string}` on a click on a row
-  - `drop_colour` with `%{"field" => string, "colour" => string, "edit" => string}` when a
+  - `drop_color` with `%{"field" => string, "color" => string, "edit" => string}` when a
     patch of the colour chooser is dropped on a colour well (spec/14 §19.10)
   - `context_width` with `%{"width" => integer}` when the inspector's edge is released
     after a drag (spec/14 §18.16)
@@ -408,7 +408,7 @@ defmodule Visualize.Hooks.Builder do
 
       dragType(e) {
         const types = e.dataTransfer ? Array.from(e.dataTransfer.types || []) : [];
-        if (types.includes('application/x-visualize-colour')) return 'colour';
+        if (types.includes('application/x-visualize-color')) return 'color';
         if (types.includes('application/x-visualize-variable')) return 'variable';
         if (types.includes('application/x-visualize-promote')) return 'promote';
         if (types.includes('application/x-visualize-fragment')) return 'fragment';
@@ -418,13 +418,13 @@ defmodule Visualize.Hooks.Builder do
       handleDragStart(e) {
         // A patch of the colour chooser carries its colour — a slot's word or a hex — so
         // a well anywhere can take it (spec/14 §19.10).
-        const patch = this.carried(e, '[data-builder-colour]');
+        const patch = this.carried(e, '[data-builder-color]');
         if (patch) {
           this.from = null;
           if (e.dataTransfer) {
             e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('application/x-visualize-colour', patch.getAttribute('data-builder-colour'));
-            e.dataTransfer.setData('text/plain', patch.getAttribute('data-builder-colour'));
+            e.dataTransfer.setData('application/x-visualize-color', patch.getAttribute('data-builder-color'));
+            e.dataTransfer.setData('text/plain', patch.getAttribute('data-builder-color'));
           }
           return;
         }
@@ -519,7 +519,7 @@ defmodule Visualize.Hooks.Builder do
       // that root), the create area (promote a field's value). Marked while over.
       chipTarget(e) {
         const kind = this.dragType(e);
-        if (kind === 'colour') return this.carried(e, '[data-builder-well]');
+        if (kind === 'color') return this.carried(e, '[data-builder-well]');
         if (kind === 'variable') {
           return this.carried(e, '[data-builder-bind]') || this.carried(e, '[data-builder-bind-root]');
         }
@@ -670,13 +670,13 @@ defmodule Visualize.Hooks.Builder do
           e.preventDefault();
           chipTarget.classList.remove('vis-builder-field-over');
           const kind = this.dragType(e);
-          if (kind === 'colour') {
+          if (kind === 'color') {
             // The well's own form says which edit writes it: the node's, or the style
             // panel's (spec/14 §19.10).
             const form = chipTarget.closest('form');
-            this.push('drop_colour', this.aimed(chipTarget, {
+            this.push('drop_color', this.aimed(chipTarget, {
               field: chipTarget.getAttribute('data-builder-well'),
-              colour: e.dataTransfer.getData('application/x-visualize-colour'),
+              color: e.dataTransfer.getData('application/x-visualize-color'),
               edit: (form && form.dataset.builderEdit) || 'edit'
             }));
           } else if (kind === 'variable') {

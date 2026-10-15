@@ -65,50 +65,50 @@ defmodule Visualize.Chart.Codec do
   defp value(_type, {:generate, name, args}) when is_atom(name) and is_list(args),
     do: Tags.tag("$generate", [Atom.to_string(name), Enum.map(args, &term/1)])
 
-  defp value(:colour, {:paint, name}) when is_atom(name),
+  defp value(:color, {:paint, name}) when is_atom(name),
     do: Tags.tag("$paint", Atom.to_string(name))
 
   # A ramp position, and a whole ramp as a colour scale's range (spec/14 §11.2, #533).
-  defp value(:colour, {:ramp, name, t}) when is_atom(name) and is_number(t),
+  defp value(:color, {:ramp, name, t}) when is_atom(name) and is_number(t),
     do: Tags.tag("$ramp", [Atom.to_string(name), t])
 
   defp value(:ramp, {:ramp, name}) when is_atom(name), do: Tags.tag("$ramp", Atom.to_string(name))
 
   # A typed color (spec/14 §11.2, #664): a name, a transform with its color first, a blend's
   # list, the contrast ink over a color or over what is under.
-  defp value(:colour, {:color, name}) when is_atom(name),
+  defp value(:color, {:color, name}) when is_atom(name),
     do: Tags.tag("$color", Atom.to_string(name))
 
-  defp value(:colour, {op, c, t}) when op in @unary and is_number(t),
-    do: Tags.tag("$#{op}", [value(:colour, c), t])
+  defp value(:color, {op, c, t}) when op in @unary and is_number(t),
+    do: Tags.tag("$#{op}", [value(:color, c), t])
 
-  defp value(:colour, {:blend, list}) when is_list(list),
-    do: Tags.tag("$blend", Enum.map(list, &value(:colour, &1)))
+  defp value(:color, {:blend, list}) when is_list(list),
+    do: Tags.tag("$blend", Enum.map(list, &value(:color, &1)))
 
   # A theme's pinned steps, `[step, colour]` pairs in step order (spec/14 §11.2, #667).
-  defp value(:theme_colour, steps) when is_map(steps) and not is_struct(steps),
+  defp value(:theme_color, steps) when is_map(steps) and not is_struct(steps),
     do:
       Tags.tag(
         "$steps",
-        steps |> Enum.sort() |> Enum.map(fn {n, c} -> [n, value(:colour, c)] end)
+        steps |> Enum.sort() |> Enum.map(fn {n, c} -> [n, value(:color, c)] end)
       )
 
-  defp value(:theme_colour, v), do: value(:colour, v)
+  defp value(:theme_color, v), do: value(:color, v)
 
   # A theme's counterpart (spec/08 §7.3, #668): its name, or `null` for none.
   defp value(:counterpart, nil), do: nil
   defp value(:counterpart, name) when is_atom(name), do: Atom.to_string(name)
 
-  defp value(:colour, {:contrast, :under}), do: Tags.tag("$contrast", "under")
-  defp value(:colour, {:contrast, c}), do: Tags.tag("$contrast", value(:colour, c))
+  defp value(:color, {:contrast, :under}), do: Tags.tag("$contrast", "under")
+  defp value(:color, {:contrast, c}), do: Tags.tag("$contrast", value(:color, c))
 
   # A map of colours as `[category, colour]` pairs in the categories' term order (spec/14
   # §11.2, D-143): an object's keys are strings, and a category need not be one.
-  defp value(:colour_map, map) when is_map(map) and not is_struct(map) do
+  defp value(:color_map, map) when is_map(map) and not is_struct(map) do
     pairs =
       map
       |> Enum.sort_by(fn {category, _colour} -> category end)
-      |> Enum.map(fn {category, colour} -> [term(category), value(:colour, colour)] end)
+      |> Enum.map(fn {category, colour} -> [term(category), value(:color, colour)] end)
 
     Tags.tag("$colors", pairs)
   end
@@ -127,7 +127,7 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  defp value(type, v) when type in [:name, :field, :colour, :font] and is_atom(v),
+  defp value(type, v) when type in [:name, :field, :color, :font] and is_atom(v),
     do: Atom.to_string(v)
 
   defp value({:enum, _}, v) when is_atom(v), do: Atom.to_string(v)
@@ -145,7 +145,7 @@ defmodule Visualize.Chart.Codec do
   defp value(:channel, {:scale, which}) when which in [:min, :max],
     do: Tags.tag("$scale", Atom.to_string(which))
 
-  defp value(type, {:series, i}) when type in [:colour, :size, :font], do: Tags.tag("$series", i)
+  defp value(type, {:series, i}) when type in [:color, :size, :font], do: Tags.tag("$series", i)
   defp value(:extent, :auto), do: "auto"
   defp value(:extent, v) when is_list(v), do: Enum.map(v, &category/1)
   defp value(:text, v) when is_binary(v), do: v
@@ -253,48 +253,48 @@ defmodule Visualize.Chart.Codec do
       else: v
   end
 
-  defp read(:colour, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
+  defp read(:color, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
     do: {:paint, String.to_atom(name)}
 
-  defp read(:colour, %{"$ramp" => [name, t]} = v) when map_size(v) == 1 and is_number(t) do
+  defp read(:color, %{"$ramp" => [name, t]} = v) when map_size(v) == 1 and is_number(t) do
     case ramp_name(name) do
       nil -> v
       found -> {:ramp, found, t}
     end
   end
 
-  defp read(:theme_colour, %{"$steps" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
+  defp read(:theme_color, %{"$steps" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
     if Enum.all?(pairs, &match?([n, _] when is_integer(n), &1)),
-      do: Map.new(pairs, fn [n, c] -> {n, read(:colour, c)} end),
+      do: Map.new(pairs, fn [n, c] -> {n, read(:color, c)} end),
       else: v
   end
 
-  defp read(:theme_colour, v), do: read(:colour, v)
+  defp read(:theme_color, v), do: read(:color, v)
 
   defp read(:counterpart, name) when is_binary(name), do: String.to_atom(name)
 
-  defp read(:colour, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
+  defp read(:color, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
     if Regex.match?(@colour_word, name), do: {:color, String.to_atom(name)}, else: v
   end
 
-  defp read(:colour, %{"$blend" => list} = v) when map_size(v) == 1 and is_list(list),
-    do: {:blend, Enum.map(list, &read(:colour, &1))}
+  defp read(:color, %{"$blend" => list} = v) when map_size(v) == 1 and is_list(list),
+    do: {:blend, Enum.map(list, &read(:color, &1))}
 
-  defp read(:colour, %{"$contrast" => "under"} = v) when map_size(v) == 1, do: {:contrast, :under}
+  defp read(:color, %{"$contrast" => "under"} = v) when map_size(v) == 1, do: {:contrast, :under}
 
-  defp read(:colour, %{"$contrast" => c} = v) when map_size(v) == 1,
-    do: {:contrast, read(:colour, c)}
+  defp read(:color, %{"$contrast" => c} = v) when map_size(v) == 1,
+    do: {:contrast, read(:color, c)}
 
   # A transform's tag. Any other one-key `$` object is left as the object it is, which is
   # no color, for the validator to refuse: a known tag out of place, or, from a document
   # before version 3, one the table does not have (an unknown tag is refused by the reader in
   # any later one, D-182).
-  defp read(:colour, %{} = v) when map_size(v) == 1 do
+  defp read(:color, %{} = v) when map_size(v) == 1 do
     case Map.to_list(v) do
       [{"$" <> op, [c, t]}] when is_number(t) ->
         case Enum.find(@unary, &(Atom.to_string(&1) == op)) do
           nil -> v
-          found -> {found, read(:colour, c), t}
+          found -> {found, read(:color, c), t}
         end
 
       [{"$series", i}] ->
@@ -308,10 +308,10 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  defp read(:colour_map, %{"$colors" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
+  defp read(:color_map, %{"$colors" => pairs} = v) when map_size(v) == 1 and is_list(pairs) do
     if Enum.all?(pairs, &match?([_, _], &1)),
       do:
-        Map.new(pairs, fn [category, colour] -> {read_term(category), read(:colour, colour)} end),
+        Map.new(pairs, fn [category, colour] -> {read_term(category), read(:color, colour)} end),
       else: v
   end
 
@@ -348,7 +348,7 @@ defmodule Visualize.Chart.Codec do
   defp read(:slot, v) when is_binary(v), do: String.to_atom(v)
 
   defp read(type, %{"$series" => i} = v)
-       when type in [:slot, :colour, :size, :font] and map_size(v) == 1,
+       when type in [:slot, :color, :size, :font] and map_size(v) == 1,
        do: {:series, i}
 
   # A unit is one of the library's, so no atom is made from a document (spec/14 §11.2).
@@ -369,9 +369,9 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  defp read(:colour, "none"), do: :none
-  defp read(:colour, "contrast"), do: :contrast
-  defp read(type, v) when type in [:colour, :font, :size] and is_binary(v), do: slot_or_string(v)
+  defp read(:color, "none"), do: :none
+  defp read(:color, "contrast"), do: :contrast
+  defp read(type, v) when type in [:color, :font, :size] and is_binary(v), do: slot_or_string(v)
   defp read(:extent, "auto"), do: :auto
   defp read(:extent, v) when is_list(v), do: Enum.map(v, &read_category/1)
   defp read(:text, v) when is_binary(v), do: v
@@ -480,7 +480,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?(:key_order, v), do: is_map(v) and is_map_key(v, "$keys") and map_size(v) == 1
   defp json_shape?(:ramp, v), do: is_map(v) and is_map_key(v, "$ramp") and map_size(v) == 1
 
-  defp json_shape?(:colour_map, v),
+  defp json_shape?(:color_map, v),
     do: is_map(v) and is_map_key(v, "$colors") and map_size(v) == 1
 
   # An enumeration's JSON is a string, so a tagged object beside one is never it (#492).

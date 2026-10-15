@@ -443,7 +443,7 @@ defmodule Visualize.Chart.CompiledTest do
         defs: %{
           fade: %{
             kind: :linear,
-            stops: [%{offset: 0, colour: :series_1}, %{offset: 1, colour: :background}]
+            stops: [%{offset: 0, color: :series_1}, %{offset: 1, color: :background}]
           }
         },
         styles: %{soft: %{fill: {:paint, :fade}}},

@@ -12,7 +12,7 @@ defmodule Examples.Charts.Design do
 
   - **The palette is the theme.** The gallery's `palette` option becomes the `theme:` of
     `Visualize.Chart.apply/2` (`Examples.ColorPalettes.theme/1`), so a mark that names no
-    colour paints in the palette's series slots and a palette swap recolours every chart.
+    colour paints in the palette's series slots and a palette swap recolors every chart.
   - **The `<svg>` shell** is the library's: `Visualize.Chart.render/2` with `root: true`
     draws the accessible root of spec/02 §2.1 around the frame, titled from the design's
     `meta` (#131).

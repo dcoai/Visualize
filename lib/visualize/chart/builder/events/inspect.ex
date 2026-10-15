@@ -27,7 +27,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The context's panels, one open at a time (spec/14 §19.10): inspect by every selection,
     # colour by its toggle and variables by its tab at the end of the node row (§18.13).
-    @panels [:inspect, :colour, :variables]
+    @panels [:inspect, :color, :variables]
 
     # -- the strip -----------------------------------------------------------------------
 
@@ -141,7 +141,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # A part's key by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
       case Editor.locate(entry.kind, key) do
-        %{spec: %{type: :colour}} -> :colour
+        %{spec: %{type: :color}} -> :color
         _other -> socket.assigns.context
       end
     end

@@ -297,7 +297,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assigns =
         assign(assigns,
           arcs: arcs,
-          centre: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
+          center: {fmt(drawn.plot.width / 2), fmt(drawn.plot.height / 2)},
           theme: drawn.theme,
           ids: drawn.ids,
           label_size: Support.css(drawn.theme, :label_size),
@@ -308,7 +308,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
         <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
-        <g transform={"translate(#{elem(@centre, 0)}, #{elem(@centre, 1)})"}>
+        <g transform={"translate(#{elem(@center, 0)}, #{elem(@center, 1)})"}>
           <%= for a <- @arcs do %>
             <path d={a.d} fill={a.fill} stroke={a.stroke} stroke-width={a.stroke_width} {@transition} />
             <%= for label <- a.labels do %>

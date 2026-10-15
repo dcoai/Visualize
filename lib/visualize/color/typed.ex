@@ -192,7 +192,7 @@ defmodule Visualize.Color.Typed do
   defp pinned({:color, name}, n, theme), do: Theme.step(theme, name, n)
   defp pinned(_c, _n, _theme), do: nil
 
-  # CSS Color 5's `color-mix` over any number of colours: weights normalized, OKLab averaged
+  # CSS Color 5's `color-mix` over any number of colors: weights normalized, OKLab averaged
   # with premultiplied alpha, and a sum of weights below 1 multiplying the alpha.
   defp blend(list, theme) do
     weighted =

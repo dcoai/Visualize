@@ -74,7 +74,7 @@ defmodule Visualize.Chart.Validator do
           | {:quantity, Visualize.Quantity.t(), Visualize.Unit.code()}
           | {:sync, :frame_kind | :x_scale, atom() | nil}
           | {:brush, :frame_kind | :x_scale, atom() | nil}
-          | {:colour_map, atom()}
+          | {:color_map, atom()}
           | {:polarity, :range}
           | {:tiles, :projection, atom()}
           | {:tiles, :attribution | :url | :subdomains}
@@ -403,7 +403,7 @@ defmodule Visualize.Chart.Validator do
   # A color generator (spec/14 §3.13): a paint's `color` and an effect's.
   defp check_key(kind, %{key: :color}, {:generate, _, _} = call, path, ctx)
        when kind in [:paint, :stroke, :effect],
-       do: Types.generator(call, path, ctx, :colour)
+       do: Types.generator(call, path, ctx, :color)
 
   defp check_key(:design, %{key: :version}, v, path, _ctx) when is_integer(v) do
     cond do

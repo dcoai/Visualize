@@ -136,7 +136,16 @@ defmodule Visualize.MixProject do
       # served the specification's references to internal functions, and went with it (D-133).
       # The British names #642 renamed outright (D-183) are recorded the same way: past
       # entries and the rename table name functions that no longer exist.
-      skip_code_autolink_to: ["Visualize.Render.with_backend/2", "Visualize.Theme.colour_safe/0"],
+      skip_code_autolink_to: [
+        "Visualize.Render.with_backend/2",
+        "Visualize.Theme.colour_safe/0",
+        "Visualize.Theme.colour_slots/1",
+        "Visualize.Board.realise/3",
+        "Visualize.Board.realise/4",
+        "Visualize.Board.Snapshot.realise/3",
+        "Visualize.Board.Snapshot.realise/4",
+        "Visualize.Color.Vision.recolour/2"
+      ],
       extras: [
         {"README.md", title: "README"},
         # The guides, in reading order, ahead of the reference material: where a newcomer

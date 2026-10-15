@@ -271,7 +271,7 @@ defmodule Visualize.Chart.FrameTest do
       assert_in_delta List.last(centres), :math.pi() / 2, 1.0e-9
       assert_in_delta Enum.at(centres, 1) - hd(centres), :math.pi() / 5, 1.0e-9
 
-      # The axis ticks every category at its centre: the first straight up at R.
+      # The axis ticks every category at its center: the first straight up at R.
       svg =
         chart(
           %{
@@ -567,13 +567,17 @@ defmodule Visualize.Chart.FrameTest do
         fade: %{
           kind: :linear,
           stops: [
+            # spelling: allow — version 2's stop word.
             %{offset: 0, colour: :series_1, opacity: 0.8},
+            # spelling: allow — version 2's stop word.
             %{offset: 1, colour: "#fff", opacity: 0.1}
           ]
         },
         glow: %{
           kind: :radial,
+          # spelling: allow — version 2's stop word.
           stops: [%{offset: 0, colour: "#ff0"}, %{offset: 1, colour: "#f00"}],
+          # spelling: allow — version 2's paint word.
           centre: [0.3, 0.4],
           radius: 0.6
         }

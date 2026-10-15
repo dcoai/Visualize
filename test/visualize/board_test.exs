@@ -3,7 +3,7 @@ defmodule Visualize.BoardTest do
   The board as a value (spec/15, D-141): its map and JSON forms under the version policy
   and limits of spec/14 §9.1–9.2, its validation alone and given a store, its required
   sources namespaced per cell, its layout and reflow, its variables' cascade and
-  `realise/4`.
+  `realize/4`.
   """
   use ExUnit.Case, async: true
 
@@ -196,7 +196,7 @@ defmodule Visualize.BoardTest do
         b: %{x: 4, y: 1, w: 6, h: 2, ref: {:composite, 1}},
         c: %{x: 5, y: 0, w: 2, h: 4, ref: {:composite, 1}},
         d: %{x: 9, y: 9, w: 4, h: 1, ref: {:composite, 1}},
-        e: %{x: -1, y: 0, w: 0, ref: {:composite, 0}, sync: "yes", colour: "red"}
+        e: %{x: -1, y: 0, w: 0, ref: {:composite, 0}, sync: "yes", color: "red"}
       }
 
       assert Board.validate(%{cells: cells}) ==
@@ -206,7 +206,7 @@ defmodule Visualize.BoardTest do
                   {[:cells, :c], {:overlap, :a}},
                   {[:cells, :c], {:overlap, :b}},
                   {[:cells, :d], {:off_grid, 12}},
-                  {[:cells, :e, :colour], :unknown_key},
+                  {[:cells, :e, :color], :unknown_key},
                   {[:cells, :e, :h], :required},
                   {[:cells, :e, :ref], {:type, {:id, :composite}}},
                   {[:cells, :e, :sync], {:type, :boolean}},
@@ -303,7 +303,7 @@ defmodule Visualize.BoardTest do
         dangling: %{x: 0, y: 0, w: 2, h: 1, ref: {:composite, 99}},
         loop: %{x: 2, y: 0, w: 2, h: 1, ref: {:composite, 3}},
         partial: %{x: 4, y: 0, w: 2, h: 1, ref: {:composite, 4}},
-        stranger: %{x: 6, y: 0, w: 2, h: 1, ref: {:composite, 1}, vars: %{colour: "red"}},
+        stranger: %{x: 6, y: 0, w: 2, h: 1, ref: {:composite, 1}, vars: %{color: "red"}},
         dial: %{x: 8, y: 0, w: 2, h: 1, ref: {:composite, 2}}
       }
 
@@ -314,7 +314,7 @@ defmodule Visualize.BoardTest do
       assert {[:cells, :loop, :ref], {:cycle, [{:composite, 3}, {:composite, 3}]}} in errors
 
       assert {[:cells, :partial, :ref, :frames], :required} in errors
-      assert {[:cells, :stranger, :vars, :colour], {:undeclared, :var, :colour}} in errors
+      assert {[:cells, :stranger, :vars, :color], {:undeclared, :var, :color}} in errors
       assert {[:cells, :dial, :sync], {:sync, :frame_kind, :polar}} in errors
     end
 
@@ -387,7 +387,7 @@ defmodule Visualize.BoardTest do
       pools = Binding.pools(binding, %{us: us, eu: eu, cpu: [%{n: 1, v: 0.5}]})
 
       {:ok, applied, _cache} =
-        Board.realise(board, store(), pools, schemas: Schema.Cache.new([{:primary, schema()}]))
+        Board.realize(board, store(), pools, schemas: Schema.Cache.new([{:primary, schema()}]))
 
       assert Visualize.Chart.Frame.scale(applied.latency.frame, :y).domain == [10, 20]
       assert Visualize.Chart.Frame.scale(applied.eu.frame, :y).domain == [300, 400]
@@ -470,12 +470,12 @@ defmodule Visualize.BoardTest do
       design = Map.update!(design, :labels, &Enum.take(&1, 1))
       store = Map.put(store(), {:composite, 1}, design)
 
-      {:ok, applied, _cache} = Board.realise(board, store, pools)
+      {:ok, applied, _cache} = Board.realize(board, store, pools)
 
       assert [%{text: "Latency for api-us"}] = applied.latency.chart.labels
       assert [%{text: "Latency for api-eu"}] = applied.eu.chart.labels
 
-      {:ok, applied, _cache} = Board.realise(%{board | vars: %{}}, store, pools)
+      {:ok, applied, _cache} = Board.realize(%{board | vars: %{}}, store, pools)
       assert [%{text: "Latency for api"}] = applied.latency.chart.labels
     end
   end
@@ -497,7 +497,7 @@ defmodule Visualize.BoardTest do
 
       store = Map.put(store(), {:composite, 1}, design)
 
-      {:ok, applied, _cache} = Board.realise(board, store, pools, width: 1288)
+      {:ok, applied, _cache} = Board.realize(board, store, pools, width: 1288)
 
       assert applied.latency.chart.interaction.sync == "api"
       refute Map.get(applied.gauge.chart.interaction, :sync)
@@ -508,7 +508,7 @@ defmodule Visualize.BoardTest do
       board = Board.from_map!(board())
       pools = %{latency: %{primary: [%{t: 1, v: 1}]}}
 
-      assert {:error, errors} = Board.realise(board, store(), pools)
+      assert {:error, errors} = Board.realize(board, store(), pools)
       assert {[:cells, :eu, :sources, :primary], {:unbound, :source, :primary}} in errors
       assert {[:cells, :gauge, :sources, :reading], {:unbound, :source, :reading}} in errors
       assert {[:cells, :latency, :sources, :primary], {:no_schema, :primary}} in errors
@@ -517,7 +517,7 @@ defmodule Visualize.BoardTest do
     test "the board's own faults come before any cell is applied" do
       board = Board.from_map!(%{cells: %{a: %{x: 0, y: 0, w: 1, h: 1, ref: {:composite, 99}}}})
 
-      assert Board.realise(board, store(), %{}) ==
+      assert Board.realize(board, store(), %{}) ==
                {:error, [{[:cells, :a, :ref], {:dangling, {:composite, 99}}}]}
     end
 
@@ -539,7 +539,7 @@ defmodule Visualize.BoardTest do
         {:ok, schema()}
       end
 
-      {:ok, applied, cache} = Board.realise(board, store(), pools, describe: describe)
+      {:ok, applied, cache} = Board.realize(board, store(), pools, describe: describe)
 
       assert_received {:described, {:eu, :primary}}
       refute_received {:described, {:latency, :primary}}

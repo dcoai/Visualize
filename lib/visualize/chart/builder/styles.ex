@@ -943,7 +943,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     /* The colour toggle beside it (#366): pressed while the picker is up. */
-    .vis-builder-node-colour[aria-pressed="true"] {
+    .vis-builder-node-color[aria-pressed="true"] {
       color: var(--vis-builder-accent);
     }
 
@@ -2097,11 +2097,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     /* The color table by name, a group per use (spec/14 §19.10); the CSS names folded. */
-    .vis-builder-colour-group {
+    .vis-builder-color-group {
       margin: 0 0 8px;
     }
 
-    .vis-builder-colour-group-title {
+    .vis-builder-color-group-title {
       margin: 0 0 4px;
       color: var(--vis-builder-muted);
       font-size: 11px;
@@ -2878,7 +2878,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     }
 
     /* The chooser's own picker, for any colour a patch does not offer. */
-    .vis-builder .vis-builder-colour {
+    .vis-builder .vis-builder-color {
       width: 2.4em;
       height: 1.8em;
       padding: 1px;

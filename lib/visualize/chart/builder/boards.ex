@@ -8,7 +8,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     through a function here that builds the board it would make, and the mode validates
     that board alone before it keeps it (`Visualize.Board.validate/1`), so the board the
     builder holds always reads and a client can never place a cell over another or off the
-    grid (§22.2, §22.3). Each cell previews alone through `Visualize.Board.realise/4`
+    grid (§22.2, §22.3). Each cell previews alone through `Visualize.Board.realize/4`
     (`preview/3`, §22.6).
 
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
@@ -322,7 +322,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # -- the preview (§22.6) -------------------------------------------------------------------
 
     @doc """
-    Each cell realised alone (spec/14 §22.6): `Visualize.Board.realise/4` of a board holding
+    Each cell realised alone (spec/14 §22.6): `Visualize.Board.realize/4` of a board holding
     that one cell and the board's shared state, at a container width of 1200, so one cell
     that cannot apply leaves every other drawn. `%{cell => {:ok, svg} | {:error, lines}}`,
     the chart a responsive root titled with the cell's title, the faults in
@@ -333,7 +333,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `:pools` - each cell's pool, by its name (default none)
       * `:theme` - as `Visualize.Chart.apply/2` takes it
       * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`, as
-        `Visualize.Board.realise/4` takes it: the schema of a slot's feed
+        `Visualize.Board.realize/4` takes it: the schema of a slot's feed
       * `:refused` - each cell the binding's type check refused, by its name, with its
         faults (D-153): it is not realised, and is drawn as the fault panel
 
@@ -369,7 +369,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The cell applied alone and drawn; one whose application reports a type fault is the
     # fault panel, any other fault its lines.
     defp realised(alone, name, cell, fetch, pool, shared, theme) do
-      case Board.realise(alone, fetch, %{name => pool}, shared) do
+      case Board.realize(alone, fetch, %{name => pool}, shared) do
         {:ok, %{^name => applied}, _cache} ->
           {:ok,
            Chart.render(applied,

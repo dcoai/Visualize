@@ -1412,7 +1412,7 @@ defmodule Visualize.Chart.MarkTest do
 
     test "a paint is read by its first stop" do
       defs = %{
-        wash: %{kind: :linear, stops: [%{offset: 0, colour: @deep}, %{offset: 1, colour: @pale}]}
+        wash: %{kind: :linear, stops: [%{offset: 0, color: @deep}, %{offset: 1, color: @pale}]}
       }
 
       for mode <- [:css, :literal] do

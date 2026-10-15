@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(Phoenix.Component) do
-  defmodule Visualize.Chart.Builder.Events.Colour do
+  defmodule Visualize.Chart.Builder.Events.Color do
     @moduledoc false
     # A color's chain in the chooser (spec/14 §19.10, D-178): a step added at the end, an
     # amount changed, a step removed, a blend's operand added or removed — each an edit of
@@ -16,7 +16,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
-    @events ~w(colour_chain)
+    @events ~w(color_chain)
 
     @doc false
     def events, do: @events
@@ -24,7 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     # The chain's form: an amount typed or dragged, a step picked from + step — the chain's
     # own, or the first step of a plain color (`<field>.step`).
-    def handle_event("colour_chain", %{"_target" => [target]} = params, socket) do
+    def handle_event("color_chain", %{"_target" => [target]} = params, socket) do
       field = Map.get(params, "field")
 
       case String.split(target, "|") do
@@ -52,7 +52,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     # A row's × and a blend's operands.
-    def handle_event("colour_chain", %{"field" => field, "op" => op} = params, socket) do
+    def handle_event("color_chain", %{"field" => field, "op" => op} = params, socket) do
       path = Map.get(params, "path", "")
       index = Integer.parse(Map.get(params, "index", ""))
 
@@ -67,7 +67,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {:noreply, if(change, do: chained(socket, field, path, change), else: socket)}
     end
 
-    def handle_event("colour_chain", _params, socket), do: {:noreply, socket}
+    def handle_event("color_chain", _params, socket), do: {:noreply, socket}
 
     defp added(socket, field, path, step) do
       case Enum.find(Chain.steps(), &(to_string(&1) == step)) do
@@ -80,7 +80,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp chained(socket, field, path, change) when is_binary(field) do
       %{entry: entry, editing: node} = editing(socket.assigns)
 
-      with %{path: at, spec: %{type: :colour}} <- Editor.locate(entry.kind, field),
+      with %{path: at, spec: %{type: :color}} <- Editor.locate(entry.kind, field),
            {:ok, path} <- operand_path(path),
            current when current != nil <- Editor.value_at(entry.kind, node, at) do
         written = Chain.edit(current, path, change)

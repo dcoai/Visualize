@@ -491,7 +491,7 @@ defmodule Visualize.Chart do
         [sources: sources, schemas: described.schemas, generated: generated] ++
           Keyword.take(opts, [:theme, :now, :size, :system])
 
-      frames = realise_frames(chart, shared)
+      frames = realize_frames(chart, shared)
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
 
@@ -523,7 +523,7 @@ defmodule Visualize.Chart do
   # channels of every frame taking part and a frame is realised over its own marks: the
   # first pass gives each its own extent, and the second gives every frame of a group the
   # union of them through the `domains:` option, which skips the inference.
-  defp realise_frames(%__MODULE__{} = chart, shared) do
+  defp realize_frames(%__MODULE__{} = chart, shared) do
     frames =
       Map.new(chart.frames, fn {name, _} -> {name, Frame.new(chart, [frame: name] ++ shared)} end)
 
@@ -815,7 +815,7 @@ defmodule Visualize.Chart do
           name: :accent,
           default: :series_1,
           required: false,
-          uses: [%{path: [:styles, :s, :stroke], expects: :colour, layer: :house}]
+          uses: [%{path: [:styles, :s, :stroke], expects: :color, layer: :house}]
         },
         %{
           name: :unit,

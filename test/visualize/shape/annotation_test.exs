@@ -104,14 +104,14 @@ defmodule Visualize.Shape.AnnotationTest do
     end
 
     test "fill and label accessors read the datum; a nil fill omits the key" do
-      windows = [%{from: 1, to: 3, colour: "pink", note: "w1"}, %{from: 5, to: 6}]
+      windows = [%{from: 1, to: 3, color: "pink", note: "w1"}, %{from: 5, to: 6}]
 
       [first, second] =
         XBand.new()
         |> XBand.x0(:from)
         |> XBand.x1(:to)
         |> XBand.scale(linear())
-        |> XBand.fill(:colour)
+        |> XBand.fill(:color)
         |> XBand.label(:note)
         |> XBand.generate(windows)
 

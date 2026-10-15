@@ -39,7 +39,7 @@ defmodule Visualize.Data.Schema do
       iex> String.length(Visualize.Data.Schema.version(schema))
       64
       iex> Visualize.Data.Schema.new(%{state: %{type: :category, colors: %{"ok" => "#0a0"}}})
-      {:error, [{[:state, :colors], {:colour_key, :colors}}]}
+      {:error, [{[:state, :colors], {:color_key, :colors}}]}
 
   """
 
@@ -92,7 +92,8 @@ defmodule Visualize.Data.Schema do
   @types [:time, :number, :category, :text]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
   @metric_kinds [:gauge, :counter, :rate]
-  @colour_keys [:color, :colour, :colors, :colours, :palette, :fill, :stroke]
+  # spelling: allow — a feed schema refuses a color key in either spelling.
+  @color_keys [:color, :colour, :colors, :colours, :palette, :fill, :stroke]
 
   # The keys a field's type takes; every other key but `type`, `label` and `continuity` is
   # `{:invalid_for, type}` on it. `window` is a clock's: a `:time` or a `:number` field's.
@@ -379,8 +380,8 @@ defmodule Visualize.Data.Schema do
     end
   end
 
-  defp key(name, _type, key, _value) when key in @colour_keys,
-    do: [{[name, key], {:colour_key, key}}]
+  defp key(name, _type, key, _value) when key in @color_keys,
+    do: [{[name, key], {:color_key, key}}]
 
   defp key(name, _type, key, _value) when key not in @attributes,
     do: [{[name, key], :unknown_key}]
@@ -565,7 +566,7 @@ defmodule Visualize.Data.Schema do
     |> String.replace(".[", "[")
   end
 
-  defp words({:colour_key, key}) do
+  defp words({:color_key, key}) do
     "#{inspect(key)} names a colour, which a schema never does: describe the meaning " <>
       "(status, order, polarity, quantity) and the theme chooses the colour"
   end

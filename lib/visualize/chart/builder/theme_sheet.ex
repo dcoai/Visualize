@@ -157,7 +157,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             markup:
               applied
               |> Chart.render(resolve: :literal)
-              |> Vision.recolour(Keyword.get(opts, :vision, :none))
+              |> Vision.recolor(Keyword.get(opts, :vision, :none))
               |> Phoenix.HTML.raw(),
             errors: [],
             width: w,

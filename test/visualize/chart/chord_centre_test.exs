@@ -145,7 +145,7 @@ defmodule Visualize.Chart.ChordCentreTest do
           [%{op: :chord, fields: [:from, :to], field: :value, output: :chords, size: [100, 60]}],
           @flows,
           size: [500, 400],
-          centre: [250, 200]
+          center: [250, 200]
         )
 
       assert [{250.0, 200.0} | _] = controls(path)

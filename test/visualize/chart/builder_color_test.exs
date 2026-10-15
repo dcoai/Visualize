@@ -24,7 +24,7 @@ defmodule Visualize.Chart.Builder.ColourTest do
 
   defp stroke(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color])
 
-  defp chain(s, params), do: elem(Builder.handle_event("colour_chain", params, s), 1)
+  defp chain(s, params), do: elem(Builder.handle_event("color_chain", params, s), 1)
 
   describe "the color table by name (§19.10)" do
     test "grouped by use, each name in the color the theme gives it" do
@@ -107,13 +107,13 @@ defmodule Visualize.Chart.Builder.ColourTest do
       html = BuilderFixture.render(s)
 
       assert html =~
-               ~s(<form id="b-picker-chain" class="vis-builder-chain" phx-change="colour_chain")
+               ~s(<form id="b-picker-chain" class="vis-builder-chain" phx-change="color_chain")
 
       for row <- Chain.rows(stroke(s), Theme.default()) do
-        assert html =~ ~s(aria-label="#{row.word}: #{row.colour}")
+        assert html =~ ~s(aria-label="#{row.word}: #{row.color}")
       end
 
-      assert Enum.map(Chain.rows(stroke(s), Theme.default()), & &1.colour) == [
+      assert Enum.map(Chain.rows(stroke(s), Theme.default()), & &1.color) == [
                Color.resolve(color(:bad), Theme.default(), :literal),
                Color.resolve(color(:bad) |> shade(700), Theme.default(), :literal),
                Color.resolve(color(:bad) |> shade(700) |> alpha(0.8), Theme.default(), :literal)

@@ -21,7 +21,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
-      find_variable expand_variable bind_field bind_root unbind_field drop_colour
+      find_variable expand_variable bind_field bind_root unbind_field drop_color
       create_variable promote set_default bind_site
     )
 
@@ -113,14 +113,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A patch dropped on a well writes that well's key, selected or not (spec/14 §19.10): a
     # word is a slot, a `#rrggbb` a literal, each through the edit the chooser would make;
     # the form the well sits in says which edit. A key that is not a colour refuses by name.
-    def handle_event("drop_colour", %{"field" => field, "colour" => colour} = params, socket) do
+    def handle_event("drop_color", %{"field" => field, "color" => colour} = params, socket) do
       socket = aimed(socket, params)
       edit = if Map.get(params, "edit") == "edit_style", do: "edit_style", else: "edit"
       kind = if edit == "edit_style", do: :style, else: editing(socket.assigns).entry.kind
 
       # A part's colour by its path — `stroke.color`, `fill.stops.0.color` (§18.7).
       case Editor.locate(kind, field) do
-        %{spec: %{type: :colour}} ->
+        %{spec: %{type: :color}} ->
           control = if String.starts_with?(colour, "#"), do: field, else: field <> ".slot"
           Builder.handle_event(edit, %{"_target" => [control], control => colour}, socket)
 

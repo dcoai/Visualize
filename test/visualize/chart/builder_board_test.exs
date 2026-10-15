@@ -2,7 +2,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
   @moduledoc """
   The board mode (spec/14 §22, D-152): a board is a library entry of its own kind, placed
   and resized on the grid with the server the authority on placement, previewed cell by
-  cell through `Visualize.Board.realise/4`, and a cell's component opened in the chart
+  cell through `Visualize.Board.realize/4`, and a cell's component opened in the chart
   builder and returned from.
   """
   use ExUnit.Case, async: true

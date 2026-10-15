@@ -70,7 +70,7 @@ defmodule Visualize.Chart.Style.Explain do
 
     pick = fn
       {:field, _} = entry -> field.(entry)
-      {:colour, call} -> result(frame, :leaf, call, datum, memo)
+      {:leaf, call} -> result(frame, :leaf, call, datum, memo)
       call -> result(frame, :entry, call, datum, memo)
     end
 

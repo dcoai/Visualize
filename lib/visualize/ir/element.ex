@@ -305,7 +305,7 @@ defmodule Visualize.IR.Element do
   end
 
   @doc """
-  A drop shadow primitive of the offset, the blur radius and a colour: `flood-color` the
+  A drop shadow primitive of the offset, the blur radius and a color: `flood-color` the
   colour at `flood-opacity` 1, so the colour's own alpha is the shadow's (#674); a `nil`
   colour is `drop_shadow/3`.
   """

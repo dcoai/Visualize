@@ -162,19 +162,19 @@ defmodule Visualize.Chart.Frame do
     {name, node} = frame_node(chart, Keyword.get(opts, :frame))
     size = size(Keyword.get(opts, :size, @default_size))
     margin = margin(Map.get(node, :margin, Schema.default(:frame, :margin)))
-    frame = realise(chart, opts, name, node, size, margin)
+    frame = realize(chart, opts, name, node, size, margin)
 
     # A legend in a margin that cannot hold it is a fault here, not a clipped drawing; a top
     # or bottom one grows its margin instead, and the frame is realised over the smaller plot
     # (§4.5, D-169). The rows depend on the plot's width, which that leaves alone.
     case Legend.fit!(frame, margin) do
       ^margin -> frame
-      grown -> realise(chart, opts, name, node, size, grown)
+      grown -> realize(chart, opts, name, node, size, grown)
     end
   end
 
   # The frame over one margin: its plot, projection, forces, panels and scales.
-  defp realise(chart, opts, name, node, size, margin) do
+  defp realize(chart, opts, name, node, size, margin) do
     sources = Keyword.get(opts, :sources, %{})
     kind = node.kind
 
@@ -212,7 +212,7 @@ defmodule Visualize.Chart.Frame do
     ctx = context(kind, scale_plot, projection, now, schemas, forces)
 
     scales =
-      Scales.realise(
+      Scales.realize(
         chart,
         node,
         marks,
@@ -402,7 +402,7 @@ defmodule Visualize.Chart.Frame do
           width: w * frame.size.width,
           height: h * frame.size.height
         },
-        style: %{fill: Style.colour(frame.background, frame.theme, mode)}
+        style: %{fill: Style.color(frame.background, frame.theme, mode)}
       )
     ]
   end
@@ -542,15 +542,15 @@ defmodule Visualize.Chart.Frame do
   # §5.6, #488): the plot's middle, or the origin of a `:polar` frame's centred group,
   # which already sits there. An `:arc` mark is translated to it and a `:chord` step's
   # paths are drawn about it, so the ring and its ribbons share one centre.
-  @spec centre(kind(), %{width: number(), height: number()}) :: [number()]
-  def centre(:polar, _plot), do: [0, 0]
-  def centre(_kind, plot), do: [plot.width / 2, plot.height / 2]
+  @spec center(kind(), %{width: number(), height: number()}) :: [number()]
+  def center(:polar, _plot), do: [0, 0]
+  def center(_kind, plot), do: [plot.width / 2, plot.height / 2]
 
   # What a mark's pipeline sees of the frame (spec/14 §5.4).
   defp context(kind, plot, projection, now, schemas, forces) do
     %{
       size: [plot.width, plot.height],
-      centre: centre(kind, plot),
+      center: center(kind, plot),
       projection: projection,
       now: now,
       schemas: schemas,

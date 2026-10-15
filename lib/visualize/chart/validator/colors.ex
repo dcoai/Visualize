@@ -7,15 +7,15 @@ defmodule Visualize.Chart.Validator.Colors do
   alias Visualize.Color.Typed
 
   @doc false
-  # The faults of one typed color at `path`: `{:type, :colour}` for a shape that is no color
+  # The faults of one typed color at `path`: `{:type, :color}` for a shape that is no color
   # value or a literal operand no transform can read, else `{:undeclared, :color, name}` for
   # each name the table lacks, in order — none when the theme is one the validator cannot
   # see (`:unknown`).
   @spec check(term(), list(), MapSet.t() | :unknown) :: [{list(), term()}]
   def check(value, path, names) do
     cond do
-      not Typed.value?(value) -> [{path, {:type, :colour}}]
-      Typed.unreadable(value) != [] -> [{path, {:type, :colour}}]
+      not Typed.value?(value) -> [{path, {:type, :color}}]
+      Typed.unreadable(value) != [] -> [{path, {:type, :color}}]
       true -> undeclared(value, path, names)
     end
   end
@@ -50,7 +50,7 @@ defmodule Visualize.Chart.Validator.Colors do
   def steps(map, path) do
     if Enum.all?(map, fn {n, c} -> is_integer(n) and is_binary(c) end),
       do: [],
-      else: [{path, {:type, :theme_colour}}]
+      else: [{path, {:type, :theme_color}}]
   end
 
   defp undeclared(_value, _path, :unknown), do: []

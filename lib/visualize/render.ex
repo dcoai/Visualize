@@ -137,7 +137,7 @@ defmodule Visualize.Render do
   or `Visualize.Chart.generate/2` with `root: true`), rendered with `to_svg_string/2`, or the
   SVG string such an element renders to (`Visualize.Chart.render/2` with `root: true`).
 
-  The SVG must carry literal colours: resvg paints a `var(--…)` theme reference black, so a
+  The SVG must carry literal colors: resvg paints a `var(--…)` theme reference black, so a
   chart meant for a PNG is generated with `resolve: :literal`, and an SVG holding one
   returns `{:error, :css_references}`.
 

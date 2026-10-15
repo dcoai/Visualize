@@ -147,6 +147,7 @@ defmodule Visualize.Chart.Style.Parts do
   end
 
   defp stored_paint?(%{type: type} = paint) when not is_struct(paint) do
+    # spelling: allow — version 2's paint word.
     not Map.has_key?(paint, :kind) and not Map.has_key?(paint, :centre) and
       not (type in @gradients and is_list(Map.get(paint, :color))) and
       stored_stops?(Map.get(paint, :stops))
@@ -161,6 +162,7 @@ defmodule Visualize.Chart.Style.Parts do
     do:
       Enum.all?(
         stops,
+        # spelling: allow — version 2's stop word.
         &(not is_map(&1) or not (Map.has_key?(&1, :offset) or Map.has_key?(&1, :colour)))
       )
 
@@ -265,6 +267,7 @@ defmodule Visualize.Chart.Style.Parts do
   def paint(map) when is_map(map) and not is_struct(map) do
     map
     |> rename(:kind, :type)
+    # spelling: allow — version 2's paint word.
     |> rename(:centre, :center)
     |> stops()
     |> typed()
@@ -305,6 +308,7 @@ defmodule Visualize.Chart.Style.Parts do
   defp tidy(at), do: Float.round(at, 4)
 
   defp stop(stop) when is_map(stop) and not is_struct(stop),
+    # spelling: allow — version 2's stop word.
     do: stop |> rename(:offset, :at) |> rename(:colour, :color)
 
   defp stop(stop), do: stop

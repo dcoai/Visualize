@@ -32,7 +32,7 @@ defmodule Visualize.Chart.Compiled.Regions do
         }
 
   @typedoc "The frame's drawing order: regions, and a centred group of regions (polar)."
-  @type layout :: [region() | {:centred, [region()]}]
+  @type layout :: [region() | {:centered, [region()]}]
 
   @polar_scales [:angle, :r]
 
@@ -112,7 +112,7 @@ defmodule Visualize.Chart.Compiled.Regions do
     {polar, other} = split_axes(axes)
     inner = grid_region(polar, :grid) ++ marks ++ Enum.map(polar, &{:axis, elem(&1, 1)})
 
-    [{:centred, inner}] ++
+    [{:centered, inner}] ++
       grid_region(other, {:grid, :outer}) ++
       Enum.map(other, &{:axis, elem(&1, 1)}) ++ tail(chart)
   end
@@ -149,7 +149,7 @@ defmodule Visualize.Chart.Compiled.Regions do
     axes |> Enum.with_index() |> Enum.split_with(fn {node, _} -> node.scale in @polar_scales end)
   end
 
-  defp unwrap({:centred, inner}), do: inner
+  defp unwrap({:centered, inner}), do: inner
   defp unwrap(region), do: region
 
   # -- status ---------------------------------------------------------------------------

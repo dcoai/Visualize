@@ -270,9 +270,9 @@ defmodule Visualize.Chart.Schema do
   defp shape?({:ref, _}, {:field, _field}), do: false
   defp shape?({:ref, _}, {:generate, _name, _args}), do: false
   defp shape?(:generator, v), do: match?({:generate, _, _}, v)
-  defp shape?(:colour_map, v), do: is_map(v) and not is_struct(v)
+  defp shape?(:color_map, v), do: is_map(v) and not is_struct(v)
   # A theme's color: a colour, or the steps it pins of a name (spec/08 §7.1, #667).
-  defp shape?(:theme_colour, _v), do: true
+  defp shape?(:theme_color, _v), do: true
   # A theme's counterpart in a color scheme: a theme's name, or `nil` for none (#668).
   defp shape?(:counterpart, v), do: is_atom(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
@@ -367,7 +367,7 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:stop) do
     [
       spec(:at, :number, :style, required: true, range: {0, 1, 0.05}),
-      spec(:color, :colour, :style, required: true),
+      spec(:color, :color, :style, required: true),
       spec(:opacity, :size, :style, default: 1, range: {0, 1, 0.05})
     ]
   end
@@ -399,7 +399,7 @@ defmodule Visualize.Chart.Schema do
       spec(:radius, :size, :style, range: {0, 20, 0.5}),
       # A shadow's offset and colour (spec/14 §3.1, #674).
       spec(:offset, {:list, :length}, :style),
-      spec(:color, :colour, :style)
+      spec(:color, :color, :style)
     ]
   end
 
@@ -459,8 +459,8 @@ defmodule Visualize.Chart.Schema do
       # The meaning-bearing ramps (spec/08 §7.5, #533) and the theme's own color table, the
       # roles' colors among it (§7.1, #663); an inline theme names only what it changes, the
       # rest the default's.
-      spec(:ramps, {:map, {:list, :colour}}, :style, default: theme.ramps),
-      spec(:colors, {:map, :theme_colour}, :style, default: theme.colors),
+      spec(:ramps, {:map, {:list, :color}}, :style, default: theme.ramps),
+      spec(:colors, {:map, :theme_color}, :style, default: theme.colors),
       # The style palette, a palette name to its entry (spec/08 §7.7, spec/14 §2.5, #637):
       # an inline theme names only the entries it changes, the rest the default's.
       spec(:styles, {:map, style_entry()}, :style, default: theme.styles),
@@ -498,11 +498,11 @@ defmodule Visualize.Chart.Schema do
   defp design_node(:flat_style) do
     [
       spec(:extends, {:ref, :style}, :style),
-      spec(:fill, :colour, :style),
+      spec(:fill, :color, :style),
       spec(:fill_opacity, :size, :style, range: {0, 1, 0.05}),
       spec(:stroke_style, {:enum, [:single, :double, :inside, :outside]}, :style),
       spec(:stroke_width, :size, :style, range: {0, 20, 0.5}),
-      spec(:stroke, :colour, :style),
+      spec(:stroke, :color, :style),
       spec(:stroke_opacity, :size, :style, range: {0, 1, 0.05}),
       spec(:stroke_dasharray, {:one_of, [:string, {:list, :number}]}, :style),
       spec(:stroke_linejoin, {:enum, [:miter, :round, :bevel]}, :style),
@@ -603,7 +603,7 @@ defmodule Visualize.Chart.Schema do
 
     [
       spec(:type, {:enum, types}, :style),
-      spec(:color, :colour, :style),
+      spec(:color, :color, :style),
       spec(:stops, {:list, {:node, :stop}}, :style),
       spec(:angle, :number, :geometry, default: 180, range: {0, 360, 15}),
       spec(:center, {:list, :number}, :geometry, default: [0.5, 0.5]),
@@ -618,7 +618,7 @@ defmodule Visualize.Chart.Schema do
       spec(:pattern, {:enum, [:lines, :crosshatch, :dots]}, :style, default: :lines),
       spec(:spacing, :size, :geometry, default: 6, range: {2, 40, 1}),
       spec(:width, :size, :geometry, default: 1, range: {0.25, 10, 0.25}),
-      spec(:background, :colour, :style)
+      spec(:background, :color, :style)
     ]
   end
 end

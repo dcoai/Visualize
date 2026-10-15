@@ -382,4 +382,4 @@ end
 ```
 
 PNG needs the `resvg` binary (0.45 or later) on the `PATH`, or
-`config :visualize, :resvg, path`. Use literal colours: resvg cannot read CSS variables.
+`config :visualize, :resvg, path`. Use literal colors: resvg cannot read CSS variables.

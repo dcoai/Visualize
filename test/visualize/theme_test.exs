@@ -77,7 +77,7 @@ defmodule Visualize.ThemeTest do
       for theme <- @builtin do
         assert is_binary(Theme.resolve(theme, :surface, :literal))
         assert :surface in Theme.slots(theme)
-        assert :surface in Theme.colour_slots(theme)
+        assert :surface in Theme.color_slots(theme)
       end
 
       assert Theme.default().surface == "#eef2f6"

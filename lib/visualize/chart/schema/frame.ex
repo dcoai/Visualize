@@ -52,7 +52,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:cell, {:list, :integer}, :geometry),
       spec(:span, {:list, :integer}, :geometry),
       spec(:z, :integer, :geometry, default: 0),
-      spec(:background, :colour, :style),
+      spec(:background, :color, :style),
       # What the frame's elements inherit under their styles (spec/14 §3.8, #651).
       spec(:defaults, {:node, :defaults}, :style)
     ]
@@ -67,7 +67,7 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:kind, {:enum, @scale_kinds}, :geometry, required: true),
       spec(:domain, :extent, :geometry, default: :auto),
       # A map of colours pins each category by name: a schema's `status` (§4.3, D-143).
-      spec(:range, {:one_of, [:extent, :ramp, :colour_map, :name]}, :geometry, default: :auto),
+      spec(:range, {:one_of, [:extent, :ramp, :color_map, :name]}, :geometry, default: :auto),
       spec(:nice, :boolean, :geometry, default: false),
       spec(:clamp, :boolean, :geometry, default: false),
       spec(:base, :number, :geometry, default: 10),
