@@ -674,7 +674,7 @@ A legend entry names what it explains and a series element names its series, wit
 | Attribute | On | Value |
 |---|---|---|
 | `data-series` | every `legend-item` group of a frame's legend ([14-declarative-chart](14-declarative-chart.md) §4.5) | `to_string/1` of the entry's value — a tick of the legend's scale |
-| `data-series` | every element a mark with a `series` channel draws for a series, and every inline label drawn for it (spec/14 §5.2, §5.6, D-126): a `:line` or an `:area` series' path and its `line-fill`; the datum's own element on every other type, such as the circles or symbols that draw a series' points; a `:rule`, `:x_band` or `:needle` datum's group | `to_string/1` of the series value; absent where the series reading is `nil` |
+| `data-series` | every element a mark with a `series` channel draws for a series, and every inline label drawn for it (spec/14 §5.2, §5.6, D-126): a `:line` or an `:area` series' path; the datum's own element on every other type, such as the circles or symbols that draw a series' points; a `:rule`, `:x_band` or `:needle` datum's group | `to_string/1` of the series value; absent where the series reading is `nil` |
 | `data-legend-event` | the hook element, set by the host | the event pushed on every toggle; absent, the hook pushes nothing |
 
 The two strings coincide when the legend explains the `color` scale the series channel reads through — the usual case, where the scale's domain is the series values — and an entry whose string no element carries toggles nothing. A hand-built chart writes the same two attributes to take part.
