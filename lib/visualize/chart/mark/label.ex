@@ -43,10 +43,10 @@ defmodule Visualize.Chart.Mark.Label do
 
   # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum,
   # over the `text` defaults the mark's containers lay (spec/14 §3.8).
-  defp node(%{frame: frame, mark: mark}, label, datum) do
+  defp node(%{frame: frame, mark: mark} = ctx, label, datum) do
     stack = Map.get(label, :style, Schema.default(:mark_label, :style))
     base = Defaults.at(frame, Map.get(mark, :defaults), :text)
-    Styled.node(frame.styles, stack, datum, base)
+    Styled.node(ctx, stack, datum, base, [:label, :style])
   end
 
   @doc false
@@ -173,14 +173,15 @@ defmodule Visualize.Chart.Mark.Label do
   def under(children, bound, %{label: label} = ctx) do
     stack = Map.get(label, :style, Schema.default(:mark_label, :style))
 
-    case Style.by_data(stack) do
-      [] ->
+    case Styled.per_datum?(ctx, stack) do
+      false ->
         if contrast?(node(ctx, label, nil)),
           do: Enum.zip_with(children, bound, &Map.put(&1, :under, under(&2, ctx))),
           else: children
 
-      # A style named by data inks each label by its own datum's style (§3.6).
-      _entries ->
+      # A style named by data — or computed by a generator — inks each label by its own
+      # datum's style (§3.6, §3.13).
+      true ->
         Enum.zip_with(children, bound, fn child, element ->
           if contrast?(node(ctx, label, child.datum)),
             do: Map.put(child, :under, under(element, ctx)),

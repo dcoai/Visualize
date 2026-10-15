@@ -33,7 +33,7 @@ defmodule Visualize.Chart.Style do
 
   """
 
-  alias Visualize.Chart.Style.{Inherited, Motion, Parts, Sizes}
+  alias Visualize.Chart.Style.{Generated, Inherited, Motion, Parts, Sizes}
   alias Visualize.Chart.Var
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme, Units}
@@ -247,19 +247,22 @@ defmodule Visualize.Chart.Style do
   # inline node is an entry like any other. The empty node when nothing declares it.
   #
   # A `{:field, f}` entry (§3.6) lays nothing here: it is a style named per datum, and
-  # `node/3` lays it.
+  # `node/3` lays it. Nor does a generator (§3.13), entry or color: it is resolved by a
+  # frame, and `node/3` lays it.
   @spec node(%{atom() => map()}, entry | [entry] | nil) :: map()
-        when entry: atom() | map() | {:field, atom()}
+        when entry: atom() | map() | {:field, atom()} | {:generate, atom(), list()}
   def node(styles, stack), do: node(styles, stack, &no_style/1)
 
   @doc false
   # `node/2` with each `{:field, f}` entry laid where it stands: `pick` answers the style
   # name the entry names — for one datum, the site's to read (spec/14 §3.6) — or `nil` to
-  # lay nothing.
+  # lay nothing. A generator is `pick`'s too (§3.13): `{:generate, name, args}` as an entry
+  # answers the style it returned, and `{:colour, call}` for a call at a color the color it
+  # returned — `nil` for either lays nothing, the leaf's key left unset.
   #
   # The entries merge in their parts (`merge/2`), and the result is projected onto the flat
   # keys the frame and the marks read (`Visualize.Chart.Style.Parts.project/1`, D-172).
-  @spec node(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
+  @spec node(%{atom() => map()}, term(), (term() -> term())) :: map()
   def node(styles, stack, pick), do: styles |> compound(stack, pick) |> Parts.project()
 
   @doc false
@@ -272,7 +275,7 @@ defmodule Visualize.Chart.Style do
   @spec node(
           %{atom() => map()},
           term(),
-          ({:field, atom()} -> atom() | nil),
+          (term() -> term()),
           Inherited.t() | map()
         ) :: map()
   def node(styles, stack, pick, %Inherited{style: base, theme: theme}) do
@@ -295,11 +298,16 @@ defmodule Visualize.Chart.Style do
   def over(base, styles, stack), do: node(styles, stack, &no_style/1, base)
 
   @doc false
+  # `node/4` laid over `base`, `pick` resolving the stack's field entries and generators.
+  @spec over(map(), %{atom() => map()}, term(), (term() -> term())) :: map()
+  def over(base, styles, stack, pick), do: node(styles, stack, pick, base)
+
+  @doc false
   # `node/3` before the projection: the stack's style in its parts. A list stacks left to
   # right wherever it stands — at the site, as a named style's entry, under `extends`
   # (spec/14 §3.6, #658) — and `seen` carries the names on the way, so a style that reaches
   # itself through a name, a list or an `extends` raises.
-  @spec compound(%{atom() => map()}, term(), ({:field, atom()} -> atom() | nil)) :: map()
+  @spec compound(%{atom() => map()}, term(), (term() -> term())) :: map()
   def compound(styles, stack, pick), do: lay(styles, stack, pick, [])
 
   @doc false
@@ -348,9 +356,18 @@ defmodule Visualize.Chart.Style do
     end
   end
 
-  # An inline node is already the style: only its own `extends` needs laying under it.
+  # A generator entry lays the style it returned, checked (§3.13): a name, a node or a list.
+  defp lay(styles, {:generate, _name, _args} = entry, pick, seen) do
+    case pick.(entry) do
+      nil -> %{}
+      style -> lay(styles, style, pick, seen)
+    end
+  end
+
+  # An inline node is already the style: only its own `extends` needs laying under it, and
+  # a color generator in it its result (§3.13).
   defp lay(styles, inline, pick, seen) when is_map(inline) do
-    inline = Parts.normalize(inline)
+    inline = inline |> Parts.normalize() |> Generated.leaf_resolve(&pick.({:colour, &1}))
 
     case Map.fetch(inline, :extends) do
       :error -> inline

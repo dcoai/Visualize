@@ -63,6 +63,7 @@ A container's facet is the facet of what it holds: `marks` is `:channel` because
 | `:field` | an atom naming a field of the mark's source (§5.4) |
 | `:field_ref` | `{:field, f}` with `f` a `:field`; how a per-datum value reaches a style or a text |
 | `:channel` | a `:field`, a number (a constant channel) or a `:field_ref` |
+| `:generator` | `{:generate, name, args}`: a call to a host's generator resolved at render (§3.13, #654), `name` an atom the registry defines for `length(args) + 1` arguments, `args` a list of `:term`s and `:field_ref`s; a style site's entry, and accepted in every `:colour` position of a style |
 | `:extent` | `:auto`; a two-element list of numbers, `DateTime`s or `:auto`; or a list of categories (numbers, strings, atoms); a member may be a variable or a fact, typed once application replaces it (§7.4, #565) |
 | `:key_order` | `{:keys, [n, …]}` with every `n` a `:name`: a stacking order fixed by the series keys, bottom first (§5.4.1, #492) |
 | `:adopted` | `{:frame, f, s}`, the scale `s` of the frame `f` (§4.3): what a frame writes under a scale name in place of a node of its own |
@@ -347,7 +348,7 @@ The stored form is always the full shape, so a tool reads one form. **The flat k
 
 ### 3.2 Values
 
-**Implemented.** A value inside a part is one of eight things, and which of them a key accepts follows from its type:
+**Implemented.** A value inside a part is one of nine things, and which of them a key accepts follows from its type:
 
 - a **literal** of the key's type — `"#3b6fa8"`, `2`, `:step_after`;
 - a **typed color** for a `:colour` key ([08-utilities](08-utilities.md) §1.9, #664, D-173) — `color(:red)`, `color(:axis)`, `{:series, 3}`, `ramp(:thermal, 0.7)`, or a transform such as `color(:blue) |> intensity(0.65)` — resolved through `Visualize.Color.resolve/3`. A name resolves as a slot does: the SVG output carries `var(--vis-red, #c23238)` and a canvas the literal (D-55); a transform is the literal it computes in `:literal` mode;
@@ -357,7 +358,8 @@ The stored form is always the full shape, so a tool reads one form. **The flat k
 - a **meaning** for a `:colour` key (#533, D-135): a **role** by its name in the color table — `color(:good)`, `color(:warning)`, `color(:bad)`, `color(:info)`, `color(:neutral)` — or a **ramp position** `{:ramp, name, t}` along one of the theme's four ramps, `:status`, `:thermal`, `:diverging` or `:sequential`, at `t` in `0..1` ([08-utilities](08-utilities.md) §7.5). A role is a theme slot and resolves like one; a ramp position resolves to its literal in both modes, except that `{:ramp, :status, 0 | 0.5 | 1}` resolves as `:good`, `:warning` and `:bad` do, so the two spellings of one meaning are one colour (spec/08 §7.3). A design that colours by meaning writes these rather than series slots: a series slot promises a *distinct* colour, a role promises the meaning, and every theme — light, dark, colour-vision-safe, a host's — renders it in its own tones with the hue order fixed;
 - a **gradient** or a **hatch** (§3.1), as the paint of a `fill` or a `stroke` rather than a value in it — what is said here of a gradient is said of a hatch: a `:paint` paint naming a gradient the design declares under `defs` (§2.7) — `%{type: :paint, name: :fade}`, written short as `{:paint, :fade}` — or a `:linear` or `:radial` paint written in place (D-172). `Visualize.Chart.Style.resolve/3` writes either as `{:paint, name}` on the element, untouched, as it passes a binding — a gradient written in place under a name that is a hash of what it draws (its type, stops and geometry; its opacity is the element's), so the same gradient written twice is one definition — and the **frame** resolves it once its elements are drawn: it holds every gradient written in place beside the declared ones, and `Visualize.Chart.Frame.generate/2` replaces every `{:paint, name}` in the tree's styles with the **paint itself**, a `Visualize.IR.Paint` (spec/02 §2.1, #652, D-175): its id `vis-paint-<h>-<name>`, its kind, its geometry in the box units of §2.7 and its stops, each stop's colour resolved in the mode of the render. **Every backend draws it** (spec/09): SVG writes `url(#vis-paint-<h>-<name>)` in both modes, against the gradient the frame's `defs` holds, so a `:literal` render rasterised for a PNG draws the gradient too; a canvas — the `:json` and `:js` commands, the binary stream and the hooks that replay them — builds a `CanvasGradient` over the bounding box of each element it fills or strokes, which is what SVG's `objectBoundingBox` units mean. A gradient set on a group is built over each child's own box, as SVG's is. The one place a canvas falls back to the first stop's colour is a `:text` it fills with a gradient, whose box the server cannot measure (spec/09 §3.3.3). The validator reports `{:undeclared, :paint, name}` at the paint's `name` for a name `defs` lacks.
 - the **contrast ink** for a `:colour` key (#486, D-123): `contrast()`, stored `{:contrast, :under}` — the ink over whatever the text is drawn on, and what the bare `:contrast` of before #664 is canonicalized to — or `contrast(c)` over a color `c` of the design's choosing (spec/08 §1.9). `contrast()` is the theme's `:text` or `:background`, whichever has the higher WCAG contrast ratio (`Visualize.Color.contrast/2`) against the colour the text is drawn on — `Visualize.Theme.ink/2`, spec/08 §7.3. In a mark's inline label (§5.5) that colour is the fill of the element the label sits on, so the ink is chosen **per element**: dark on a pale slice, light on a dark one, in one style. Anywhere else — a frame label, an axis, a `:text` mark, a mark's own paint — there is no element under the text, and the colour is the theme's `background`, so `:contrast` there is the ink that reads on the page (on every theme that holds spec/08 §7.4, its `text`). When neither slot reaches 4.5:1 against the colour (WCAG AA for text), the ink is black or white instead, whichever contrasts more, and one of the two always reaches 4.58:1. The ink is a **literal colour in both modes**: `Visualize.Chart.Style.resolve/3` writes the chosen slot's literal, never a `var(--vis-text, …)`, because the choice was made against the literals — a stylesheet that overrode `--vis-text` under it would undo the choice it was made for — so under `resolve: :css` the ink is chosen against the slots' fallback literals and the element's fill's, exactly as under `:literal`, and the SVG and the canvas carry the same colour.
-- a **channel binding** `{:field, f}` for any key of a part — on `marker.shape` and `stroke.dash` through the `color` scale to a role's cue (§21.7) — which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4) — a value its domain lacks is the scale's `unknown` colour (§4.3), never a dropped key.
+- a **channel binding** `{:field, f}` for any key of a part — on `marker.shape` and `stroke.dash` through the `color` scale to a role's cue (§21.7) — which is how `Visualize.Shape.Band`'s per-datum fill is expressed: the value is read from the datum at render — per element for a mark that draws one element per datum, from the series' first datum for a mark that draws one path per series (§5.6) — and, for a `:colour` key, passed through the scale named `color` when the frame declares one (§3.4) — a value its domain lacks is the scale's `unknown` colour (§4.3), never a dropped key;
+- a **color generator** `generate(:name, args)` for a `:colour` key (#654, D-177), stored `{:generate, name, args}`: a call to a host's generator resolved at render, per datum where its arguments read the datum, whose result must be a typed color (§3.13).
 
 **The parts are the design's; the element keys are what they always were** (D-172). A resolved style node is **projected** onto flat keys (`Visualize.Chart.Style.project/1`, §3.4), the names the frame, the marks and the backends read: `fill.color` is `fill` and `fill.opacity` `fill_opacity`; `stroke.color`, `opacity`, `width`, `dash`, `join`, `cap` and `placement` are `stroke`, `stroke_opacity`, `stroke_width`, `stroke_dasharray`, `stroke_linejoin`, `stroke_linecap` and `stroke_style` (`:center` written `:single`); `font.family`, `size`, `weight`, `style` and `line_height` are `font_family`, `font_size`, `font_weight`, `font_style` and `line_height`; `text.anchor`, `baseline`, `offset` and `angle` are `text_anchor`, `vertical_align`, `margin_x` with `margin_y`, and `text_angle`; `effect.type`, `radius`, `offset` and `color` are `effect`, `effect_radius`, `effect_offset` and `effect_color`; `marker.shape` and `size` are `symbol` and `symbol_size`; `curve.type` is `curve` and its `tension` and `alpha` are `curve_opts`; a paint of type `:none` is the key `:none`, and a gradient `{:paint, name}`. `stroke.non_scaling` is `vector_effect: :non_scaling_stroke` (§3.9). The `transition` part (§3.10) keeps its name and reaches the element resolved, as the list of the properties it moves, and the `animation`, `enter` and `exit` parts (§3.11, §3.12) as their resolved maps; none is ever an attribute. Of the projected keys nineteen reach the element the mark draws — the fifteen of §3.4, `line_height`, and, as one, `effect` with `effect_radius`, `effect_offset` and `effect_color`, `blend` and `vector_effect`; four more — `curve`, `curve_opts`, `symbol` and `symbol_size` — reach the mark's generator (§5.6) and never an element; five — `stroke_style` (§5.6), `vertical_align`, `margin_x`, `margin_y` and `text_angle` (§6.3) — are read by the placements from the style node and never reach an element as themselves; and `extends` reaches neither, being consumed by the lookup that flattens it (§3.5). Where this document names a flat key of a resolved style — §3.4, §5.6, §6.3, spec/09 — it is this projection's key.
 
@@ -431,9 +433,22 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 
 A design whose stack holds no field entry draws byte for byte as before: the per-datum path is taken only by a mark whose stack holds one.
 
+**A generator in the stack: a style computed at render** (#654, D-177). A stack entry MAY be a generator call `generate(:name, args)`, stored `{:generate, name, args}`: the style a host's generator returns for those arguments (§3.13). It is laid **where it stands**, as a field entry is, alone or in a list:
+
+```elixir
+import Visualize.Generators, only: [generate: 2]
+
+[
+  style: generate(:tenant_style, [{:field, :tenant}]),
+  style: [:message, generate(:tenant_style, [{:field, :tenant}]), %{stroke: %{width: 2}}]
+]
+```
+
+Its result is a style — a name, a node or a list of them — and is laid as that style would be. Its field arguments are read from the datum by the same binding rule as a field entry's; where there is no datum they read `nil`, and a generator whose arguments are all literals draws the same everywhere, a frame label, an axis and a legend included. A result that is no style lays nothing (§3.13).
+
 ### 3.7 Precedence
 
-**Implemented** for every layer but generator results (#658, #670, D-172, D-174). The look of an element is laid from these layers, each over the ones before it by the merge rule (§3.5), lowest first:
+**Implemented** (#658, #670, D-172, D-174, D-177). The look of an element is laid from these layers, each over the ones before it by the merge rule (§3.5), lowest first:
 
 | | Layer | Where it comes from |
 |---|---|---|
@@ -442,11 +457,11 @@ A design whose stack holds no field entry draws byte for byte as before: the per
 | 3 | mark-kind defaults | a container's `defaults` entry for the element's kind (§3.8) |
 | 4 | named and stacked styles, with `extends` | the site's stack: names, lists and inline nodes, each through its `extends` (§3.5, §3.6); the theme's palette under a name the design does not declare (§3.3) |
 | 5 | the field-chosen style | a `{:field, f}` entry, the style the datum's value names (§3.6) |
-| 6 | generator results | #654 |
+| 6 | generator results | a `{:generate, name, args}` entry, the style a host's generator returns (§3.6, §3.13) |
 | 7 | view states | `:hover`, `:focused`, `:selected`, `:muted`: a board's selection (spec/15 §13.2), the hooks' markers (spec/10 §4.4) |
 | 8 | the site's local inline edit | the inline node a stack ends with (§3.6) |
 
-**View states sit above data styles**, so feedback stays visible over whatever the data chose, and **the local edit sits above everything**, so an edit made at a site is what that site shows. A stack an author writes is laid in the order written, a field entry where it stands (§3.6); the order above is the one the library keeps where it adds a layer itself. A board puts its selection's state entry after the stack's names and field entries and **before** a trailing inline node (`Visualize.Chart.Style.with_state/2`), and a resolved state is laid over the element's own look and never under it. Layers 2 and 3 are laid **container by container, nearest last** (§3.8): within one container its kind entry is over its part defaults, and a nearer container's part defaults are over a farther one's kind entry. Layer 6 belongs to #654. A mark's own paint — the series' colour of §5.6 — is what the theme's root gives a mark when no layer above sets its paint key.
+**View states sit above data styles**, so feedback stays visible over whatever the data chose, and **the local edit sits above everything**, so an edit made at a site is what that site shows. A stack an author writes is laid in the order written, a field entry where it stands (§3.6); the order above is the one the library keeps where it adds a layer itself. A board puts its selection's state entry after the stack's names, field entries and generator entries and **before** a trailing inline node (`Visualize.Chart.Style.with_state/2`), and a resolved state is laid over the element's own look and never under it. Layers 2 and 3 are laid **container by container, nearest last** (§3.8): within one container its kind entry is over its part defaults, and a nearer container's part defaults are over a farther one's kind entry. A generator entry an author writes after a field entry is laid over it, as layer 6 is over layer 5; a color generator in a part (§3.2) sits at the layer of the style that holds it. A mark's own paint — the series' colour of §5.6 — is what the theme's root gives a mark when no layer above sets its paint key.
 
 ### 3.8 Defaults: inherited by container and mark kind
 
@@ -657,6 +672,54 @@ A host's exit keyframes run on SVG as a CSS animation of the copy's wrapper, `fo
 **Through a board.** A board's cell redraws its chart when its rows change (spec/15 §8.3), and the redraw is a LiveView patch of the cell's component: the cell's `MotionHook` plays each exit, and the restarted or inserted elements their enters. **The examples** show it on the *Client-side Interaction* page: a bar per service, its state fading between colors (§3.10) and pulsing in error (§3.11), and a click on a bar deleting its row, which explodes.
 
 **Validation.** As §3.11's: an unknown key, a name that is neither its part's built-in nor a string, an easing that is no curve; a negative `duration` `:negative`; a string name that is not a CSS identifier `{:unsafe, :animation}`.
+
+### 3.13 Generators: styles and colors resolved at render
+
+**Implemented** (#654, work item #680, D-177). A design holds what is known when it is built. A style that depends on the row, the viewer or anything learned later — in a multi-tenant chat, each message drawn in its *sender's* tenant theme — is a **call** the design stores and the frame resolves at render:
+
+```elixir
+import Visualize.Generators, only: [generate: 2]
+
+[
+  # stored as {:generate, :tenant_style, [{:field, :tenant}]}
+  style: [:message, generate(:tenant_style, [{:field, :tenant}])],
+  # a paint's color
+  fill: generate(:brand_color, [{:field, :tenant}])
+]
+```
+
+**Defined in a host module**, as ordinary Elixir a host tests with ExUnit:
+
+<!-- not run: a host's module, calling the host's own MyApp.Tenants -->
+```elixir
+defmodule MyApp.Generators do
+  use Visualize.Generators
+
+  defgenerator tenant_style(tenant_id, ctx) do
+    MyApp.Tenants.theme(tenant_id, ctx.assigns.viewer).message_style
+  end
+
+  defgenerator brand_color(tenant_id, _ctx) do
+    Visualize.Color.color(MyApp.Tenants.brand(tenant_id))
+  end
+end
+```
+
+- **`use Visualize.Generators`** imports `defgenerator/2` and compiles `__generators__/0`, the `{name, arity}` of every generator the module defines, in definition order. `defgenerator` expands to a plain public `def`, so a generator is called and tested as any function is. Its last parameter is always the context.
+- **Registration is by module** (#654's acceptance, modification 2): `config :visualize, generators: [MyApp.Generators]` for the whole host, and `generators: [MyApp.Generators]` on the options that read and draw a chart — `Visualize.Chart.from_map/2`, `from_json/2`, `apply/2`, `compile/2`, and a board's `realise/4`, `components/3` and `Visualize.Board.Server` (spec/15 §6, §8). The registry is the options' modules then the configuration's; a name two modules define at one arity is an `ArgumentError`, as is a module without `__generators__/0`. Host-compiled code is trusted: a design names a generator, never code.
+- **Arguments** are a list. Each is a literal term — an atom, a number, a string, a list or a map of them — or a field binding `{:field, f}`, read from the datum by §3.2's binding rule (an element's datum, a series' first), `nil` where there is no datum.
+- **The context** is the last argument: `%{theme: theme, vars: vars, assigns: assigns}` — the `%Visualize.Theme{}` the frame resolved, the values of the design's variables at application (each declared variable's given value, else its default), and the `assigns:` the host passed to `apply/2` (default `%{}`): the viewer's, in a LiveView. A board passes its own `assigns:` to every cell.
+- **Typed results.** A generator in a style position — a stack entry (§3.6) — returns a **style**: a name the frame knows (the design's `styles` or the theme's palette, §3.3), a style node, or a list of them, checked as a `styles` entry is (§2.6) against the frame's theme, its color names included. A generator in a `:colour` position (§3.2) — a solid paint's `color`, or a paint written short, `fill: generate(…)`, and an effect's `color` — returns a **typed color** (D-173, spec/08 §1.9), or `:none`, no paint; its names are checked against the theme's color table. A result that is anything else is a **fault at that site and applies nothing**: the layers under it show through, and the fault is logged at `:warning` as `<path>: generator <name> returned no style` (or `no color`) with the result's own fault, the path the site's — `marks[0].style`, `frames.main.axes[1].style`. A wrong-typed result never crashes the render. A style result may not hold a generator itself, nor a gradient written in place (the frame holds its gradients before it draws, §3.2); either is such a fault.
+- **A generator that raises is a bug and surfaces as one** (#654's acceptance, modification 1). Nothing rescues it: the render raises with the generator's own exception, as any host function's. "Never crashes the render" covers what a generator returns, not what it raises.
+- **Caching.** A generator is called once per distinct `(name, arguments)` within a site's drawing — a mark's rows, one furniture element — and the context is fixed within a render, so a generator must be pure in its arguments and context. A mark of a thousand messages from two tenants calls `tenant_style` twice.
+- **Precedence.** A generator entry is layer 6 of §3.7: an author's stack lays it where it is written, above a field entry before it; a board's state entry goes after it and a trailing local edit over it. A color generator in a part takes the layer of the style that holds it.
+- **Where it resolves.** At every site the frame draws — a mark and its inline label per datum, a frame label, an axis and a legend once, with no datum. Where the library reads a style without drawing it — the color domain's inference, the type inference, the builder's stack panel — a generator lays nothing, as a field entry does there.
+- **Validation** (§10.1). When the chart is built, each `{:generate, name, args}` is checked against the registry the read was given (#654's acceptance, modification 2): a name no registered module defines is `{:undeclared, :generator, name}`, and a name that is registered but not for this many arguments is `{:arity, :generator, name, n}`, `n` the arguments given; `name` must be an atom and `args` a list (`{:type, :generator}`), each argument a term or a field binding checked as any field binding is. A fragment validated alone (§19.8) does not check names, as it does not check its references. A generator is accepted at a site's stack and in a solid paint's or an effect's `color` within a style a site reaches; anywhere else — a gradient's stops or a gradient paint's `color` (`{:invalid_for, type}`), `defs`, a theme, a `defaults` node, a scale's range — it is the position's type fault, since nothing there is laid by a frame that calls it.
+- **JSON** (§11.2): `{"$generate": [name, [arg, …]]}`, the arguments as terms.
+- **Explained** (§17.3): `explain/2` attributes each generator's result at its layer.
+- **Not here:** generators written as stored source text, which need #643's checked compile path (an AST allowlist and a bounded process).
+
+**The examples** run the tenant chat as a board (`/tenants`): one transcript, messages from two tenants, each drawn in its sender's tenant style, and a cell of messages per tenant whose bars take the tenant's brand color — the two cells over one generator module, `Examples.Tenants.Generators`, registered in the examples' configuration.
 
 ## 4. The frame
 
@@ -1538,6 +1601,9 @@ A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, na
 | `{:no_box, key}` | a `pct` unit value at a size that has no box to be a percentage of — a stroke's `width`, a `dash` member, an effect's `radius` (§3.9) |
 | `{:no_unit, key}` | a unit value at an opacity, which is a fraction and not a length (§3.9) |
 | `:negative` | a motion part's `duration`, `delay` or `iterations` below zero (§3.10–§3.12) |
+| `{:undeclared, :generator, name}` | a `{:generate, name, args}` (§3.13) whose name no generator module the read was given defines — the options' `generators:` and `config :visualize, generators:`; at the generator's path (#654, D-177) |
+| `{:arity, :generator, name, n}` | a generator the registry defines, but not for `n` arguments (and the context); at the generator's path |
+| `{:type, :generator}` | a `{:generate, name, args}` whose name is not an atom or whose `args` is not a list, or an argument that is neither a term nor a field binding |
 | `{:unscaled, field}` | the builder's, not the layer's (§18.16, #370): a position channel bound to a field that names a scale the frame lacks and no type could be read for; the design still validates and draws |
 
 The resolution, binding and schema faults are reported by `Visualize.Chart.apply/2`, and `:conflict` by `Visualize.Chart.compose/2`, in the same shape, so one reader serves every error of the layer. `Visualize.Chart.Validator.format/1` renders one error as a line a person reads, `marks[1].channels.y: field :temp is not declared by the mark's source`, `sources.primary: has no field :v`.
@@ -1589,6 +1655,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 | `{:frame, :main, :x}`, a scale adopted from another frame (§4.3) | `{"$adopted": ["main", "x"]}`, the frame and the scale (#480) |
 | `{:keys, [:pop, :rock]}`, a stack's fixed order (§5.4.1) | `{"$keys": ["pop", "rock"]}`, the keys in order (#492) |
 | `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
+| `{:generate, :tenant_style, [{:field, :tenant}]}`, a generator (§3.13) | `{"$generate": ["tenant_style", [{"$field": "tenant"}]]}`: the name, then the arguments as terms (#654); a name that is not lower-case letters, digits and `_`, or a shape other than `[name, list]`, is left as the object it was read as, never made into an atom, and the validator refuses it at its path (#645's rule) |
 | `%Visualize.Chart.Fact{source: :primary, field: :latency, key: :unit}` (§7.4) | `{"$fact": ["primary", "latency", "unit"]}`, the slot, the field and the attribute (#552) |
 | `{:color, :red}`, a typed color (§3.2, spec/08 §1.9) | `{"$color": "red"}` (#664); a name that is not lower-case letters, digits and `_` is left as it was read, never made into an atom |
 | `{:intensity, c, 0.65}`, and likewise `{:alpha, c, a}`, `{:lighten, c, t}`, `{:darken, c, t}`, `{:saturate, c, t}` | `{"$intensity": [c, 0.65]}`, `{"$alpha": [c, a]}`, … — the color as a color, then the number |
@@ -1851,7 +1918,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.from_map/1` | As `from_map/2` with `[]` options: the default limits (§9.2). |
-| `Visualize.Chart.from_map/2` | `from_map(map, limits: limits, urls: urls)`: `{:ok, chart}` for a valid design map after the version gate (§9.1), the limits (§9.2) and migration, else `{:error, errors}` as §10.1, its URLs held to the application's policy made stricter by `urls:` (§10.3); the design-level keys absent from the map take the defaults of §2.1. `limits:` is a keyword list or map over `Visualize.Chart.Limits.defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
+| `Visualize.Chart.from_map/2` | `from_map(map, limits: limits, urls: urls, generators: modules)` — `generators:` the generator modules (§3.13) its names are checked against, with the configuration's: `{:ok, chart}` for a valid design map after the version gate (§9.1), the limits (§9.2) and migration, else `{:error, errors}` as §10.1, its URLs held to the application's policy made stricter by `urls:` (§10.3); the design-level keys absent from the map take the defaults of §2.1. `limits:` is a keyword list or map over `Visualize.Chart.Limits.defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
 | `Visualize.Chart.from_map!/1` | As `from_map!/2` with `[]` options. |
 | `Visualize.Chart.from_map!/2` | As `from_map/2`, raising `ArgumentError` with the formatted errors (§10.1) on the error branch. |
 | `Visualize.Chart.to_map/1` | The design map of a chart: every design-level key, nested nodes as stored. |
@@ -1864,7 +1931,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.check_types/2` | `check_types(design, types)`: `:ok`, or every field a mark reads through a scale whose type does not satisfy the scale kind's need, `{:type_mismatch, slot, field, expected, given}` by path; `types` maps a slot to a `%Visualize.Data.Schema{}` or to a map from field to type; total over any map (§7.4). |
 | `Visualize.Chart.column_type/3` | `column_type(design, source, field)`: the type `types` declares for the field of the source (§2.3), or `nil` when the design, the source or the type is absent; a chart struct or a design map. |
 | `Visualize.Chart.apply/1` | As `apply/2` with `[]` options: every variable takes its default and the pool is empty, so a slot with a default is unbound too — it applies a design that declares no source. |
-| `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
+| `Visualize.Chart.apply/2` | `apply(design, opts)`: `{:ok, %Visualize.Chart.Applied{}}` for a chart or a design map with the variables of `vars:` resolved, the slots bound from the pool of `sources:` and the frame realised with `theme:` (§7.3), else `{:error, errors}` by path — the map's own errors, the unresolved variables, the unbound slots and missing fields, or the validator's, whichever step fails first. `generators:` names the generator modules (§3.13) the design's names are checked against and the frames call, with the configuration's, and `assigns:` the host's assigns every generator's context carries (default `%{}`); `compile/2` takes both and passes them on, and a compiled chart's every tick calls the same. Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does. |
 | `Visualize.Chart.compose/1` | `compose(fragments)`: the fragments folded left to right through `compose/2`; `{:ok, %{}}` for `[]`. |
 | `Visualize.Chart.compose/2` | `compose(a, b)`: `{:ok, map}`, the second fragment merged over the first by the merge rule of every key (§8.1), else `{:error, errors}` with `:conflict` at the path of every `:union` name the two declare differently. |
 | `Visualize.Chart.stack/1` | `stack(layers)`: the layers cascaded left to right, the later the higher (§8.2); `%{}` for `[]` and the layer itself for one. The cascade cannot fail, so the result is the fragment, not an ok tuple. |
@@ -2237,6 +2304,19 @@ The scale functions, one per kind of §4.3. The name carries the `_scale` suffix
 | `Visualize.Chart.Theme.from_json/1` | As `from_json/2` with `[]` options. |
 | `Visualize.Chart.Theme.from_json/2` | the JSON document back as `from_map/2` reads a map, the version gate and the limits run on the parsed document before a key is decoded; every fault, a JSON one included, as `{:error, errors}` |
 
+### 14.15 `Visualize.Generators`
+
+**Implemented** (#654, D-177). A host's generators (§3.13).
+
+| Function | Contract |
+|---|---|
+| `use Visualize.Generators` | imports `defgenerator/2` and compiles `__generators__/0` into the module: `[{name, arity}]`, in definition order |
+| `Visualize.Generators.defgenerator/2` | `defgenerator name(arg, …, ctx) do … end`: a public `def` of that head, recorded under `__generators__/0`; a generator defined in several clauses, as any function may be, is listed once; a head with no parameter — none for the context — is a `CompileError` |
+| `Visualize.Generators.generate/1` | As `generate/2` with `[]` arguments. |
+| `Visualize.Generators.generate/2` | `generate(name, args)`: the stored call `{:generate, name, args}`; an `ArgumentError` for a name that is not an atom or `args` that is not a list |
+| `Visualize.Generators.registry/0` | As `registry/1` with no modules: the configuration's alone. |
+| `Visualize.Generators.registry/1` | `registry(modules)`: `%{{name, arity} => module}` of the modules given and then `config :visualize, generators:`; an `ArgumentError` for a module without `__generators__/0`, or a `{name, arity}` two modules define |
+
 ## 15. Presets
 
 ### 15.1 A component is a preset design plus an assign mapping
@@ -2481,6 +2561,8 @@ A variable is *free* whether or not it has a default: `required` is what separat
 | `datum:` | the element's datum, which a `{:field, f}` entry reads (§3.6); without it a field entry lays nothing, as where there is no datum |
 | `state:` | a view state laid at its layer (§3.7), as the board and the hooks lay one — `:hover`, `:focused`, `:selected`, `:muted`, … — or `nil` |
 
+A generator (§3.13) is called as the frame calls it: with the datum's arguments and the context the applied chart's frame carries — its theme, its variables and the `assigns:` it was applied with.
+
 It answers `%{at: path, kind: kind, state: state, parts: parts}`, `kind` the mark's type (`:text` for a label, `:axis`, `:legend`). `parts` holds, for each part the resolved style has — `fill`, `stroke`, `font`, `text`, `effect`, `marker`, `curve`, and `opacity`, `blend` and `class` — a map of:
 
 | Key | What |
@@ -2489,7 +2571,7 @@ It answers `%{at: path, kind: kind, state: state, parts: parts}`, `kind` the mar
 | `drawn` | whether the kind draws the part (§5.6); a part a kind ignores is still explained |
 | `chain` | the contributions to it, lowest first, each `%{layer, container, style, via, field, value, set}` |
 
-A contribution's `layer` is its layer of §3.7: `:theme` for the theme's root defaults (§3.8), which every part has, so every part's chain begins there; `:defaults` for a container's part defaults and `:kind` for its entry for the element's kind, with `container` naming it — `:theme`, `:design`, `{:frame, f}`, or `:site` for the element's own, its layers' and groups' (§3.8) — and `nil` on every other layer; `:mark` for the mark's own paint, the theme's series colour for its position, which lies under every style when none gives one (§5.6); `:palette` for a palette entry the design does not declare (§3.3); `:style` for a style the design declares, by name or in a list; `:field` for the style a datum's value named, with `field` the `{:field, f}` and `value` the datum's reading; `:state` for a view state, laid by `state:` or named by a field whose value is a state; `:inline` for an inline node of the stack; and `:local` for the inline node a stack ends with, the site's local edit (§3.6). `style` is the style's name where the contribution has one, `via` the names the style reached it through — its `extends` chain and the names in its lists, in the order they were laid — and `set` the keys of the part this contribution wrote, which the ones above it may have overwritten. Nothing is drawn and nothing is validated: like `explain/1` it is a reading of what the frame resolves, by the same resolution, so it cannot drift from it.
+A contribution's `layer` is its layer of §3.7: `:theme` for the theme's root defaults (§3.8), which every part has, so every part's chain begins there; `:defaults` for a container's part defaults and `:kind` for its entry for the element's kind, with `container` naming it — `:theme`, `:design`, `{:frame, f}`, or `:site` for the element's own, its layers' and groups' (§3.8) — and `nil` on every other layer; `:mark` for the mark's own paint, the theme's series colour for its position, which lies under every style when none gives one (§5.6); `:palette` for a palette entry the design does not declare (§3.3); `:style` for a style the design declares, by name or in a list; `:field` for the style a datum's value named, with `field` the `{:field, f}` and `value` the datum's reading; `:generator` for a generator entry's result (§3.13, D-177), with `value` the result; `:state` for a view state, laid by `state:` or named by a field whose value is a state; `:inline` for an inline node of the stack; and `:local` for the inline node a stack ends with, the site's local edit (§3.6). `style` is the style's name where the contribution has one, `via` the names the style reached it through — its `extends` chain and the names in its lists, in the order they were laid — and `set` the keys of the part this contribution wrote, which the ones above it may have overwritten. Every contribution carries `generators`, the generators it was computed with, each `%{name, args, at, result}`: `args` the arguments as the generator received them, the datum's readings in place of its field bindings; `at` `[]` for a generator entry, whose result is the whole contribution, and the path of the leaf within the style for a color generator in a part, `[:fill, :color]`; `result` the value it returned, or `{:fault, reason}` for one that applied nothing — so a generator's result is attributed at the layer it sits at, and a fault is seen where it failed to apply. Nothing is drawn and nothing is validated: like `explain/1` it is a reading of what the frame resolves, by the same resolution, so it cannot drift from it.
 
 ## 18. The builder component
 

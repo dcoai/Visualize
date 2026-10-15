@@ -74,7 +74,8 @@ defmodule Visualize.Chart.Mark do
   its series values by position when it has a `series` channel (spec/14 §5.2, D-126), the
   keys a mark with an event writes on its elements (§5.7, D-170), its one-based position
   among the marks, and the styles a stack's `{:field, f}` entries name by data (§3.6,
-  #644), `nil` for a stack that names none.
+  #644) and its generators compute (§3.13, #654), `nil` for a stack that names none and
+  reaches none, with the memo of the generators the mark's rows call.
   """
   @type context :: %{
           frame: Frame.t(),
@@ -94,7 +95,8 @@ defmodule Visualize.Chart.Mark do
             %{frame: atom(), mark: non_neg_integer(), ordinals: %{map() => non_neg_integer()}}
             | nil,
           index: pos_integer(),
-          by_data: %{entries: [{:field, atom()}], names: map(), table: map()} | nil
+          by_data: %{entries: [{:field, atom()}], names: map(), reach: map(), table: map()} | nil,
+          generated: %{memo: map(), path: list()}
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."

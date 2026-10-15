@@ -154,7 +154,8 @@ defmodule Visualize.Board.Snapshot do
     opts = Keyword.merge(opts, theme: theme, width: width)
 
     with {:ok, applied, _cache} <- Board.realise(board, store, pools, opts),
-         {:ok, components} <- Board.components(board, store, Keyword.take(opts, [:limits])) do
+         {:ok, components} <-
+           Board.components(board, store, Keyword.take(opts, [:limits, :generators])) do
       cells =
         Map.new(components, fn {name, %{chart: chart, vars: vars}} ->
           # The sources application bound each slot to: its pool's entry, by the slot's

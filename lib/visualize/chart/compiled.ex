@@ -72,6 +72,7 @@ defmodule Visualize.Chart.Compiled do
     :plot,
     :box,
     :viewport,
+    :generated,
     motion: :full,
     system: :as_posted,
     backdrop: "",
@@ -138,6 +139,7 @@ defmodule Visualize.Chart.Compiled do
           viewport: map() | nil,
           motion: :full | :reduce,
           system: Visualize.Quantity.system(),
+          generated: struct() | nil,
           transitions: %{atom() => map()},
           eased: %{atom() => map()},
           motions: %{non_neg_integer() => map()},
@@ -179,6 +181,8 @@ defmodule Visualize.Chart.Compiled do
       chart: chart,
       theme: frame.theme,
       system: frame.system,
+      # The generators every tick's frame calls (spec/14 §3.13): the applied frame's.
+      generated: frame.generated,
       layout: layout,
       regions: regions,
       targets: targets,
@@ -704,7 +708,8 @@ defmodule Visualize.Chart.Compiled do
       theme: theme,
       system: system,
       size: {size.width, size.height},
-      warm: forces
+      warm: forces,
+      generated: c.generated
     ]
   end
 

@@ -17,6 +17,24 @@ release it merely follows.
 
 ### Added
 
+- **Generators: styles and colors computed when a chart is drawn** (#680, #654, D-177). A
+  design may store a call, `generate(:name, args)` (`import Visualize.Generators`), where
+  it cannot know the value in advance — each chat message in its sender's tenant style,
+  say: `style: [:message, generate(:tenant_style, [{:field, :tenant}])]` as a stack entry
+  (returning a style), or `fill: generate(:brand_color, [{:field, :tenant}])` in a paint
+  (returning a typed color). Define generators in your own module with
+  `use Visualize.Generators` and `defgenerator tenant_style(tenant, ctx) do … end`, where
+  `ctx` holds the theme, the design's variables and your `assigns:`; register the module
+  with `config :visualize, generators: [MyApp.Generators]` or the `generators:` option of
+  `Visualize.Chart.from_map/2`, `from_json/2`, `apply/2`, `compile/2`, a board's
+  `realise/4` and `Visualize.Board.Server` (which also takes `assigns:`). An unknown name or
+  a wrong arity is a validation fault when the chart is built. A result of the wrong type
+  applies nothing and is logged; a generator that raises is not rescued. Results are
+  computed once per distinct arguments while a mark draws. `Visualize.Chart.explain/2`
+  lists every generator it called, with its arguments and result, at its layer. JSON writes
+  a call as `{"$generate": [name, [args…]]}`. The examples gain a tenant chat board at
+  `/tenants`.
+
 - **Enter and exit by identity** (#678, D-176). `enter: %{name: :grow}` (or `:fade`) and
   `exit: %{name: :explode}` (or `:fade`, `:shrink`, or a host's keyframes) say how a row's
   element arrives and leaves: a row whose identity a drawing gains enters, one it loses

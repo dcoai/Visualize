@@ -7,7 +7,7 @@ defmodule Visualize.Chart.Frame.Labels do
   alias Visualize.Chart.Frame.Position
   alias Visualize.Chart.Label.Polar
   alias Visualize.Chart.{Schema, Style, Var}
-  alias Visualize.Chart.Style.Defaults
+  alias Visualize.Chart.Style.{Defaults, Generated}
   alias Visualize.Chart.Text
   alias Visualize.Geo.Projection
   alias Visualize.IR.{Element, Transform}
@@ -36,10 +36,20 @@ defmodule Visualize.Chart.Frame.Labels do
   def axis_title(frame, side, text, mode),
     do: label(frame, %{anchor: {:side, side}, text: Text.unparse([text])}, mode)
 
+  # A label's style's path in the design, for a generator's faults (spec/14 §3.13).
+  defp label_path(frame, node) do
+    case Enum.find_index(frame.labels, &(&1 == node)) do
+      nil -> [:style]
+      i -> [:labels, Enum.at(frame.label_paths, i, i), :style]
+    end
+  end
+
   defp label(frame, node, mode) do
     default_style = if node.anchor == :title, do: :title, else: Schema.default(:label, :style)
     base = Defaults.at(frame, Map.get(node, :defaults), :text)
-    style_node = Style.over(base, frame.styles, Map.get(node, :style, default_style))
+    stack = Map.get(node, :style, default_style)
+    pick = Generated.pick(frame, label_path(frame, node))
+    style_node = Style.over(base, frame.styles, stack, pick)
     style = Style.resolve(style_node, frame.theme, mode)
     dx = Map.get(node, :dx, 0)
     dy = Map.get(node, :dy, 0)

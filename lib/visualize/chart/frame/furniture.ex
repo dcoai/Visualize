@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   alias Visualize.Chart.Frame
   alias Visualize.Chart.Frame.{Labels, Position}
   alias Visualize.Chart.{Schema, Style}
-  alias Visualize.Chart.Style.Defaults
+  alias Visualize.Chart.Style.{Defaults, Generated}
   alias Visualize.IR.{Element, Path, Transform}
 
   @stroke_keys [
@@ -300,7 +300,7 @@ defmodule Visualize.Chart.Frame.Furniture do
          Defaults.at(frame, own, nil).style == %{} do
       element
     else
-      style_node = style(frame, name, own)
+      style_node = style(frame, name, own, axis_path(frame, node))
 
       element
       |> apply_style(Style.resolve(style_node, frame.theme, mode))
@@ -324,8 +324,18 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   defp apply_style(element, _style), do: element
 
-  # A furniture style over the part defaults the containers lay (spec/14 §3.8).
-  defp style(frame, name, own), do: Style.over(Defaults.at(frame, own, nil), frame.styles, name)
+  # A furniture style over the part defaults the containers lay (spec/14 §3.8), a generator
+  # in it resolved with no datum, its faults reported at `path` (spec/14 §3.13).
+  defp style(frame, name, own, path \\ []),
+    do: Style.over(Defaults.at(frame, own, nil), frame.styles, name, Generated.pick(frame, path))
+
+  # An axis's style's path in the design, `[:frames, f, :axes, i, :style]`.
+  defp axis_path(frame, node) do
+    case Enum.find_index(frame.axes, &(&1 == node)) do
+      nil -> [:style]
+      i -> [:frames, frame.name, :axes, i, :style]
+    end
+  end
 
   # -- grid -----------------------------------------------------------------------------
 
@@ -466,7 +476,9 @@ defmodule Visualize.Chart.Frame.Furniture do
   end
 
   defp polar_axis(frame, node, axis, mode) do
-    style_node = style(frame, Map.get(node, :style, :axis), Map.get(node, :defaults))
+    style_node =
+      style(frame, Map.get(node, :style, :axis), Map.get(node, :defaults), axis_path(frame, node))
+
     style = Style.resolve(style_node, frame.theme, mode)
     text_anchor = if node.scale == :angle, do: :middle, else: spoke_anchor(spoke_direction(node))
 

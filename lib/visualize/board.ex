@@ -260,7 +260,7 @@ defmodule Visualize.Board do
   `:ok`, or every fault of the board alone and then given the store (spec/15 §3.2).
 
   Each cell's component is fetched, flattened through the store and read through
-  `Visualize.Chart.from_map/2` with `limits:`. An id the store does not hold is
+  `Visualize.Chart.from_map/2` with `limits:` and `generators:`. An id the store does not hold is
   `{:dangling, id}` and a component that reaches itself `{:cycle, chain}`, at the cell's
   `ref`; a component that is not a design has its faults under the ref; a cell variable
   its component does not declare is `{:undeclared, :var, name}`; and a cell that cannot
@@ -284,10 +284,10 @@ defmodule Visualize.Board do
 
   # Every cell's component, and every fault given the store.
   defp resolved(map, store, opts) do
-    limits = Keyword.get(opts, :limits, [])
+    read = read_opts(opts)
 
     {charts, errors} =
-      Validator.components(Map.get(map, :cells, %{}), Validator.fetch(store), limits)
+      Validator.components(Map.get(map, :cells, %{}), Validator.fetch(store), read)
 
     boards = if Keyword.has_key?(opts, :boards), do: Validator.fetch(opts[:boards])
 
@@ -516,18 +516,21 @@ defmodule Visualize.Board do
   `{path, field, need}`, `need` the type the scale's kind needs (spec/14 §7.4, D-153). One design used in two cells is two sets of slots, bound independently.
 
   Components are resolved through the store as `validate/3` resolves them, with
-  `limits:`; the faults that keep one from being read are `{:error, errors}`.
+  `limits:` and `generators:`; the faults that keep one from being read are `{:error, errors}`.
   """
   @spec required_sources(t(), store(), keyword()) ::
           {:ok, %{{atom(), atom()} => Visualize.Board.Binding.need()}} | {:error, [error(), ...]}
   def required_sources(%__MODULE__{cells: cells}, store, opts) do
-    limits = Keyword.get(opts, :limits, [])
-
-    case Validator.components(cells, Validator.fetch(store), limits) do
+    case Validator.components(cells, Validator.fetch(store), read_opts(opts)) do
       {charts, []} -> {:ok, Enum.reduce(charts, %{}, &slots/2)}
       {_charts, errors} -> Validator.done(errors)
     end
   end
+
+  # The options a component is read with (spec/15 §3.2): the limits, and the generators
+  # its names are checked against (spec/14 §3.13).
+  defp read_opts(opts),
+    do: [limits: Keyword.get(opts, :limits, [])] ++ Keyword.take(opts, [:generators])
 
   defp slots({cell, %Chart{sources: sources} = chart}, acc) do
     contract = Chart.contract(chart)
@@ -569,6 +572,9 @@ defmodule Visualize.Board do
     * `:width` - the board's container width in pixels (default `1200`); each cell is
       applied at its box's size there (`boxes/2`)
     * `:theme`, `:now`, `:system` - as `Visualize.Chart.apply/2` takes them
+    * `:generators`, `:assigns` - the generator modules each component is read with and
+      its frames call, and the host's assigns their context carries, as
+      `Visualize.Chart.apply/2` takes them (spec/14 §3.13)
     * `:schemas` - the schema cache (default empty), threaded from cell to cell and
       returned grown
     * `:describe` - `({cell, slot} -> {:ok, schema} | {:error, reason})`: the connector
@@ -585,7 +591,7 @@ defmodule Visualize.Board do
 
   defp apply_cells(board, components, pools, opts) do
     boxes = boxes(board, Keyword.get(opts, :width, 1200))
-    shared = Keyword.take(opts, [:theme, :now, :system])
+    shared = Keyword.take(opts, [:theme, :now, :system, :generators, :assigns])
     cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
 
     {applied, cache, errors} =
@@ -629,7 +635,7 @@ defmodule Visualize.Board do
   Every cell's component prepared for application, purely (spec/15 §6): `{:ok, %{cell =>
   %{chart: chart, vars: vars}}}`, or every fault of the board alone and given the store.
 
-  Each component is resolved through the store and read with `limits:`; with the board's
+  Each component is resolved through the store and read with `limits:` and `generators:`; with the board's
   `sync` set and the cell's true, the board's group is written into its
   `interaction.sync`; the board's zone is written into every `:time` scale that names no
   zone of its own (spec/15 §1.5); and `vars` is the cascade of spec/15 §5 narrowed to the
