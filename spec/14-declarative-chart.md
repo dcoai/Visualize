@@ -1265,6 +1265,8 @@ A document over a limit is `{:error, errors}` of §10.1, one `{path, {:limit, na
 | `{:tiles, :attribution}` | a `:tiles` mark's `attribution` that is empty or blank: the attribution is drawn, and a provider's terms require it to say something |
 | `{:tiles, :url}` | a `:tiles` mark's `url` without each of `{z}`, `{x}` and `{y}`: such a template addresses one picture, not a tile set |
 | `{:tiles, :subdomains}` | a `:tiles` mark's `url` with `{s}` and an empty `subdomains` list: no host to rotate over |
+| `{:url, reason}` | a field holding a URL — a `:tiles` mark's `url` — that the URL policy of §10.3 refuses, at the field's path: `reason` is `:relative`, `:scheme`, `:http`, `:data_type` or `:host`. The line names the field and the reason and never the URL (#660) |
+| `{:unsafe, what}` | a string a style or a theme sends to SVG, CSS or a canvas that holds what its context cannot carry (§10.3, #660): `what` is `:font_family` for a font family holding `<`, `>`, `/`, `;`, `{`, `}`, `\` or a control character, `:class` for a class that is not CSS class names |
 | `{:outside_domain, scale, what}` | a value a mark sends to its frame's colour scale that the scale's **declared** domain can be seen not to hold (#487, D-122), so that every element it reaches would draw the scale's `unknown` (§4.3). The scale is an `:ordinal` scale whose `domain` is a literal, non-empty list. `what` is the number of a **constant** channel that names the scale (`series`, a `:rect`'s `value`, a `:geo` frame's `value`, §4.3) and the domain does not hold, at the channel's path; or `{:column, field, type}` for a field bound to the scale — by such a channel or by a `{:field, f}` on a `:colour` key of the mark's style (§3.2) — whose source declares the column's `type` (§2.3) and whose domain holds **no value a column of that type can hold**, at the channel's or the mark's `style` path: a `:number` column holds numbers, a `:text` column strings and atoms, a `:time` column temporal structs, strings and numbers, and a `:category` column anything, so it is never reported. Only what is decidable from the design is reported: an untyped field, a mark reading its source through transforms, an inferred or variable domain and a style reached through a variable are not checked, and a domain that holds a value of the type is not a fault although the column's rows may still miss it |
 | `{:unit, code, reason}` | an axis's `measure.unit` that is not a UCUM code `Visualize.Unit` reads (§4.4, spec/05 §4.1): `reason` is `Visualize.Unit.parse/1`'s — `:empty`, `{:syntax, rest}`, `{:unknown_atom, symbol}`, `{:not_metric, prefix, atom}` |
 | `{:quantity, quantity, code}` | an axis's `measure` whose unit's dimension is not its quantity's (`By` as a `:duration`), at `[..., :measure, :quantity]` (§4.4, spec/05 §4.2) |
@@ -1300,6 +1302,23 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 ### 10.2 Checks
 
 **Implemented.** For every node, in this order: unknown keys; required keys; the type of every present value, recursing into nodes, lists and maps; enumerations; then references. A reference is resolved against the design being validated — the node's own frame's `scales` for `:scale` (a mark's or a label's is the frame it names, §5.1; a frame's own parts are its own, §4.3), `frames` for `:frame`, `styles` and the palette names of the theme (§3.3) for `:style`, `sources` for `:source`, `vars` for `:var`, the mark's source's `fields` for `:field`, the theme's slots for `:slot` — so a design is self-contained or it does not validate. A `%Visualize.Chart.Var{}` in any position is accepted after its declaration is checked, and nothing under it is examined.
+
+### 10.3 Untrusted strings and URLs
+
+**Implemented** (#660, D-172). A design, a theme and a library entry may come from a tenant or from the store, so every string a style or a theme sends to SVG, CSS or a canvas, and every URL a design holds, is untrusted input.
+
+**Strings are sanitized where they are read, and escaped where they are written.**
+
+- A **font family** — a style's `font.family`, a version 2 `font_family`, a theme's `font_family` — may hold only the characters a font name is written in: `<`, `>`, `/`, `;`, `{`, `}`, `\` and control characters are refused as `{:unsafe, :font_family}` at its path. Commas, spaces and quotes stay, since a family list is `Inter, 'Segoe UI', sans-serif`.
+- A **class** is one or more CSS class names separated by spaces, each `-?[_a-zA-Z][_a-zA-Z0-9-]*`; anything else is `{:unsafe, :class}`.
+- **Every string reaching an output is escaped for its context**: SVG attribute values and text content as SVG escapes them (spec/09 §2); a canvas's JavaScript strings — `fillText`, an image's source, and the font shorthand `ctx.font` — escape `\`, `'`, line breaks and `<` (as `\x3c`, so no `</script>` closes a script); a theme's stylesheet (`Visualize.Theme.stylesheet/1`) writes `<`, `>`, `;`, `{`, `}` and `\` in a value as CSS escapes, so a value never ends its declaration or its rule.
+
+**URLs are checked when the design is validated.** Today the one field that holds a URL is a `:tiles` mark's `url` template (§5.2); later ones — icon sets (#646), embedded elements (#620), image marks — are held to the same policy.
+
+- **Scheme.** `https:` is accepted. `http:` is accepted only when the policy allows it. `data:` is accepted only as an image of `image/png`, `image/jpeg` or `image/webp` — `data:image/svg+xml` can carry script, so it is `:data_type`, as is any other `data:` type. Every other scheme — `javascript:`, `file:`, `ftp:` — is `:scheme`, and a URL with no scheme (relative) is `:relative`.
+- **Hosts.** The policy may list the hosts it allows; a URL whose host is not on the list is `:host`. An entry is a host, or `*.domain` for any host under the domain. A template's `{s}` host is checked for every subdomain the mark rotates over (`subdomains`). With no list, any host is accepted.
+- **The policy** is the host application's: `config :visualize, urls: [http: false, hosts: :any]` (the defaults), `hosts` either `:any` or a list. A read may be **stricter** than the application, never looser: `Visualize.Chart.from_map/2` and `from_json/2` take `urls: [http: …, hosts: …]`, where `http: true` is honoured only when the application allows `http:` too, and a `hosts` list is intersected with the application's (or taken as it is under `:any`). `Visualize.Chart.Validator.validate/1` checks under the application's policy, `validate/3` under a read's.
+- **A refusal is a validator fault** `{:url, reason}` at the field's path, worded by `Visualize.Chart.Validator.format/1` with the field and the reason — `marks[0].tiles.url: the URL's scheme is refused: only https (and http when the host allows it) and image data` — and never the URL itself, which may carry a credential or be meant to mislead whoever reads the log.
 
 ## 11. JSON
 
@@ -1580,7 +1599,7 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | Function | Contract |
 |---|---|
 | `Visualize.Chart.from_map/1` | As `from_map/2` with `[]` options: the default limits (§9.2). |
-| `Visualize.Chart.from_map/2` | `from_map(map, limits: limits)`: `{:ok, chart}` for a valid design map after the version gate (§9.1), the limits (§9.2) and migration, else `{:error, errors}` as §10.1; the design-level keys absent from the map take the defaults of §2.1. `limits:` is a keyword list or map over `Visualize.Chart.Limits.defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
+| `Visualize.Chart.from_map/2` | `from_map(map, limits: limits, urls: urls)`: `{:ok, chart}` for a valid design map after the version gate (§9.1), the limits (§9.2) and migration, else `{:error, errors}` as §10.1, its URLs held to the application's policy made stricter by `urls:` (§10.3); the design-level keys absent from the map take the defaults of §2.1. `limits:` is a keyword list or map over `Visualize.Chart.Limits.defaults/0`; raises `ArgumentError` for a name that is not a limit or a value that is not a positive integer. |
 | `Visualize.Chart.from_map!/1` | As `from_map!/2` with `[]` options. |
 | `Visualize.Chart.from_map!/2` | As `from_map/2`, raising `ArgumentError` with the formatted errors (§10.1) on the error branch. |
 | `Visualize.Chart.to_map/1` | The design map of a chart: every design-level key, nested nodes as stored. |
@@ -1636,7 +1655,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 
 | Function | Contract |
 |---|---|
-| `Visualize.Chart.Validator.validate/1` | `:ok`, or `{:error, errors}` with every fault of §10 by path, ordered by path. |
+| `Visualize.Chart.Validator.validate/1` | `:ok`, or `{:error, errors}` with every fault of §10 by path, ordered by path; its URLs under the application's policy (§10.3). |
+| `Visualize.Chart.Validator.validate/3` | `validate(map, :design, urls: urls)`: `validate/1` with the URL policy of a read, the application's made stricter by `urls:` (§10.3). |
 | `Visualize.Chart.Validator.format/1` | One error as a line: the path in `a[1].b` form, a colon, the reason in words. |
 | `Visualize.Chart.Validator.format_path/1` | A path in that `a[1].b` form, `design` for the root — the one spelling an error, a node label (§18.5) and a rendered `data-node` (§4.7) share. |
 
