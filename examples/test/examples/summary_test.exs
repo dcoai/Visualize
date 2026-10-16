@@ -19,6 +19,7 @@ defmodule Examples.SummaryTest do
     Charts.CirclePacking => ["circle packing"],
     Charts.ClusterDendrogram => ["dendrogram"],
     Charts.ColorsChart => ["bar chart", "bar chart"],
+    Charts.CompositionChart => ["bar chart", "line chart"],
     Charts.ContextChart => ["area chart", "area chart", "area chart", "area chart"],
     Charts.ContourPlot => ["contour plot"],
     Charts.DayNightGps => ["map"],

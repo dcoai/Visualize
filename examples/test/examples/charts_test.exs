@@ -65,7 +65,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.GpsTrack,
     # The style grammar of 0.7.0 (#705).
     Examples.Charts.ColorsChart,
-    Examples.Charts.PaintsChart
+    Examples.Charts.PaintsChart,
+    Examples.Charts.CompositionChart
   ]
 
   # Converted and deterministic: these hold the golden.
@@ -106,7 +107,8 @@ defmodule Examples.ChartsTest do
     Examples.Charts.HexbinChart,
     Examples.Charts.SpectrumChart,
     Examples.Charts.ColorsChart,
-    Examples.Charts.PaintsChart
+    Examples.Charts.PaintsChart,
+    Examples.Charts.CompositionChart
   ]
 
   # Converted, but asserted on rather than recorded: seeded at compile time, or — the

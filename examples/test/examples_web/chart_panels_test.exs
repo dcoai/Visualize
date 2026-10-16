@@ -6,7 +6,7 @@ defmodule ExamplesWeb.ChartPanelsTest do
   """
   use ExUnit.Case, async: true
 
-  alias Examples.Charts.{BarChart, ColorsChart, Design}
+  alias Examples.Charts.{BarChart, ColorsChart, CompositionChart, Design}
   alias ExamplesWeb.ChartLive
   alias ExamplesWeb.ChartPanels
   alias ExamplesWeb.ChartPanels.DarkMode
@@ -98,5 +98,23 @@ defmodule ExamplesWeb.ChartPanelsTest do
     assert stepped.assigns.panels == []
     {:noreply, back} = ChartLive.handle_params(%{"chart" => "colors"}, "/chart/colors", stepped)
     assert [dark_mode: %{scheme: :system}] = back.assigns.panels
+  end
+
+  test "the Composition chart is drawn under ZoomHook, its budget line non-scaling" do
+    assert ChartPanels.of(CompositionChart) == [:zoom]
+    s = mounted("composition")
+    page = html(s)
+
+    [_, panel] = String.split(page, ~s(id="chart-panel-zoom-composition"), parts: 2)
+    assert panel =~ ~s(phx-hook="ZoomHook")
+    assert panel =~ ~s(phx-update="ignore")
+    assert panel =~ ~s(data-zoom-event="chart_zoom")
+    assert panel =~ ~s(<g class="zoom-container"><svg)
+    # The budget line's stroke keeps its width; the trend lines' do not.
+    assert panel =~ ~s(vector-effect="non-scaling-stroke")
+
+    # The hook's report changes nothing on the page.
+    params = %{"k" => 2.0, "x" => -10.0, "y" => -5.0}
+    assert {:noreply, ^s} = ChartLive.handle_event("chart_zoom", params, s)
   end
 end
