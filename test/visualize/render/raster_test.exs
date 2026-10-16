@@ -67,11 +67,11 @@ defmodule Visualize.Render.RasterTest do
     end
 
     test "the shapes are painted and the background fills the transparent pixels" do
-      plain = Render.to_png!(swatch())
+      plain = PNGPixels.decode(Render.to_png!(swatch()))
       assert PNGPixels.pixel(plain, 1, 1) == {255, 0, 0, 255}
       assert PNGPixels.pixel(plain, 8, 1) == {0, 0, 0, 0}
 
-      backed = Render.to_png!(swatch(), background: "#0000ff")
+      backed = PNGPixels.decode(Render.to_png!(swatch(), background: "#0000ff"))
       assert PNGPixels.pixel(backed, 1, 1) == {255, 0, 0, 255}
       assert PNGPixels.pixel(backed, 8, 1) == {0, 0, 255, 255}
     end

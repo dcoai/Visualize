@@ -147,12 +147,10 @@ defmodule Visualize.Chart.StatusCueTest do
 
     # A square of grayscale luminance about a point, thresholded at its own middle: the
     # shape in it, whatever its lightness.
-    defp mask(png, {px, py}, half) do
-      {w, _h, pixels} = PNGPixels.decode(png)
-
+    defp mask(image, {px, py}, half) do
       lum =
         for y <- (py - half)..(py + half), x <- (px - half)..(px + half) do
-          <<r, g, b, _a>> = binary_part(pixels, (y * w + x) * 4, 4)
+          {r, g, b, _a} = PNGPixels.pixel(image, x, y)
           0.2126 * r + 0.7152 * g + 0.0722 * b
         end
 
@@ -166,7 +164,8 @@ defmodule Visualize.Chart.StatusCueTest do
       applied = applied(gauge(cues?))
       root = Chart.generate(applied, root: true, resolve: :literal)
       {:ok, png, _warnings} = Render.to_png(root, scale: 2, background: "#ffffff")
-      for center <- centers(applied, 2), do: mask(png, center, 14)
+      image = PNGPixels.decode(png)
+      for center <- centers(applied, 2), do: mask(image, center, 14)
     end
 
     test "with the glyphs every pair of zones differs in shape; without them they do not" do

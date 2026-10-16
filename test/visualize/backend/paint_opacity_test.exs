@@ -210,6 +210,7 @@ defmodule Visualize.Backend.PaintOpacityTest do
       band = Element.rect(20, 30, 200, 50, %{fill: "#1f77b4", fill_opacity: 0.3})
       root = Element.root(240, 120, children: [band])
       {:ok, png, _warnings} = Visualize.Render.to_png(root, scale: 1, background: "#ffffff")
+      image = Visualize.PNGPixels.decode(png)
 
       [%{"name" => "fill", "globalAlpha" => a, "fillStyle" => "rgba(31,119,180,1)"}] =
         streams(band)[:binary]
@@ -217,7 +218,7 @@ defmodule Visualize.Backend.PaintOpacityTest do
       expected = for c <- [31, 119, 180], do: 255 + (c - 255) * a
 
       for px <- 25..215//10, py <- 35..75//10 do
-        {r, g, b, _} = Visualize.PNGPixels.pixel(png, px, py)
+        {r, g, b, _} = Visualize.PNGPixels.pixel(image, px, py)
 
         for {got, want} <- Enum.zip([r, g, b], expected) do
           assert abs(got - want) <= 3,
@@ -370,12 +371,11 @@ defmodule Visualize.Backend.PaintOpacityTest do
           background: "#ffffff"
         )
 
-      # Decoded once: `PNGPixels.pixel/3` decodes the whole image per pixel.
       Visualize.PNGPixels.decode(png)
     end
 
-    defp inked?({w, _h, pixels}, px, py) do
-      <<r, g, b, _a>> = binary_part(pixels, (py * w + px) * 4, 4)
+    defp inked?(image, px, py) do
+      {r, g, b, _a} = Visualize.PNGPixels.pixel(image, px, py)
 
       cond do
         abs(r - 31) <= 40 and abs(g - 119) <= 40 and abs(b - 180) <= 40 -> true
