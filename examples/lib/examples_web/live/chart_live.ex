@@ -243,6 +243,16 @@ defmodule ExamplesWeb.ChartLive do
   # The zoom panel's hook reports each settled transform; nothing here depends on it.
   def handle_event("chart_zoom", _params, socket), do: {:noreply, socket}
 
+  # The explain panel's graph is `BuilderHook`'s (spec/14 §12.6): a click picks the node
+  # it explains; a drag or a context menu on it moves nothing here.
+  def handle_event("pick", %{"node" => node}, socket) do
+    params = %{"panel" => "explain", "node" => node}
+    {:noreply, update(socket, :panels, &ExamplesWeb.ChartPanels.event(&1, params))}
+  end
+
+  def handle_event(gesture, _params, socket) when gesture in ["move", "menu"],
+    do: {:noreply, socket}
+
   def handle_event("change_palette", %{"palette" => palette_key}, socket) do
     palette =
       case palette_key do

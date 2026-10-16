@@ -12,23 +12,29 @@ defmodule ExamplesWeb.ChartPanels do
 
   use Phoenix.Component
 
-  alias ExamplesWeb.ChartPanels.{DarkMode, Zoom}
+  alias ExamplesWeb.ChartPanels.{DarkMode, Explain, Zoom}
 
-  @panels %{dark_mode: DarkMode, zoom: Zoom}
+  @panels %{dark_mode: DarkMode, zoom: Zoom, explain: Explain}
 
-  @doc "The panels `module` names, in its order: none for a module without `panels/0`."
+  @doc """
+  The panels of `module`'s page: those it names, in its order — none for a module without
+  `panels/0` — then `:explain`, which every chart page carries.
+  """
   @spec of(module()) :: [atom()]
   def of(module) do
-    if Code.ensure_loaded?(module) and function_exported?(module, :panels, 0) do
-      for name <- module.panels() do
-        Map.has_key?(@panels, name) ||
-          raise ArgumentError, "#{inspect(module)} names no chart panel #{inspect(name)}"
+    named =
+      if Code.ensure_loaded?(module) and function_exported?(module, :panels, 0) do
+        for name <- module.panels() do
+          (Map.has_key?(@panels, name) and name != :explain) ||
+            raise ArgumentError, "#{inspect(module)} names no chart panel #{inspect(name)}"
 
-        name
+          name
+        end
+      else
+        []
       end
-    else
-      []
-    end
+
+    named ++ [:explain]
   end
 
   @doc "Every panel's state for `module`, by name, in its order."
@@ -60,6 +66,7 @@ defmodule ExamplesWeb.ChartPanels do
     <%= for {name, state} <- @panels do %>
       <DarkMode.panel :if={name == :dark_mode} id={"chart-panel-#{name}-#{@slug}"} state={state} />
       <Zoom.panel :if={name == :zoom} id={"chart-panel-#{name}-#{@slug}"} state={state} />
+      <Explain.panel :if={name == :explain} id={"chart-panel-#{name}-#{@slug}"} state={state} />
     <% end %>
     """
   end

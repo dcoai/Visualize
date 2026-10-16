@@ -29,6 +29,9 @@ release it merely follows.
   `[:style_3, :thick]`, `[:bad, :dashed]`), derives a style with `extends`, sets
   `defaults` on the design, on a frame and per mark kind, sizes in `pt`, `mm`, `em` and
   `pct`, and draws a `non_scaling` stroke that its page's zoom panel keeps a hairline.
+  Every chart page gains **Why it looks as it does**: click a mark, an axis, the legend or
+  a label and see `Visualize.Chart.explain/2` for it — each part, whether its kind draws
+  it, and the layers that set it — per datum where the data chooses the style.
 
 - **The builder makes every style stack entry and explains an element's look** (#686,
   D-178). The style stack panel adds, beside a name, a `{:field, f}` entry from the site's
