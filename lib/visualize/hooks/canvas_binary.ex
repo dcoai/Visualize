@@ -620,12 +620,12 @@ defmodule Visualize.Hooks.CanvasBinary do
   end
 
   # A hatch's CanvasPattern as ctx[target + 'Style'] (spec/10 §8.1, #673): the tile source the
-  # server writes into a `:js` script, `Visualize.Backend.Canvas.hatch_js/0`, so the two never
-  # draw different tiles.
+  # server writes into a `:js` script, `Visualize.Backend.Canvas.Output.hatch_js/0`, so the
+  # two never draw different tiles.
   defp pattern_js do
     "    export function visualizePattern(ctx, target, pattern, angle, spacing, width, color, background) {\n" <>
       "      ctx[target + 'Style'] = (" <>
-      Visualize.Backend.Canvas.hatch_js() <>
+      Visualize.Backend.Canvas.Output.hatch_js() <>
       ")(ctx, pattern, angle, spacing, width, color, background);\n    }\n\n"
   end
 

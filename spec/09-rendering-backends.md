@@ -13,6 +13,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 | `Visualize.Backend.SVG` | `Visualize.Backend` implementation producing SVG markup |
 | `Visualize.Backend.Canvas` | `Visualize.Backend` implementation producing Canvas 2D commands |
 | `Visualize.Backend.Canvas.Arc` | Internal: SVG arc to Canvas `ellipse` (endpoint-to-center conversion) |
+| `Visualize.Backend.Canvas.Output` | Internal: the `:js` and `:json` serializers of the command list, and the hatch pattern source `hatch_js/0` the hooks share |
 | `Visualize.Backend.CanvasBinary` | Binary encoder for Canvas commands (IR and `Visualize.SVG.Element` input) |
 | `Visualize.Backend.CanvasBinary.Opcodes` | Internal: opcode byte constants |
 | `Visualize.Backend.CanvasBinary.PathEncoder` | Internal: the `path_cubic` command stream |
