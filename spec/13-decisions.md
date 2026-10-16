@@ -2313,3 +2313,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `range: [color(:good), color(:warning), color(:bad)]`, a transform or a shade works in a scale range on every backend; `range: [:good, :warning, :bad]` reads, validates and draws as before, stored as the typed form.
 - A range's atom that is no name of the theme's table, which passed before, is now `{:undeclared, :color, name}` at its index, as it is in a style.
 - A stored design's JSON writes a range's colors as `{"$color": …}` where it wrote `{"$atom": …}`; the old form still reads.
+
+## 186. D-186 — An in-place gradient is hoisted from the paint its style resolved to
+
+**Context.** #711; work item #717. Building the 0.7.0 examples (#705), a style that `extends` one whose fill is a gradient written in place (`fill: %{type: :radial, …}`, D-172) and sets its own stops failed at render: "paint … is not declared under defs". Each style alone rendered. The frame held the gradients written in place in a table built from every style node **as written** — the named styles, the sites, the defaults — while an element's `fill` was `{:paint, name}` with `name` a hash of the **merged** paint: under a merge that keeps the gradient's `type`, the child's stops over the parent's geometry is a gradient neither node holds, so its name was in no table. The same gap broke a stack (`[:lit, :blue_stops]`), a gradient a defaults node lays under a site's stops, and a generator returning a style with a gradient. D-172's merge tests checked the merged node, never a render of it, and the gallery's paints were each written whole, so nothing drew a merged gradient until #707 tried, and wrote both looks in full instead.
+
+**Decision.**
+- **The element carries the resolved paint.** `Visualize.Chart.Style.resolve/3` projects a gradient written in place as `{:paint, node}`, the node the style resolved to without its opacity, and a declared paint as `{:paint, name}` as before (spec/14 §3.2).
+- **The frame resolves the node it is given.** `Visualize.Chart.Frame.generate/2` turns `{:paint, node}` into its `Visualize.IR.Paint` under `vis-paint-<h>-p<h'>`, `<h'>` the hash of that node, and its `defs` declares every paint the drawn tree holds — declared ones always, as before (spec/14 §2.7). Hoisting therefore runs on what is drawn, so no merge can reach a paint the defs lack.
+- **A color list with no type is stops** (spec/14 §3.1): one color with no type is already a solid, so `fill: %{color: [a, b]}` in a style that extends a gradient is that gradient in these colors — the plain way to derive one look from another, which the validator refused as no color.
+- **A compiled chart's static defs cover what a later tick may draw**: every gradient of the named styles with their `extends` chains laid, of the sites and of the defaults, and every one of its first draw of every mark.
+
+**Rejected.**
+- **Computing every merge ahead.** A stack can hold field entries, so the merged paints are a product over the data's choices; a table of them is a guess where the drawn tree is the answer.
+- **Looking an unknown name up by recomputing it.** The name is a hash; nothing can be recovered from it.
+- **Projecting the bare paint map.** A map under `fill` is a part (§3.1); the tagged `{:paint, node}` keeps a projected style distinct from one in parts, and every place that passes a paint through untouched already matches `{:paint, _}`.
+
+**Consequences.**
+- A style may extend, stack or default a gradient and change its stops, its geometry or its type, on SVG and both canvases; the gallery's Paints chart derives its second incident look by `extends`.
+- A host reading `Style.resolve/3`'s output sees `{:paint, node}` for an in-place gradient where it saw `{:paint, "p…"}`; the SVG and the canvas commands are byte for byte what they were for every gradient that drew before.
+- A compiled chart whose later ticks reach a gradient only through a stack's field entry combined with another entry's gradient, which its first draw did not hold, draws that element on SVG with a `url(#id)` its static layer lacks; the canvas draws it, since it reads the paint from the element.
