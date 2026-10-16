@@ -6,7 +6,8 @@ defmodule Visualize.Backend.PaintOpacityTest do
   writes must change what every canvas encoder draws, so a key added to the table fails
   here until each canvas draws it. The encoders are one list, `@encoders`, and every module
   under `Visualize.Backend.Canvas*` is either in it or named as no encoder, so a new encoder
-  cannot escape the guard (#693). The hooks then replay a translucent paint on the
+  cannot escape the guard (#693). An element's `opacity` is put together with each paint's,
+  so an encoder that lets one replace the other fails (#742). The hooks then replay a translucent paint on the
   recording stub, and the binary hook's composite is held to resvg's raster; so is an SVG
   element's dashed, capped and joined stroke (#693).
   """
@@ -447,6 +448,154 @@ defmodule Visualize.Backend.PaintOpacityTest do
         [%{join: drawn_join}] = strokes(corner)
         assert drawn_join == Atom.to_string(join)
         assert inked?(png(corner), 206, 24) == (drawn_join == "miter"), "#{join}"
+      end
+    end
+  end
+
+  # -- an element's opacity with each paint's (#742) --------------------------------------
+
+  # The guards above put each paint key on an element alone, so an encoder that let the
+  # element's `opacity` replace its `fill-opacity`, or never take it to the stroke, passed
+  # them: these put the two together, each paint alone so the other cannot mask it.
+  describe "an element's opacity with each paint's opacity reaches every canvas stream (#742)" do
+    # `{base, with, without}`: the element's style with both opacities, and with one of them.
+    @combined [
+      {%{fill: "#336699", stroke: :none}, %{opacity: 0.5, fill_opacity: 0.4}, [:fill_opacity]},
+      {%{fill: "#336699", stroke: :none}, %{opacity: 0.5, fill_opacity: 0.4}, [:opacity]},
+      {%{fill: :none, stroke: "#cc0000"}, %{opacity: 0.5, stroke_opacity: 0.3},
+       [:stroke_opacity]},
+      {%{fill: :none, stroke: "#cc0000"}, %{opacity: 0.5, stroke_opacity: 0.3}, [:opacity]},
+      {%{fill: :none, stroke: "#cc0000"}, %{opacity: 0.5}, [:opacity]}
+    ]
+
+    test "every canvas encoder carries the combination, under a translucent group too" do
+      wraps = [
+        alone: & &1,
+        under_a_group: &Element.group([&1], style: %{opacity: 0.5})
+      ]
+
+      for {base, both, dropped} <- @combined,
+          {where, wrap} <- wraps,
+          {encoder, encode} <- @encoders do
+        with_both = wrap.(rect(Map.merge(base, both)))
+        with_one = wrap.(rect(Map.merge(base, Map.drop(both, dropped))))
+
+        markup = &Visualize.Render.to_string/1
+
+        if markup.(with_both) != markup.(with_one) do
+          assert encode.(with_both) != encode.(with_one),
+                 "SVG draws #{inspect(both)} over #{inspect(base)} #{where} unlike without " <>
+                   "#{inspect(dropped)}; #{inspect(encoder)} does not"
+        end
+      end
+    end
+
+    test "the SVG-element encoder's alphas are the products; a group's opacity is the global alpha" do
+      style = %{
+        fill: "#336699",
+        fill_opacity: 0.4,
+        stroke: "#cc0000",
+        stroke_opacity: 0.6,
+        opacity: 0.5
+      }
+
+      tree = Element.group([rect(style)], style: %{opacity: 0.5})
+
+      assert [
+               :save,
+               {:style, %{fill: nil, stroke: nil, opacity: 0.5}},
+               {:style, %{fill: {51, 102, 153, fill}, stroke: {204, 0, 0, stroke}, opacity: nil}},
+               {:rects, _},
+               :fill,
+               :stroke,
+               :restore
+             ] = Decoder.decode(svg_elements(tree))
+
+      assert {fill, stroke} == {trunc(0.4 * 0.5 * 255), trunc(0.6 * 0.5 * 255)}
+    end
+  end
+
+  describe "a translucent element on the binary canvas of SVG elements is the SVG's (#742)" do
+    # Both node and resvg (test_helper, #652).
+    @describetag :js_resvg
+
+    # A band filled and a line stroked, each with its own paint opacity and the element's,
+    # under a translucent group: every alpha meets in each draw, at 0.6 · 0.5 · 0.5. The
+    # band has no stroke and the line no fill, so SVG's compositing of each element as a
+    # whole is the canvas's draw by draw.
+    defp translucent do
+      alias Visualize.SVG.Element, as: E
+
+      %{
+        E.svg(%{width: 240, height: 120})
+        | children: [
+            %{
+              E.g(%{opacity: 0.5})
+              | children: [
+                  E.rect(%{
+                    x: 20,
+                    y: 20,
+                    width: 200,
+                    height: 30,
+                    fill: "#1f77b4",
+                    "fill-opacity": 0.6,
+                    opacity: 0.5
+                  }),
+                  E.line(%{
+                    x1: 20,
+                    y1: 90,
+                    x2: 220,
+                    y2: 90,
+                    stroke: "#d62728",
+                    "stroke-width": 10,
+                    "stroke-opacity": 0.6,
+                    opacity: 0.5
+                  })
+                ]
+            }
+          ]
+      }
+    end
+
+    # Each draw of the binary hook as `{name, [r, g, b], alpha}`: its paint's color and the
+    # alpha it composites at, the context's global alpha times the style's own.
+    defp drawn(tree) do
+      for d <-
+            draws("CanvasBinaryChart", %{
+              binary: CanvasBinary.to_base64(CanvasBinary.encode_element!(tree))
+            }) do
+        style = if d["name"] == "fill", do: d["fillStyle"], else: d["strokeStyle"]
+
+        [r, g, b, a] =
+          Regex.run(~r/rgba\((\d+),(\d+),(\d+),([\d.]+)\)/, style, capture: :all_but_first)
+
+        {alpha, ""} = Float.parse(a)
+        {d["name"], Enum.map([r, g, b], &String.to_integer/1), d["globalAlpha"] * alpha}
+      end
+    end
+
+    test "the band's fill and the line's stroke composite over the page as resvg's" do
+      {:ok, png, _warnings} =
+        Visualize.Render.to_png(to_string(translucent()), scale: 1, background: "#ffffff")
+
+      image = Visualize.PNGPixels.decode(png)
+
+      assert [{"fill", [31, 119, 180], fill}, {"stroke", [214, 39, 40], stroke}] =
+               drawn(translucent())
+
+      assert_in_delta fill, 0.15, 0.01
+      assert_in_delta stroke, 0.15, 0.01
+
+      for {{color, alpha}, y} <-
+            Enum.zip([{[31, 119, 180], fill}, {[214, 39, 40], stroke}], [35, 90]),
+          px <- 30..210//20 do
+        expected = for c <- color, do: 255 + (c - 255) * alpha
+        {r, g, b, _} = Visualize.PNGPixels.pixel(image, px, y)
+
+        for {got, want} <- Enum.zip([r, g, b], expected) do
+          assert abs(got - want) <= 3,
+                 "at #{px},#{y}: #{inspect({r, g, b})} vs #{inspect(expected)}"
+        end
       end
     end
   end

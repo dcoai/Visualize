@@ -335,7 +335,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
       assert fill_of(%{fill: "not a color"}) == {0, 0, 0, 255}
     end
 
-    test "the SVG element encoder resolves names and honors the opacity attribute" do
+    test "the SVG element encoder resolves names and multiplies the opacity attribute in" do
       element =
         SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: "steelblue", opacity: 0.5})
 
@@ -352,7 +352,8 @@ defmodule Visualize.Backend.CanvasBinaryTest do
           opacity: 0.5
         })
 
-      assert [{:style, %{fill: {1, 2, 3, 63}}} | _] =
+      # The color's own alpha times the element's opacity, as SVG composites it (#742).
+      assert [{:style, %{fill: {1, 2, 3, 31}}} | _] =
                Decoder.decode(CanvasBinary.encode_element!(own_alpha))
 
       atom = SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: :red})
