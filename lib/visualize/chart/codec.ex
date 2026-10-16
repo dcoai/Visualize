@@ -148,6 +148,8 @@ defmodule Visualize.Chart.Codec do
   defp value(type, {:series, i}) when type in [:color, :size, :font], do: Tags.tag("$series", i)
   defp value(:extent, :auto), do: "auto"
   defp value(:extent, v) when is_list(v), do: Enum.map(v, &category/1)
+  defp value(:range, :auto), do: "auto"
+  defp value(:range, v) when is_list(v), do: Enum.map(v, &range_entry/1)
   defp value(:text, v) when is_binary(v), do: v
   defp value(:text, v) when is_list(v), do: Enum.map(v, &value(:term, &1))
   defp value(:anchor, v) when is_atom(v), do: Atom.to_string(v)
@@ -162,6 +164,15 @@ defmodule Visualize.Chart.Codec do
     do: Tags.tag("$keys", Enum.map(keys, &value(:name, &1)))
 
   defp value(_type, v), do: term(v)
+
+  # A range's entry (spec/14 §11.2, D-185): a position as its term, a color as a color — an
+  # atom a design built in memory still holds bare is the color it can only be there.
+  defp range_entry(v) when is_number(v) or is_struct(v), do: term(v)
+
+  defp range_entry(v) when is_atom(v) and v not in [nil, true, false, :none],
+    do: value(:color, {:color, v})
+
+  defp range_entry(v), do: value(:color, v)
 
   defp category(:auto), do: "auto"
   defp category(v), do: term(v)
@@ -373,6 +384,8 @@ defmodule Visualize.Chart.Codec do
   defp read(type, v) when type in [:color, :font, :size] and is_binary(v), do: slot_or_string(v)
   defp read(:extent, "auto"), do: :auto
   defp read(:extent, v) when is_list(v), do: Enum.map(v, &read_category/1)
+  defp read(:range, "auto"), do: :auto
+  defp read(:range, v) when is_list(v), do: Enum.map(v, &read_range_entry/1)
   defp read(:text, v) when is_binary(v), do: v
   defp read(:text, v) when is_list(v), do: Enum.map(v, &read_term/1)
   defp read(:anchor, v) when is_binary(v), do: String.to_atom(v)
@@ -405,6 +418,19 @@ defmodule Visualize.Chart.Codec do
 
   # A ramp's name is one of the theme's four, so no atom is created from a document.
   defp ramp_name(name), do: Enum.find(Theme.ramp_names(), &(Atom.to_string(&1) == name))
+
+  # A range's entry (spec/14 §11.2, D-185): a number or a string as it is, a position's tag
+  # — and an atom an earlier document wrote, for `canonical/1` to type — as a term, and
+  # anything else as a color.
+  defp read_range_entry(v) when is_number(v) or is_binary(v), do: v
+
+  defp read_range_entry(%{} = v)
+       when map_size(v) == 1 and
+              (is_map_key(v, "$var") or is_map_key(v, "$fact") or
+                 is_map_key(v, "$time") or is_map_key(v, "$atom")),
+       do: read_term(v)
+
+  defp read_range_entry(v), do: read(:color, v)
 
   defp read_category("auto"), do: :auto
   defp read_category(v), do: read_term(v)
@@ -488,6 +514,7 @@ defmodule Visualize.Chart.Codec do
   defp json_shape?({:list, _}, v), do: is_list(v)
   defp json_shape?(:text, v), do: is_list(v) or is_binary(v)
   defp json_shape?(:extent, v), do: v == "auto" or is_list(v)
+  defp json_shape?(:range, v), do: v == "auto" or is_list(v)
   defp json_shape?(:integer, v), do: is_integer(v)
   defp json_shape?(:number, v), do: is_number(v)
   defp json_shape?(:boolean, v), do: is_boolean(v)

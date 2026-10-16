@@ -481,6 +481,20 @@ release it merely follows.
 
 ### Fixed
 
+- **A scale's range takes typed colors and transforms** (#710, D-185). `range:
+  [color(:good), color(:bad)]`, `[color(:blue) |> intensity(0.5), …]` or
+  `Enum.map(steps, &shade(color(:red), &1))` was refused as `{:type, :extent}` while the
+  bare `[:good, :bad]` passed: a list range was typed like a domain, as categories. A list
+  range is now its own schema type, `:range` — numbers, or colors of every form a style
+  takes — so its colors validate, resolve through the theme on every backend, and its bare
+  atoms are stored as typed colors (`[:good, :bad]` reads, draws and round-trips as
+  `[color(:good), color(:bad)]`; JSON writes `{"$color": "good"}` and still reads the old
+  `{"$atom": "good"}`). A name in a range that the theme's color table lacks is now
+  reported, `{:undeclared, :color, name}` at its index, as it is in a style; `:auto` in a
+  range list is `{:type, :range}`. A `:sequential` or `:diverging` scale given a list of
+  names, which crashed at render, interpolates their colors; stops with an alpha
+  interpolate it. A theme's ramp anchor may be a transform (`color(:blue) |> darken(0.4)`).
+
 - **The builder no longer slows down with the size of the color table** (#704, D-184).
   Every builder event and render rebuilt and sorted the theme's ~190 color names once for
   each name the color chooser listed, and rebuilt a node kind's key specs on every schema

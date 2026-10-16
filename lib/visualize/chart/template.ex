@@ -79,7 +79,8 @@ defmodule Visualize.Chart.Template do
 
   defp value({:list, t}, v, path, sub) when is_list(v), do: each(t, v, path, sub)
   # An extent's member may be a variable or a fact: a threshold at a feed's target (§4.3).
-  defp value(:extent, v, path, sub) when is_list(v), do: each(:term, v, path, sub)
+  defp value(type, v, path, sub) when type in [:extent, :range] and is_list(v),
+    do: each(:term, v, path, sub)
 
   defp value({:map, t}, v, path, sub) when is_map(v) and not is_struct(v) do
     Enum.reduce(v, {%{}, []}, fn {k, e}, {acc, errors} ->

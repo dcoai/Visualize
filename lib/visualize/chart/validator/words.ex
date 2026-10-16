@@ -320,6 +320,7 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:key_order), do: "{:keys, [name, …]}, the series keys bottom first"
   defp type_words(:channel), do: "a field name, a number or {:field, name}"
   defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"
+  defp type_words(:range), do: "a range: :auto, or a list of numbers or of colors"
   defp type_words(:text), do: ~S|a string, with #{var(:name)} for a variable|
 
   defp type_words(:anchor) do

@@ -235,6 +235,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?({:list, _}, v), do: is_list(v)
   defp shape?(:text, v), do: is_list(v)
   defp shape?(:extent, v), do: v == :auto or is_list(v)
+  defp shape?(:range, v), do: v == :auto or is_list(v)
   defp shape?(:integer, v), do: is_integer(v)
   defp shape?(:number, v), do: is_number(v)
   defp shape?(:boolean, v), do: is_boolean(v)
