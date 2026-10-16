@@ -40,10 +40,16 @@ js_resvg = if js == [] and resvg == [], do: [], else: [:js_resvg]
 # A message a test waits for must arrive, so an `assert_receive` with no timeout of its own
 # waits as long as the test may run: the test's timeout ends a wait whose message never
 # comes, and its report names the waiting line (spec/12 §6, #736).
+#
+# As many cases at once as there are schedulers, half ExUnit's default of twice as many: a
+# CI runner runs several jobs at once, so 32 cases on its 16 cores each had a sliver of one
+# and a long test crossed its timeout; measured, the suite takes as long either way
+# (spec/12 §6, #735).
 ExUnit.start(
   exclude: [:benchmark | js ++ resvg ++ js_resvg],
   timeout: 60_000,
-  assert_receive_timeout: 60_000
+  assert_receive_timeout: 60_000,
+  max_cases: System.schedulers_online()
 )
 
 # A zoned time scale reads the host's time zone database (spec/03 §7.4, D-115); the library

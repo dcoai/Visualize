@@ -96,16 +96,22 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert dead.assigns.run_frame == nil
   end
 
-  test "every chart of the gallery opens on SVG, or on its first backend where SVG isn't offered (#501)" do
+  # One test a chart (#735).
+  describe "every chart of the gallery opens on SVG, or on its first backend where SVG isn't offered (#501)" do
     for {module, slug} <- Examples.Gallery.charts() do
-      {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
-      [first | _] = backends = Examples.Frames.backends(module)
-      expected = if :svg in backends, do: :svg, else: first
-      assert s.assigns.run_backend == expected, slug
-      assert html(s) =~ ~r/phx-value-backend="#{expected}"\s+class="backend-btn active"/, slug
+      test slug, do: assert_opens(unquote(module), unquote(slug))
     end
+  end
 
-    # A streaming design offers Incremental and still opens on SVG; the buttons switch.
+  defp assert_opens(module, slug) do
+    {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
+    [first | _] = backends = Examples.Frames.backends(module)
+    expected = if :svg in backends, do: :svg, else: first
+    assert s.assigns.run_backend == expected, slug
+    assert html(s) =~ ~r/phx-value-backend="#{expected}"\s+class="backend-btn active"/, slug
+  end
+
+  test "a streaming design offers Incremental and still opens on SVG; the buttons switch" do
     {:ok, streaming} =
       ChartLive.mount(%{"chart" => "incremental_line"}, %{}, %Phoenix.LiveView.Socket{})
 

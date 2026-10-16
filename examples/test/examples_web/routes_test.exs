@@ -41,12 +41,17 @@ defmodule ExamplesWeb.RoutesTest do
     assert redirected_to(build_conn() |> get("/incremental")) == "/chart/incremental_line"
   end
 
-  test "a chart page renders for every chart the gallery lists" do
+  # One test a chart (#735).
+  describe "a chart page renders for every chart the gallery lists" do
     for {slug, _module} <- ExamplesWeb.ChartLive.charts() do
-      assert build_conn() |> get("/chart/#{slug}") |> html_response(200) =~
-               ~s(class="site-header"),
-             slug
+      test slug, do: assert_renders(unquote(slug))
     end
+  end
+
+  defp assert_renders(slug) do
+    assert build_conn() |> get("/chart/#{slug}") |> html_response(200) =~
+             ~s(class="site-header"),
+           slug
   end
 
   test "the gallery says every chart is a design, and every chart it lists is one (#130)" do

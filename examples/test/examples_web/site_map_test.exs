@@ -22,13 +22,18 @@ defmodule ExamplesWeb.SiteMapTest do
   defp expand(path),
     do: flunk("#{path} is parameterized and the site map cannot list its pages; add an expansion")
 
-  defp pages do
+  defp routes do
     Phoenix.Router.routes(ExamplesWeb.Router)
     |> Enum.filter(&(&1.verb == :get and not String.starts_with?(&1.path, "/hooks")))
-    |> Enum.flat_map(fn %{path: path} ->
-      if String.contains?(path, ":"), do: expand(path), else: [path]
-    end)
+    |> Enum.map(& &1.path)
   end
+
+  defp pages,
+    do: Enum.flat_map(routes(), &if(String.contains?(&1, ":"), do: expand(&1), else: [&1]))
+
+  # The pages of the routes with no parameter; a parameterized route's pages are each a
+  # test of their own below (#735).
+  defp fixed_pages, do: Enum.reject(routes(), &String.contains?(&1, ":"))
 
   defp tab_hrefs, do: for({_tab, href, _name, _icon} <- ExamplesWeb.SiteHeader.tabs(), do: href)
 
@@ -41,24 +46,41 @@ defmodule ExamplesWeb.SiteMapTest do
   end
 
   test "every page is a header tab or is linked from its tab's page" do
-    tabs = tab_hrefs()
-    tab_html = Map.new(tabs, &{&1, build_conn() |> get(&1) |> html_response(200)})
-    pages = pages()
+    tab_html = Map.new(tab_hrefs(), &{&1, build_conn() |> get(&1) |> html_response(200)})
+    for path <- fixed_pages(), do: assert_reached(path, &tab_html[&1])
+  end
 
-    for path <- pages do
-      conn = build_conn() |> get(path)
+  test "every parameterized route has its pages listed" do
+    for route <- routes(), String.contains?(route, ":"), do: assert(expand(route) != [], route)
+  end
 
-      case conn.status do
-        302 ->
-          target = redirected_to(conn)
-          assert target in pages, "#{path} redirects to #{target}, which is no page of the router"
-
-        200 ->
-          tab = current_tab(path, html_response(conn, 200))
-
-          assert path == tab or tab_html[tab] =~ ~s(href="#{path}"),
-                 "#{path} is under the #{tab} tab, and #{tab} does not link to it"
+  # The chart route's pages, as `expand/1` lists them, one test a page (#735).
+  describe "every chart page is linked from its tab's page" do
+    for {slug, _module} <- ExamplesWeb.ChartLive.charts() do
+      test "/chart/#{slug}" do
+        assert_reached(
+          "/chart/#{unquote(slug)}",
+          &(build_conn() |> get(&1) |> html_response(200))
+        )
       end
+    end
+  end
+
+  # The page at `path` is a tab, or the page of the tab it marks current links to it, or
+  # it redirects to a page of the router. `tab_html` reads a tab's page.
+  defp assert_reached(path, tab_html) do
+    conn = build_conn() |> get(path)
+
+    case conn.status do
+      302 ->
+        target = redirected_to(conn)
+        assert target in pages(), "#{path} redirects to #{target}, which is no page of the router"
+
+      200 ->
+        tab = current_tab(path, html_response(conn, 200))
+
+        assert path == tab or tab_html.(tab) =~ ~s(href="#{path}"),
+               "#{path} is under the #{tab} tab, and #{tab} does not link to it"
     end
   end
 
