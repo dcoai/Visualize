@@ -510,6 +510,15 @@ release it merely follows.
   the paint it resolved to, where it wrote `{:paint, "p…"}`; a declared paint is
   `{:paint, name}` as before.
 
+- **The builder holds a design-level `defaults` and a list-valued style** (#713, D-187).
+  Importing a design into the builder (`Visualize.Chart.Composite.decompose/1`) dropped its
+  `defaults` and turned a style written as a list (`styles: %{warn: [:warning,
+  :outline]}`) into a stray `style` key, so the design did not flatten back to itself, and
+  the builder's style list crashed on a list-valued style. `decompose/1` now has a site for
+  every design key — checked against the schema when the library compiles — a list-valued
+  style is placed under its name like any style, and the style list shows it as its
+  entries. The examples app offers the Composition chart as a builder template.
+
 - **The builder no longer slows down with the size of the color table** (#704, D-184).
   Every builder event and render rebuilt and sorted the theme's ~190 color names once for
   each name the color chooser listed, and rebuilt a node kind's key specs on every schema

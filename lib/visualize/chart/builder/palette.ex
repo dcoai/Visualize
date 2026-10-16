@@ -358,7 +358,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp literal("#" <> _rest = color), do: color
     defp literal(_other), do: nil
 
+    # A style that is a list stacks its entries (spec/14 §3.6, #658), and says them in order.
+    defp summary(entries) when is_list(entries),
+      do: "[" <> Enum.map_join(entries, ", ", &entry_word/1) <> "]"
+
     defp summary(style) when map_size(style) == 0, do: "empty"
     defp summary(style), do: style |> Map.keys() |> Enum.sort() |> Enum.join(", ")
+
+    defp entry_word(name) when is_atom(name), do: Atom.to_string(name)
+    defp entry_word({:field, field}), do: "field(#{field})"
+    defp entry_word({:generate, name, _args}), do: "generate(#{name})"
+    defp entry_word(_inline), do: "{…}"
   end
 end

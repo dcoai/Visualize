@@ -91,12 +91,10 @@ defmodule ExamplesWeb.BuilderLiveTest do
     test "every gallery design and every preset without one is a Charts:: entry" do
       names = Enum.map(Templates.all(), & &1.name)
 
-      for module <- Templates.gallery_modules() -- Templates.not_templates() do
+      # Composition among them: the builder holds a design-level `defaults` and a list-
+      # valued style (#713).
+      for module <- Templates.gallery_modules() do
         assert "Charts::#{module.title()}" in names
-      end
-
-      for module <- Templates.not_templates() do
-        refute "Charts::#{module.title()}" in names
       end
 
       assert "Charts::Tree Diagram" in names and "Charts::Treemap" in names
