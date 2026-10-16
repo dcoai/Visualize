@@ -89,6 +89,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       StyleStack,
       Themes,
       ThemeSheet,
+      Typed,
       Variables
     }
 
@@ -263,10 +264,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> assign_new(:library_folded, fn -> Map.get(assigns, :library_folded, MapSet.new()) end)
         |> seed(assigns)
         |> then(&Enum.reduce(defaults(), &1, fn pair, acc -> default(pair, acc) end))
+        |> typed()
 
       # The parameters form edits the builder's own copy of the bindings: the host gives the
       # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
       {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
+    end
+
+    # The host's data typed when it arrives, not on every pass (spec/14 §19.10, D-189): kept
+    # while the host gives the same `sources` and `catalog`.
+    defp typed(%{assigns: %{sources: sources, catalog: catalog} = assigns} = socket) do
+      case Map.get(assigns, :typed) do
+        %{sources: ^sources, catalog: ^catalog} -> socket
+        _other -> assign(socket, :typed, Typed.typed(sources, catalog))
+      end
     end
 
     # `layers` is seeded and not controlled, because the stack is what the builder writes

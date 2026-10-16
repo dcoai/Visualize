@@ -41,6 +41,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Store,
       StyleStack,
       Themes,
+      Typed,
       Variables
     }
 
@@ -89,6 +90,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       preview_theme = preview_theme(assigns, design)
+      # The pool typed once for the pass, the host's part as `update/2` typed it (D-189).
+      pool_types = Typed.pool(assigns)
+      assigns = Map.put(assigns, :pool_types, pool_types)
       # The theme a palette name resolves against: the preview's (spec/14 §18.14, #685).
       palette_theme = preview_theme || design |> Map.get(:theme, :default) |> theme()
       errors = faults(kind, design, Map.put(assigns, :theme, preview_theme), cycle)
@@ -123,7 +127,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         bound_pool: pool(assigns),
         columns: columns(pool(assigns)),
         source_name: source_name(assigns, fetch),
-        channel_columns: Scales.columns(design, pool(assigns)),
+        channel_columns: Scales.columns(design, pool(assigns), pool_types),
         data_page?: root(entry.label) == "sources" and kind == :composite,
         axes_rows:
           if(kind == :composite, do: axes_rows(design, entry, at(layer, entry.path)), else: []),
@@ -327,7 +331,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           end
         end
 
-      layer ++ Scales.unscaled(design, Scales.pool_types(pool))
+      layer ++ Scales.unscaled(design, assigns.pool_types)
     end
 
     # A board chart has no design: the board mode validates the board itself, alone on every
@@ -602,7 +606,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {name, Stack.label(labels, Stack.get(uses, id))}
         end
 
-      Sources.rows(design, assigns.signals, pool, Scales.pool_types(pool), owners)
+      Sources.rows(design, assigns.signals, pool, assigns.pool_types, owners)
     end
 
     # The inspect tab's page (spec/14 §18.15): the nodes at the top of the open root — the

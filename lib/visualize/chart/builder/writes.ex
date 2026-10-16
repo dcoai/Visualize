@@ -16,7 +16,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @placement [:box, :cell, :span, :z]
 
     alias Visualize.{Chart, Signals}
-    alias Visualize.Chart.Builder.{Scales, Stack}
+    alias Visualize.Chart.Builder.{Scales, Stack, Typed}
     alias Visualize.Chart.{Fragment, Use}
 
     # A composer opened on a kind takes only that kind; the workspace, a composite and a
@@ -110,7 +110,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     def derived_scales(socket) do
       design = composed(socket)
-      types = Scales.pool_types(pool(socket.assigns))
+      types = Typed.pool(socket.assigns)
 
       # Each frame's from the marks drawn in it, into that frame (#615).
       for frame <- frame_names(design),
