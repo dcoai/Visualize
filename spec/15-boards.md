@@ -876,6 +876,7 @@ A binding names a virtual source as it names a feed: a cell's slot bound to a na
 
 | Function | Contract |
 |---|---|
+| `Visualize.VirtualSource.Engine.new/1` | `new(sources, [])`. |
 | `Visualize.VirtualSource.Engine.new/2` | `new(sources, opts)`: the engine over virtual sources by path, defined (§14.1) — `{:ok, engine}` or `{:error, [{path, at, reason}]}`; options `feeds:` (the feeds' names), `functions:` (the registry), `debounce:`, `timeout:`, `max_heap:`. |
 | `Visualize.VirtualSource.Engine.push/4` | `push(engine, deliveries, schemas, now)`: the sources that read a changed feed marked, and the next pulse due (§14.2). |
 | `Visualize.VirtualSource.Engine.run/2` | `run(engine, now)`: the due pulse run, in rank order, each marked source at most once; the engine unchanged when none is due (§14.2). |
