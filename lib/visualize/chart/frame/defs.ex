@@ -23,16 +23,15 @@ defmodule Visualize.Chart.Frame.Defs do
   # or `[]` with neither. A declared paint is always declared; one written in place (a
   # string name) when the tree — resolved by `resolve/3` — draws it, as its style resolved
   # it (D-186): the theme's palette is among the styles searched, so the frame's table
-  # alone would declare every role's hatch. With `all: true`, for a compiled chart whose
-  # later ticks may draw what this one did not, every one of the table too (spec/14 §2.7,
-  # #673).
-  @spec defs(map(), atom(), Element.t(), keyword()) :: [Element.t()]
-  def defs(%{defs: defs, theme: theme}, mode, tree, opts \\ []) do
+  # alone would declare every role's hatch. A compiled chart's later ticks declare what
+  # they first draw themselves (`undeclared/2`, D-190).
+  @spec defs(map(), atom(), Element.t()) :: [Element.t()]
+  def defs(%{defs: defs, theme: theme}, mode, tree) do
     prefix = prefix(defs)
 
     table =
       for {name, node} <- defs,
-          is_atom(name) or Keyword.get(opts, :all, false),
+          is_atom(name),
           into: %{},
           do: {name, paint(node, id(prefix, name), theme, mode)}
 
@@ -52,6 +51,32 @@ defmodule Visualize.Chart.Frame.Defs do
       |> Enum.map(fn {_name, paint} -> Paint.definition(paint) end)
 
     case gradients ++ filters(tree) do
+      [] -> []
+      children -> [Element.defs(children)]
+    end
+  end
+
+  @doc false
+  # What a compiled chart's tick draws that its compiled `defs` lack (spec/14 §2.7, #721,
+  # D-190): one `defs` element of every paint and every effect filter the tree uses whose
+  # id `declared` — the compiled chart's `defs` elements — does not hold, the paints in id
+  # order; `[]` when it uses none. The tree's paints are resolved already, so each
+  # definition is its element's own.
+  @spec undeclared(Element.t(), [Element.t()]) :: [Element.t()]
+  def undeclared(tree, declared) do
+    known =
+      MapSet.new(
+        for %Element{type: :defs, children: children} <- declared,
+            %Element{attrs: %{id: id}} <- children,
+            do: id
+      )
+
+    paints =
+      for {id, paint} <- Enum.sort(drawn(tree)),
+          id not in known,
+          do: Paint.definition(paint)
+
+    case paints ++ Enum.reject(filters(tree), &(&1.attrs.id in known)) do
       [] -> []
       children -> [Element.defs(children)]
     end

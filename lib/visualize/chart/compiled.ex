@@ -205,15 +205,12 @@ defmodule Visualize.Chart.Compiled do
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
-    # it declares and the filters any mark's effect needs, found over every mark rendered
-    # once in `:css` here, so a `url(#id)` on either SVG layer resolves on the page.
+    # it declares and the paints and filters every mark rendered once in `:css` here draws,
+    # so a `url(#id)` on either SVG layer resolves on the page; a paint a later tick first
+    # draws, that tick declares (`undeclared/2`, D-190).
     drawn = drawn(compiled, frame, sources, nil, true)
     static = layer(compiled, drawn, :static, false)
-
-    defs =
-      Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)),
-        all: true
-      )
+    defs = Defs.defs(frame, :css, Element.group(static ++ all_marks(compiled, frame, sources)))
 
     compiled = %{compiled | defs: defs}
 
@@ -372,7 +369,7 @@ defmodule Visualize.Chart.Compiled do
       dynamic: if(canvas == [], do: nil, else: canvas),
       dynamic_style: %{},
       canvas_format: format(compiled),
-      dynamic_svg: moving(layer(compiled, drawn, :dynamic_svg, false)),
+      dynamic_svg: moving(first_drawn(compiled, layer(compiled, drawn, :dynamic_svg, false))),
       backdrop: layer(compiled, drawn, :backdrop, false)
     }
   end
@@ -388,7 +385,7 @@ defmodule Visualize.Chart.Compiled do
     {frame, hi} = realize(compiled, sources, nil)
     children = moving(layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true))
 
-    Element.group(compiled.defs ++ children,
+    Element.group(compiled.defs ++ undeclared(compiled, children) ++ children,
       style: %{class: "frame"},
       attrs: group_attrs(frame),
       transform: placed(compiled)
@@ -415,7 +412,7 @@ defmodule Visualize.Chart.Compiled do
       moving(layer(compiled, drawn(compiled, frame, sources, hi, true, moved), :svg, true))
 
     group =
-      Element.group(compiled.defs ++ children,
+      Element.group(compiled.defs ++ undeclared(compiled, children) ++ children,
         style: %{class: "frame"},
         attrs: group_attrs(frame),
         transform: placed(compiled)
@@ -556,7 +553,7 @@ defmodule Visualize.Chart.Compiled do
     # `Window.scroll/6` calls in the full-redraw branch and nowhere else.
     scrolling? = compiled.viewport != nil and format == :binary_base64
     drawn = drawn(compiled, frame, sources, hi, not scrolling?, moved)
-    svg = fragment(compiled, layer(compiled, drawn, :dynamic_svg, false))
+    svg = fragment(compiled, first_drawn(compiled, layer(compiled, drawn, :dynamic_svg, false)))
     backdrop = fragment(compiled, layer(compiled, drawn, :dynamic_backdrop, false))
 
     # A scroll strip is built over the strip's rows and their neighbors (§12.5, D-108).
@@ -692,7 +689,7 @@ defmodule Visualize.Chart.Compiled do
 
       %{
         compiled
-        | static: root(compiled, compiled.defs ++ static),
+        | static: root(compiled, compiled.defs ++ undeclared(compiled, static) ++ static),
           backdrop: static_backdrop(compiled, drawn)
       }
     end
@@ -896,6 +893,14 @@ defmodule Visualize.Chart.Compiled do
       {"", payload, window}
     end
   end
+
+  # The paints and effect filters these elements draw that the compiled `defs` lack, as one
+  # `defs` (spec/14 §2.7, #721, D-190): a merged gradient a later row first selects; `[]`
+  # when they draw none, so a tick of declared paints is the bytes it was.
+  defp undeclared(%{defs: defs}, elements), do: Defs.undeclared(Element.group(elements), defs)
+
+  # A layer that carries no compiled `defs` with what it first draws before it.
+  defp first_drawn(compiled, elements), do: undeclared(compiled, elements) ++ elements
 
   defp fragment(_compiled, []), do: ""
   defp fragment(compiled, elements), do: root(compiled, elements)

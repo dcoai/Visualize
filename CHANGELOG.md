@@ -493,6 +493,16 @@ release it merely follows.
 
 ### Fixed
 
+- **A compiled chart declares a gradient a later row first selects** (#721, D-190). A
+  style stack with a field entry laid over another style's in-place gradient
+  (`style: [:a, {:field, :look}]`) reaches a merged gradient on whichever row first names
+  it; `Visualize.Chart.Compiled.step/3`, `svg/2`, `tick/3` and `render/2` drew that row
+  with a `url(#…)` declared nowhere, so it lost its fill on SVG (both canvases drew it).
+  Each output now carries, after the compiled `defs`, a `defs` of the paints it draws that
+  they lack; an output that draws none is byte for byte what it was. The static layer now
+  declares only what the first draw uses, so a design whose named style holds only part of
+  a paint — a hatch with no `color`, meant to be stacked — compiles instead of raising.
+
 - **An SVG element's dashed, capped or joined stroke draws on the binary canvas** (#693).
   `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
   dropped `stroke-dasharray`, `stroke-linecap` and `stroke-linejoin`, so a dashed line drew
