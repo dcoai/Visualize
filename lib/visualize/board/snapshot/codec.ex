@@ -78,7 +78,7 @@ defmodule Visualize.Board.Snapshot.Codec do
       "capped" => Map.get(slot, :capped),
       "reduced_by" => Codec.encode_term(Map.get(slot, :reduced_by)),
       "version" => slot.version,
-      "schema" => schema(slot.schema),
+      "schema" => schema_json(slot.schema),
       "status" => status(slot.status)
     }
   end
@@ -102,9 +102,12 @@ defmodule Visualize.Board.Snapshot.Codec do
     }
   end
 
-  defp schema(nil), do: nil
+  @doc false
+  # A schema's fields as `[name, description]` pairs; a virtual source writes its schema
+  # so too (spec/08 §10.5.10).
+  def schema_json(nil), do: nil
 
-  defp schema(fields) do
+  def schema_json(fields) do
     fields
     |> Enum.sort_by(fn {name, _} -> to_string(name) end)
     |> Enum.map(fn {name, description} -> [Codec.encode_term(name), description(description)] end)
@@ -169,7 +172,7 @@ defmodule Visualize.Board.Snapshot.Codec do
     Map.new(slot, fn {key, value} ->
       case known(key, @slot_keys) do
         :rows -> {:rows, read_rows(value)}
-        :schema -> {:schema, read_schema(value)}
+        :schema -> {:schema, read_schema_json(value)}
         :status -> {:status, read_status(value)}
         key when key in [:window, :resolution, :reduced_by] -> {key, Codec.decode_term(value)}
         other -> {other, value}
@@ -197,7 +200,8 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp read_rows(other), do: other
 
-  defp read_schema(pairs) when is_list(pairs) do
+  @doc false
+  def read_schema_json(pairs) when is_list(pairs) do
     if Enum.all?(pairs, &match?([_name, description] when is_map(description), &1)) do
       Map.new(pairs, fn [name, description] ->
         {Codec.decode_term(name), read_description(description)}
@@ -207,7 +211,7 @@ defmodule Visualize.Board.Snapshot.Codec do
     end
   end
 
-  defp read_schema(other), do: other
+  def read_schema_json(other), do: other
 
   defp read_description(description) do
     Map.new(description, fn {key, value} ->

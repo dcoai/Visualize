@@ -47,6 +47,7 @@ defmodule Visualize.Board do
   alias Visualize.Chart.Validator, as: ChartValidator
   alias Visualize.Chart.Validator.Words
   alias Visualize.Data.Schema.Cache
+  alias Visualize.VirtualSource
 
   @layout %{breakpoint: 768, row_height: 80, gap: 8}
 
@@ -59,7 +60,8 @@ defmodule Visualize.Board do
             sync: nil,
             layout: %{},
             stale_after: nil,
-            links: %{}
+            links: %{},
+            virtual_sources: %{}
 
   @typedoc "A cell (spec/15 §1.3): a placement and a component reference."
   @type cell :: %{
@@ -71,7 +73,8 @@ defmodule Visualize.Board do
           optional(:title) => String.t() | nil,
           optional(:vars) => %{atom() => term()},
           optional(:sync) => boolean(),
-          optional(:drill) => drill() | nil
+          optional(:drill) => drill() | nil,
+          optional(:virtual_sources) => %{atom() => map()}
         }
 
   @typedoc """
@@ -96,7 +99,8 @@ defmodule Visualize.Board do
           sync: String.t() | nil,
           layout: map(),
           stale_after: number() | nil,
-          links: %{atom() => atom()}
+          links: %{atom() => atom()},
+          virtual_sources: %{atom() => map()}
         }
 
   @typedoc "A placement on the grid."
@@ -153,11 +157,60 @@ defmodule Visualize.Board do
     map = Map.put_new(map, :version, Migration.current())
 
     with :ok <- Validator.validate(map) do
-      {:ok, struct(__MODULE__, Map.take(map, Validator.board_keys()))}
+      {:ok, struct(__MODULE__, map |> Map.take(Validator.board_keys()) |> canonical())}
     end
   end
 
   defp read(other), do: Validator.validate(other)
+
+  # Virtual sources are kept in their canonical map form (spec/08 §10.5.10): the
+  # proposal's `{:window, opts}` read as its map, every key present, so the map and JSON
+  # forms round-trip exactly.
+  defp canonical(map) do
+    map
+    |> Map.update(:virtual_sources, %{}, &canonical_sources/1)
+    |> Map.update(:cells, %{}, fn cells ->
+      Map.new(cells, fn
+        {name, %{virtual_sources: sources} = cell} ->
+          {name, %{cell | virtual_sources: canonical_sources(sources)}}
+
+        cell ->
+          cell
+      end)
+    end)
+  end
+
+  defp canonical_sources(sources) do
+    Map.new(sources, fn {id, source} ->
+      {id,
+       source
+       |> Map.put(:id, id)
+       |> VirtualSource.new!()
+       |> VirtualSource.to_map()
+       |> Map.delete(:id)}
+    end)
+  end
+
+  @doc """
+  Every virtual source of the board and its cells by path (spec/15 §1.2, spec/08
+  §10.5.9): `[id]` for the board's own, `[cell, id]` for a cell's, each a
+  `%Visualize.VirtualSource{}`.
+  """
+  @spec virtual_sources(t()) :: %{[atom()] => VirtualSource.t()}
+  def virtual_sources(%__MODULE__{} = board) do
+    own =
+      for {id, source} <- board.virtual_sources, into: %{}, do: {[id], read_source(id, source)}
+
+    cells =
+      for {cell, %{virtual_sources: sources}} <- board.cells,
+          {id, source} <- sources,
+          into: %{},
+          do: {[cell, id], read_source(id, source)}
+
+    Map.merge(own, cells)
+  end
+
+  defp read_source(id, source), do: source |> Map.put(:id, id) |> VirtualSource.new!()
 
   @doc "As `from_map/2`, raising `ArgumentError` with every fault formatted."
   @spec from_map!(term(), keyword()) :: t()
