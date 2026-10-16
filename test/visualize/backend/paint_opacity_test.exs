@@ -4,8 +4,9 @@ defmodule Visualize.Backend.PaintOpacityTest do
   canvas (spec/09 §3.3.3, §4.3.17, #675, D-180). The parity test is driven by the grammar's
   one table of paint keys (`Visualize.Chart.Style.Parts.paint_keys/0`): every key SVG
   writes must change what every canvas encoder draws, so a key added to the table fails
-  here until each canvas draws it. The encoders are one list, `@encoders`, and every module
-  under `Visualize.Backend.Canvas*` is either in it or named as no encoder, so a new encoder
+  here until each canvas draws it. The encoders are one list, `Visualize.CanvasEncoders`,
+  which the sibling guard reads too (#744), and every module under
+  `Visualize.Backend.Canvas*` is either in it or named as no encoder, so a new encoder
   cannot escape the guard (#693). An element's `opacity` is put together with each paint's,
   so an encoder that lets one replace the other fails (#742). The hooks then replay a translucent paint on the
   recording stub, and the binary hook's composite is held to resvg's raster; so is an SVG
@@ -15,8 +16,9 @@ defmodule Visualize.Backend.PaintOpacityTest do
 
   import Visualize.JsHooks, only: [run: 1]
 
-  alias Visualize.Backend.{Canvas, CanvasBinary, CanvasIncremental}
+  alias Visualize.Backend.{Canvas, CanvasBinary}
   alias Visualize.Backend.CanvasBinary.Decoder
+  alias Visualize.CanvasEncoders
   alias Visualize.Chart.Style.Parts
   alias Visualize.IR.{Element, Paint}
 
@@ -38,36 +40,15 @@ defmodule Visualize.Backend.PaintOpacityTest do
   # it as geometry and a clip, so it never reaches an element's style.
   @not_element_keys [:stroke_style]
 
-  # Every canvas encoder, by its module, as the bytes it writes for an IR element: the
-  # SVG-element encoder is given the element as `Visualize.SVG.Element.from_ir/1` makes it.
-  @encoders %{
-    Canvas => &__MODULE__.commands/1,
-    CanvasBinary => &CanvasBinary.encode_element!/1,
-    CanvasBinary.SVG => &__MODULE__.svg_elements/1,
-    CanvasIncremental => &CanvasIncremental.encode_full_redraw/1
-  }
-
-  # The modules under `Visualize.Backend.Canvas*` that encode no element: a geometry
-  # helper, the commands' serializer (the canvas commands' `:json` is it), the decoder,
-  # the opcode table and the path record writer.
-  @not_encoders [
-    Canvas.Arc,
-    Canvas.Output,
-    CanvasBinary.Decoder,
-    CanvasBinary.Opcodes,
-    CanvasBinary.PathEncoder
-  ]
+  # Every canvas encoder, by its module, as the bytes it writes for an IR element (#693).
+  @encoders CanvasEncoders.encoders()
+  @not_encoders CanvasEncoders.not_encoders()
 
   defp rect(style), do: Element.rect(10, 10, 40, 20, style)
 
   defp svg(style), do: Visualize.Render.to_string(rect(style))
 
-  @doc false
-  def commands(element), do: IO.iodata_to_binary(Canvas.render_element(element, format: :json))
-
-  @doc false
-  def svg_elements(element),
-    do: CanvasBinary.encode_element!(Visualize.SVG.Element.from_ir(element))
+  defp svg_elements(element), do: CanvasEncoders.svg_elements(element)
 
   defp binary(style), do: CanvasBinary.encode_element!(rect(style))
 
@@ -307,7 +288,9 @@ defmodule Visualize.Backend.PaintOpacityTest do
 
     test "a tree that sets none of them is the stream it was; a value that does not read sets nothing" do
       plain = stroke_path([{0, 0}, {10, 0}], %{})
-      assert [{:style, _}, {:path_cubic32, _}, :stroke] = Decoder.decode(svg_stream(plain))
+
+      assert [:save, {:style, _}, {:path_cubic32, _}, :stroke, :restore] =
+               Decoder.decode(svg_stream(plain))
 
       unread = stroke_path([{0, 0}, {10, 0}], %{stroke_dasharray: "four", stroke_linecap: :wide})
       assert svg_stream(unread) == svg_stream(plain)
@@ -321,9 +304,11 @@ defmodule Visualize.Backend.PaintOpacityTest do
                {:version, 3},
                :save,
                {:paint_state, %{dash: [4.0, 2.0]}},
+               :save,
                {:style, _},
                {:path_cubic32, _},
                :stroke,
+               :restore,
                :restore
              ] = Decoder.decode(CanvasBinary.encode_element!(group))
     end
@@ -340,8 +325,10 @@ defmodule Visualize.Backend.PaintOpacityTest do
       records = Decoder.decode(svg_stream(root))
       assert [{:version, 3}, :save | _] = records
 
-      assert [:stroke, :restore, {:style, _}, {:path_cubic32, _}, :stroke] =
-               Enum.take(records, -5)
+      # The second is scoped too, as every styled leaf is (#744); its stroke is outside the
+      # first's pair.
+      assert [:stroke, :restore, :save, {:style, _}, {:path_cubic32, _}, :stroke, :restore] =
+               Enum.take(records, -7)
     end
   end
 
@@ -504,10 +491,12 @@ defmodule Visualize.Backend.PaintOpacityTest do
       assert [
                :save,
                {:style, %{fill: nil, stroke: nil, opacity: 0.5}},
+               :save,
                {:style, %{fill: {51, 102, 153, fill}, stroke: {204, 0, 0, stroke}, opacity: nil}},
                {:rects, _},
                :fill,
                :stroke,
+               :restore,
                :restore
              ] = Decoder.decode(svg_elements(tree))
 

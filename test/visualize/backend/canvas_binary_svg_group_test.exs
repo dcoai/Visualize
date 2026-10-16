@@ -24,8 +24,18 @@ defmodule Visualize.Backend.CanvasBinarySVGGroupTest do
       assert CanvasBinary.encode_element!(group(%{}, [child])) ==
                CanvasBinary.encode_element!(child)
 
-      # A transform alone is drawn as it was: the group's save, its transform, its children.
-      assert [:save, {:transform, _, _}, {:style, _}, {:rects, _}, :fill, :restore] =
+      # A transform alone is drawn as it was: the group's save, its transform, its children,
+      # each styled one in its own save and restore (#744).
+      assert [
+               :save,
+               {:transform, _, _},
+               :save,
+               {:style, _},
+               {:rects, _},
+               :fill,
+               :restore,
+               :restore
+             ] =
                records(group(%{transform: "translate(5, 5)"}, [child]))
     end
 
@@ -115,9 +125,11 @@ defmodule Visualize.Backend.CanvasBinarySVGGroupTest do
                {:style, %{opacity: outer}},
                :save,
                {:style, %{opacity: inner}},
+               :save,
                {:style, %{fill: {0, 0, 0, 255}, opacity: nil}},
                {:rects, _},
                :fill,
+               :restore,
                :restore,
                :restore
              ] = records(tree)

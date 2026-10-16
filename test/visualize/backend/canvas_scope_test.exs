@@ -4,7 +4,9 @@ defmodule Visualize.Backend.CanvasScopeTest do
   canvas backend draws a leaf that sets either inside `save … restore`, so its next
   sibling draws where SVG draws it and with what SVG draws it with. The hooks replay each
   stream on the recording stub, which scopes the context's properties as a browser does
-  and records the transform and the state every draw call ran in.
+  and records the transform and the state every draw call ran in. Every encoder in
+  `Visualize.CanvasEncoders` runs two siblings for every piece of state a leaf sets, the
+  SVG-element encoder's root-level leaves included (spec/09 §4.7, #744, D-193).
   """
   use ExUnit.Case, async: true
 
@@ -12,9 +14,11 @@ defmodule Visualize.Backend.CanvasScopeTest do
 
   alias Visualize.Backend.{Canvas, CanvasBinary}
   alias Visualize.Backend.CanvasBinary.Decoder
+  alias Visualize.CanvasEncoders
   alias Visualize.Chart
   alias Visualize.Chart.Frame
   alias Visualize.IR.{Element, Path, Transform}
+  alias Visualize.SVG
 
   @identity %{"a" => 1, "b" => 0, "c" => 0, "d" => 1, "e" => 0, "f" => 0}
 
@@ -148,6 +152,140 @@ defmodule Visualize.Backend.CanvasScopeTest do
         assert second["fillStyle"] in ["blue", "rgba(0,0,255,1)"],
                "#{stream}: #{second["fillStyle"]}"
       end
+    end
+  end
+
+  # Every piece of state a leaf can set, as the value its first sibling sets (#744): each
+  # paint key, the element's opacity, and a transform.
+  @state %{
+    fill: "#2ca02c",
+    fill_opacity: 0.4,
+    stroke: "#9467bd",
+    stroke_opacity: 0.3,
+    stroke_width: 6,
+    stroke_dasharray: "4 2",
+    stroke_linecap: :round,
+    stroke_linejoin: :bevel,
+    opacity: 0.5,
+    transform: :turned
+  }
+
+  @base %{fill: "#336699", stroke: "#cc0000"}
+
+  # Where two siblings stand: at the root, under a group that sets nothing, and under a
+  # group whose fill, stroke and width are their state.
+  @places [
+    root: &__MODULE__.at_root/1,
+    bare_group: &Element.group/1,
+    group_state: &__MODULE__.under_state/1
+  ]
+
+  @doc false
+  def at_root(children), do: Element.root(240, 200, children: children)
+
+  @doc false
+  def under_state(children),
+    do: Element.group(children, style: %{fill: "blue", stroke: "#00aa00", stroke_width: 2})
+
+  defp leaf(x, style) do
+    {transform, style} = Map.pop(style, :transform)
+    rect = Element.rect(x, 20, 40, 30, style)
+
+    if transform,
+      do: Element.set_transform(rect, Transform.new() |> Transform.rotate(30)),
+      else: rect
+  end
+
+  describe "every encoder's sibling draws as it draws alone, for every state key (#744)" do
+    @describetag :js
+
+    test "the encoders' list is the paint guard's: every canvas module is in it or named" do
+      {:ok, modules} = :application.get_key(:visualize, :modules)
+
+      canvas =
+        for m <- modules, String.starts_with?(inspect(m), "Visualize.Backend.Canvas"), do: m
+
+      assert Enum.sort(canvas) ==
+               Enum.sort(Map.keys(CanvasEncoders.encoders()) ++ CanvasEncoders.not_encoders())
+    end
+
+    test "the first sets one key, the second none of it; each draws as it does alone" do
+      cases =
+        for {key, value} <- @state, {place, wrap} <- @places do
+          first = leaf(20, Map.put(@base, key, value))
+          second = leaf(140, Map.delete(@base, key))
+          {{key, place}, [wrap.([first, second]), wrap.([first]), wrap.([second])]}
+        end
+
+      for encoder <- Map.keys(CanvasEncoders.encoders()) do
+        drawn =
+          CanvasEncoders.draws(encoder, Enum.flat_map(cases, &elem(&1, 1)))
+          |> Enum.chunk_every(3)
+
+        for {{{key, place}, _trees}, [both, first, second]} <- Enum.zip(cases, drawn) do
+          assert first != [] and second != [], "#{inspect(encoder)} drew nothing"
+
+          assert both == first ++ second,
+                 "#{inspect(encoder)}: a sibling after one that sets #{inspect(key)} " <>
+                   "(#{place}) draws #{inspect(both -- first)}, alone #{inspect(second)}"
+        end
+      end
+    end
+  end
+
+  describe "a root-level SVG line after a wide one is SVG's (#744)" do
+    defp lines do
+      line = fn y, attrs ->
+        SVG.Element.line(Map.merge(%{x1: 20, y1: y, x2: 220, y2: y, stroke: "#000000"}, attrs))
+      end
+
+      %{
+        SVG.Element.svg(%{width: 240, height: 120})
+        | children: [line.(40, %{"stroke-width": 6}), line.(80, %{})]
+      }
+    end
+
+    test "the wide line's width is scoped to it" do
+      assert [
+               :save,
+               {:style, %{stroke_width: 6.0}},
+               {:path_cubic32, _},
+               :stroke,
+               :restore,
+               :save,
+               {:style, %{stroke_width: nil}},
+               {:path_cubic32, _},
+               :stroke,
+               :restore
+             ] = Decoder.decode(CanvasBinary.encode_element!(lines()))
+    end
+
+    # Both node and resvg (test_helper, #652).
+    @tag :js_resvg
+    test "the binary hook strokes the second at 1, as resvg's raster has it" do
+      {:ok, png, _warnings} =
+        Visualize.Render.to_png(to_string(lines()), scale: 1, background: "#ffffff")
+
+      image = Visualize.PNGPixels.decode(png)
+
+      # The ink in a column across each line: resvg's widths.
+      ink = fn y0 ->
+        Enum.count((y0 - 8)..(y0 + 8), fn y ->
+          {r, _g, _b, _a} = Visualize.PNGPixels.pixel(image, 120, y)
+          r < 128
+        end)
+      end
+
+      assert {ink.(40), ink.(80)} == {6, 1}
+
+      {:ok, %{"draws" => draws}} =
+        run("""
+        const el = Stub.element(#{js(%{binary: CanvasBinary.to_base64(CanvasBinary.encode_element!(lines())), width: "240", height: "120"})}, 240, 120);
+        Stub.mount(CanvasBinaryChart, el);
+        Stub.done({});
+        """)
+
+      assert [6, 1] = for(%{"name" => "stroke", "lineWidth" => w} <- draws, do: w)
     end
   end
 

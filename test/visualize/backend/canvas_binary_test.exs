@@ -214,10 +214,10 @@ defmodule Visualize.Backend.CanvasBinaryTest do
 
       svg = SVG.Element.path(%{d: "M0,0L1,1", fill: "none", stroke: "red"})
 
-      assert [{:style, _}, {:path_cubic32, _}, :stroke] =
+      assert [:save, {:style, _}, {:path_cubic32, _}, :stroke, :restore] =
                Decoder.decode(CanvasBinary.encode_element!(svg))
 
-      assert [{:style, _}, {:path_cubic, _}, :stroke] =
+      assert [:save, {:style, _}, {:path_cubic, _}, :stroke, :restore] =
                Decoder.decode(CanvasBinary.encode_element!(svg, precision: :f64))
     end
   end
@@ -339,7 +339,7 @@ defmodule Visualize.Backend.CanvasBinaryTest do
       element =
         SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: "steelblue", opacity: 0.5})
 
-      assert [{:style, %{fill: {70, 130, 180, 127}}} | _] =
+      assert [:save, {:style, %{fill: {70, 130, 180, 127}}} | _] =
                Decoder.decode(CanvasBinary.encode_element!(element))
 
       own_alpha =
@@ -353,12 +353,12 @@ defmodule Visualize.Backend.CanvasBinaryTest do
         })
 
       # The color's own alpha times the element's opacity, as SVG composites it (#742).
-      assert [{:style, %{fill: {1, 2, 3, 31}}} | _] =
+      assert [:save, {:style, %{fill: {1, 2, 3, 31}}} | _] =
                Decoder.decode(CanvasBinary.encode_element!(own_alpha))
 
       atom = SVG.Element.rect(%{x: 0, y: 0, width: 1, height: 1, fill: :red})
 
-      assert [{:style, %{fill: {255, 0, 0, 255}}} | _] =
+      assert [:save, {:style, %{fill: {255, 0, 0, 255}}} | _] =
                Decoder.decode(CanvasBinary.encode_element!(atom))
     end
   end

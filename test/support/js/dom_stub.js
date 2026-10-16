@@ -46,10 +46,11 @@ const Stub = (() => {
   // Every context method is a recorder; every assignment is recorded and kept. The
   // transform is tracked beside, and `getTransform()` reads it without being recorded.
   // `save` and `restore` scope the assigned properties as they scope the transform, as a
-  // browser's context does (#679).
+  // browser's context does (#679), the line dash `setLineDash` sets among them (#744).
   function context(canvas) {
     // A context starts with the values a browser's does (#653): a motion reads them as targets.
-    const props = {globalAlpha: 1, lineWidth: 1, fillStyle: "#000000", strokeStyle: "#000000"};
+    const props = {globalAlpha: 1, lineWidth: 1, fillStyle: "#000000", strokeStyle: "#000000",
+      lineCap: 'butt', lineJoin: 'miter', lineDash: []};
     const state = {m: identity(), stack: []};
     const saved = [];
     return new Proxy(props, {
@@ -78,10 +79,13 @@ const Stub = (() => {
             for (const key of Object.keys(props)) delete props[key];
             Object.assign(props, back);
           }
+          if (name === 'setLineDash') props.lineDash = [...args[0]];
           transforms(state, name, args);
           if (drawCalls.has(name)) {
             draws.push({on: canvas.id, name, m: {...state.m}, globalAlpha: props.globalAlpha,
-              fillStyle: props.fillStyle, strokeStyle: props.strokeStyle});
+              fillStyle: props.fillStyle, strokeStyle: props.strokeStyle,
+              lineWidth: props.lineWidth, lineCap: props.lineCap, lineJoin: props.lineJoin,
+              lineDash: props.lineDash});
           }
           log.push({on: canvas.id, kind: 'call', name, args});
         },
