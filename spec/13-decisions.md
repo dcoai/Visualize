@@ -2369,3 +2369,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - The examples' dark-mode panel draws its two roots with ids of their own and the design's own title.
 - A board cell's root id changes from the title-and-summary hash to `<board id>-<cell>-chart`; a host that styled cells by the old id styles them by the new.
+
+## 189. D-189 — The builder types its pool and its catalog once per change of the data
+
+**Context.** #714; work item #720. After #706 (D-184), measuring `Visualize.Chart.Builder.Editing.editing/1` on the examples' board-mode test board found `Visualize.Data.Table.column_types/1` called 161 times in one pass: the host pool's 76 sources typed twice — once under the channel columns (`Scales.columns/2`), once for the data page — about 232,000 reductions each, and the 9 catalog feeds' preview rows once more for the binding's row check (§22.8, D-153), about 21,000. The pass cost about 2.61 million reductions, so the typing was about a fifth of it. The types change only when the host's `sources` or `catalog` change, which is never during an edit; every event and every render paid them again.
+
+**Decision.**
+- **The builder types the host's data when it arrives.** `update/2` keeps, beside the host's `sources` and `catalog`, the column types of each source and of each catalog feed's preview rows, with the data they were read from. A pass reads them when its `sources` and `catalog` are the very terms they were typed from (`===`, which the VM answers at once for the same term), and types them itself otherwise, so a socket whose data was changed some other way is never read with stale types (spec/14 §19.10).
+- **What moves with the tick is typed in the pass**: the signals' rows, a handful of sources.
+- **Within a pass the pool is typed once** and every reader — the channel columns, the data page, the faults — takes that one.
+- **The board-mode pass has a budget** (spec/12 §6), beside the composite one.
+
+**Rejected.**
+- **A cache keyed by the data in shared state** (`:persistent_term`, an ETS table). It is mutable state outside the socket, whose first filler pays and whose entries outlive the data; D-184 rejected it for the schema's tables for the same reason.
+- **Typing from the catalog's schemas instead of its rows.** D-153 checks a binding against what the preview's rows show; the schema is checked separately, and the row check exists for the rows that disagree with it.
+- **Caching per pass only.** It halves the pool's cost and leaves the rest paid on every event, though the data has not changed.
+
+**Consequences.**
+- A board-mode pass on the examples' board costs about 2.13 million reductions where it cost 2.61 million, and on the cost test's board about 405,000 where it cost 1,520,000; every builder event in any mode stops paying for the host pool's types (numbers on #714).
+- A host that hands the builder new `sources` or a new `catalog` pays the typing once, in `update/2`.
+- The cell previews, which realize and draw each cell, are the largest remaining part of a board-mode pass; they draw, and are left as they are.
