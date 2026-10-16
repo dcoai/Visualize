@@ -5,10 +5,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # §22.8, #714, D-189). `update/2` keeps `typed/2` of the host's `sources` and `catalog`
     # beside them; a pass reads it when it is given the very terms it was typed from, and
     # types them itself otherwise, so nothing reads stale types. The signals, whose rows move
-    # with the tick, are typed in the pass.
+    # with the tick, are typed in the pass. The rows a catalog feed previews over are made
+    # here too, once, ending at the instant the host gave them (§22.6, #723, D-191).
 
     alias Visualize.Chart.Builder.{Boards, Scales}
-    alias Visualize.Data.{Delivery, Table}
+    alias Visualize.Data.{Delivery, Schema, Table}
     alias Visualize.Signals
 
     @doc false
@@ -22,8 +23,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
         sources: sources,
         catalog: catalog,
         pool: Scales.pool_types(sources),
-        feeds: feeds(sources, catalog)
+        feeds: feeds(sources, catalog),
+        samples: samples(sources, catalog, DateTime.utc_now())
       }
+    end
+
+    @doc false
+    # The rows each catalog feed previews over (§22.6), as deliveries naming the schema's
+    # version: the host's source of its name, else rows made from its schema. Made when the
+    # host gave the catalog, so a preview kept by its pool (D-191) is not drawn again for a
+    # clock that moved; a pass given other data makes them itself.
+    @spec samples(map()) :: %{term() => Delivery.t()}
+    def samples(assigns) do
+      case own(assigns) do
+        %{samples: samples} -> samples
+        nil -> samples(assigns.sources, assigns.catalog, DateTime.utc_now())
+      end
+    end
+
+    defp samples(_sources, nil, _now), do: %{}
+
+    defp samples(sources, catalog, now) do
+      now = DateTime.truncate(now, :second)
+      sources = sources || %{}
+
+      Map.new(catalog, fn {feed, schema} ->
+        rows = Map.get_lazy(sources, feed, fn -> Boards.sample(schema, now) end)
+        {feed, Delivery.new(rows, schema: Schema.version(schema))}
+      end)
     end
 
     @doc false

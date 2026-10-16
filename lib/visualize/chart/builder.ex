@@ -67,6 +67,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart.Builder.{
       Axes,
       BoardGrid,
+      BoardMode,
       Boards,
       Document,
       Editor,
@@ -265,6 +266,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         |> seed(assigns)
         |> then(&Enum.reduce(defaults(), &1, fn pair, acc -> default(pair, acc) end))
         |> typed()
+        |> BoardMode.keep()
 
       # The parameters form edits the builder's own copy of the bindings: the host gives the
       # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
@@ -951,9 +953,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Every event the builder's markup sends, routed to the module of its area; an event no
     # module handles is a `FunctionClauseError` here, as a missing clause always was.
+    #
+    # After it, a board's previews and facts are kept for the render and the next event to
+    # read (spec/14 §22.6, #723, D-191): only what the event changed is drawn again.
     @impl true
-    def handle_event(event, params, socket) when is_map_key(@routes, event),
-      do: Map.fetch!(@routes, event).handle_event(event, params, socket)
+    def handle_event(event, params, socket) when is_map_key(@routes, event) do
+      {:noreply, socket} = Map.fetch!(@routes, event).handle_event(event, params, socket)
+      {:noreply, BoardMode.keep(socket)}
+    end
 
     defp class(base, nil), do: base
     defp class(base, extra), do: base <> " " <> extra
