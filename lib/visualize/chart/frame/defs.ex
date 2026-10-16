@@ -5,10 +5,12 @@ defmodule Visualize.Chart.Frame.Defs do
   # per effect the tree uses, and every `{:paint, name}` in the tree's styles resolved to
   # the paint itself, a `Visualize.IR.Paint` every backend draws — SVG as `url(#id)`, a
   # canvas as a gradient over each element's box (#652, D-175). A gradient written inline
-  # is held under the name `Visualize.Chart.Style.Parts.paint_name/1` gives it, a string,
-  # beside the declared ones (D-172).
+  # reaches the tree as `{:paint, node}`, the node its style resolved to, and is named by
+  # `Visualize.Chart.Style.Parts.paint_name/1` of that node, a string, beside the declared
+  # ones (D-172, D-186).
 
   alias Visualize.Chart.{Schema, Style, Var}
+  alias Visualize.Chart.Style.Parts
   alias Visualize.IR.{Element, Paint}
   alias Visualize.Units
 
@@ -19,19 +21,35 @@ defmodule Visualize.Chart.Frame.Defs do
   @doc false
   # The `defs` element holding the design's paints and the filters the tree's effects need,
   # or `[]` with neither. A declared paint is always declared; one written in place (a
-  # string name) only when the tree draws it — the theme's palette is among the styles it
-  # was found in — unless `all: true`, for a compiled chart whose later ticks may draw
-  # what this one did not (spec/14 §2.7, #673).
+  # string name) when the tree — resolved by `resolve/3` — draws it, as its style resolved
+  # it (D-186): the theme's palette is among the styles searched, so the frame's table
+  # alone would declare every role's hatch. With `all: true`, for a compiled chart whose
+  # later ticks may draw what this one did not, every one of the table too (spec/14 §2.7,
+  # #673).
   @spec defs(map(), atom(), Element.t(), keyword()) :: [Element.t()]
   def defs(%{defs: defs, theme: theme}, mode, tree, opts \\ []) do
     prefix = prefix(defs)
-    drawn = if Keyword.get(opts, :all, false), do: :all, else: drawn(tree)
+
+    table =
+      for {name, node} <- defs,
+          is_atom(name) or Keyword.get(opts, :all, false),
+          into: %{},
+          do: {name, paint(node, id(prefix, name), theme, mode)}
+
+    known = MapSet.new(table, fn {_name, paint} -> paint.id end)
+
+    # Every other paint the tree draws is one written in place, under its name.
+    inline =
+      for {id, paint} <- drawn(tree),
+          id not in known,
+          into: %{},
+          do: {String.replace_prefix(id, id(prefix, ""), ""), paint}
 
     gradients =
-      for {name, node} <- Enum.sort_by(defs, fn {name, _} -> name end),
-          is_atom(name) or drawn == :all or MapSet.member?(drawn, id(prefix, name)) do
-        node |> paint(id(prefix, name), theme, mode) |> Paint.definition()
-      end
+      table
+      |> Map.merge(inline)
+      |> Enum.sort_by(fn {name, _paint} -> name end)
+      |> Enum.map(fn {_name, paint} -> Paint.definition(paint) end)
 
     case gradients ++ filters(tree) do
       [] -> []
@@ -39,10 +57,10 @@ defmodule Visualize.Chart.Frame.Defs do
     end
   end
 
-  # The ids of the paints the tree's styles draw.
+  # The paints the tree's styles draw, by id.
   defp drawn(%Element{style: style, children: children}) do
-    own = for %Paint{id: id} <- [style[:fill], style[:stroke]], into: MapSet.new(), do: id
-    Enum.reduce(children, own, &MapSet.union(drawn(&1), &2))
+    own = for %Paint{id: id} = paint <- [style[:fill], style[:stroke]], into: %{}, do: {id, paint}
+    Enum.reduce(children, own, &Map.merge(drawn(&1), &2))
   end
 
   # One filter per distinct effect any style in the tree carries: its type and radius, and a
@@ -85,10 +103,9 @@ defmodule Visualize.Chart.Frame.Defs do
   end
 
   @doc false
-  # The tree with every `{:paint, name}` in a style resolved to its paint for the mode.
+  # The tree with every `{:paint, name}` and `{:paint, node}` in a style resolved to its
+  # paint for the mode.
   @spec resolve(Element.t(), map(), atom()) :: Element.t()
-  def resolve(element, %{defs: defs}, _mode) when map_size(defs) == 0, do: element
-
   def resolve(element, %{defs: defs, theme: theme}, mode) do
     prefix = prefix(defs)
 
@@ -100,6 +117,10 @@ defmodule Visualize.Chart.Frame.Defs do
   defp walk(%Element{children: children} = element, fun) do
     fun.(%{element | children: Enum.map(children, &walk(&1, fun))})
   end
+
+  # A gradient written in place, as its style resolved it (spec/14 §3.2, D-186).
+  defp value({:paint, %{} = node}, _defs, prefix, theme, mode) when not is_struct(node),
+    do: paint(node, id(prefix, Parts.paint_name(node)), theme, mode)
 
   defp value({:paint, name}, defs, prefix, theme, mode) do
     case Map.fetch(defs, name) do
@@ -116,25 +137,29 @@ defmodule Visualize.Chart.Frame.Defs do
   @doc false
   # A paint's first stop's color, a literal (spec/14 §5.5): the one color that stands for
   # a gradient where one color must — what a label's ink is chosen against; `nil` for an
-  # undeclared name.
-  @spec literal(atom() | String.t(), map()) :: String.t() | nil
+  # undeclared name. A gradient written in place is given as its node (D-186).
+  @spec literal(atom() | map(), map()) :: String.t() | nil
+  def literal(%{} = node, %{theme: theme}) when not is_struct(node), do: node_literal(node, theme)
+
   def literal(name, %{defs: defs, theme: theme}) do
     case Map.fetch(defs, name) do
-      # A hatch's ground is what a text over it is read against; with none, nothing is
-      # under the text but the page (spec/14 §5.5, #673).
-      {:ok, %{type: :hatch} = node} ->
-        case Map.get(node, :background) do
-          background when background in [nil, :none] -> nil
-          background -> Style.color(background, theme, :literal)
-        end
-
-      {:ok, node} ->
-        [first | _] = stops(node)
-        Style.color(color(first), theme, :literal)
-
-      :error ->
-        nil
+      {:ok, node} -> node_literal(node, theme)
+      :error -> nil
     end
+  end
+
+  # A hatch's ground is what a text over it is read against; with none, nothing is under
+  # the text but the page (spec/14 §5.5, #673).
+  defp node_literal(%{type: :hatch} = node, theme) do
+    case Map.get(node, :background) do
+      background when background in [nil, :none] -> nil
+      background -> Style.color(background, theme, :literal)
+    end
+  end
+
+  defp node_literal(node, theme) do
+    [first | _] = stops(node)
+    Style.color(color(first), theme, :literal)
   end
 
   # -- the paint --------------------------------------------------------------------------

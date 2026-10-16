@@ -495,6 +495,21 @@ release it merely follows.
   names, which crashed at render, interpolates their colors; stops with an alpha
   interpolate it. A theme's ramp anchor may be a transform (`color(:blue) |> darken(0.4)`).
 
+- **A style that extends, stacks or defaults an in-place gradient and changes it draws**
+  (#711, D-186). `style(:info_look, extends: :lit, fill: %{type: :radial, color: [...]})`
+  over a style whose fill is a gradient written in place failed at render with "paint …
+  is not declared under defs", as did a stack (`[:lit, :blue]`, `[:lit, %{fill: …}]`), a
+  named style that is a list, a field entry naming the derived style and a design's
+  `defaults` under a site's gradient: the frame declared the gradients as each style wrote
+  them, while an element draws the one its styles merged to. The frame now declares the
+  paint each element resolved to, on SVG and both canvases; every chart that drew before
+  draws byte for byte the same. A `color` list with no `type` is now a gradient's stops,
+  so `extends: :lit, fill: %{color: [a, b, c]}` keeps the parent's gradient — its type,
+  center and radius — in its own colors (it was refused as no color).
+  `Visualize.Chart.Style.resolve/3` now writes an in-place gradient as `{:paint, node}`,
+  the paint it resolved to, where it wrote `{:paint, "p…"}`; a declared paint is
+  `{:paint, name}` as before.
+
 - **The builder no longer slows down with the size of the color table** (#704, D-184).
   Every builder event and render rebuilt and sorted the theme's ~190 color names once for
   each name the color chooser listed, and rebuilt a node kind's key specs on every schema

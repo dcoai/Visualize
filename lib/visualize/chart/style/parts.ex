@@ -115,7 +115,7 @@ defmodule Visualize.Chart.Style.Parts do
   def color?({:series, _i}), do: true
   def color?({:ramp, _name, _t}), do: true
   def color?({:field, _f}), do: true
-  def color?({:paint, _name}), do: true
+  def color?({:paint, _name_or_node}), do: true
   # A color generator (spec/14 §3.13): `fill: generate(…)` is a solid paint of it.
   def color?({:generate, _name, _args}), do: true
   def color?(value) when is_tuple(value), do: Visualize.Color.Typed.tagged?(value)
@@ -262,6 +262,8 @@ defmodule Visualize.Chart.Style.Parts do
   # `color` list written out as evenly spaced stops.
   @spec paint(term()) :: term()
   def paint(:none), do: %{type: :none}
+  # A projected in-place gradient is its node again (D-186).
+  def paint({:paint, %{} = node}) when not is_struct(node), do: node
   def paint({:paint, name}), do: %{type: :paint, name: name}
 
   def paint(map) when is_map(map) and not is_struct(map) do
@@ -283,8 +285,11 @@ defmodule Visualize.Chart.Style.Parts do
     end
   end
 
-  # A gradient's `color` list is its stops, evenly spaced; explicit `stops` win.
-  defp stops(%{type: type, color: colors} = map) when type in @gradients and is_list(colors) do
+  # A gradient's `color` list is its stops, evenly spaced; explicit `stops` win. A list with
+  # no type is a gradient's too — one color is a solid's — whose type the part it is laid
+  # over gives, as a style extending a gradient sets its own stops (§3.5, D-186).
+  defp stops(%{color: colors} = map)
+       when is_list(colors) and (not is_map_key(map, :type) or map.type in @gradients) do
     map = Map.delete(map, :color)
     if Map.has_key?(map, :stops), do: stops(map), else: Map.put(map, :stops, spaced(colors))
   end
@@ -363,9 +368,10 @@ defmodule Visualize.Chart.Style.Parts do
 
   @doc false
   # The node's parts written as the flat keys the frame, the marks and the backends read
-  # (spec/14 §3.4, D-172). A gradient is drawn by the frame from its `defs`: it projects to
-  # `{:paint, name}` under the name `paint_name/1` gives it. Keys already flat pass through,
-  # so projecting twice is projecting once.
+  # (spec/14 §3.4, D-172). A gradient is drawn by the frame from its `defs`: a declared one
+  # projects to `{:paint, name}`, one written in place to `{:paint, node}`, the node as the
+  # style resolved it (D-186). Keys already flat pass through, so projecting twice is
+  # projecting once.
   @spec project(map()) :: map()
   def project(node) when is_map(node) do
     Enum.reduce(node, %{}, fn {key, value}, acc -> project(acc, key, value) end)
@@ -466,8 +472,10 @@ defmodule Visualize.Chart.Style.Parts do
 
   defp solid?(paint), do: Map.get(paint, :type, :solid) == :solid
 
+  # A gradient written in place projects to the paint it resolved to, whatever merged it —
+  # `extends`, a stack, the defaults — for the frame to name and declare (§3.2, D-186).
   defp gradient(acc, key, %{type: type} = paint) when type in @drawn,
-    do: Map.put(acc, key, {:paint, paint_name(paint)})
+    do: Map.put(acc, key, {:paint, drawn(paint)})
 
   defp gradient(acc, _key, _paint), do: acc
 

@@ -124,10 +124,13 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
 
         # The print theme's :bad is a crosshatch in its color (#673).
         case group.style.fill do
-          {:paint, name} ->
+          # A hatch written in place reaches the element as the paint it resolved to, and
+          # the frame holds it under that paint's name (D-186).
+          {:paint, %{} = node} ->
             assert theme.name == :print
+            assert %{type: :hatch, color: {:color, :bad}} = node
             frame = applied(design(%{style: :bad}), theme: theme).frame
-            assert %{type: :hatch, color: {:color, :bad}} = frame.defs[name]
+            assert frame.defs[Visualize.Chart.Style.Parts.paint_name(node)] == node
 
           fill ->
             assert fill == lit(theme, :bad), inspect(theme.name)

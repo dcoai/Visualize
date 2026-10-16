@@ -261,10 +261,14 @@ defmodule Visualize.Chart.Frame do
   end
 
   # The gradients the design's styles write inline (spec/14 §3.2, D-172), held beside the
-  # declared paints so the frame draws both alike: the named styles, the palette among
-  # them, every style node written at a site — a mark's and its label's, a label's, an
-  # axis's and a legend's — and every defaults node (spec/14 §3.8).
+  # declared paints: the named styles, the palette among them, each also with its `extends`
+  # chain laid — the paint a field entry naming it draws (D-186) — every style node written
+  # at a site — a mark's and its label's, a label's, an axis's and a legend's — and every
+  # defaults node (spec/14 §3.8). A frame declares the ones its tree draws, as resolved; a
+  # compiled chart, whose later ticks may draw others, all of these too (§2.7).
   defp inline_paints(chart, styles, theme) do
+    laid = for {name, _node} <- styles, do: Style.compound(styles, name, fn _entry -> nil end)
+
     sites =
       Enum.flat_map(chart.marks, fn mark ->
         stack(mark) ++ stack(Map.get(mark, :label))
@@ -284,7 +288,7 @@ defmodule Visualize.Chart.Frame do
           end)
       )
 
-    Parts.inline_paints(Map.values(styles) ++ sites ++ defaults)
+    Parts.inline_paints(Map.values(styles) ++ laid ++ sites ++ defaults)
   end
 
   defp stack(%{style: stack}) when is_map(stack) or is_list(stack), do: List.wrap(stack)

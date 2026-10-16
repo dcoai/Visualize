@@ -13,7 +13,8 @@ defmodule Examples.Charts.PaintsChart do
   - **A shadow** under the line, `effect: %{type: :shadow, …}`, its offset in points and its
     color a translucent `color(:text)`.
   - **A radial gradient** on each incident, off center so the circle reads as lit from the
-    top left, its outline a translucent stroke.
+    top left, its outline a translucent stroke; the second team's look `extends` the first
+    and sets only its own colors, keeping the gradient's geometry (spec/14 §3.5, D-186).
   - **Translucent fills**: the two incident series overlap, and where they do both show.
   """
 
@@ -78,10 +79,23 @@ defmodule Examples.Charts.PaintsChart do
         ),
 
         # Each incident lit from the top left, translucent so overlaps show: one look per
-        # team, each written whole by `lit/1` rather than one extending the other, since a
-        # gradient written in place and merged through `extends` does not draw yet.
-        style(:incident, lit(color(:bad))),
-        style(:incident_info, lit(color(:info))),
+        # team, the second extending the first — its radial gradient's center, radius and
+        # opacity, its outline's width — in its own colors.
+        style(:incident,
+          fill: %{
+            type: :radial,
+            color: shades(color(:bad)),
+            center: [0.35, 0.3],
+            radius: 0.7,
+            opacity: 0.7
+          },
+          stroke: %{color: color(:bad) |> alpha(0.5), width: 2}
+        ),
+        style(:incident_info,
+          extends: :incident,
+          fill: %{color: shades(color(:info))},
+          stroke: %{color: color(:info) |> alpha(0.5)}
+        ),
         cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 24]),
         linear_scale(:y, domain: [0, :auto], nice: true),
@@ -108,20 +122,8 @@ defmodule Examples.Charts.PaintsChart do
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
 
-  # An incident's look in one hue: a radial gradient from a lighter step of it to a darker,
-  # its center up and left, the whole paint at 0.7, and a translucent outline.
-  defp lit(hue) do
-    [
-      fill: %{
-        type: :radial,
-        color: [hue |> lighten(0.5), hue, hue |> darken(0.3)],
-        center: [0.35, 0.3],
-        radius: 0.7,
-        opacity: 0.7
-      },
-      stroke: %{color: hue |> alpha(0.5), width: 2}
-    ]
-  end
+  # An incident's gradient in one hue: a lighter step of it, the hue, a darker step.
+  defp shades(hue), do: [hue |> lighten(0.5), hue, hue |> darken(0.3)]
 
   # The day's requests; an animation tick moves the busy hours a quarter of an hour on, so
   # a run shows every paint redrawn over moving data.
@@ -148,20 +150,8 @@ defmodule Examples.Charts.PaintsChart do
     import Visualize.Color
     import Visualize.Units
 
-    # An incident's look in one hue: a radial gradient written in place, lit from the top
-    # left, the whole paint translucent, with a translucent outline.
-    lit = fn hue ->
-      [
-        fill: %{
-          type: :radial,
-          color: [hue |> lighten(0.5), hue, hue |> darken(0.3)],
-          center: [0.35, 0.3],
-          radius: 0.7,
-          opacity: 0.7
-        },
-        stroke: %{color: hue |> alpha(0.5), width: 2}
-      ]
-    end
+    # An incident's gradient in one hue: a lighter step of it, the hue, a darker step.
+    shades = fn hue -> [hue |> lighten(0.5), hue, hue |> darken(0.3)] end
 
     {:ok, design} =
       Visualize.Chart.compose([
@@ -199,8 +189,23 @@ defmodule Examples.Charts.PaintsChart do
           },
           stroke: %{color: color(:warning), width: 1, dash: [4, 3]}
         ),
-        style(:incident, lit.(color(:bad))),
-        style(:incident_info, lit.(color(:info))),
+        # A radial gradient in place, lit from the top left, the whole paint translucent,
+        # with a translucent outline; the second look extends it in its own colors.
+        style(:incident,
+          fill: %{
+            type: :radial,
+            color: shades.(color(:bad)),
+            center: [0.35, 0.3],
+            radius: 0.7,
+            opacity: 0.7
+          },
+          stroke: %{color: color(:bad) |> alpha(0.5), width: 2}
+        ),
+        style(:incident_info,
+          extends: :incident,
+          fill: %{color: shades.(color(:info))},
+          stroke: %{color: color(:info) |> alpha(0.5)}
+        ),
         cartesian(margin: %{top: 30, right: 24, bottom: 34, left: 44}),
         linear_scale(:x, domain: [0, 24]),
         linear_scale(:y, domain: [0, :auto], nice: true),
