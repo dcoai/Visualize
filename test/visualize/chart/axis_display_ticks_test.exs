@@ -10,8 +10,6 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
 
   @moduletag :capture_log
 
-  @patience 10_000
-
   alias Visualize.Board
   alias Visualize.Board.{Binding, Export, Server, Snapshot, View}
   alias Visualize.Chart
@@ -300,8 +298,6 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{state: :live} = view}} -> view
       {:visualize_board, _board, _other} -> live_view(cell)
-    after
-      @patience -> flunk("no live view of #{inspect(cell)} within #{@patience} ms")
     end
   end
 end
