@@ -120,8 +120,8 @@ defmodule ExamplesWeb.ChartLiveNavTest do
 
     s = step(s, "/chart/bar")
 
-    assert_receive {:DOWN, ^monitor, :process, ^renderer, _}, 5_000
-    assert_receive {:DOWN, ^compare_monitor, :process, ^compare, _}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^renderer, _}
+    assert_receive {:DOWN, ^compare_monitor, :process, ^compare, _}
     refute s.assigns.run.running
     assert s.assigns.run.renderer == nil
     assert s.assigns.run_ticks == 0 and s.assigns.run_frame == nil

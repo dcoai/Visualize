@@ -37,7 +37,14 @@ resvg =
 # so it carries neither, and runs only where both are present.
 js_resvg = if js == [] and resvg == [], do: [], else: [:js_resvg]
 
-ExUnit.start(exclude: [:benchmark | js ++ resvg ++ js_resvg])
+# A message a test waits for must arrive, so an `assert_receive` with no timeout of its own
+# waits as long as the test may run: the test's timeout ends a wait whose message never
+# comes, and its report names the waiting line (spec/12 §6, #736).
+ExUnit.start(
+  exclude: [:benchmark | js ++ resvg ++ js_resvg],
+  timeout: 60_000,
+  assert_receive_timeout: 60_000
+)
 
 # A zoned time scale reads the host's time zone database (spec/03 §7.4, D-115); the library
 # ships none, so the suite configures the test-only `tz` here as a host would.

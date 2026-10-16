@@ -74,7 +74,7 @@ defmodule Examples.RunTest do
 
     {asked, id} = Run.asking(run, opts ++ [now: 740], 0)
     assert id != nil and asked.render_id == id
-    assert_receive {:frame, ^id, %{plots: [%{incremental: %{mode: "full"}}]}}, 10_000
+    assert_receive {:frame, ^id, %{plots: [%{incremental: %{mode: "full"}}]}}
 
     # One in flight: a second ask while the first is out changes nothing.
     assert {^asked, nil} = Run.asking(asked, opts, 0)
@@ -85,14 +85,14 @@ defmodule Examples.RunTest do
     # The same process draws the next frame, and Stop takes it down.
     pid = free.renderer
     {again, id2} = Run.asking(free, opts ++ [now: 760], 2)
-    assert_receive {:frame, ^id2, %{plots: [%{incremental: %{mode: "scroll_x"}}]}}, 10_000
+    assert_receive {:frame, ^id2, %{plots: [%{incremental: %{mode: "scroll_x"}}]}}
     assert again.renderer == pid
 
     monitor = Process.monitor(pid)
     stopped = Run.stop(again)
     assert stopped.renderer == nil and stopped.render_id == nil
     refute stopped.running
-    assert_receive {:DOWN, ^monitor, :process, ^pid, _}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _}
   end
 
   test "what a frame goes as: full first, then strips or the empty update; a full clears the need" do
@@ -181,7 +181,7 @@ defmodule Examples.RunTest do
     stopped = Run.stop(run)
     refute stopped.running
     assert stopped.renderer == nil
-    assert_receive {:DOWN, ^monitor, :process, ^pid, _}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, _}
     assert :stale = Run.result(stopped, 1)
     assert :stale = Run.down(stopped, make_ref(), :shutdown)
 

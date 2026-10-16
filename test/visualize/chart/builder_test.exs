@@ -3026,8 +3026,8 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, playing} = Builder.handle_event("play", %{}, s)
       assert playing.assigns.playing
       # The first tick is armed on the signals' period; a starved runner may deliver it
-      # late, so the wait is a bound on a defect, not on the period (D-148).
-      assert_receive {:visualize_chart_tick, "b"}, 5_000
+      # late, so only the test's own timeout bounds the wait (spec/12 §6, D-148).
+      assert_receive {:visualize_chart_tick, "b"}
       {:ok, ticked} = Builder.update(%{tick: :next}, playing)
       assert ticked.assigns.tick == 1
       refute BuilderFixture.render(ticked) == before

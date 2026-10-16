@@ -34,7 +34,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
   defp settled(s) do
     id = s.assigns.run.render_id
     assert id != nil, "no frame is in flight"
-    assert_receive {:frame, ^id, frame}, 10_000
+    assert_receive {:frame, ^id, frame}
     {:noreply, s} = ChartLive.handle_info({:frame, id, frame}, s)
     s
   end
@@ -71,7 +71,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     {:noreply, stopped} = ChartLive.handle_event("run_stop", %{}, s)
     assert stopped.assigns.run.renderer == nil
-    assert_receive {:DOWN, ^monitor, :process, ^renderer, _}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^renderer, _}
 
     # A run that ends with the view takes its renderer with it.
     {:noreply, again} = ChartLive.handle_event("run_start", %{}, stopped)
@@ -79,7 +79,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert is_pid(second) and second != renderer
     monitor = Process.monitor(second)
     ChartLive.terminate(:shutdown, again)
-    assert_receive {:DOWN, ^monitor, :process, ^second, _}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^second, _}
   end
 
   test "a renderer that dies stops the run with the reason, not the view (#413)" do
@@ -185,8 +185,8 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert is_pid(s.assigns.run.renderer)
     s = settled(s)
     assert s.assigns.run.frame == 2
-    # The next tick is armed on the run's period; the wait bounds a defect, not the period.
-    assert_receive :run_tick, 5_000
+    # The next tick is armed on the run's period; only the test's timeout bounds the wait.
+    assert_receive :run_tick
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running
@@ -455,7 +455,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     s = page("line")
     {:noreply, s} = ChartLive.handle_event("run_compare", %{}, s)
     %Task{ref: ref} = s.assigns.compare_task
-    assert_receive {^ref, {:compare, rows} = result}, 30_000
+    assert_receive {^ref, {:compare, rows} = result}
     {:noreply, s} = ChartLive.handle_info({ref, result}, s)
     assert s.assigns.compare_task == nil
     assert [%{backend: :svg, ticks: 100}, %{backend: :canvas, ticks: 100}] = rows

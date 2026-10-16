@@ -24,4 +24,7 @@ resvg =
     [:resvg]
   end
 
-ExUnit.start(exclude: resvg)
+# A message a test waits for must arrive, so an `assert_receive` with no timeout of its own
+# waits as long as the test may run: the test's timeout ends a wait whose message never
+# comes, and its report names the waiting line (spec/12 §6, #736).
+ExUnit.start(exclude: resvg, timeout: 60_000, assert_receive_timeout: 60_000)
