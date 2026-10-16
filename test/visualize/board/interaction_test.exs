@@ -12,9 +12,6 @@ defmodule Visualize.Board.InteractionTest do
 
   @moduletag :capture_log
 
-  # When a wait gives up on a defect, never how fast the machine is (spec/12 §6, D-148).
-  @patience 10_000
-
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server, View}
   alias Visualize.Components.Board, as: Component
@@ -135,8 +132,6 @@ defmodule Visualize.Board.InteractionTest do
         if cell in cells and test.(view),
           do: views_until(List.delete(cells, cell), test, Map.put(seen, cell, view)),
           else: views_until(cells, test, seen)
-    after
-      @patience -> flunk("no view of #{inspect(cells)} within #{@patience} ms")
     end
   end
 
@@ -144,8 +139,6 @@ defmodule Visualize.Board.InteractionTest do
     receive do
       {:visualize_board, _board, {:board, info}} ->
         if test.(info), do: info, else: board_info_until(test)
-    after
-      @patience -> flunk("no board info within #{@patience} ms")
     end
   end
 
@@ -157,8 +150,6 @@ defmodule Visualize.Board.InteractionTest do
           {:ok, %{row: %{t: ^from}}} -> :ok
           _before -> follows(board, cell, from)
         end
-    after
-      @patience -> flunk("#{inspect(cell)} did not follow the window within #{@patience} ms")
     end
   end
 

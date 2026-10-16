@@ -85,8 +85,6 @@ defmodule Visualize.Components.BoardTest do
     view =
       receive do
         {:visualize_board, _, {:cell, ^cell, %View{state: :live} = view}} -> view
-      after
-        5000 -> flunk("no live view of #{cell}")
       end
 
     view

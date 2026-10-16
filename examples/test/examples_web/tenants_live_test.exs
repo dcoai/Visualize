@@ -81,8 +81,6 @@ defmodule ExamplesWeb.TenantsLiveTest do
 
       {:visualize_board, _board, _other} ->
         views(seen, waiting)
-    after
-      10_000 -> flunk("no view of #{inspect(waiting)}")
     end
   end
 end

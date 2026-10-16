@@ -15,9 +15,10 @@ defmodule Visualize.NoWallClockTest do
   Nor does a test wait on the clock (D-148, #520). An `assert_receive` gives up after at
   least `@floor` milliseconds, so its bound says when a defect is given up on and never how
   fast the machine is; a `refute_receive` does not wait at all — absence after a
-  synchronizing call is `refute_received`; a `receive … after` waits nothing or at least
-  the floor; and nothing sleeps. A site that must break one of these is on `@allowed`,
-  with its reason. This one is read from the parsed code, so a string or a comment that
+  synchronizing call is `refute_received`; a `receive … after` waits nothing — `after 0`
+  — since a longer one is a second clock under the test's own timeout, which bounds a
+  message that never comes (#715); and nothing sleeps. A site that must break one of
+  these is on `@allowed`, with its reason. This one is read from the parsed code, so a string or a comment that
   mentions a wait is not one.
   """
   use ExUnit.Case, async: true
@@ -34,7 +35,7 @@ defmodule Visualize.NoWallClockTest do
   @benchmark_tag ~r/^\s*@tag\s+(:benchmark\b|benchmark:\s*true)/
   @benchmark_module ~r/^\s*@moduletag\s+(:benchmark\b|benchmark:\s*true)/
 
-  # The shortest wait an `assert_receive`, or a `receive … after`, may give up after.
+  # The shortest wait an `assert_receive` may give up after.
   @floor 5_000
 
   # The waits that stay, each with its reason: `{path, the code at the site, reason}`. A
@@ -78,7 +79,8 @@ defmodule Visualize.NoWallClockTest do
 
     assert violations == [],
            "a test waits on the clock (spec/12 §6, D-148). Wait on a message or a count " <>
-             "with an `assert_receive` of at least #{@floor} ms; assert absence after a " <>
+             "with an `assert_receive` of at least #{@floor} ms, or a `receive` with no " <>
+             "`after` but 0, which the test's own timeout bounds; assert absence after a " <>
              "synchronizing call with `refute_received`; drive time with a clock the code " <>
              "takes; or put the site on @allowed with its reason:\n" <>
              Enum.map_join(violations, "\n", &describe_site/1)
@@ -135,10 +137,11 @@ defmodule Visualize.NoWallClockTest do
              ] = summary(waits("probe_test.exs", source))
     end
 
-    test "rejects a sleep and a short receive after, in a test or a helper" do
+    test "rejects a sleep and a receive after of any length, in a test or a helper" do
       source = """
       defmodule ProbeTest do
         use ExUnit.Case
+        @patience 30_000
 
         defp poll(pid) do
           receive do
@@ -157,14 +160,26 @@ defmodule Visualize.NoWallClockTest do
           after
             30_000 -> flunk("never came")
           end
+          receive do
+            :done -> :ok
+          after
+            @patience -> flunk("never came")
+          end
+          receive do
+            :done -> :ok
+          end
         end
       end
       """
 
+      # Every `after` but 0, however long (#715): a long one is the test's timeout made
+      # shorter, and a receive with none waits on its message alone.
       assert [
-               {8, :receive_after, "10 ms"},
-               {13, :sleep, "a sleep"},
-               {14, :sleep, "a sleep"}
+               {9, :receive_after, "10 ms"},
+               {14, :sleep, "a sleep"},
+               {15, :sleep, "a sleep"},
+               {20, :receive_after, "30000 ms"},
+               {25, :receive_after, "30000 ms"}
              ] = summary(waits("probe_test.exs", source))
     end
 
@@ -386,7 +401,7 @@ defmodule Visualize.NoWallClockTest do
 
   defp wait({:receive, meta, [clauses]}, attributes) when is_list(clauses) do
     with [{:->, _, [[timeout], _body]} | _] <- Keyword.get(clauses, :after),
-         ms when ms != 0 and not (is_integer(ms) and ms >= @floor) <- timeout(timeout, attributes) do
+         ms when ms != 0 <- timeout(timeout, attributes) do
       line = if is_integer(ms), do: "#{ms} ms", else: "a timeout it cannot read"
       {after_line(clauses, meta), :receive_after, line}
     else

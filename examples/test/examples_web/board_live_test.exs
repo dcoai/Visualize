@@ -182,8 +182,6 @@ defmodule ExamplesWeb.BoardLiveTest do
 
       {:visualize_board, _board, _other} ->
         dimmed(seen, waiting)
-    after
-      10_000 -> flunk("no dimmed view of #{inspect(waiting)}")
     end
   end
 
@@ -200,8 +198,6 @@ defmodule ExamplesWeb.BoardLiveTest do
 
       {:visualize_board, _board, _other} ->
         views(seen, waiting)
-    after
-      10_000 -> flunk("no view of #{inspect(waiting)}")
     end
   end
 end

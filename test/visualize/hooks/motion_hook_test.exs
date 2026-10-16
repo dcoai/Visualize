@@ -80,22 +80,31 @@ defmodule Visualize.Hooks.MotionHookTest do
         clock: fn -> DateTime.add(@t0, 600) end
       )
 
+    # The views come in a known order (#715): the board fetched the scripted feed in its
+    # first turn and sent the cell its rows before the subscribe was answered, so the
+    # cell's first view to this process is the drawing of all three rows, sent on
+    # subscribing; the window call runs a turn that sends the cell the rows without `gone`,
+    # and the cell's next view is their drawing. Each is asserted as it is taken.
     {:ok, _info} = Server.subscribe(pid)
-    before = live_view(&(&1 =~ ~s(data-vis-id="main.1.name=db")))
+    before = next_view(pid)
+    assert before.state == :live
+    assert before.svg =~ ~s(data-vis-id="main.1.name=#{gone}")
 
     Feeds.set(agent, rows: rows(names -- [gone]))
     :ok = Server.window(pid, %{from: @t0, to: DateTime.add(@t0, 600)})
-    after_ = live_view(&(not (&1 =~ ~s(data-vis-id="main.1.name=#{gone}"))))
+    after_ = next_view(pid)
+    assert after_.state == :live
+    refute after_.svg =~ ~s(data-vis-id="main.1.name=#{gone}")
 
     {cell(before), cell(after_)}
   end
 
-  defp live_view(ready?) do
+  # The cell's next view: a message the cell sends once it has drawn, waited on with no
+  # `after` of its own, so a cell that never draws is bounded by the test's timeout and
+  # nothing here reads the clock (spec/12 §6).
+  defp next_view(board) do
     receive do
-      {:visualize_board, _, {:cell, :services, %View{state: :live, svg: svg} = view}} ->
-        if ready?.(svg), do: view, else: live_view(ready?)
-    after
-      5000 -> flunk("no live view")
+      {:visualize_board, ^board, {:cell, :services, %View{} = view}} -> view
     end
   end
 

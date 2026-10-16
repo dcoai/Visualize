@@ -525,8 +525,6 @@ defmodule Visualize.Board.ExportTest do
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} ->
         if test.(view), do: view, else: view_until(cell, test)
-    after
-      @patience -> flunk("no view of #{inspect(cell)} within #{@patience} ms")
     end
   end
 

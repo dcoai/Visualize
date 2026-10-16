@@ -85,8 +85,6 @@ defmodule Visualize.Board.RuntimeTest do
   defp view(cell) do
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} -> view
-    after
-      @patience -> flunk("no view of #{inspect(cell)} within #{@patience} ms")
     end
   end
 
