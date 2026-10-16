@@ -6,8 +6,25 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
   import Bitwise
 
+  alias Visualize.Backend.Canvas
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder}
   require Opcodes
+
+  # The tags that draw, and so read the stroke's attributes (spec/09 §4.7).
+  @drawn [:rect, :circle, :path, :line]
+
+  @doc false
+  # A tree as a whole stream (spec/09 §4.2, §4.7): `version` 3 first when any element writes
+  # a stroke's dash, cap or join (#693, D-180), and every other tree's records as they were.
+  @spec encode_tree(Visualize.SVG.Element.t(), :f32 | :f64) :: binary()
+  def encode_tree(element, precision) do
+    records = encode_element(element, precision)
+    if paint_state?(element), do: <<Opcodes.version()::8, 3::8>> <> records, else: records
+  end
+
+  defp paint_state?(%Visualize.SVG.Element{tag: tag, attrs: attrs, children: children}) do
+    (tag in @drawn and paint_state(attrs) != <<>>) or Enum.any?(children, &paint_state?/1)
+  end
 
   # SVG Element Encoding
 
@@ -61,23 +78,11 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     width = Map.get(attrs, :width, 0) |> PathEncoder.to_float()
     height = Map.get(attrs, :height, 0) |> PathEncoder.to_float()
 
-    parts = []
+    geometry =
+      <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
+        width::little-float-64, height::little-float-64>>
 
-    # Style
-    parts = parts ++ [encode_svg_style(attrs)]
-
-    # Rectangle command
-    parts =
-      parts ++
-        [
-          <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
-            width::little-float-64, height::little-float-64>>
-        ]
-
-    # Draw commands
-    parts = parts ++ encode_svg_draw_commands(attrs)
-
-    IO.iodata_to_binary(parts)
+    leaf(attrs, geometry, encode_svg_draw_commands(attrs))
   end
 
   def encode_element(%Visualize.SVG.Element{tag: :circle, attrs: attrs}, _precision) do
@@ -85,23 +90,11 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     cy = Map.get(attrs, :cy, 0) |> PathEncoder.to_float()
     r = Map.get(attrs, :r, 0) |> PathEncoder.to_float()
 
-    parts = []
+    geometry =
+      <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
+        r::little-float-64>>
 
-    # Style
-    parts = parts ++ [encode_svg_style(attrs)]
-
-    # Circle command
-    parts =
-      parts ++
-        [
-          <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
-            r::little-float-64>>
-        ]
-
-    # Draw commands
-    parts = parts ++ encode_svg_draw_commands(attrs)
-
-    IO.iodata_to_binary(parts)
+    leaf(attrs, geometry, encode_svg_draw_commands(attrs))
   end
 
   def encode_element(%Visualize.SVG.Element{tag: :path, attrs: attrs}, precision) do
@@ -112,18 +105,8 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
         <<>>
 
       commands ->
-        parts = []
-
-        # Style
-        parts = parts ++ [encode_svg_style(attrs)]
-
-        # Path data
-        parts = parts ++ [PathEncoder.encode_cubic_path(commands, precision)]
-
-        # Draw commands
-        parts = parts ++ encode_svg_draw_commands(attrs)
-
-        IO.iodata_to_binary(parts)
+        geometry = PathEncoder.encode_cubic_path(commands, precision)
+        leaf(attrs, geometry, encode_svg_draw_commands(attrs))
     end
   end
 
@@ -133,19 +116,9 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     x2 = Map.get(attrs, :x2, 0) |> PathEncoder.to_float()
     y2 = Map.get(attrs, :y2, 0) |> PathEncoder.to_float()
 
-    parts = []
-
-    # Style
-    parts = parts ++ [encode_svg_style(attrs)]
-
-    # Path as move + line
-    commands = [{:M, x1, y1}, {:L, x2, y2}]
-    parts = parts ++ [PathEncoder.encode_cubic_path(commands, precision)]
-
-    # Always stroke lines
-    parts = parts ++ [<<Opcodes.stroke()::8>>]
-
-    IO.iodata_to_binary(parts)
+    # A move and a line, always stroked.
+    geometry = PathEncoder.encode_cubic_path([{:M, x1, y1}, {:L, x2, y2}], precision)
+    leaf(attrs, geometry, [<<Opcodes.stroke()::8>>])
   end
 
   def encode_element(%Visualize.SVG.Element{tag: :text}, _precision) do
@@ -156,6 +129,79 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   def encode_element(_element, _precision) do
     <<>>
   end
+
+  # A drawing element's records: its style, its geometry and its draws, and with a stroke's
+  # dash, cap or join its `paint_state` after the style, all inside `save` … `restore` so
+  # they outlive it on no later element (spec/09 §4.7, #693).
+  defp leaf(attrs, geometry, draws) do
+    case paint_state(attrs) do
+      <<>> ->
+        IO.iodata_to_binary([encode_svg_style(attrs), geometry | draws])
+
+      state ->
+        IO.iodata_to_binary([
+          <<Opcodes.save()::8>>,
+          encode_svg_style(attrs),
+          state,
+          geometry,
+          draws,
+          <<Opcodes.restore()::8>>
+        ])
+    end
+  end
+
+  @caps %{"butt" => 0, "round" => 1, "square" => 2}
+  @joins %{"miter" => 0, "round" => 1, "bevel" => 2}
+
+  # Version 3's `paint_state` record with the cap, the join and the dash an element's
+  # attributes set (spec/09 §4.3.17): the opacities are folded into the colors here, so
+  # its alpha bits are never set; `<<>>` when it sets none of the three.
+  defp paint_state(attrs) do
+    fields = [
+      {0x04, word(attr(attrs, :stroke_linecap), @caps)},
+      {0x08, word(attr(attrs, :stroke_linejoin), @joins)},
+      {0x10, dash(Canvas.dash(attr(attrs, :stroke_dasharray)))}
+    ]
+
+    case for {bit, bytes} <- fields, is_binary(bytes), do: {bit, bytes} do
+      [] ->
+        <<>>
+
+      set ->
+        flags = Enum.reduce(set, 0, fn {bit, _}, acc -> acc ||| bit end)
+
+        IO.iodata_to_binary([
+          <<Opcodes.paint_state()::8, flags::8>> | Enum.map(set, &elem(&1, 1))
+        ])
+    end
+  end
+
+  @hyphenated %{
+    stroke_linecap: :"stroke-linecap",
+    stroke_linejoin: :"stroke-linejoin",
+    stroke_dasharray: :"stroke-dasharray"
+  }
+
+  # An attribute under its underscore name or its hyphenated one.
+  defp attr(attrs, key), do: Map.get(attrs, key) || Map.get(attrs, Map.fetch!(@hyphenated, key))
+
+  defp word(value, table) when is_atom(value) and value != nil,
+    do: word(Atom.to_string(value), table)
+
+  defp word(value, table) when is_binary(value) do
+    case Map.fetch(table, value) do
+      {:ok, n} -> <<n::8>>
+      :error -> nil
+    end
+  end
+
+  defp word(_absent, _table), do: nil
+
+  defp dash(pattern) when is_list(pattern) and length(pattern) < 256,
+    do:
+      IO.iodata_to_binary([<<length(pattern)::8>> | Enum.map(pattern, &<<&1::little-float-32>>)])
+
+  defp dash(_absent), do: nil
 
   defp encode_svg_style(attrs) do
     fill = Map.get(attrs, :fill)

@@ -493,6 +493,14 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG element's dashed, capped or joined stroke draws on the binary canvas** (#693).
+  `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
+  dropped `stroke-dasharray`, `stroke-linecap` and `stroke-linejoin`, so a dashed line drew
+  solid with butt caps and miter joins. They are now written, and such a stream begins
+  with version 3 (as an IR element's does since #675), so a hook older than that version
+  refuses it rather than drawing it solid; a tree that sets none of the three encodes as
+  before, byte for byte.
+
 - **A scale's range takes typed colors and transforms** (#710, D-185). `range:
   [color(:good), color(:bad)]`, `[color(:blue) |> intensity(0.5), …]` or
   `Enum.map(steps, &shade(color(:red), &1))` was refused as `{:type, :extent}` while the

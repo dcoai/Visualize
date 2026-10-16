@@ -159,7 +159,7 @@ defmodule Visualize.Backend.CanvasBinary do
     precision = precision!(opts)
 
     if available?() do
-      {:ok, SVG.encode_element(svg_element, precision)}
+      {:ok, SVG.encode_tree(svg_element, precision)}
     else
       {:error, :nx_not_available}
     end
