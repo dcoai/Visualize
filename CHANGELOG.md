@@ -309,6 +309,15 @@ release it merely follows.
 
 ### Changed
 
+- **The builder's board mode draws only the cells an edit touched** (#723, D-191). Every
+  event and render in board mode drew every cell's preview and validated the whole board —
+  about 2.1 million reductions a pass on an eight-cell board. Each preview is now kept by
+  its inputs (the cell, the board's shared state, its component as the store holds it, its
+  data, the theme, the catalog and its binding), and the validation by the board and its
+  components, so a pass that changes nothing draws nothing (about 73,000) and an edit to
+  one cell draws that cell. A catalog feed's sample rows now end at the instant the host
+  gave the catalog rather than at each render.
+
 - **American spelling: the color-safe theme is `:color_safe`, and a map of colors is
   `$colors` in JSON** (#642, D-183). The built-in theme and its function are
   `Visualize.Theme.color_safe/0` and `theme: :color_safe`, and `Visualize.Theme.builtin/1`

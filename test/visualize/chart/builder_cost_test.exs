@@ -10,7 +10,9 @@ defmodule Visualize.Chart.Builder.CostTest do
 
   In board mode (#714, D-189) the pass is counted over a board whose cells bind a catalog,
   beside a host pool of many sources: the pool and the catalog are typed when the host gives
-  them, so a pass that types them again fails here by name.
+  them, so a pass that types them again fails here by name. Its cell previews and the
+  board's validation are kept by their inputs (#723, D-191), so a pass that draws them
+  again fails here too, and an event that touches one cell draws that cell's preview alone.
   """
   use ExUnit.Case, async: true
 
@@ -56,7 +58,14 @@ defmodule Visualize.Chart.Builder.CostTest do
   # while it typed the pool's 40 sources twice and the catalog's 6 feeds once a pass, and is
   # about 405,000 reading what `update/2` typed. Its budget, about twice that, is under the
   # cost of typing them again.
-  @budget %{editing: 300_000, groups: 50_000, board: 800_000}
+  #
+  # Board mode (#723): with the previews and the validation kept by their inputs, the pass
+  # is about 36,000 (405,000 before; on the examples' board about 73,000, from 2,120,000),
+  # and an event that retitles one cell, with the pass after it, about 175,000 with the
+  # cells bound — the board's validation and the one cell's slots and preview, where
+  # drawing every cell again is about 285,000. Each budget is about twice the cost, but the
+  # one-cell edit's, which stays under the cost of drawing every cell.
+  @budget %{editing: 300_000, groups: 50_000, board: 80_000, one_cell: 260_000}
 
   defp counted(fun) do
     {_first, _} = Visualize.Work.reductions(fun)
@@ -138,7 +147,42 @@ defmodule Visualize.Chart.Builder.CostTest do
     # The same pass given data other than what was typed types it itself, and costs more.
     {untyped, _} = counted(fn -> Editing.editing(Map.delete(s.assigns, :typed)) end)
     assert untyped > work
-    assert untyped > work
+
+    # And one with nothing kept draws every preview and validates the board (#723).
+    {unkept, _} = counted(fn -> Editing.editing(Map.delete(s.assigns, :board_kept)) end)
+    assert unkept > 4 * work
+  end
+
+  test "an event that touches one cell draws that cell alone, within its budget" do
+    s = board_mode()
+
+    binding =
+      Visualize.Board.Binding.new(
+        for {cell, n} <- [a: 1, b: 2, c: 3, d: 4], into: %{}, do: {{cell, :primary}, :"feed_#{n}"}
+      )
+
+    s =
+      s |> Phoenix.Component.assign(:binding, binding) |> Visualize.Chart.Builder.BoardMode.keep()
+
+    retitle = %{"_target" => ["title"], "title" => "Renamed"}
+
+    {work, editing} =
+      counted(fn ->
+        {:noreply, s} = Builder.handle_event("board_cell", retitle, s)
+        Editing.editing(s.assigns)
+      end)
+
+    assert %{cells: [%{title: "Renamed"} | _]} = editing.board_mode
+
+    {:noreply, edited} = Builder.handle_event("board_cell", retitle, s)
+
+    {_kept, computed} =
+      Visualize.Chart.Builder.BoardMode.kept(%{edited.assigns | board_kept: s.assigns.board_kept})
+
+    assert computed.previews == [:a]
+
+    assert work <= @budget.one_cell,
+           "a one-cell edit spent #{work} reductions, over #{@budget.one_cell}"
   end
 
   test "the picker's color table is linear in the theme's names" do

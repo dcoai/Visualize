@@ -2388,7 +2388,7 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A board-mode pass on the examples' board costs about 2.13 million reductions where it cost 2.61 million, and on the cost test's board about 405,000 where it cost 1,520,000; every builder event in any mode stops paying for the host pool's types (numbers on #714).
 - A host that hands the builder new `sources` or a new `catalog` pays the typing once, in `update/2`.
-- The cell previews, which realize and draw each cell, are the largest remaining part of a board-mode pass; they draw, and are left as they are.
+- The cell previews, which realize and draw each cell, are the largest remaining part of a board-mode pass; they draw, and are left as they are. *Answered by #723, D-191: they are kept by their inputs.*
 
 ## 190. D-190 — A compiled chart's tick declares the paints it first draws
 
@@ -2410,4 +2410,26 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A compiled chart's static layer no longer declares in-place paints its first draw does not use; a page that read one of those ids from the static layer before any tick drew it finds it in the tick that draws it.
 - A tick that first draws a merged paint carries its definition in that tick's SVG on every tick that draws it — a few hundred bytes per paint, in the tick's payload `bytes`.
 - Two SVG layers on one page may define the same id once each; they define the same paint, since the id is a hash of it.
+
+## 191. D-191 — The board mode keeps each cell's preview and the board's faults by their inputs
+
+**Context.** #723; work item #730. After #714 (D-189) a board-mode pass of `Visualize.Chart.Builder.Editing.editing/1` on the examples' board cost about 2.12 million reductions. Measured by part: the cell previews — every cell realized and drawn on every pass, whatever the event changed — about 1.4 million; `Visualize.Board.validate/2` of the whole board about 0.3 million; the cells' slots (`Board.required_sources/2`, each cell alone) about 0.27 million; the variables the components declare, read through the store three times over, about 0.05 million each time. On the cost test's board the pass was about 405,000. Every builder event and every render pays a pass, and none of these changes unless the board, the store's components, the binding, the data, the catalog or the theme does. #704 and #714 were the same defect class: work that is a function of an unchanged input, done per event.
+
+**Decision.**
+- **A cell's preview is kept under its inputs** (spec/14 §22.6): the cell, the board's shared state, its component flattened through the store, its pool, the theme, the catalog and its slots' feeds, its type refusal. A pass draws only the cells whose inputs differ from the kept ones, in one `Boards.preview/3` call over those cells.
+- **The board's faults and declared variables are kept under the board and its components flattened** (§22.5); **each cell's slots under the cell and its component**. The components are flattened once per pass — what the store says of each, nested references and all — so a store whose entries change behind the same store term (a module store, `:persistent_term`, a database) is seen; this costs one flatten per component the board names, about 6,000 reductions each.
+- **The kept map is an assign**, refreshed after every builder event and every `update/2` (`BoardMode.keep/1`), compared with `==`, which the VM answers at once for the same term. A pass whose inputs are not the kept ones computes what they make itself, so nothing is read stale (D-189's rule).
+- **The catalog's sample rows are made when the host gives the catalog** (D-189's `update/2`), ending at that instant, rather than on every pass at its own instant: a preview kept by its pool must not be drawn again because the clock moved.
+- **Budgets** (spec/12 §6): the board-mode pass at 80,000 (measured about 36,000), and an event touching one cell with its pass at 260,000 (about 175,000; every cell drawn again is about 285,000), asserted to draw that cell's preview alone.
+
+**Rejected.**
+- **A process or a table holding previews** (an ETS cache, `:persistent_term`). State outside the socket outlives what it was made from and is filled by whoever asks first; D-184 and D-189 rejected it for the same reasons.
+- **Keying on the store term.** A module store holds its entries elsewhere; the term does not change when they do, and a saved component would keep its stale preview.
+- **Validating per cell.** `Board.validate/3` is one contract, with board-level faults (overlaps, the sync group, drills) across cells; re-implementing it in the builder to save its cost on a one-cell edit would let the two drift. A one-cell edit changes the board, and the board is validated again.
+- **Keeping per event kind** (an event that names the cells it touched). Every event would have to say so correctly forever; keys derived from the inputs cannot be wrong by omission.
+
+**Consequences.**
+- A board-mode pass on the examples' board costs about 73,000 reductions where it cost 2,120,000, on the cost test's board about 36,000 where it cost 405,000; a selection is a pass that draws nothing. An event that retitles one cell costs about 615,000 on the examples' board (2,120,000 before), most of it the board's validation, and draws one preview.
+- A host that hands the builder a new catalog has its sample rows end at that instant; a preview's time axis no longer advances with every render, only with the data.
+- The examples' board has eight cells; the saving grows with the cells, since an edit draws one.
 

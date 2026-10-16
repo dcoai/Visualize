@@ -23,8 +23,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Board
     alias Visualize.Board.Binding
-    alias Visualize.Chart.Builder.{Boards, Stack, Store, Typed}
-    alias Visualize.Data.{Delivery, Schema}
+    alias Visualize.Chart
+    alias Visualize.Chart.Builder.{BoardKept, Boards, Stack, Store, Typed}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -290,32 +290,91 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The render's assigns for the mode (`Visualize.Chart.Builder.Modes`): `board_mode`.
     def assigns(assigns, kind, _errors), do: %{board_mode: board_mode(assigns, kind)}
 
-    defp board_mode(%{board: %Board{} = board} = assigns, :board) do
+    @doc false
+    # The socket with what a pass over it draws and checks kept as `board_kept` (spec/14
+    # §22.6, #723, D-191), for the render and the next event to read; `nil` off the mode.
+    # `Visualize.Chart.Builder` calls it after every event and every `update/2`.
+    def keep(socket) do
+      case kept(socket.assigns) do
+        nil -> if socket.assigns[:board_kept], do: assign(socket, :board_kept, nil), else: socket
+        {kept, _computed} -> assign(socket, :board_kept, kept)
+      end
+    end
+
+    @doc false
+    # What a pass over the assigns keeps, and what it had to compute for it: `{kept,
+    # %{facts: computed?, required: cells read, previews: cells drawn}}`, or `nil` off the
+    # mode.
+    def kept(assigns) do
+      case board_kept(assigns) do
+        nil -> nil
+        {_mode, kept, computed} -> {kept, computed}
+      end
+    end
+
+    defp board_mode(assigns, kind) do
+      case kind == :board && board_kept(assigns) do
+        {mode, _kept, _computed} -> mode
+        _off -> nil
+      end
+    end
+
+    defp board_kept(%{board: %Board{} = board, open: %{kind: :board}} = assigns),
+      do: pass(assigns, board)
+
+    defp board_kept(_assigns), do: nil
+
+    defp pass(assigns, %Board{} = board) do
       fetch = Stack.fetch(assigns.store)
       entries = if assigns.store, do: Store.list(assigns.store), else: []
       names = Map.new(entries, &{&1.id, &1.name})
+      kept = Map.get(assigns, :board_kept) || %{}
 
-      faults =
-        case Board.validate(board, fetch) do
-          :ok -> []
-          {:error, errors} -> errors
-        end
+      # The facts are a function of the board and of what the store says of its
+      # components, flattened (§22.5): kept while both are what they were.
+      flat = flat(board, fetch)
 
+      {facts, facts_entry, facts?} =
+        BoardKept.facts(kept[:facts], {board, flat}, fn -> facts(board, fetch, flat) end)
+
+      # A cell's slots are its component's, read alone (§22.8): kept by the cell and what
+      # the store says of its component.
+      {per_cell, required_entries, read} =
+        BoardKept.each(
+          kept[:required],
+          Map.new(board.cells, fn {name, cell} -> {name, {cell, Map.get(flat, cell.ref)}} end),
+          fn stale -> Map.new(stale, &{&1, required_of(board, &1, fetch)}) end
+        )
+
+      required = per_cell |> Map.values() |> Enum.reduce(%{}, &Map.merge(&2, &1))
       binding = assigns.binding || Binding.new()
-      required = required(assigns)
       sources = feed_sources(assigns)
       bind_faults = binding_faults(assigns, binding, required, sources)
-      faults = faults ++ bind_faults
+      faults = facts.faults ++ bind_faults
       faulty = MapSet.new(for {[:cells, cell | _], _reason} <- faults, do: cell)
       pools = Binding.pools(binding, sources)
+      refused = refused(bind_faults)
 
-      previews =
-        Boards.preview(board, fetch,
-          pools: pools,
-          theme: assigns.theme,
-          describe: describe(assigns, binding),
-          refused: refused(bind_faults)
-        )
+      # Each preview is a function of these, and is drawn again only when one moved (§22.6).
+      shared = %{board | cells: %{}}
+
+      keys =
+        Map.new(board.cells, fn {name, cell} ->
+          {name,
+           {cell, shared, Map.get(flat, cell.ref), Map.get(pools, name), assigns.theme,
+            assigns[:catalog], for({{^name, _slot}, _feed} = pair <- binding.slots, do: pair),
+            Map.get(refused, name)}}
+        end)
+
+      {previews, preview_entries, drawn} =
+        BoardKept.each(kept[:previews], keys, fn stale ->
+          Boards.preview(%{board | cells: Map.take(board.cells, stale)}, fetch,
+            pools: pools,
+            theme: assigns.theme,
+            describe: describe(assigns, binding),
+            refused: refused
+          )
+        end)
 
       layout = Board.layout(board)
 
@@ -332,7 +391,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         })
       end
 
-      %{
+      mode = %{
         board: board,
         layout: layout,
         view: assigns.board_view,
@@ -341,18 +400,51 @@ if Code.ensure_loaded?(Phoenix.Component) do
         stacked:
           for({name, rect} <- Board.arrange(board, layout.breakpoint - 1), do: view.(name, rect)),
         selected:
-          selected(board, assigns.board_cell, fetch, names)
+          selected(board, assigns.board_cell, flat, names)
           |> with_slots(assigns.board_cell, binding, required, bind_faults),
         catalog?: is_map(assigns[:catalog]),
         feeds: for(feed <- feeds(assigns), do: {Boards.feed_key(feed), Boards.feed_key(feed)}),
         components: for(%{kind: :composite} = e <- entries, do: {e.name, Store.encode_id(e.id)}),
-        vars: board_vars(board, fetch),
+        vars: facts.vars,
         window: window(board.window),
         faults: Enum.map(faults, &Board.format_error/1)
       }
+
+      {mode, %{facts: facts_entry, required: required_entries, previews: preview_entries},
+       %{facts: facts?, required: read, previews: drawn}}
     end
 
-    defp board_mode(_assigns, _kind), do: nil
+    # Each component the board's cells name, flattened through the store (spec/14 §19.8):
+    # what the store says of it, nested references and all, by ref.
+    defp flat(board, fetch) do
+      board.cells
+      |> Map.values()
+      |> Enum.map(& &1.ref)
+      |> Enum.uniq()
+      |> Map.new(fn ref ->
+        {ref, with({:ok, fragment} <- fetch.(ref), do: Chart.flatten(fragment, fetch))}
+      end)
+    end
+
+    # The board's faults given the store (§22.5) and the variables it shows (§22.4): one
+    # reading of the board and its components.
+    defp facts(board, fetch, flat) do
+      faults =
+        case Board.validate(board, fetch) do
+          :ok -> []
+          {:error, errors} -> errors
+        end
+
+      %{faults: faults, vars: board_vars(board, flat)}
+    end
+
+    # The variables a component declares, from its flattened design.
+    defp declared(flat, ref) do
+      case Map.get(flat, ref) do
+        {:ok, design, _report} -> design |> Map.get(:vars, %{}) |> Map.keys() |> Enum.sort()
+        _none -> []
+      end
+    end
 
     # The selected cell's slots, each with the feed it is bound to and its own faults (§22.8).
     defp with_slots(nil, _cell, _binding, _required, _faults), do: nil
@@ -381,9 +473,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp slot?({[:cells, cell | _], {:type_mismatch, slot, _, _, _}}, cell, slot), do: true
     defp slot?(_fault, _cell, _slot), do: false
 
-    defp selected(_board, nil, _fetch, _names), do: nil
+    defp selected(_board, nil, _flat, _names), do: nil
 
-    defp selected(board, name, fetch, names) do
+    defp selected(board, name, flat, names) do
       case Map.fetch(board.cells, name) do
         {:ok, cell} ->
           vars = Map.get(cell, :vars, %{})
@@ -396,7 +488,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             sync: Map.get(cell, :sync, true),
             vars:
               for(
-                var <- Boards.declared(cell.ref, fetch),
+                var <- declared(flat, cell.ref),
                 do: {Atom.to_string(var), shown(Map.get(vars, var))}
               )
           }
@@ -408,10 +500,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # Every variable a cell's component declares, and every one the board holds that none
     # does, so it can be emptied (§22.4).
-    defp board_vars(board, fetch) do
-      declared = board_var_names(board, fetch) -- Map.keys(board.vars)
+    defp board_vars(board, flat) do
+      by_cells =
+        board.cells
+        |> Map.values()
+        |> Enum.flat_map(&declared(flat, &1.ref))
+        |> Enum.uniq()
+
       held = Map.keys(board.vars)
-      by_cells = declared_by_cells(board, fetch)
+      declared = Enum.uniq(by_cells ++ held) -- held
 
       (declared ++ held)
       |> Enum.uniq()
@@ -499,27 +596,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp required(%{board: %Board{cells: cells} = board, store: store}) do
       fetch = Stack.fetch(store)
 
-      Enum.reduce(cells, %{}, fn {name, cell}, acc ->
-        case Board.required_sources(%{board | cells: %{name => cell}}, fetch) do
-          {:ok, required} -> Map.merge(acc, required)
-          {:error, _errors} -> acc
-        end
+      Enum.reduce(cells, %{}, fn {name, _cell}, acc ->
+        Map.merge(acc, required_of(board, name, fetch))
       end)
     end
 
     defp required(_assigns), do: %{}
 
+    # One cell's slots, its component read alone; none when it does not resolve.
+    defp required_of(%Board{cells: cells} = board, name, fetch) do
+      case Board.required_sources(%{board | cells: Map.take(cells, [name])}, fetch) do
+        {:ok, required} -> required
+        {:error, _errors} -> %{}
+      end
+    end
+
     # The rows each bindable feed previews over (§22.6): the host's `sources` of its name,
     # else rows made from a catalog feed's schema.
-    defp feed_sources(%{catalog: catalog} = assigns) when is_map(catalog) do
-      now = DateTime.utc_now() |> DateTime.truncate(:second)
-      sources = assigns.sources || %{}
-
-      Map.new(catalog, fn {feed, schema} ->
-        rows = Map.get_lazy(sources, feed, fn -> Boards.sample(schema, now) end)
-        {feed, Delivery.new(rows, schema: Schema.version(schema))}
-      end)
-    end
+    defp feed_sources(%{catalog: catalog} = assigns) when is_map(catalog),
+      do: Typed.samples(assigns)
 
     defp feed_sources(assigns), do: pool(assigns)
 
