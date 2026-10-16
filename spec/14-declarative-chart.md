@@ -434,6 +434,8 @@ It is **anonymous in the document**: an inline node is not a key of `design.styl
 
 A design whose stack holds no field entry draws byte for byte as before: the per-datum path is taken only by a mark whose stack holds one.
 
+**A virtual source's field joined to an item** (#643, D-194). On a board, a row of a feed carries the fields of every per-identity virtual source over that feed for its own identity, each named `:"<id>.<field>"` (spec/15 §14.7), so `style: {:field, :"health.state"}` names the style `:ok`, `:warning` or `:error` by the host's own health, and a list composes as any: `[:base, {:field, :"health.state"}]`. A design declares the joined field among its slot's `fields` like any column; its JSON is `{"$field": "health.state"}`. When the field declares `values`, the stack is checked to cover them (§7.4).
+
 **A generator in the stack: a style computed at render** (#654, D-177). A stack entry MAY be a generator call `generate(:name, args)`, stored `{:generate, name, args}`: the style a host's generator returns for those arguments (§3.13). It is laid **where it stands**, as a field entry is, alone or in a list:
 
 ```elixir
@@ -879,6 +881,7 @@ An axis has no `id`: its identity in a stack is `{scale, side}` (§8.2), so a la
 | `style` | `{:ref, :style}` | `:style` | `:label` | `:override` |
 | `wrap` | `:boolean` | `:geometry` | `true` | `:override` |
 | `max_label` | `:integer` | `:geometry` | `nil` | `:override` |
+| `values` | `{:list, :term}` | `:content` | `nil` | `:override` |
 
 The frame builds the legend from the realized scale: one entry per value of `Visualize.Scale.ticks/2` — the domain of a discrete scale, five ticks of a continuous one — each a 12 × 12 swatch and, 16 user units to its right, the value's label as an axis would print it (spec/05 §1.5), with the legend's own `prefix` and `unit` before and after it (#135), so a legend explaining a scale with units agrees with the axis drawing it. The swatch is filled with the scale's value for the entry when that is a color — a string, or a theme slot resolved through `Visualize.Theme.resolve/3` (§4.3) — and with the theme's `{:series, i}` for the i-th entry of a scale that yields anything else. The labels and the title take the legend's `style`.
 
@@ -892,6 +895,8 @@ group  style: %{class: "legend", font_family: <font_family>, font_size: <font_si
 ```
 
 Entries are 16 apart and the title, when given, is the first row. `position` places the legend inside the plot area, 8 user units from its edges: the four corner positions stack the entries downward from the corner, the right-hand ones laid out right to left — the swatch at the edge and the label anchored `end` to its left — so no text width is needed; `:left` and `:right` stack them likewise, centered on the plot's height; `:top` and `:bottom` lay them in a row centered on the plot's width, each entry's width taken as 16 plus 0.6 × the font size per character of its label (`Visualize.Chart.Text.width/2`) and the title's as its estimated width, each followed by 8 before the next.
+
+**A legend of declared values** (#643, D-194). With `values` — a list, most often `fact(:hosts, :"health.state", :values)`, the field's declared values read from its schema (§7.4, spec/08 §10.1) — the legend explains a mapping by value rather than a scale, and `scale` is not required: one entry per value, in order, labeled by the value with `prefix` and `unit` around it, its swatch the fill of the **style the value names** (§3.6: the design's `styles`, then the theme's palette), else that style's stroke color, else the theme's `{:series, i}`. So a style chosen by `{:field, :"health.state"}`, or a `:choose` whose children are styled by the same names, has its legend built from the field's declared values with no list of its own. With both `scale` and `values`, `values` wins.
 
 **A top or bottom legend wraps to the plot's width** (#630, D-169). With `wrap: true`, the default, the title and the entries flow left to right, in order, and a cell that would end past the plot's width starts a new row; rows are 16 apart, the first at the legend's origin, and each row is centered on the plot's width on its own. A legend whose cells all fit one row is that one row, exactly as it was before wrapping existed. `:top` inside the plot puts its first row 8 below the plot's top edge, and `:bottom` its last row's swatches 8 above the plot's bottom edge, so a wrapped legend grows into the plot from the edge it names. Wrapping places only the entries' groups — every entry keeps its group, its `data-series` and its swatch-then-label children — so `LegendHook` reads a wrapped legend as it reads a row. Two things cannot be fitted, and `Visualize.Chart.Frame.new/2` raises `ArgumentError` for each, naming the side (`top` or `bottom`) and the width needed beside the plot's width: with `wrap: false`, a row wider than the plot; with wrapping, a single cell — an entry, or the title — wider than the plot on its own, for which `max_label` is the remedy. The four corner positions and `:left` and `:right` stack, and `wrap` does nothing for them.
 
@@ -961,6 +966,9 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `id` | `:name` | `:content` | `nil` | `:override` |
 | `frame` | `{:ref, :frame}` | `:binding` | `nil` | `:override` |
 | `defaults` | `{:node, :defaults}` | `:style` | `nil` — the defaults of the layers and groups it was placed from (§3.8) | `:override` |
+| `on` | `:field` | `:binding` | required of `:choose`, `{:invalid_for, type}` on any other (§5.2) | `:override` |
+| `cases` | `{:map, {:node, :choice}}` | `:content` | required of `:choose`, `{:invalid_for, type}` on any other | `:override` |
+| `else` | `{:node, :choice}` | `:content` | `nil`; of `:choose` only | `:override` |
 
 `frame` is the frame the mark is drawn in (#383), **required when the design has more than one** and the single frame's when it has one — the validator reports a mark without one in a multi-frame design as `:required` and a name the design does not declare as `{:undeclared, :frame, name}`. A scale name resolves **inside the mark's frame**, so `history` and `now` may both declare `x` or `r` and each mark reads its own; that is what makes two plots over one source two frames rather than two designs.
 
@@ -993,6 +1001,22 @@ A `:facet` frame holds one `class="panel"` group per panel in place of the grid,
 | `:circle` | `x`, `y` | `value`, `series` | a circle per datum; `value` is the radius |
 | `:text` | `x`, `y` | `value`, `series` | a text per datum at the scaled position (#134): its content the mark's inline `label` text (§5.5) read from the datum, else `value` as a string; drawn in the label's style, `class="mark mark-text"`, and anchored as the label's `anchor` says about the position — the mark a grammar of graphics has, so a text at a data position needs no invisible carrier. It draws text alone, so its render target is `:svg` whatever `render` says (§12.3) |
 | `:tiles` | | | a Web-Mercator basemap under a `:geo` frame (#475): one `:image` per slippy-map tile covering the plot and the attribution as text, beneath every other mark (below) |
+| `:choose` | `x`, `y` | `series` | a **choice by value** (#643, D-194): for each datum, the child its `on` field's value names, at the datum's position (below) |
+
+**A choice by value** (#641's reduced question 4, #643, D-194). A `:choose` mark draws, for each datum, **the child the value of its `on` field names**: a green dot for `:ok`, a yield sign for `:warning`, a stop sign for `:error`, placed at the datum's `x` and `y`:
+
+```elixir
+%{type: :choose, data: :hosts, channels: %{x: :x, y: :y}, on: :"health.state",
+  cases: %{ok: %{type: :circle, style: :good},
+           warning: %{type: :symbol, style: :warning},
+           error: %{type: :symbol, style: :bad}},
+  else: %{type: :text, label: %{text: "?"}}}
+```
+
+- **A child is a `:choice` node**: `type`, one of `:circle`, `:symbol`, `:text` and `:rect`, with `channels`, `options`, `style` and `label` as a mark of that type takes them (§5.1–§5.5). It has no `data` and no `frame`: it draws the data its case holds, in the choose mark's frame, its channels the choose mark's with its own over them — so a child may add a `value` for its size, or move `y`.
+- **The value names a case** as a style name is matched (§3.6): an atom key of `cases`, or a string spelling one — a feed's `"warning"` names `warning:` — never made into an atom. A value no case names draws `else`, and with no `else`, nothing: the datum is skipped, never a fault at render.
+- **Drawing.** The rows are the mark's data through its transforms (§5.4), split by case; each case's rows are drawn by its child as a mark of the child's type over exactly those rows, at the choose mark's position among the marks (its paint, §5.6), the cases in the order of their names as strings and then `else`. The mark is one group, `class="mark mark-choose"`, holding each drawn case's group in that order. The frame infers its scales' domains from the choose mark's own channels, as for any mark.
+- **Coverage.** A `:choose` whose `on` field declares `values` (spec/08 §10.1) has a case for each, or an `else`: §7.4's coverage check.
 
 **A rule and an x band are the overlays a chart draws over its data** (#565, D-143): an event at an instant is a `:rule` at `x`, an event that lasted is an `:x_band` from `x0` to `x1`, and a threshold is a `:rule` at `y` — a horizontal line across the plot at the reading, the cartesian counterpart of the polar arc at a radius. Each is fed from a source like any mark: a source of events with `at`, `ends`, `title` and `severity` columns is two marks over one slot (a `:filter` step keeps the instants, `test: :absent` on `ends`, and another the spans, `test: :present`), labeled by an inline label (`label: %{text: "#{field(:title)}"}`, §5.5), colored by meaning through a scale of their own (`scales: %{color: :severity}`, §4.3) whose range is the feed's `status` (`fact(:events, :severity, :status)`, §7.4), and given a hover text and a click by a tooltip (§5.7). A threshold source of `value` rows is one `:rule` at `y: :value`, and a feed's own target is one rule at `y: fact(:primary, :latency, :target)` over `take(1)` of the feed (§5.4.1), since a constant is drawn once per row. A rule's or a band's reading feeds the domain it names (§4.3), so a threshold is always in view. **In a cartesian frame a rule and an x band are cut to the plot area** (#565): a rule whose reading lies outside `[0, width]` (at `x`) or `[0, height]` (at `y`) draws nothing, and an x band is clamped to `[0, width]`, one wholly outside drawing nothing — marks are not clipped (§5.2's baseline note), and an event span that began before the window, or a rule at an instant the window has scrolled past, would otherwise be drawn across the axis and into the margin. Their labels go with them. A polar frame's rules and bands stand on the angle's sweep and are not cut.
 
@@ -1342,6 +1366,8 @@ An axis title follows the side of the first axis that names its scale; with no a
 The result is a `%Visualize.Chart.Applied{}` (§14.10): `chart`, the concrete `%Visualize.Chart{}` — no variable anywhere in it, `vars` empty, the slot declarations kept as the data contract, everything else as the design wrote it; `sources`, the bound sources by slot name; `frame`, the realized frame, whose `Visualize.Chart.Frame.scales/1` is the escape hatch; and `schemas`, `versions` and `cache` (§7.4): the schema of each slot that has one, the version each delivery named, and the cache grown by any describe. `Visualize.Chart.render/2` draws it: `Visualize.Chart.Frame.render/2` of the frame over the bound sources, with the same options. The design, its fragments and a binding are storable; the applied chart holds data and is not — it has no map form and no JSON form.
 
 ### 7.4 Schemas: the contract and the facts
+
+**Coverage of declared values** (#643, D-194). A mapping by a field — a style stack entry `{:field, f}` at a mark's `style`, and a `:choose` mark's `on: f` — is checked at application against the field's declared `values` (spec/08 §10.1) wherever the slot the mark reads resolves to a schema that declares them: a style entry must have, for every value, a style the value names — the design's `styles` or the palette of the theme its frame is drawn with (§3.3), matched as §3.6 matches — and a `:choose` a case for every value, or an `else`. A mapping that does not is `{:uncovered, f, missing}` at the mark's `style` or its `cases`, `missing` the values with nothing to draw, in their declared order. A field that declares no values, or a slot with no schema, is not checked: its value names a style or a case at render, or lays nothing (§3.6, §5.2). The check runs once the frames are realized, which is where the theme is known.
 
 **Implemented** (#552, D-136). A feed describes its fields in a schema, and each of its deliveries names the schema's version ([08-utilities](08-utilities.md) §10). A design does not carry those facts as variables a host must compute. It **states a contract**, the attributes a slot's schema must give, and **reads facts** from the bound schema. `Visualize.Chart.apply/2` checks one against the other and resolves the other, as it resolves variables.
 
