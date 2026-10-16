@@ -17,6 +17,22 @@ release it merely follows.
 
 ### Added
 
+- **A sandbox for stored Elixir functions** (#748, D-194), the first part of virtual
+  sources (#643): sources computed from other sources by a function, rows in and rows
+  out. `Visualize.VirtualSource.Sandbox.check/2` reads a function stored as source text —
+  one `fn` — and refuses, with every fault at its line, whatever the allowlist does not
+  name: the allowed calls are control structures, arithmetic and comparison, data access
+  (`row.field`, `row[:key]`) and explicit lists of `Enum`, `Map`, `Keyword`, `String`,
+  `Integer`, `Float` and `:math` functions (no random, atom-making or deprecated ones);
+  `send`, `receive`, `spawn`, `try`, `raise`, `apply`, other modules, sigils, structs and
+  string interpolation are refused. A name the node has never seen is refused at parse,
+  so a function makes no atoms; a variable name must already exist as an atom.
+  `compile/2` compiles a checked function once into a closure, and
+  `Visualize.VirtualSource.Sandbox.Cache` keeps compiled functions by source hash as a
+  value. `run/3` calls any function — stored or your own — in a process with a heap
+  limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
+  :raised, detail}`; a raise is reported by the exception's module, never its message.
+
 - **A chart's root takes an `id:`** (#712, D-188). `Visualize.Chart.render/2` and
   `generate/2` with `root: true` take `id:`: the root's id, its `<title>`'s and `<desc>`'s
   ids (`<id>-title`, `<id>-desc`) and the selector of the automatic dark-mode rule. Without
