@@ -39,7 +39,8 @@ defmodule ExamplesWeb.ChartLiveDesignTest do
     assert html =~ "The design (data)"
     assert html =~ "meta: %{name: &quot;Line Chart&quot;"
     assert html =~ "marks: ["
-    assert html =~ "to_json/1</code> is the same map as JSON"
+    # Text, not the template's line breaks: HTML whitespace between words is one space.
+    assert html =~ ~r"to_json/1</code>\s+is the same map as JSON"
   end
 
   test "the SVG tab keeps the module's sample, and the data panel is there too" do
