@@ -502,6 +502,16 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG element's stroke width no longer carries over to its next sibling on the binary
+  canvas** (#744, D-193). `Visualize.Backend.CanvasBinary.encode_element/2` given a
+  `Visualize.SVG.Element` tree left an element's own `stroke-width`, fill and stroke colors
+  in the canvas state when it stood at the root or under a group that set none of them, so a
+  later sibling that strokes without a width of its own drew at the earlier element's width
+  instead of SVG's 1. Every drawing element that sets a color, a width, a dash, a cap or a
+  join is now drawn inside its own `save` … `restore`, as the IR encoders' elements are
+  (D-179), wherever it stands; an element that sets none costs nothing. A styled element's
+  stream is two bytes longer.
+
 - **An SVG element's `opacity` multiplies into its fill and its stroke on the binary
   canvas** (#742). `Visualize.Backend.CanvasBinary.encode_element/2` given a
   `Visualize.SVG.Element` tree let an element's `opacity` replace its `fill-opacity`, and

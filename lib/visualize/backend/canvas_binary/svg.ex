@@ -27,9 +27,6 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     :stroke_dasharray
   ]
 
-  # The inherited attributes a style record (spec/09 §4.3.5) carries as canvas state.
-  @style_state [:fill, :fill_opacity, :stroke, :stroke_opacity, :stroke_width]
-
   @doc false
   # A tree as a whole stream (spec/09 §4.2, §4.7): `version` 3 first when any element writes
   # a stroke's dash, cap or join (#693, D-180), and every other tree's records as they were.
@@ -136,24 +133,22 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   defp encode(_element, _precision, _inherited), do: <<>>
 
   # A drawing element's records: its style, its geometry and its draws, and with a stroke's
-  # dash, cap or join its `paint_state` after the style, all inside `save` … `restore` so
-  # they outlive it on no later element (spec/09 §4.7, #693). The style carries what its own
-  # attributes set, each combined with what the groups pass on; the draws are its effective
-  # attributes', its own over the groups' (#734).
+  # dash, cap or join its `paint_state` after the style (#693). The style carries what its
+  # own attributes set, each combined with what the groups pass on; the draws are its
+  # effective attributes', its own over the groups' (#734).
   #
-  # Under a group's style state — its fill, stroke or width — a leaf whose own style record
-  # changes it is scoped too: the state is the group's for every child, so a later sibling
-  # that sets nothing draws in the group's colors, not this leaf's (#742). A tree with no
-  # such group is the stream it was.
+  # A leaf that writes either record writes all of them inside `save` … `restore`, wherever
+  # it stands, so its colors, width, dash, cap and join outlive it on no later sibling,
+  # which draws in the state of the groups above it (spec/09 §4.7, #744, D-193, as D-179
+  # for the IR encoders). A leaf that writes neither pays nothing.
   defp leaf(attrs, inherited, geometry, draws) do
     effective = Map.merge(inherited, presentation(attrs))
     style = leaf_style(attrs, effective)
     draws = draws.(effective)
-    group_state? = Enum.any?(@style_state, &Map.has_key?(inherited, &1))
 
     case paint_state(attrs) do
-      <<>> when style == <<>> or not group_state? ->
-        IO.iodata_to_binary([style, geometry | draws])
+      <<>> when style == <<>> ->
+        IO.iodata_to_binary([geometry | draws])
 
       state ->
         IO.iodata_to_binary([
