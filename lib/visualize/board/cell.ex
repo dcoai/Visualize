@@ -74,6 +74,8 @@ defmodule Visualize.Board.Cell do
       generators: Keyword.get(opts, :generators, []),
       assigns: Keyword.get(opts, :assigns, %{}),
       title: Keyword.get(opts, :title),
+      # Its chart root's id on the board (spec/15 §8.3, D-188).
+      id: Keyword.get(opts, :id),
       stale_after: Keyword.get(opts, :stale_after),
       subscribers: Keyword.get(opts, :subscribers, []),
       selection: Keyword.get(opts, :selection),

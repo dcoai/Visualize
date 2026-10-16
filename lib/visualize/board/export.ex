@@ -42,7 +42,7 @@ defmodule Visualize.Board.Export do
 
   # What a cell is drawn with beside the snapshot's data: the reader's unit system, and the
   # board's generators and assigns (spec/15 §12.2, D-156, D-181).
-  @drawing [:system, :generators, :assigns]
+  @drawing [:system, :generators, :assigns, :id]
 
   @typedoc "A box on the document or the page: `{x, y, w, h}` in pixels."
   @type box :: {number(), number(), number(), number()}
@@ -69,6 +69,9 @@ defmodule Visualize.Board.Export do
       host's assigns, as `Visualize.Board.Snapshot.views/2` takes them (default none and
       `%{}`): the board's own, so the export draws what the board draws for its viewer
       (D-181). `Visualize.Board.Server.export/3` passes a running board's
+    * `:id` - the board's id, each cell's chart root `<id>-<cell>-chart`, as
+      `Visualize.Board.Snapshot.views/2` takes it (D-188); `Visualize.Board.Server.export/3`
+      passes a running board's
     * `:title` - the header's name (default the board's `meta.name`)
     * `:resolve` - `:css` (default), every theme value a custom-property reference with
       its literal as fallback, as the cells draw it; or `:literal`, each reference

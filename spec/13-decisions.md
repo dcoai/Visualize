@@ -2351,3 +2351,21 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A design with a design-level `defaults` or a list-valued style imports into the builder and flattens back unchanged; the Composition chart is a builder template like every other gallery design.
 - A design key added to the schema fails the build until `decompose/1` places it.
+
+## 188. D-188 — A chart's root takes its id from the host, and a board gives each cell one
+
+**Context.** #712; work item #719. A chart's root id is content-derived: `vis-` and a hash of its title and description (D-56, D-142), the stem of its title's and description's ids and, since #668 (D-173), the selector of the automatic dark-mode rule its root carries. Two charts on one page with the same title and description therefore share an id: their accessible names collide, and the dark-mode rule of one restyles the other. Building the 0.7.0 examples (#705) met it in the Colors chart's dark-mode panel, which draws one design twice — with the rule and with `color_scheme: false` — beside the gallery's own drawing of it, and gave each drawing a different title so the three roots differed. A host had no way to say which chart is which. A board met the same thing in every cell: each cell's root was named by its title and summary, so two cells showing one component shared it.
+
+**Decision.**
+- **`Visualize.Chart.generate/2` and `render/2` take `id:`** (spec/14 §4.7): the root's id, its title's and description's id stem, and the selector its scoped rules are written against. Without it the id is content-derived as before, so nothing that renders today changes; an id given is the root's even with no title or description.
+- **A board names each cell's root** (spec/15 §8.2, §8.3): `<board id>-<cell>-chart`, the board's id the board process's `id:` option, by default `vis-board-` and a hash of the board's `meta` and cell names — a value that does not change while the board runs, and that a snapshot of it derives the same way (§12.2), so a snapshot's cell is still its live drawing byte for byte. The suffix keeps the root apart from the cell's own DOM id, `<board id>-<cell>` (§9.1), when a host gives both the component's id.
+- **The builder's board preview names each cell's root** `<id>-<cell>` (spec/14 §22.6).
+
+**Rejected.**
+- **Hashing more of the chart into the default** (its data, its design). Two drawings of one design over one dataset, which the dark-mode panel is, would still collide; only the host knows that two roots are two.
+- **Making `id:` required.** Nothing about one chart on a page needs it, and every render today would break.
+- **A random default.** A render would no longer be a function of its input: goldens, diffs and a snapshot's equality with its live drawing all rest on the same input drawing the same bytes.
+
+**Consequences.**
+- The examples' dark-mode panel draws its two roots with ids of their own and the design's own title.
+- A board cell's root id changes from the title-and-summary hash to `<board id>-<cell>-chart`; a host that styled cells by the old id styles them by the new.

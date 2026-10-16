@@ -50,7 +50,10 @@ defmodule ExamplesWeb.ChartPanelsTest do
     refute fixed =~ "prefers-color-scheme"
 
     # Three roots on one page, the chart above among them, and no two share an id: the
-    # rule is scoped to its root's id.
+    # rule is scoped to its root's id, which the panel gives each drawing (D-188), so both
+    # keep the design's own title.
+    assert implicit =~ ~s(<title id="dark-mode-implicit-title">Colors</title>)
+    assert fixed =~ ~s(<title id="dark-mode-fixed-title">Colors</title>)
     main = Design.render(ColorsChart, [])
     ids = Enum.map([implicit, fixed, main], &root_id/1)
     assert length(Enum.uniq(ids)) == 3

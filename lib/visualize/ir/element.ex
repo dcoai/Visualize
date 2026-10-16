@@ -404,8 +404,9 @@ defmodule Visualize.IR.Element do
   # `aria-labelledby` value — the title's id, else the description's, the only text there
   # is — and `describedby` the `aria-describedby` value, the description's id when there
   # is a title to name the root. The prefix is the given id or `vis-` plus a base-36 hash
-  # of the two texts, so equal charts share ids and different ones do not.
-  def label_ids(_id, nil, nil),
+  # of the two texts, so equal charts share ids and different ones do not — unless the host
+  # gives each its own (D-188). An id given is the root's even with neither text.
+  def label_ids(nil, nil, nil),
     do: %{root: nil, title: nil, desc: nil, labelledby: nil, describedby: nil}
 
   def label_ids(id, title, description) do

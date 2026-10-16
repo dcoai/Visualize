@@ -67,13 +67,15 @@ defmodule Visualize.Board.Server do
       `Visualize.Board.validate/3` takes them (default `%{}`)
     * `:debounce` - milliseconds a brushed window waits for the next (default `250`);
       `0` applies each at once
+    * `:id` - the board's id, each cell's chart root `<id>-<cell>-chart` (default
+      `vis-board-` and a hash of the board's meta and cell names, spec/15 §8.2, D-188)
     * `:name` - a registered name
   """
 
   use GenServer, restart: :transient
 
   alias Visualize.Board
-  alias Visualize.Board.{Binding, Cell, Export, Snapshot, State, View}
+  alias Visualize.Board.{Binding, Cell, Draw, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Feed.Monitor
 
@@ -121,6 +123,7 @@ defmodule Visualize.Board.Server do
         :board,
         :store,
         :name,
+        :id,
         :limits,
         boards: %{},
         debounce: 250,
@@ -380,6 +383,8 @@ defmodule Visualize.Board.Server do
         :debounce
       ])
       |> Map.merge(%{
+        # The board's id, its cells' root ids' stem, fixed while it runs (D-188).
+        id: Map.get(prepared, :id) || Draw.board_id(board),
         limits: Map.get(prepared, :limits, []),
         given: board.window,
         selection: nil,
@@ -521,7 +526,13 @@ defmodule Visualize.Board.Server do
 
   # What the board draws with beside its data, which a snapshot does not record (D-181).
   def handle_call(:export, _from, state) do
-    own = [generators: state.generators, assigns: state.assigns, system: state.system]
+    own = [
+      generators: state.generators,
+      assigns: state.assigns,
+      system: state.system,
+      id: state.id
+    ]
+
     {:reply, {frozen(state), own}, state}
   end
 
@@ -676,6 +687,7 @@ defmodule Visualize.Board.Server do
        generators: state.generators,
        assigns: state.assigns,
        title: Map.get(cell, :title),
+       id: Draw.root_id(state.id, name),
        stale_after: state.board.stale_after,
        subscribers: Map.keys(state.subscribers),
        max_heap: state.max_heap,
