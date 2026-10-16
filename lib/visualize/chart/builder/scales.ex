@@ -120,9 +120,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
         %{[:marks, 0, :channels] => [%{name: :extra, type: :text}, %{name: :t, type: :time}, %{name: :v, type: :number}]}
     """
     @spec columns(map(), map()) :: %{[term()] => [%{name: atom(), type: atom() | nil}]}
-    def columns(design, pool) when is_map(design) and is_map(pool) do
-      pool_types = pool_types(pool)
+    def columns(design, pool) when is_map(design) and is_map(pool),
+      do: columns(design, pool, pool_types(pool))
 
+    @doc """
+    `columns/2` with the pool's types already read (`pool_types/1`), as the editing pass
+    reads them once for every field (spec/14 §19.10, D-189).
+    """
+    @spec columns(map(), map(), pool_types()) :: %{
+            [term()] => [%{name: atom(), type: atom() | nil}]
+          }
+    def columns(design, _pool, pool_types) when is_map(design) and is_map(pool_types) do
       for {mark, i} <- Enum.with_index(List.wrap(Map.get(design, :marks, []))),
           is_map(mark),
           source = source_of(mark),

@@ -531,6 +531,14 @@ release it merely follows.
   style is placed under its name like any style, and the style list shows it as its
   entries. The examples app offers the Composition chart as a builder template.
 
+- **The builder no longer re-reads its data's column types on every event** (#714, D-189).
+  Every builder event and render typed each source of the host's `sources` twice and each
+  catalog feed's preview rows once more; on the examples' board that was about a fifth of
+  an editing pass. The builder now types them when the host gives them and reads them
+  after: a board-mode pass there costs about 2.13 million reductions where it cost 2.61
+  million. A host that hands the builder new `sources` or a new `catalog` pays the typing
+  once, then.
+
 - **The builder no longer slows down with the size of the color table** (#704, D-184).
   Every builder event and render rebuilt and sorted the theme's ~190 color names once for
   each name the color chooser listed, and rebuilt a node kind's key specs on every schema

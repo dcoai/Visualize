@@ -23,8 +23,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Board
     alias Visualize.Board.Binding
-    alias Visualize.Chart.Builder.{Boards, Stack, Store}
-    alias Visualize.Data.{Delivery, Schema, Table}
+    alias Visualize.Chart.Builder.{Boards, Stack, Store, Typed}
+    alias Visualize.Data.{Delivery, Schema}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -556,25 +556,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
             end)
         end
 
-      (checked ++ row_types(sources, binding, required))
+      (checked ++ row_types(Typed.feeds(assigns), sources, binding, required))
       |> Enum.uniq()
       |> Enum.sort_by(&elem(&1, 0))
     end
 
-    defp row_types(sources, binding, required) do
-      types =
-        Map.new(sources, fn {feed, source} ->
-          {feed, Table.column_types(rows(source))}
-        end)
+    # Each feed's types as `update/2` read them from its preview rows (D-189), for the feeds
+    # the preview binds.
+    defp row_types(typed, sources, binding, required) do
+      types = Map.take(typed, Map.keys(sources))
 
       case Binding.check_types(binding, required, types) do
         :ok -> []
         {:error, errors} -> errors
       end
     end
-
-    defp rows(%Delivery{} = delivery), do: Delivery.source(delivery)
-    defp rows(source), do: source
 
     # The cells a type fault keeps from being realized (§22.6, D-153), with their faults.
     defp refused(faults) do
