@@ -15,17 +15,10 @@ defmodule Visualize.Geo.ProjectionGoldenTest do
 
   @golden "test/support/projection_golden.txt"
 
-  @types ~w(mercator transverse_mercator equirectangular cylindrical_equal_area miller
-            gall_peters orthographic stereographic gnomonic azimuthal_equal_area
-            azimuthal_equidistant albers conic_conformal conic_equal_area conic_equidistant
-            bonne polyconic mollweide sinusoidal eckert1 eckert2 eckert3 eckert4 eckert5
-            eckert6 hammer kavrayskiy7 wagner4 wagner6 fahey collignon loximuthal
-            natural_earth equal_earth robinson winkel_tripel aitoff van_der_grinten)a
+  @types Visualize.Geo.ProjectionTypes.all()
 
   @lons [-170, -120, -60, -15, 0, 15, 60, 120, 170]
   @lats [-80, -60, -30, -5, 0, 5, 30, 60, 80]
-
-  def types, do: @types
 
   def render do
     for type <- @types, lon <- @lons, lat <- @lats do

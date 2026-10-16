@@ -214,7 +214,7 @@ defmodule Visualize.Geo.ClipTest do
       cap = %{"type" => "Polygon", "coordinates" => [ring(-70, [-135, -45, 45, 135])]}
       across = %{"type" => "Polygon", "coordinates" => [ring(60, [170, -170, -160, 160])]}
 
-      for type <- Visualize.Geo.ProjectionGoldenTest.types(),
+      for type <- Visualize.Geo.ProjectionTypes.all(),
           Projection.new(type).clip_angle == nil,
           rotate <- [0, 90, -135] do
         geo = Path.new(Projection.new(type) |> Projection.rotate(rotate, 0, 0))

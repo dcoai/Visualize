@@ -11,11 +11,9 @@ defmodule Visualize.Geo.ProjectionEdgeTest do
   use ExUnit.Case, async: true
 
   alias Visualize.Geo.Projection
-  alias Visualize.Geo.ProjectionGoldenTest, as: Golden
+  alias Visualize.Geo.ProjectionTypes
 
-  Code.require_file("test/visualize/geo/projection_golden_test.exs")
-
-  @types Golden.types()
+  @types ProjectionTypes.all()
 
   # The next float toward +∞ (`dir > 0`) or −∞, from the float's bits: Erlang has no
   # `nextafter`. A positive float's successor is its bit pattern plus one, a negative
