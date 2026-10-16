@@ -35,6 +35,41 @@ defmodule Visualize.Chart.Composite do
   # tier is written at the version this library writes (§9).
   @version Visualize.Chart.Migration.current()
 
+  # How `decompose/1` makes sites of a design (spec/14 §18.12, D-187), in the order it lists
+  # them: a design key's one positional site, a keyed site per entry, a site per element,
+  # or the frames' own rule — and the one frame's scales and axes, each a site of its own.
+  @sites [
+    theme: :one,
+    meta: :one,
+    layout: :one,
+    interaction: :one,
+    defaults: :one,
+    frames: :frames,
+    styles: {:keyed, :style},
+    scales: {:frame, :keyed, :scale},
+    sources: {:keyed, :source},
+    vars: {:keyed, :var},
+    defs: {:keyed, :gradient},
+    axes: {:frame, :each, :axis},
+    marks: {:each, :mark},
+    labels: {:each, :label}
+  ]
+
+  # Every key of the design schema has a site rule, `version` aside, which flatten writes:
+  # a key the schema gains and the table lacks would be dropped on import (#713).
+  @design_keys for {key, rule} <- @sites, not match?({:frame, _, _}, rule), do: key
+  @schema_keys for spec <- Visualize.Chart.Schema.describe(:design),
+                   spec.key != :version,
+                   do: spec.key
+
+  if Enum.sort(@design_keys) != Enum.sort(@schema_keys) do
+    raise CompileError,
+      description:
+        "Visualize.Chart.Composite.decompose/1 has no site rule for " <>
+          "#{inspect(@schema_keys -- @design_keys)}, or one for a key the design schema " <>
+          "lacks: #{inspect(@design_keys -- @schema_keys)} (spec/14 §18.12, D-187)"
+  end
+
   @typedoc """
   What `flatten/2` reports beside the design: every ref no store could find — a site's,
   by the site's id, or a reference inside the design, by its path — and every name-keyed
@@ -226,19 +261,14 @@ defmodule Visualize.Chart.Composite do
       end
 
     sites =
-      one(:theme, document) ++
-        one(:meta, document) ++
-        one(:layout, document) ++
-        one(:interaction, document) ++
-        frame_sites(frames) ++
-        keyed(:style, Map.get(document, :styles, %{})) ++
-        keyed(:scale, Map.get(parts, :scales, %{})) ++
-        keyed(:source, Map.get(document, :sources, %{})) ++
-        keyed(:var, Map.get(document, :vars, %{})) ++
-        keyed(:gradient, Map.get(document, :defs, %{})) ++
-        each(:axis, Map.get(parts, :axes, [])) ++
-        each(:mark, Map.get(document, :marks, [])) ++
-        each(:label, Map.get(document, :labels, []))
+      Enum.flat_map(@sites, fn
+        {key, :one} -> one(key, document)
+        {:frames, :frames} -> frame_sites(frames)
+        {key, {:keyed, kind}} -> keyed(kind, Map.get(document, key, %{}))
+        {key, {:frame, :keyed, kind}} -> keyed(kind, Map.get(parts, key, %{}))
+        {key, {:frame, :each, kind}} -> each(kind, Map.get(parts, key, []))
+        {key, {:each, kind}} -> each(kind, Map.get(document, key, []))
+      end)
 
     sites
     |> Enum.with_index(1)
@@ -253,7 +283,7 @@ defmodule Visualize.Chart.Composite do
   # something a person wrote (spec/14 §2.1, §18.12).
   defp one(key, document) do
     case Map.fetch(document, key) do
-      {:ok, value} when value == %{} -> []
+      {:ok, value} when value in [%{}, nil] -> []
       {:ok, value} -> [{to_string(key), %{ref: nil, local: %{key => value}}}]
       :error -> []
     end
@@ -316,6 +346,13 @@ defmodule Visualize.Chart.Composite do
       {:ok, %{frames: %{gauge: %{kind: :polar}}, marks: [%{type: :arc, data: :d, frame: :gauge}]}}
   """
   @spec place(map(), Use.t()) :: {:ok, map()} | :keyless
+  # A style whose body is a list of entries (spec/14 §3.6, #658) is a style all the same:
+  # under the site's key, or keyless (#713).
+  def place(%{style: entries} = contribution, %Use{key: key})
+      when is_list(entries) and map_size(contribution) == 1 do
+    if key == nil, do: :keyless, else: {:ok, %{styles: %{key => entries}}}
+  end
+
   def place(contribution, %Use{key: key}) do
     case Fragment.wrapped(contribution) do
       {kind, _body} when kind in @named and is_nil(key) ->

@@ -71,17 +71,10 @@ defmodule Examples.Charts.Templates do
     |> Enum.sort_by(& &1.title())
   end
 
-  # Gallery designs the builder cannot yet hold whole (#705): decomposing a design into
-  # sites (`Visualize.Chart.Composite.decompose/1`) drops a design-level `defaults` and a
-  # `styles` entry that is a list, both of which the Composition chart is there to show.
-  @not_templates [Examples.Charts.CompositionChart]
-
-  @doc "The gallery designs left out of the templates, until the builder holds them whole."
-  @spec not_templates() :: [module()]
-  def not_templates, do: @not_templates
-
+  # Every gallery design is a template: the builder holds each whole, its design-level
+  # `defaults` and list-valued styles among them (#713, D-187).
   defp gallery do
-    for module <- gallery_modules(), module not in @not_templates do
+    for module <- gallery_modules() do
       {design, sources} = module.design([])
 
       template(
