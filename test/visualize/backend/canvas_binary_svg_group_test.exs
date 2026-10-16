@@ -56,16 +56,45 @@ defmodule Visualize.Backend.CanvasBinarySVGGroupTest do
           Element.rect(%{x: 40, y: 0, width: 10, height: 10, "stroke-opacity": 0.5})
         ])
 
+      # A child whose own style changes the group's state is scoped, so the third fills
+      # in the group's fill, not the first child's (#742).
       assert [
                :save,
                {:style, %{fill: {255, 0, 0, 127}, stroke: {0, 0, 255, 255}}},
+               :save,
                {:style, %{fill: {0, 255, 0, 127}, stroke: nil}},
                {:rects, _},
                :fill,
                :stroke,
+               :restore,
                {:rects, _},
                :stroke,
+               :save,
                {:style, %{fill: nil, stroke: {0, 0, 255, 127}}},
+               {:rects, _},
+               :fill,
+               :stroke,
+               :restore,
+               :restore
+             ] = records(tree)
+    end
+
+    test "a child's own style ends with it: a later sibling draws in the group's (#742)" do
+      tree =
+        group(%{fill: "#ff0000", stroke: "#0000ff"}, [
+          Element.rect(%{x: 0, y: 0, width: 10, height: 10, opacity: 0.5}),
+          Element.rect(%{x: 20, y: 0, width: 10, height: 10})
+        ])
+
+      assert [
+               :save,
+               {:style, %{fill: {255, 0, 0, 255}, stroke: {0, 0, 255, 255}}},
+               :save,
+               {:style, %{fill: {255, 0, 0, 127}, stroke: {0, 0, 255, 127}}},
+               {:rects, _},
+               :fill,
+               :stroke,
+               :restore,
                {:rects, _},
                :fill,
                :stroke,

@@ -27,6 +27,9 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     :stroke_dasharray
   ]
 
+  # The inherited attributes a style record (spec/09 §4.3.5) carries as canvas state.
+  @style_state [:fill, :fill_opacity, :stroke, :stroke_opacity, :stroke_width]
+
   @doc false
   # A tree as a whole stream (spec/09 §4.2, §4.7): `version` 3 first when any element writes
   # a stroke's dash, cap or join (#693, D-180), and every other tree's records as they were.
@@ -137,13 +140,19 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   # they outlive it on no later element (spec/09 §4.7, #693). The style carries what its own
   # attributes set, each combined with what the groups pass on; the draws are its effective
   # attributes', its own over the groups' (#734).
+  #
+  # Under a group's style state — its fill, stroke or width — a leaf whose own style record
+  # changes it is scoped too: the state is the group's for every child, so a later sibling
+  # that sets nothing draws in the group's colors, not this leaf's (#742). A tree with no
+  # such group is the stream it was.
   defp leaf(attrs, inherited, geometry, draws) do
     effective = Map.merge(inherited, presentation(attrs))
     style = leaf_style(attrs, effective)
     draws = draws.(effective)
+    group_state? = Enum.any?(@style_state, &Map.has_key?(inherited, &1))
 
     case paint_state(attrs) do
-      <<>> ->
+      <<>> when style == <<>> or not group_state? ->
         IO.iodata_to_binary([style, geometry | draws])
 
       state ->
@@ -232,18 +241,21 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   defp dash(_absent), do: nil
 
   # A drawing element's style record: the fill where its own attributes touch the fill (its
-  # color, its opacity, or the element's `opacity`, which the fill's alpha takes), the
-  # stroke where they touch the stroke, the width where it sets one. Each color is the
-  # effective one at the effective opacity, so a fill set under a group's fill-opacity
-  # takes it. With nothing inherited it is the record the element's attributes alone make.
+  # color, its opacity, or the element's `opacity`), the stroke where they touch the stroke
+  # (likewise), the width where it sets one. Each color is the effective one at the
+  # effective paint opacity times the element's `opacity`, as SVG multiplies them (#742), so
+  # a fill set under a group's fill-opacity takes it and a translucent element's stroke is
+  # translucent too. With nothing inherited it is the record the element's attributes
+  # alone make.
   defp leaf_style(attrs, effective) do
-    fill_alpha = Map.get(attrs, :opacity) || effective[:fill_opacity]
+    opacity = Map.get(attrs, :opacity)
+    touched? = &(touches?(attrs, &1) or opacity != nil)
 
     style_record(
-      touches?(attrs, [:fill, :fill_opacity]) or Map.has_key?(attrs, :opacity),
-      {effective[:fill], fill_alpha},
-      touches?(attrs, [:stroke, :stroke_opacity]),
-      {effective[:stroke], effective[:stroke_opacity] || 1.0},
+      touched?.([:fill, :fill_opacity]),
+      {effective[:fill], alpha(effective[:fill_opacity], opacity)},
+      touched?.([:stroke, :stroke_opacity]),
+      {effective[:stroke], alpha(effective[:stroke_opacity], opacity)},
       attr(attrs, :stroke_width),
       nil
     )
@@ -263,6 +275,19 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   end
 
   defp touches?(attrs, keys), do: Enum.any?(keys, &(attr(attrs, &1) != nil))
+
+  # A paint's opacity times the element's, `1.0` for either that is absent.
+  defp alpha(paint, element), do: opacity_float(paint) * opacity_float(element)
+
+  defp opacity_float(nil), do: 1.0
+  defp opacity_float(n) when is_number(n), do: n * 1.0
+
+  defp opacity_float(s) when is_binary(s) do
+    case Float.parse(s) do
+      {f, _} -> f
+      :error -> 1.0
+    end
+  end
 
   # The style record (spec/09 §4.3.5) with the fields given, `<<>>` when it sets none: a
   # fill or a stroke whose color is absent or `none` sets no field.
@@ -291,28 +316,13 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   defp has_color?("none"), do: false
   defp has_color?(_), do: true
 
-  defp none?(nil), do: true
-  defp none?(:none), do: true
-  defp none?("none"), do: true
-  defp none?(_), do: false
-
-  # The draws of an element's effective attributes: a fill where it has a fill, a stroke
-  # where it has a stroke, and SVG's default black fill where it has neither and its fill
-  # is not `none`.
+  # The draws of an element's effective attributes: a fill where it has a fill and a stroke
+  # where it has a stroke. A missing fill is not filled, as on every canvas (D-122), where
+  # SVG's initial value would paint it black (spec/09 §4.7).
   defp encode_svg_draw_commands(effective) do
-    fill = effective[:fill]
-    stroke = effective[:stroke]
-
-    cmds = []
-    cmds = if has_color?(fill), do: cmds ++ [<<Opcodes.fill()::8>>], else: cmds
-    cmds = if has_color?(stroke), do: cmds ++ [<<Opcodes.stroke()::8>>], else: cmds
-
-    # Default to fill if nothing specified (and not explicitly none)
-    if cmds == [] && !none?(fill) do
-      [<<Opcodes.fill()::8>>]
-    else
-      cmds
-    end
+    for {paint, opcode} <- [fill: Opcodes.fill(), stroke: Opcodes.stroke()],
+        has_color?(effective[paint]),
+        do: <<opcode::8>>
   end
 
   defp encode_svg_transform(transform_str) when is_binary(transform_str) do
@@ -526,19 +536,12 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     end
   end
 
-  defp alpha_byte(nil), do: 255
-  defp alpha_byte(n) when is_number(n), do: trunc(n * 255)
+  defp alpha_byte(alpha), do: trunc(opacity_float(alpha) * 255)
 
-  defp alpha_byte(s) when is_binary(s) do
-    case Float.parse(s) do
-      {f, _} -> trunc(f * 255)
-      :error -> 255
-    end
-  end
-
-  # A color is parsed by `Visualize.Color.parse/1` (an atom by its name); the supplied
-  # opacity is the alpha unless the color syntax carried its own (`rgba()`, `#rgba`,
-  # `#rrggbbaa`). `"none"` is transparent; anything unparseable is black.
+  # A color is parsed by `Visualize.Color.parse/1` (an atom by its name); its alpha is the
+  # supplied opacity times the alpha the color syntax carries (`rgba()`, `#rgba`,
+  # `#rrggbbaa`), as SVG multiplies them (#742). `"none"` is transparent; anything
+  # unparseable is black.
   defp parse_color("none", _opacity), do: {0, 0, 0, 0}
 
   defp parse_color(color, opacity) when is_atom(color),
@@ -546,13 +549,9 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
   defp parse_color(color, opacity) when is_binary(color) do
     case Visualize.Color.parse(color) do
-      %Visualize.Color{opacity: own} = parsed when own < 1.0 ->
+      %Visualize.Color{opacity: own} = parsed ->
         {r, g, b, _} = Visualize.Color.to_rgba(parsed)
-        {r, g, b, trunc(own * 255)}
-
-      %Visualize.Color{} = parsed ->
-        {r, g, b, _} = Visualize.Color.to_rgba(parsed)
-        {r, g, b, alpha_byte(opacity)}
+        {r, g, b, alpha_byte(own * opacity_float(opacity))}
 
       nil ->
         {0, 0, 0, alpha_byte(opacity)}

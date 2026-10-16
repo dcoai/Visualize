@@ -502,6 +502,18 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG element's `opacity` multiplies into its fill and its stroke on the binary
+  canvas** (#742). `Visualize.Backend.CanvasBinary.encode_element/2` given a
+  `Visualize.SVG.Element` tree let an element's `opacity` replace its `fill-opacity`, and
+  never applied it to the stroke, so a translucent element's outline drew opaque and a
+  `fill-opacity` beside an `opacity` was lost. Each paint's alpha is now the product of the
+  color's own alpha (`rgba()`, `#rrggbbaa`, which an `opacity` also used to replace), the
+  paint's opacity and the element's, composed with a translucent group's as SVG composes
+  them; where an element's stroke overlaps its own fill the fill shows through the stroke's
+  inner half, as on the other canvases. A child that sets its own fill, stroke or width
+  under a group that sets one no longer leaves it to the next sibling, which now draws in
+  the group's paint as SVG draws it.
+
 - **An SVG element's group passes its paint on the binary canvas** (#734, D-192).
   `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
   ignored a `<g>`'s presentation attributes, so a child that took its fill, stroke, width,
