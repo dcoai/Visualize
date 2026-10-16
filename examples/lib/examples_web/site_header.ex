@@ -7,7 +7,10 @@ defmodule ExamplesWeb.SiteHeader do
 
   use Phoenix.Component
 
-  attr(:tab, :atom, required: true, doc: "the current tab: :charts, :performance, :interaction or :builder")
+  attr(:tab, :atom,
+    required: true,
+    doc: "the current tab: :charts, :performance, :interaction or :builder"
+  )
 
   def header(assigns) do
     ~H"""
@@ -15,7 +18,12 @@ defmodule ExamplesWeb.SiteHeader do
       <h1>Visualize Examples</h1>
       <p>Liveview data visualizations</p>
       <nav class="site-tabs" aria-label="sections">
-        <a :for={{tab, href, name, icon} <- tabs()} href={href} class="site-tab" aria-current={if(tab == @tab, do: "page", else: false)}>
+        <a
+          :for={{tab, href, name, icon} <- tabs()}
+          href={href}
+          class="site-tab"
+          aria-current={if(tab == @tab, do: "page", else: false)}
+        >
           <span class="site-tab-icon">{Phoenix.HTML.raw(icon)}</span><span class="site-tab-name">{name}</span>
         </a>
       </nav>

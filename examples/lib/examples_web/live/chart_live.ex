@@ -632,6 +632,7 @@ defmodule ExamplesWeb.ChartLive do
   defp access(module, opts) do
     applied = Examples.Charts.Design.applied(module, opts)
     summary = Visualize.Chart.Summary.new(applied)
+
     %{
       summary: summary,
       table: Visualize.Chart.Summary.table(applied, id: "chart-data"),
@@ -897,17 +898,17 @@ defmodule ExamplesWeb.ChartLive do
         </a>
         <span class="chart-nav-steps">
           <.link patch={chart_path(prev_slug)} id="chart-prev" class="chart-nav-link" rel="prev">
-            <span>&larr;</span> Previous: <%= prev_module.title() %>
+            <span>&larr;</span> Previous: {prev_module.title()}
           </.link>
           <.link patch={chart_path(next_slug)} id="chart-next" class="chart-nav-link" rel="next">
-            Next: <%= next_module.title() %> <span>&rarr;</span>
+            Next: {next_module.title()} <span>&rarr;</span>
           </.link>
         </span>
       </nav>
 
       <div class="chart-detail">
-        <h2><%= @title %></h2>
-        <p style="color: #666; margin-bottom: 1rem;"><%= @description %></p>
+        <h2>{@title}</h2>
+        <p style="color: #666; margin-bottom: 1rem;">{@description}</p>
 
         <div class="controls-row">
           <div class="backend-selector">
@@ -920,7 +921,7 @@ defmodule ExamplesWeb.ChartLive do
                 phx-value-backend={backend}
                 class={"backend-btn #{if @run_backend == backend, do: "active", else: ""}"}
               >
-                <%= backend_word(backend) %>
+                {backend_word(backend)}
               </button>
             </div>
           </div>
@@ -942,7 +943,7 @@ defmodule ExamplesWeb.ChartLive do
                       <span class="color-dot" style={"background-color: #{color}"}></span>
                     <% end %>
                   </span>
-                  <span class="palette-name"><%= info.name %></span>
+                  <span class="palette-name">{info.name}</span>
                 </button>
               <% end %>
             </div>
@@ -956,22 +957,20 @@ defmodule ExamplesWeb.ChartLive do
                 class={"animate-btn #{if @run.running, do: "animating", else: ""}"}
               >
                 <%= if @run.running do %>
-                  <span class="pulse-dot"></span>
-                  Stop Animation
+                  <span class="pulse-dot"></span> Stop Animation
                 <% else %>
-                  <span class="play-icon">▶</span>
-                  Animate Data
+                  <span class="play-icon">▶</span> Animate Data
                 <% end %>
               </button>
               <%= if @run.running do %>
-                <span class="tick-counter">Tick: <%= @run_ticks %></span>
+                <span class="tick-counter">Tick: {@run_ticks}</span>
               <% end %>
             </div>
           <% end %>
 
           <%= if @slug == "hexbin" do %>
             <form phx-change="change_hex_radius" class="slider-control">
-              <label for="hex-radius-slider">Hex Size: <%= @hex_radius %>px</label>
+              <label for="hex-radius-slider">Hex Size: {@hex_radius}px</label>
               <input
                 type="range"
                 id="hex-radius-slider"
@@ -998,64 +997,104 @@ defmodule ExamplesWeb.ChartLive do
         >
           <%!-- One frame loop (spec/14 §12.6, #362): the run's frame while a run is going, the still one
                 otherwise — SVG whole, or the canvas under the compiled chart's static furniture. --%>
-          <% {frame, state} = if(@run.running and @run_frame, do: {@run_frame, @run_state}, else: {@still_frame, @still_state}) %>
+          <% {frame, state} =
+            if(@run.running and @run_frame,
+              do: {@run_frame, @run_state},
+              else: {@still_frame, @still_state}
+            ) %>
           <%!-- The chart is one tab stop: the arrow keys move between its points and a live
                 region reads each one (spec/14 §21.5, #558). --%>
-          <div id="chart-keys" phx-hook="KeyboardHook" {if @still_access, do: @still_access.keyboard, else: %{}}>
-          <%= cond do %>
-            <% frame == nil -> %>
-              <p class="chart-pending">rendering…</p>
-            <% frame.svg -> %>
-              <%= Phoenix.HTML.raw(frame.svg) %>
-            <% true -> %>
-              <%!-- One canvas per plot at its own box (spec/14 §12.1, #432): an incremental
+          <div
+            id="chart-keys"
+            phx-hook="KeyboardHook"
+            {if @still_access, do: @still_access.keyboard, else: %{}}
+          >
+            <%= cond do %>
+              <% frame == nil -> %>
+                <p class="chart-pending">rendering…</p>
+              <% frame.svg -> %>
+                {Phoenix.HTML.raw(frame.svg)}
+              <% true -> %>
+                <%!-- One canvas per plot at its own box (spec/14 §12.1, #432): an incremental
                     canvas is the plot area at the box's margin offset, a binary one the whole
                     box; the frames' static documents stack over them, and their backdrops — a
                     basemap's tiles — beneath them (spec/14 §12.4, #476): backdrop, canvas,
                     static SVG, dynamic SVG. --%>
-              <%!-- The layers are one picture (spec/14 §21.4): the wrapper is the image a
+                <%!-- The layers are one picture (spec/14 §21.4): the wrapper is the image a
                     screen reader meets, named and described by the summary, and every
                     SVG layer under it is aria-hidden. --%>
-              <% summary = Frames.summary(state) %>
-              <div class="hybrid-wrapper" style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"} {if summary, do: Visualize.Chart.Summary.attrs(summary, "chart-access"), else: []}>
-                <%= if summary, do: Phoenix.HTML.raw(Visualize.Chart.Summary.description(summary, "chart-access")) %>
-                <div :if={Frames.backdrop(state) != ""} class="hybrid-backdrop-layer" style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(Frames.backdrop(state)) %>
-                </div>
-                <div :for={plot <- frame.plots} :if={plot.backdrop != ""} class="hybrid-backdrop-layer" style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(plot.backdrop) %>
-                </div>
+                <% summary = Frames.summary(state) %>
                 <div
-                  :for={plot <- frame.plots}
-                  id={"plot-#{plot_kind(plot)}-#{plot.name}"}
-                  phx-hook={if plot.incremental, do: "CanvasIncrementalChart", else: "CanvasBinaryChart"}
-                  phx-update="ignore"
-                  data-ack="frame_drawn"
-                  data-ack-interval="50"
-                  data-frame={plot.name}
-                  data-binary={plot.canvas}
-                  data-width={canvas_size(plot, :width)}
-                  data-height={canvas_size(plot, :height)}
-                  style={"position: absolute; top: #{canvas_at(plot, :top)}px; left: #{canvas_at(plot, :left)}px; z-index: 1;"}
+                  class="hybrid-wrapper"
+                  style={"position: relative; width: #{run_size(state, :width)}px; height: #{run_size(state, :height)}px;"}
+                  {if summary, do: Visualize.Chart.Summary.attrs(summary, "chart-access"), else: []}
                 >
-                  <canvas width={canvas_size(plot, :width)} height={canvas_size(plot, :height)} style="display: block;"></canvas>
+                  {if summary,
+                    do: Phoenix.HTML.raw(Visualize.Chart.Summary.description(summary, "chart-access"))}
+                  <div
+                    :if={Frames.backdrop(state) != ""}
+                    class="hybrid-backdrop-layer"
+                    style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;"
+                  >
+                    {Phoenix.HTML.raw(Frames.backdrop(state))}
+                  </div>
+                  <div
+                    :for={plot <- frame.plots}
+                    :if={plot.backdrop != ""}
+                    class="hybrid-backdrop-layer"
+                    style="position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;"
+                  >
+                    {Phoenix.HTML.raw(plot.backdrop)}
+                  </div>
+                  <div
+                    :for={plot <- frame.plots}
+                    id={"plot-#{plot_kind(plot)}-#{plot.name}"}
+                    phx-hook={
+                      if plot.incremental, do: "CanvasIncrementalChart", else: "CanvasBinaryChart"
+                    }
+                    phx-update="ignore"
+                    data-ack="frame_drawn"
+                    data-ack-interval="50"
+                    data-frame={plot.name}
+                    data-binary={plot.canvas}
+                    data-width={canvas_size(plot, :width)}
+                    data-height={canvas_size(plot, :height)}
+                    style={"position: absolute; top: #{canvas_at(plot, :top)}px; left: #{canvas_at(plot, :left)}px; z-index: 1;"}
+                  >
+                    <canvas
+                      width={canvas_size(plot, :width)}
+                      height={canvas_size(plot, :height)}
+                      style="display: block;"
+                    ></canvas>
+                  </div>
+                  <div
+                    class="hybrid-static-layer"
+                    style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;"
+                  >
+                    {Phoenix.HTML.raw(Frames.static(state))}
+                  </div>
+                  <div
+                    :for={plot <- frame.plots}
+                    :if={plot.dynamic_svg != ""}
+                    class="hybrid-dynamic-layer"
+                    style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;"
+                  >
+                    {Phoenix.HTML.raw(plot.dynamic_svg)}
+                  </div>
                 </div>
-                <div class="hybrid-static-layer" style="position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(Frames.static(state)) %>
-                </div>
-                <div :for={plot <- frame.plots} :if={plot.dynamic_svg != ""} class="hybrid-dynamic-layer" style="position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;">
-                  <%= Phoenix.HTML.raw(plot.dynamic_svg) %>
-                </div>
-              </div>
-          <% end %>
+            <% end %>
           </div>
         </div>
         <%!-- The data-table fallback, visually hidden (spec/14 §21.3), and the summary shown
               for the reader who wants to see what a screen reader is told. --%>
         <%= if @still_access do %>
-          <%= Phoenix.HTML.raw(@still_access.table) %>
-          <p class="chart-summary" aria-hidden="true" style="color: #666; font-size: 0.85rem; margin: 0.5rem 0 0;">
-            <strong>Text alternative:</strong> <%= Visualize.Chart.Summary.text(@still_access.summary) %>
+          {Phoenix.HTML.raw(@still_access.table)}
+          <p
+            class="chart-summary"
+            aria-hidden="true"
+            style="color: #666; font-size: 0.85rem; margin: 0.5rem 0 0;"
+          >
+            <strong>Text alternative:</strong> {Visualize.Chart.Summary.text(@still_access.summary)}
           </p>
         <% end %>
         <PerformanceDrawer.performance
@@ -1073,9 +1112,10 @@ defmodule ExamplesWeb.ChartLive do
         <%!-- The chart's own panels, when its module names any (spec/14 §12.6, #705). --%>
         <ExamplesWeb.ChartPanels.panels panels={@panels} slug={@slug} />
 
-        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;"><%= backend_code_title(@run_backend) %></h3>
+        <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">{backend_code_title(@run_backend)}</h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
-          The design is the thing to copy: the <code>Visualize.Chart.Build</code> calls below fold to a map,
+          The design is the thing to copy: the <code>Visualize.Chart.Build</code>
+          calls below fold to a map,
           and the map is the chart — applied to rows and rendered by the library, on any backend (spec/14 §16).
         </p>
         <Highlight.code code={backend_sample_code(@run_backend, @module)} />
@@ -1083,7 +1123,8 @@ defmodule ExamplesWeb.ChartLive do
         <h3 style="margin-top: 2rem; margin-bottom: 0.5rem;">The design (data)</h3>
         <p style="color: #666; font-size: 0.9rem; margin-bottom: 0.5rem;">
           What the Build calls fold to: the stored form the builder and a host exchange (spec/14 §1, §9).
-          <code>Visualize.Chart.to_json/1</code> is the same map as JSON.
+          <code>Visualize.Chart.to_json/1</code>
+          is the same map as JSON.
         </p>
         <Highlight.code code={@still_design || "# rendering…"} />
 

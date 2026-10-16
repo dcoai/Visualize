@@ -73,7 +73,8 @@ defmodule Examples.FrameDesignsTest do
       [year, day, hour, recent] =
         for name <- names, do: applied.frames[name].scales.x.domain
 
-      for [[_, older_end], [newer_start, _]] <- Enum.chunk_every([year, day, hour, recent], 2, 1, :discard) do
+      for [[_, older_end], [newer_start, _]] <-
+            Enum.chunk_every([year, day, hour, recent], 2, 1, :discard) do
         assert DateTime.compare(older_end, newer_start) == :lt
       end
 

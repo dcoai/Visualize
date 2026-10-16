@@ -55,7 +55,9 @@ defmodule ExamplesWeb.LayoutTest do
       for name <- ~w(BuilderHook ZoomHook BrushHook TooltipHook CrosshairHook LegendHook
                      ResizeHook) do
         assert hooks =~ "export const #{name}", "#{name} is not in Visualize.Hooks.js_code/0"
-        assert hooks =~ ~r/export default \{[^}]*\b#{name}\b/, "#{name} is not exported by default"
+
+        assert hooks =~ ~r/export default \{[^}]*\b#{name}\b/,
+               "#{name} is not exported by default"
       end
     end
   end

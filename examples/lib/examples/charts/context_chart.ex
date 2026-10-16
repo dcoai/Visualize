@@ -127,6 +127,7 @@ defmodule Examples.Charts.ContextChart do
     # counts down from the oldest.
     for i <- steps()..0//-1 do
       age = @newest * :math.pow(10, i * decades() / steps())
+
       %{
         t: DateTime.add(@epoch, round(now - age), :second),
         v: Load.mean(:fifteen, now - age * half, now - age / half)
