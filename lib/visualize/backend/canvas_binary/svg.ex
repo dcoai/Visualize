@@ -13,6 +13,20 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   # The tags that draw, and so read the stroke's attributes (spec/09 §4.7).
   @drawn [:rect, :circle, :path, :line]
 
+  # The presentation attributes a `:g` (or the root `:svg`) passes on to what it holds, as
+  # SVG inherits them: a descendant's own value wins (spec/09 §4.7, #734, D-192). `opacity`
+  # is not among them: it is the group's, its children's global alpha.
+  @inherited [
+    :fill,
+    :fill_opacity,
+    :stroke,
+    :stroke_opacity,
+    :stroke_width,
+    :stroke_linecap,
+    :stroke_linejoin,
+    :stroke_dasharray
+  ]
+
   @doc false
   # A tree as a whole stream (spec/09 §4.2, §4.7): `version` 3 first when any element writes
   # a stroke's dash, cap or join (#693, D-180), and every other tree's records as they were.
@@ -23,56 +37,50 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   end
 
   defp paint_state?(%Visualize.SVG.Element{tag: tag, attrs: attrs, children: children}) do
-    (tag in @drawn and paint_state(attrs) != <<>>) or Enum.any?(children, &paint_state?/1)
+    (tag in [:g, :svg | @drawn] and paint_state(attrs) != <<>>) or
+      Enum.any?(children, &paint_state?/1)
   end
 
   # SVG Element Encoding
 
   @doc false
-  def encode_element(%Visualize.SVG.Element{tag: :svg, children: children}, precision) do
-    children
-    |> Enum.map(&encode_element(&1, precision))
-    |> IO.iodata_to_binary()
+  def encode_element(element, precision), do: encode(element, precision, %{})
+
+  # `inherited` is what the groups above pass on: their presentation attributes under the
+  # names of `@inherited`, the nearest group's value for each, and `:group_opacity`, the
+  # product of their opacities.
+  defp encode(%Visualize.SVG.Element{tag: tag} = element, precision, inherited)
+       when tag in [:svg, :g] do
+    %{attrs: attrs, children: children} = element
+    own = presentation(attrs)
+    effective = Map.merge(inherited, own)
+    opacity = group_opacity(attrs, inherited)
+    passed = if opacity, do: Map.put(effective, :group_opacity, opacity), else: effective
+
+    # A root draws nothing of its own transform: its `viewBox` places it.
+    transform =
+      case {tag, Map.get(attrs, :transform)} do
+        {:g, transform} when transform != nil -> encode_svg_transform(transform)
+        _ -> <<>>
+      end
+
+    # The group's state, which its children draw in: what it sets, combined with what it
+    # inherits (a fill-opacity over an inherited fill), and its cap, join and dash.
+    state =
+      IO.iodata_to_binary([transform, group_style(own, effective, opacity), paint_state(attrs)])
+
+    child_data = IO.iodata_to_binary(Enum.map(children, &encode(&1, precision, passed)))
+
+    case state do
+      <<>> when not is_map_key(attrs, :transform) or tag == :svg ->
+        child_data
+
+      state ->
+        <<Opcodes.save()::8, state::binary, child_data::binary, Opcodes.restore()::8>>
+    end
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :g, attrs: attrs, children: children}, precision) do
-    parts = []
-
-    # Handle transform attribute
-    parts =
-      case Map.get(attrs, :transform) do
-        nil -> parts
-        transform_str -> parts ++ [encode_svg_transform(transform_str)]
-      end
-
-    # Save context if we have transform
-    parts =
-      if Map.has_key?(attrs, :transform) do
-        [<<Opcodes.save()::8>>] ++ parts
-      else
-        parts
-      end
-
-    # Encode children
-    child_data =
-      children
-      |> Enum.map(&encode_element(&1, precision))
-      |> IO.iodata_to_binary()
-
-    parts = parts ++ [child_data]
-
-    # Restore context if we saved
-    parts =
-      if Map.has_key?(attrs, :transform) do
-        parts ++ [<<Opcodes.restore()::8>>]
-      else
-        parts
-      end
-
-    IO.iodata_to_binary(parts)
-  end
-
-  def encode_element(%Visualize.SVG.Element{tag: :rect, attrs: attrs}, _precision) do
+  defp encode(%Visualize.SVG.Element{tag: :rect, attrs: attrs}, _precision, inherited) do
     x = Map.get(attrs, :x, 0) |> PathEncoder.to_float()
     y = Map.get(attrs, :y, 0) |> PathEncoder.to_float()
     width = Map.get(attrs, :width, 0) |> PathEncoder.to_float()
@@ -82,10 +90,10 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
       <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
         width::little-float-64, height::little-float-64>>
 
-    leaf(attrs, geometry, encode_svg_draw_commands(attrs))
+    leaf(attrs, inherited, geometry, &encode_svg_draw_commands/1)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :circle, attrs: attrs}, _precision) do
+  defp encode(%Visualize.SVG.Element{tag: :circle, attrs: attrs}, _precision, inherited) do
     cx = Map.get(attrs, :cx, 0) |> PathEncoder.to_float()
     cy = Map.get(attrs, :cy, 0) |> PathEncoder.to_float()
     r = Map.get(attrs, :r, 0) |> PathEncoder.to_float()
@@ -94,10 +102,10 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
       <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
         r::little-float-64>>
 
-    leaf(attrs, geometry, encode_svg_draw_commands(attrs))
+    leaf(attrs, inherited, geometry, &encode_svg_draw_commands/1)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :path, attrs: attrs}, precision) do
+  defp encode(%Visualize.SVG.Element{tag: :path, attrs: attrs}, precision, inherited) do
     d = Map.get(attrs, :d, "")
 
     case parse_svg_path(d) do
@@ -106,11 +114,11 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
       commands ->
         geometry = PathEncoder.encode_cubic_path(commands, precision)
-        leaf(attrs, geometry, encode_svg_draw_commands(attrs))
+        leaf(attrs, inherited, geometry, &encode_svg_draw_commands/1)
     end
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :line, attrs: attrs}, precision) do
+  defp encode(%Visualize.SVG.Element{tag: :line, attrs: attrs}, precision, inherited) do
     x1 = Map.get(attrs, :x1, 0) |> PathEncoder.to_float()
     y1 = Map.get(attrs, :y1, 0) |> PathEncoder.to_float()
     x2 = Map.get(attrs, :x2, 0) |> PathEncoder.to_float()
@@ -118,30 +126,30 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
     # A move and a line, always stroked.
     geometry = PathEncoder.encode_cubic_path([{:M, x1, y1}, {:L, x2, y2}], precision)
-    leaf(attrs, geometry, [<<Opcodes.stroke()::8>>])
+    leaf(attrs, inherited, geometry, fn _effective -> [<<Opcodes.stroke()::8>>] end)
   end
 
-  def encode_element(%Visualize.SVG.Element{tag: :text}, _precision) do
-    # Text not supported in binary canvas format
-    <<>>
-  end
-
-  def encode_element(_element, _precision) do
-    <<>>
-  end
+  # Text is not representable in the binary format, and any other tag draws nothing.
+  defp encode(_element, _precision, _inherited), do: <<>>
 
   # A drawing element's records: its style, its geometry and its draws, and with a stroke's
   # dash, cap or join its `paint_state` after the style, all inside `save` … `restore` so
-  # they outlive it on no later element (spec/09 §4.7, #693).
-  defp leaf(attrs, geometry, draws) do
+  # they outlive it on no later element (spec/09 §4.7, #693). The style carries what its own
+  # attributes set, each combined with what the groups pass on; the draws are its effective
+  # attributes', its own over the groups' (#734).
+  defp leaf(attrs, inherited, geometry, draws) do
+    effective = Map.merge(inherited, presentation(attrs))
+    style = leaf_style(attrs, effective)
+    draws = draws.(effective)
+
     case paint_state(attrs) do
       <<>> ->
-        IO.iodata_to_binary([encode_svg_style(attrs), geometry | draws])
+        IO.iodata_to_binary([style, geometry | draws])
 
       state ->
         IO.iodata_to_binary([
           <<Opcodes.save()::8>>,
-          encode_svg_style(attrs),
+          style,
           state,
           geometry,
           draws,
@@ -177,6 +185,11 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   end
 
   @hyphenated %{
+    fill: :fill,
+    stroke: :stroke,
+    fill_opacity: :"fill-opacity",
+    stroke_opacity: :"stroke-opacity",
+    stroke_width: :"stroke-width",
     stroke_linecap: :"stroke-linecap",
     stroke_linejoin: :"stroke-linejoin",
     stroke_dasharray: :"stroke-dasharray"
@@ -184,6 +197,21 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
   # An attribute under its underscore name or its hyphenated one.
   defp attr(attrs, key), do: Map.get(attrs, key) || Map.get(attrs, Map.fetch!(@hyphenated, key))
+
+  # The inherited presentation attributes an element sets, under their underscore names.
+  defp presentation(attrs) do
+    for key <- @inherited, value = attr(attrs, key), value != nil, into: %{}, do: {key, value}
+  end
+
+  # A group's opacity times the groups' above it, or nil when it sets none: a group's
+  # opacity composites the group in SVG, and here it is its children's global alpha, exact
+  # where they do not overlap (D-192).
+  defp group_opacity(attrs, inherited) do
+    case Map.get(attrs, :opacity) do
+      nil -> nil
+      opacity -> PathEncoder.to_float(opacity) * Map.get(inherited, :group_opacity, 1.0)
+    end
+  end
 
   defp word(value, table) when is_atom(value) and value != nil,
     do: word(Atom.to_string(value), table)
@@ -203,53 +231,60 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
   defp dash(_absent), do: nil
 
-  defp encode_svg_style(attrs) do
-    fill = Map.get(attrs, :fill)
-    stroke = Map.get(attrs, :stroke)
-    stroke_width = Map.get(attrs, :stroke_width) || Map.get(attrs, :"stroke-width")
+  # A drawing element's style record: the fill where its own attributes touch the fill (its
+  # color, its opacity, or the element's `opacity`, which the fill's alpha takes), the
+  # stroke where they touch the stroke, the width where it sets one. Each color is the
+  # effective one at the effective opacity, so a fill set under a group's fill-opacity
+  # takes it. With nothing inherited it is the record the element's attributes alone make.
+  defp leaf_style(attrs, effective) do
+    fill_alpha = Map.get(attrs, :opacity) || effective[:fill_opacity]
 
-    opacity =
-      Map.get(attrs, :opacity) || Map.get(attrs, :fill_opacity) || Map.get(attrs, :"fill-opacity")
+    style_record(
+      touches?(attrs, [:fill, :fill_opacity]) or Map.has_key?(attrs, :opacity),
+      {effective[:fill], fill_alpha},
+      touches?(attrs, [:stroke, :stroke_opacity]),
+      {effective[:stroke], effective[:stroke_opacity] || 1.0},
+      attr(attrs, :stroke_width),
+      nil
+    )
+  end
 
-    flags = 0
-    data = []
+  # A group's style record: as a leaf's, over what the group sets, and its opacity as the
+  # record's global alpha (bit 3), the groups' above it multiplied in.
+  defp group_style(own, effective, opacity) do
+    style_record(
+      touches?(own, [:fill, :fill_opacity]),
+      {effective[:fill], effective[:fill_opacity]},
+      touches?(own, [:stroke, :stroke_opacity]),
+      {effective[:stroke], effective[:stroke_opacity] || 1.0},
+      own[:stroke_width],
+      opacity
+    )
+  end
 
-    # Fill color (skip if none or not specified)
-    {flags, data} =
-      if has_color?(fill) do
-        {r, g, b, a} = parse_color(fill, opacity)
-        {flags ||| 0x01, data ++ [<<r::8, g::8, b::8, a::8>>]}
-      else
-        {flags, data}
-      end
+  defp touches?(attrs, keys), do: Enum.any?(keys, &(attr(attrs, &1) != nil))
 
-    # Stroke color
-    {flags, data} =
-      if has_color?(stroke) do
-        stroke_opacity =
-          Map.get(attrs, :stroke_opacity) || Map.get(attrs, :"stroke-opacity") || 1.0
+  # The style record (spec/09 §4.3.5) with the fields given, `<<>>` when it sets none: a
+  # fill or a stroke whose color is absent or `none` sets no field.
+  defp style_record(fill?, {fill, fill_alpha}, stroke?, {stroke, stroke_alpha}, width, alpha) do
+    fields = [
+      {0x01, fill? and has_color?(fill) and rgba(parse_color(fill, fill_alpha))},
+      {0x02, stroke? and has_color?(stroke) and rgba(parse_color(stroke, stroke_alpha))},
+      {0x04, width != nil and <<PathEncoder.to_float(width)::little-float-32>>},
+      {0x08, alpha != nil and <<alpha::little-float-32>>}
+    ]
 
-        {r, g, b, a} = parse_color(stroke, stroke_opacity)
-        {flags ||| 0x02, data ++ [<<r::8, g::8, b::8, a::8>>]}
-      else
-        {flags, data}
-      end
+    case for {bit, bytes} <- fields, is_binary(bytes), do: {bit, bytes} do
+      [] ->
+        <<>>
 
-    # Stroke width
-    {flags, data} =
-      if stroke_width do
-        sw = PathEncoder.to_float(stroke_width)
-        {flags ||| 0x04, data ++ [<<sw::little-float-32>>]}
-      else
-        {flags, data}
-      end
-
-    if flags == 0 do
-      <<>>
-    else
-      IO.iodata_to_binary([<<Opcodes.style()::8, flags::8>> | data])
+      set ->
+        flags = Enum.reduce(set, 0, fn {bit, _}, acc -> acc ||| bit end)
+        IO.iodata_to_binary([<<Opcodes.style()::8, flags::8>> | Enum.map(set, &elem(&1, 1))])
     end
   end
+
+  defp rgba({r, g, b, a}), do: <<r::8, g::8, b::8, a::8>>
 
   defp has_color?(nil), do: false
   defp has_color?(:none), do: false
@@ -261,9 +296,12 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   defp none?("none"), do: true
   defp none?(_), do: false
 
-  defp encode_svg_draw_commands(attrs) do
-    fill = Map.get(attrs, :fill)
-    stroke = Map.get(attrs, :stroke)
+  # The draws of an element's effective attributes: a fill where it has a fill, a stroke
+  # where it has a stroke, and SVG's default black fill where it has neither and its fill
+  # is not `none`.
+  defp encode_svg_draw_commands(effective) do
+    fill = effective[:fill]
+    stroke = effective[:stroke]
 
     cmds = []
     cmds = if has_color?(fill), do: cmds ++ [<<Opcodes.fill()::8>>], else: cmds

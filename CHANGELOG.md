@@ -502,6 +502,16 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG element's group passes its paint on the binary canvas** (#734, D-192).
+  `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
+  ignored a `<g>`'s presentation attributes, so a child that took its fill, stroke, width,
+  fill or stroke opacity, dash, cap or join from its group drew without them — a child with
+  no fill or stroke of its own drew nothing — where SVG drew it with the group's. A group's
+  attributes (and the root `<svg>`'s) are now its children's state, a child's own winning,
+  and a group's `opacity` is its children's global alpha, nested groups' multiplied: exact
+  where the children do not overlap, an overlap drawing more opaque than SVG's. A tree whose
+  groups set none of them encodes byte for byte as before.
+
 - **A board names its cells' state panels by the cell** (#722). The loading, crashed and
   other whole-cell panels, and the banner over a stale, capped or down chart, took a root id
   derived from their title, so two cells in one state shared one — and any rule scoped to
