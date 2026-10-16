@@ -5,6 +5,7 @@
 defmodule Visualize.Check do
   @jobs [
     {"format", "test", ~w(format --check-formatted)},
+    {"format", "test", ~w(format --check-formatted), "examples"},
     {"compile", "test", ~w(compile --force --warnings-as-errors)},
     {"test", "test", ~w(test --warnings-as-errors --cover)},
     {"verify:api-surface", "dev", ~w(vis.surface --check)},
