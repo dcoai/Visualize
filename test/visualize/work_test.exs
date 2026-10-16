@@ -61,6 +61,6 @@ defmodule Visualize.WorkTest do
         Work.reductions(fn -> exit(:gone) end)
       end)
 
-    assert_receive {:DOWN, ^monitor, :process, ^pid, :gone}, 5_000
+    assert_receive {:DOWN, ^monitor, :process, ^pid, :gone}
   end
 end

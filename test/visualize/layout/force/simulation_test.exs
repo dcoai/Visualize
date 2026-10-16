@@ -95,13 +95,12 @@ defmodule Visualize.Layout.Force.SimulationTest do
   @cold [nodes: [%{id: :a}, %{id: :b}], alpha: 0.01, alpha_decay: 0.5]
   @cold_ticks 4
 
-  # Waits on the event, not on the clock: the bound is generous because a loaded host
-  # delays a 16 ms timer by seconds (#483), and the assertions count ticks.
-  @patience 30_000
-
+  # Waits on the event, not on the clock: a loaded host delays a 16 ms timer by seconds
+  # (#483), so the wait is bounded by the test alone (spec/12 §6), and the assertions
+  # count ticks.
   defp receive_ticks(n) do
     for _ <- 1..n do
-      assert_receive {:force_tick, %{nodes: nodes}}, @patience
+      assert_receive {:force_tick, %{nodes: nodes}}
       nodes
     end
   end

@@ -22,7 +22,7 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     {:noreply, s} = Page.handle_event("pick", %{"slug" => "bar", "ticks" => "20"}, s)
     {:noreply, s} = Page.handle_event("compare", %{}, s)
     %Task{ref: ref} = s.assigns.task
-    assert_receive {^ref, {:rows, rows} = result}, 30_000
+    assert_receive {^ref, {:rows, rows} = result}
     {:noreply, s} = Page.handle_info({ref, result}, s)
     assert s.assigns.task == nil
     assert [%{backend: :svg, ticks: 20}, %{backend: :canvas, ticks: 20}] = rows

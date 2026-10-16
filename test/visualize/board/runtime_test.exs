@@ -9,10 +9,6 @@ defmodule Visualize.Board.RuntimeTest do
   # A killed or raising cell is reported by the VM and the supervisor; kept out of the run.
   @moduletag :capture_log
 
-  # How long a wait gives up after: when a defect is given up on, never how fast the
-  # machine is (spec/12 §6, D-148).
-  @patience 10_000
-
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server, View}
   alias Visualize.Data.Schema
@@ -275,7 +271,7 @@ defmodule Visualize.Board.RuntimeTest do
       # board's cell is gone before its views are dropped, so none of them is read below.
       old_cell = Process.monitor(Server.info(board).cells.old.pid)
       Server.stop(board)
-      assert_receive {:DOWN, ^old_cell, :process, _, _}, @patience
+      assert_receive {:DOWN, ^old_cell, :process, _, _}
       flush_views()
 
       {:ok, board} =
@@ -340,7 +336,7 @@ defmodule Visualize.Board.RuntimeTest do
       a = view_until(:a, &(&1.size != {596.0, 256}))
       assert a.size == {600.0, 256}
       assert a.svg =~ ~s(viewBox="0 0 600.0 256")
-      assert_receive {:visualize_board, ^board, {:board, %{width: 600}}}, @patience
+      assert_receive {:visualize_board, ^board, {:board, %{width: 600}}}
     end
 
     test "new board variables prepare every cell again" do

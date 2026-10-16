@@ -34,7 +34,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
   defp settled(s) do
     id = s.assigns.run.render_id
     assert id != nil, "no frame is in flight"
-    assert_receive {:frame, ^id, frame}, 10_000
+    assert_receive {:frame, ^id, frame}
     {:noreply, s} = ChartLive.handle_info({:frame, id, frame}, s)
     s
   end
@@ -184,7 +184,7 @@ defmodule ExamplesWeb.ChartLiveSwitchTest do
 
     s = switch(s, :svg)
     assert s.assigns.run.render_id == nil
-    assert_receive {:frame, ^old, frame}, 10_000
+    assert_receive {:frame, ^old, frame}
     assert frame.svg == nil
     {:noreply, after_stale} = ChartLive.handle_info({:frame, old, frame}, s)
     assert after_stale.assigns.run_frame == s.assigns.run_frame

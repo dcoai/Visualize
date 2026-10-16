@@ -20,8 +20,6 @@ defmodule Visualize.Board.ExportTest do
 
   @moduletag :capture_log
 
-  @patience 10_000
-
   alias Visualize.Board
   alias Visualize.Board.{Binding, Export, Server, Snapshot, State, View}
   alias Visualize.Data.{Delivery, Schema}
@@ -255,7 +253,7 @@ defmodule Visualize.Board.ExportTest do
 
       ref = Process.monitor(server)
       Server.stop(server)
-      assert_receive {:DOWN, ^ref, :process, _, _}, @patience
+      assert_receive {:DOWN, ^ref, :process, _, _}
       Agent.stop(agent)
 
       assert {:ok, reopened} = Snapshot.from_json(json)

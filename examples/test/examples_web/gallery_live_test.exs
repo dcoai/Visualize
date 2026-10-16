@@ -66,7 +66,7 @@ defmodule ExamplesWeb.GalleryLiveTest do
 
     socket =
       Enum.reduce(1..n, socket, fn _, s ->
-        assert_receive {ref, {:preview, module, svg}}, 30_000
+        assert_receive {ref, {:preview, module, svg}}
         assert is_reference(ref) and is_atom(module) and svg =~ ~s(role="img")
         {:noreply, s} = GalleryLive.handle_info({ref, {:preview, module, svg}}, s)
         s

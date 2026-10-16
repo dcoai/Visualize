@@ -12,14 +12,14 @@ defmodule Visualize.NoWallClockTest do
   that reads a clock outside any test fails too: a benchmark times inline. Assert work
   with `Visualize.Work.reductions/1` or a count the code exposes instead.
 
-  Nor does a test wait on the clock (D-148, #520). An `assert_receive` gives up after at
-  least `@floor` milliseconds, so its bound says when a defect is given up on and never how
-  fast the machine is; a `refute_receive` does not wait at all — absence after a
+  Nor does a test wait on the clock (D-148, #520). An `assert_receive` names no timeout of
+  its own: both suites set its default to the test's timeout, so the test's timeout is the
+  one bound on a message that must arrive, and a bound written at the site is a second
+  clock under it (#736); a `refute_receive` does not wait at all — absence after a
   synchronizing call is `refute_received`; a `receive … after` waits nothing — `after 0`
-  — since a longer one is a second clock under the test's own timeout, which bounds a
-  message that never comes (#715); and nothing sleeps. A site that must break one of
-  these is on `@allowed`, with its reason. This one is read from the parsed code, so a string or a comment that
-  mentions a wait is not one.
+  — for the same reason (#715); and nothing sleeps. A site that must break one of these
+  is on `@allowed`, with its reason. This one is read from the parsed code, so a string or
+  a comment that mentions a wait is not one.
   """
   use ExUnit.Case, async: true
 
@@ -35,9 +35,6 @@ defmodule Visualize.NoWallClockTest do
   @benchmark_tag ~r/^\s*@tag\s+(:benchmark\b|benchmark:\s*true)/
   @benchmark_module ~r/^\s*@moduletag\s+(:benchmark\b|benchmark:\s*true)/
 
-  # The shortest wait an `assert_receive` may give up after.
-  @floor 5_000
-
   # The waits that stay, each with its reason: `{path, the code at the site, reason}`. A
   # site is matched by its file and the text of its line, so the entry survives an edit
   # above it; an entry that matches no site fails, so the list cannot outlive its sites.
@@ -50,7 +47,12 @@ defmodule Visualize.NoWallClockTest do
        "tries thirty seconds long, so load lengthens the poll and never fails it (#495)"},
     {"test/visualize/feed/telemetry_test.exs", "receive after: (1 -> wait_for_message(pid))",
      "polls a suspended collector's queue until the call is in it; nothing announces a " <>
-       "message's arrival, and the poll ends on the count, with no deadline of its own"}
+       "message's arrival, and the poll ends on the count, with no deadline of its own"},
+    {"examples/test/examples_web/performance_live_test.exs",
+     "assert_receive {^ref, {:all, all} = result}, @compare_wait",
+     "the whole comparison runs under a test timeout raised past the suite's, and the " <>
+       "wait is longer than the suite's default, inside that timeout, so a slow " <>
+       "comparison fails on the receive's own message (#469, #736)"}
   ]
 
   # Every test file of the library and the examples, and the library's test support.
@@ -79,7 +81,7 @@ defmodule Visualize.NoWallClockTest do
 
     assert violations == [],
            "a test waits on the clock (spec/12 §6, D-148). Wait on a message or a count " <>
-             "with an `assert_receive` of at least #{@floor} ms, or a `receive` with no " <>
+             "with an `assert_receive` that names no timeout, or a `receive` with no " <>
              "`after` but 0, which the test's own timeout bounds; assert absence after a " <>
              "synchronizing call with `refute_received`; drive time with a clock the code " <>
              "takes; or put the site on @allowed with its reason:\n" <>
@@ -90,7 +92,7 @@ defmodule Visualize.NoWallClockTest do
   end
 
   describe "the wait scan" do
-    test "rejects a short assert_receive, the default timeout, and one it cannot read" do
+    test "rejects an assert_receive that names a timeout, however long, and passes one that does not" do
       source = """
       defmodule ProbeTest do
         use ExUnit.Case
@@ -105,16 +107,34 @@ defmodule Visualize.NoWallClockTest do
           assert_receive :tick, 2 * @short
           assert_receive :tick, @patience
           assert_receive :tick, 5_000
+          assert_receive :tick
         end
       end
       """
 
       assert [
                {7, :assert_receive, "500 ms"},
-               {8, :assert_receive, "the default timeout"},
                {10, :assert_receive, "500 ms"},
-               {11, :assert_receive, "a timeout it cannot read"}
+               {11, :assert_receive, "a timeout it cannot read"},
+               {12, :assert_receive, "30000 ms"},
+               {13, :assert_receive, "5000 ms"}
              ] = summary(waits("probe_test.exs", source))
+    end
+
+    # Without the setting, an `assert_receive` that names no timeout waits ExUnit's 100 ms.
+    test "both suites give assert_receive the test's own timeout" do
+      for helper <- ["test/test_helper.exs", "examples/test/test_helper.exs"] do
+        options = start_options(File.read!(helper))
+        timeout = Keyword.get(options, :timeout)
+        receive_timeout = Keyword.get(options, :assert_receive_timeout)
+
+        assert is_integer(timeout) and is_integer(receive_timeout) and
+                 receive_timeout >= timeout,
+               "#{helper} must pass ExUnit.start/1 a literal :timeout and an " <>
+                 ":assert_receive_timeout no shorter: #{inspect(options)}"
+      end
+
+      assert ExUnit.configuration()[:assert_receive_timeout] >= ExUnit.configuration()[:timeout]
     end
 
     test "rejects a refute_receive that waits, and passes refute_received" do
@@ -377,12 +397,12 @@ defmodule Visualize.NoWallClockTest do
   end
 
   # `{line, kind, why}` for a node that waits on the clock, or nil.
-  defp wait({:assert_receive, meta, [_pattern]}, _attributes),
-    do: {meta[:line], :assert_receive, "the default timeout"}
+  # An `assert_receive` with no timeout waits on the suite's default, the test's own
+  # timeout; a timeout written at the site is a second clock, however long (#736).
+  defp wait({:assert_receive, _meta, [_pattern]}, _attributes), do: nil
 
   defp wait({:assert_receive, meta, [_pattern, timeout | _]}, attributes) do
     case timeout(timeout, attributes) do
-      ms when is_integer(ms) and ms >= @floor -> nil
       ms when is_integer(ms) -> {meta[:line], :assert_receive, "#{ms} ms"}
       :unreadable -> {meta[:line], :assert_receive, "a timeout it cannot read"}
     end
@@ -431,6 +451,22 @@ defmodule Visualize.NoWallClockTest do
       [{:->, arrow, _} | _] -> arrow[:line] || meta[:line]
       _ -> meta[:line]
     end
+  end
+
+  # The keyword options of a test helper's `ExUnit.start/1` call, as written.
+  defp start_options(source) do
+    {_, found} =
+      source
+      |> Code.string_to_quoted!()
+      |> Macro.prewalk(nil, fn
+        {{:., _, [{:__aliases__, _, [:ExUnit]}, :start]}, _, [options]} = node, nil ->
+          {node, options}
+
+        node, acc ->
+          {node, acc}
+      end)
+
+    found || []
   end
 
   defp allowed?(site, entries) do

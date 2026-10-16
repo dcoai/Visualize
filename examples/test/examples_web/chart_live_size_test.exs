@@ -34,7 +34,7 @@ defmodule ExamplesWeb.ChartLiveSizeTest do
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
     {:noreply, s} = ChartLive.handle_event("resize", %{"width" => width, "height" => 0}, s)
     %Task{ref: ref} = s.assigns.still_task
-    assert_receive {^ref, {:still, _frame, _state, _design, _access} = still}, 30_000
+    assert_receive {^ref, {:still, _frame, _state, _design, _access} = still}
     {:noreply, s} = ChartLive.handle_info({ref, still}, s)
     s
   end
