@@ -63,20 +63,22 @@ defmodule ExamplesWeb.PerformanceLiveTest do
     assert html(s) =~ "Every design, 20 ticks per backend"
   end
 
-  test "a heavy chart is comparable: one tick on each of its backends is a row with bytes" do
-    heavy =
-      for {slug, module} <- ExamplesWeb.ChartLive.charts(),
-          Compare.cost(module) == :heavy,
-          do: {slug, module}
+  test "the downsampling chart is a heavy one" do
+    assert Compare.cost(Examples.Charts.Downsampling) == :heavy
+  end
 
-    assert {"downsampling", Examples.Charts.Downsampling} in heavy
-    opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
-
-    for {_slug, module} <- heavy do
-      rows = Compare.run(module, opts_for, 1)
-      assert Enum.map(rows, & &1.backend) == Examples.Frames.backends(module)
-      assert Enum.all?(rows, &(&1.ticks == 1 and &1.avg_bytes > 0))
+  # One test a heavy chart (#735).
+  describe "a heavy chart is comparable: one tick on each of its backends is a row with bytes" do
+    for {slug, module} <- ExamplesWeb.ChartLive.charts(), Compare.cost(module) == :heavy do
+      test slug, do: assert_comparable(unquote(module))
     end
+  end
+
+  defp assert_comparable(module) do
+    opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
+    rows = Compare.run(module, opts_for, 1)
+    assert Enum.map(rows, & &1.backend) == Examples.Frames.backends(module)
+    assert Enum.all?(rows, &(&1.ticks == 1 and &1.avg_bytes > 0))
   end
 
   test "a comparison that dies is reported and the page goes on" do

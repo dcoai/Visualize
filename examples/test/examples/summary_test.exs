@@ -87,15 +87,21 @@ defmodule Examples.SummaryTest do
         "2,100 at DataUtil."
   }
 
-  test "every gallery chart is the kind the rules make it" do
-    modules = Templates.gallery_modules()
-    assert Enum.sort(modules) == Enum.sort(Map.keys(@kinds))
+  test "every gallery chart has its kind stated" do
+    assert Enum.sort(Templates.gallery_modules()) == Enum.sort(Map.keys(@kinds))
+  end
 
-    for module <- modules do
-      summary = Summary.new(Design.applied(module, []))
-      assert Enum.map(summary.frames, & &1.kind) == Map.fetch!(@kinds, module), inspect(module)
-      assert summary.name == module.title(), inspect(module)
+  # One test a chart (#735).
+  describe "every gallery chart is the kind the rules make it" do
+    for {module, kinds} <- @kinds do
+      test "#{inspect(module)}", do: assert_kinds(unquote(module), unquote(kinds))
     end
+  end
+
+  defp assert_kinds(module, kinds) do
+    summary = Summary.new(Design.applied(module, []))
+    assert Enum.map(summary.frames, & &1.kind) == kinds, inspect(module)
+    assert summary.name == module.title(), inspect(module)
   end
 
   test "the deterministic charts' summaries are said word for word" do
@@ -104,29 +110,37 @@ defmodule Examples.SummaryTest do
     end
   end
 
-  test "every chart's <svg> is named by its title and described by its description and summary" do
+  describe "every chart's <svg> is named by its title and described by its description and summary" do
     for module <- Templates.gallery_modules() do
-      text = module |> Design.applied([]) |> Summary.text() |> escape()
-      svg = Design.render(module, [])
-
-      assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-labelledby="\1-title"/,
-             inspect(module)
-
-      assert svg =~ ">#{escape(module.title())}</title>", inspect(module)
-      assert svg =~ "#{text}</desc>", inspect(module)
+      test "#{inspect(module)}", do: assert_named_and_described(unquote(module))
     end
   end
 
-  test "every chart that draws a value has a data table, captioned by its name" do
-    for module <- Templates.gallery_modules() do
-      applied = Design.applied(module, [])
-      summary = Summary.new(applied)
-      html = Summary.table(applied)
+  defp assert_named_and_described(module) do
+    text = module |> Design.applied([]) |> Summary.text() |> escape()
+    svg = Design.render(module, [])
 
-      if Enum.any?(summary.frames, &(&1.extremes != [])) do
-        assert html =~ "<table><caption>#{escape(module.title())}", inspect(module)
-        assert html =~ ~s(<th scope="col">), inspect(module)
-      end
+    assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-labelledby="\1-title"/,
+           inspect(module)
+
+    assert svg =~ ">#{escape(module.title())}</title>", inspect(module)
+    assert svg =~ "#{text}</desc>", inspect(module)
+  end
+
+  describe "every chart that draws a value has a data table, captioned by its name" do
+    for module <- Templates.gallery_modules() do
+      test "#{inspect(module)}", do: assert_data_table(unquote(module))
+    end
+  end
+
+  defp assert_data_table(module) do
+    applied = Design.applied(module, [])
+    summary = Summary.new(applied)
+    html = Summary.table(applied)
+
+    if Enum.any?(summary.frames, &(&1.extremes != [])) do
+      assert html =~ "<table><caption>#{escape(module.title())}", inspect(module)
+      assert html =~ ~s(<th scope="col">), inspect(module)
     end
   end
 

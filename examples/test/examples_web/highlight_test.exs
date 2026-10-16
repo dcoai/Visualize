@@ -87,17 +87,17 @@ defmodule ExamplesWeb.HighlightTest do
              Enum.join(unhighlighted(html), "\n---\n")
   end
 
+  # The router's pages but the chart pages, which the tests below take one a chart.
   defp pages do
     Phoenix.Router.routes(ExamplesWeb.Router)
     |> Enum.filter(&(&1.verb == :get and not String.starts_with?(&1.path, "/hooks")))
-    |> Enum.flat_map(fn %{path: path} ->
-      if path == "/chart/:chart",
-        do: for({slug, _} <- ChartLive.charts(), do: "/chart/#{slug}"),
-        else: [path]
-    end)
+    |> Enum.map(& &1.path)
+    |> Enum.reject(&(&1 == "/chart/:chart"))
   end
 
   test "no page of the router renders a code block the highlighter did not" do
+    assert "/" in pages()
+
     for path <- pages() do
       conn = build_conn() |> get(path)
 
@@ -108,10 +108,22 @@ defmodule ExamplesWeb.HighlightTest do
     end
   end
 
-  # The code a chart page shows changes with its backend (the Canvas sample is the
-  # split, the Incremental one the scroll): every backend of every chart.
-  test "every chart page shows highlighted code on every backend it offers" do
-    for {slug, module} <- ChartLive.charts(), backend <- Examples.Frames.backends(module) do
+  # The code a chart page shows changes with its backend (the Canvas sample is the split,
+  # the Incremental one the scroll): every backend of every chart, one test a chart (#735),
+  # the page as the router serves it first.
+  describe "every chart page shows highlighted code on every backend it offers" do
+    for {slug, module} <- ChartLive.charts() do
+      test slug, do: assert_chart_highlighted(unquote(slug), unquote(module))
+    end
+  end
+
+  defp assert_chart_highlighted(slug, module) do
+    assert_highlighted(
+      "/chart/#{slug}",
+      build_conn() |> get("/chart/#{slug}") |> html_response(200)
+    )
+
+    for backend <- Examples.Frames.backends(module) do
       {:ok, s} = ChartLive.mount(%{"chart" => slug}, %{}, %Phoenix.LiveView.Socket{})
 
       {:noreply, s} =

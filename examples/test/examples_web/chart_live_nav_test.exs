@@ -137,21 +137,32 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     assert after_late.assigns.run_frame == nil
   end
 
+  # Every chart offers Canvas, so a chosen Canvas holds across the whole gallery: Next from
+  # each chart is the next in the index's order, wrapping, and keeps it (#501). One test a
+  # chart (#735), where one test had walked the gallery with Next; the walk is these steps.
+  describe "Next from each chart is the next in the gallery's order, and keeps a chosen Canvas" do
+    charts = Gallery.charts()
+
+    for {{_module, slug}, {next_module, next_slug}} <-
+          Enum.zip(charts, tl(charts) ++ [hd(charts)]) do
+      test slug, do: assert_next(unquote(slug), unquote(next_module), unquote(next_slug))
+    end
+  end
+
+  defp assert_next(slug, next_module, next_slug) do
+    {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, page(slug))
+    {next, _tag} = nav_link(html(s), "next")
+    assert next == "/chart/#{next_slug}"
+    s = step(s, next)
+    assert s.assigns.slug == next_slug and s.assigns.module == next_module
+    assert :canvas in Frames.backends(next_module), next_slug
+    assert s.assigns.run_backend == :canvas, next_slug
+  end
+
   test "Previous and Next keep the backend the reader chose where the chart offers it (#501)" do
     s = page("bar")
     assert s.assigns.run_backend == :svg
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => "canvas"}, s)
-
-    # Every chart offers Canvas, so a chosen Canvas holds across the whole gallery.
-    s =
-      Enum.reduce(Gallery.charts(), s, fn _chart, s ->
-        {next, _tag} = nav_link(html(s), "next")
-        s = step(s, next)
-        assert :canvas in Frames.backends(s.assigns.module), s.assigns.slug
-        assert s.assigns.run_backend == :canvas, s.assigns.slug
-        s
-      end)
-
     {prev, _tag} = nav_link(html(s), "prev")
     assert step(s, prev).assigns.run_backend == :canvas
 
@@ -219,19 +230,9 @@ defmodule ExamplesWeb.ChartLiveNavTest do
 
     index = build_conn() |> get("/") |> html_response(200)
     hrefs = for [_, slug] <- Regex.scan(~r{<a href="/chart/([a-z_]+)"}, index), do: slug
+    # So Next, which goes from each chart to the next of this order and from the last to
+    # the first (above), visits every chart of the index in its order, and wraps.
     assert hrefs == Enum.map(Gallery.charts(), &elem(&1, 1))
-
-    # Next from the first chart visits every chart of the index in its order, and wraps.
-    {_m, first} = List.first(Gallery.charts())
-
-    {visited, s} =
-      Enum.map_reduce(Gallery.charts(), page(first), fn _chart, s ->
-        {next, _tag} = nav_link(html(s), "next")
-        {s.assigns.slug, step(s, next)}
-      end)
-
-    assert visited == hrefs
-    assert s.assigns.slug == first
   end
 
   test "a patch to a slug the gallery does not list goes to the index" do
