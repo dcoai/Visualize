@@ -737,7 +737,7 @@ defmodule Visualize.Board.Server do
       title: Map.get(state.board.cells[name], :title),
       state: crashed,
       size: size(box),
-      note: State.render(crashed, state.theme, size(box))
+      note: State.render(crashed, state.theme, size(box), id: Draw.root_id(state.id, name))
     }
   end
 

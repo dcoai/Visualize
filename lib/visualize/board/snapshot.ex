@@ -234,7 +234,7 @@ defmodule Visualize.Board.Snapshot do
     end)
   end
 
-  defp view(snapshot, name, %{crashed: reason}, size, theme, _drawing) when is_binary(reason) do
+  defp view(snapshot, name, %{crashed: reason}, size, theme, drawing) when is_binary(reason) do
     crashed = {:crashed, reason}
 
     %View{
@@ -242,7 +242,7 @@ defmodule Visualize.Board.Snapshot do
       title: title(snapshot, name),
       state: crashed,
       size: size,
-      note: State.render(crashed, theme, size)
+      note: State.render(crashed, theme, size, id: Draw.root_id(drawing.id, name))
     }
   end
 
