@@ -2333,3 +2333,21 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A style may extend, stack or default a gradient and change its stops, its geometry or its type, on SVG and both canvases; the gallery's Paints chart derives its second incident look by `extends`.
 - A host reading `Style.resolve/3`'s output sees `{:paint, node}` for an in-place gradient where it saw `{:paint, "p…"}`; the SVG and the canvas commands are byte for byte what they were for every gradient that drew before.
 - A compiled chart whose later ticks reach a gradient only through a stack's field entry combined with another entry's gradient, which its first draw did not hold, draws that element on SVG with a `url(#id)` its static layer lacks; the canvas draws it, since it reads the paint from the element.
+
+## 187. D-187 — Decomposing a design covers every design key, checked against the schema when the library compiles
+
+**Context.** #713; work item #718. `Visualize.Chart.Composite.decompose/1`, which the builder uses to turn a design into one site per root (spec/14 §18.12), named the design's keys by hand: theme, meta, layout, interaction, frames, styles, sources, vars, defs, marks, labels. 0.7.0 added a design-level `defaults` (#651, D-174), which the list never gained, and made a `styles` entry a list of entries (#658), which the list reached but placed wrong — a style site whose body is a list was not recognized as a style, so flatten cascaded it as a design key `style` and the name vanished from `styles`. A design using either did not round-trip through the builder, and the gallery's Composition chart, which shows both, was kept out of the builder's templates (`Templates.not_templates/0`, #705). Every other gallery design round-tripped, which is why nothing failed: no test decomposed a design that used the new keys, and nothing tied the hand list to the schema.
+
+**Decision.**
+- **The design's keys are placed by a table checked against the schema.** `decompose/1` reads a table from each design key to its site rule — one positional site, a keyed site per entry, a site per element, or the frames' own rule — and the module raises when it compiles if `Visualize.Chart.Schema.describe(:design)` has a key, `version` aside, the table lacks, or the table a key the schema lacks. The schema's tables are compile-time constants (D-184), so the check costs the build nothing.
+- **`defaults` is a positional site**, placed at the design key of its name, as `theme` and `meta` are (spec/14 §19.6).
+- **A style site's body may be a list** (§3.6): flatten places it under the site's key as it places a node, and a style site with no key is keyless either way.
+- **The round trip is tested over every design** the library's tests and the gallery hold (spec/12 §6), and the gallery has no design the builder cannot hold.
+
+**Rejected.**
+- **Deriving the site rules from the schema's types alone.** A `{:map, _}` key is keyed and a `{:list, _}` key per element, but `frames` decomposes its scales and axes into sites of their own, and the order the builder lists the sites in is a choice the types do not make; a table with a compile-time check says both and still cannot fall behind.
+- **Keeping the list and adding the two keys.** It is the gap that let `defaults` be missed; the next design key would be missed the same way.
+
+**Consequences.**
+- A design with a design-level `defaults` or a list-valued style imports into the builder and flattens back unchanged; the Composition chart is a builder template like every other gallery design.
+- A design key added to the schema fails the build until `decompose/1` places it.
