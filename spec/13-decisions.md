@@ -2332,7 +2332,7 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A style may extend, stack or default a gradient and change its stops, its geometry or its type, on SVG and both canvases; the gallery's Paints chart derives its second incident look by `extends`.
 - A host reading `Style.resolve/3`'s output sees `{:paint, node}` for an in-place gradient where it saw `{:paint, "p…"}`; the SVG and the canvas commands are byte for byte what they were for every gradient that drew before.
-- A compiled chart whose later ticks reach a gradient only through a stack's field entry combined with another entry's gradient, which its first draw did not hold, draws that element on SVG with a `url(#id)` its static layer lacks; the canvas draws it, since it reads the paint from the element.
+- A compiled chart whose later ticks reach a gradient only through a stack's field entry combined with another entry's gradient, which its first draw did not hold, draws that element on SVG with a `url(#id)` its static layer lacks; the canvas draws it, since it reads the paint from the element. *Answered by #721, D-190: the tick declares it.*
 
 ## 187. D-187 — Decomposing a design covers every design key, checked against the schema when the library compiles
 
@@ -2389,3 +2389,25 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A board-mode pass on the examples' board costs about 2.13 million reductions where it cost 2.61 million, and on the cost test's board about 405,000 where it cost 1,520,000; every builder event in any mode stops paying for the host pool's types (numbers on #714).
 - A host that hands the builder new `sources` or a new `catalog` pays the typing once, in `update/2`.
 - The cell previews, which realize and draw each cell, are the largest remaining part of a board-mode pass; they draw, and are left as they are.
+
+## 190. D-190 — A compiled chart's tick declares the paints it first draws
+
+**Context.** #721; work item #728. D-186 hoisted an in-place gradient from the paint its style resolved to, so a frame declares every merged paint its drawn tree holds, and a compiled chart's static `defs` cover every gradient of the named styles (with their `extends` chains), the sites, the defaults and the first draw of every mark. It recorded one gap: a stack whose field entry is laid over another entry's gradient (`style: [:a, {:field, :look}]`, `:a` a radial gradient and the style a row names changing its stops) reaches a merged gradient that no style holds whole. When no row of the compilation's data names that style, the static `defs` lack it, and the later tick whose row does draws the element on SVG with a `url(#id)` declared nowhere — no fill at all — while both canvases draw it, since they read the paint from the element. The #717 property test rendered charts whole through `Visualize.Chart.render/2`, whose frame declares what it draws, and never through `Compiled.step/3` with a value arriving after compilation.
+
+**Decision.**
+- **A tick declares what it draws that the compiled `defs` lack.** Every SVG output of a compiled chart — `step/3`, `svg/2`, `tick/3`'s `svg`, `render/2`'s `dynamic_svg`, a re-realized frame's static layer — holds a second `defs` element of every paint and effect filter its own elements use whose id the compiled `defs` do not declare (spec/14 §2.7, §12.4), after the compiled `defs` where the output carries them and first where it does not.
+- **It is computed per output, from the drawn elements, and kept nowhere.** The paints are already resolved on the elements (D-186), so the definitions are the elements' own; nothing about the compiled chart changes between ticks.
+- **An output that draws nothing new is unchanged byte for byte.**
+- **The static `defs` declare what the first draw holds, and no longer every in-place paint of the design's styles.** That table (#652, D-186's last bullet) existed to cover later ticks, which now declare for themselves; it also built every named style's in-place paint on its own, so a style that is only part of a paint — `%{fill: %{type: :hatch, pattern: :lines}}`, meant to be stacked over one with a color — raised at compilation (`key :color not found`), though the design validated and its frame rendered.
+
+**Rejected.**
+- **Declaring every reachable merge up front.** D-186 rejected it: a stack with field entries reaches a product over the data's values, and the drawn tree is the answer.
+- **Growing the compiled `defs` as ticks draw new paints.** The static layer is drawn once (spec/14 §12.4) and a tick's SVG layer replaces the last one, so a definition added to compiled state reaches the page only if some layer carries it each tick — which is this decision — and the state would make a tick's output depend on the ticks before it.
+- **Re-rendering the static layer when a new paint appears.** It moves furniture the page holds still, for what is a property of one element.
+
+**Consequences.**
+- A compiled chart's SVG never references an undeclared paint: a board cell or a run draws a merged gradient a later row selects, and a design whose styles hold part of a paint compiles.
+- A compiled chart's static layer no longer declares in-place paints its first draw does not use; a page that read one of those ids from the static layer before any tick drew it finds it in the tick that draws it.
+- A tick that first draws a merged paint carries its definition in that tick's SVG on every tick that draws it — a few hundred bytes per paint, in the tick's payload `bytes`.
+- Two SVG layers on one page may define the same id once each; they define the same paint, since the id is a hash of it.
+
