@@ -867,8 +867,9 @@ A description says what a field **means**, never how it is drawn:
 | `metric_kind` | `:gauge`, `:counter` or `:rate` | `:number` | how the values were measured, which refines what the quantity's additivity allows (spec/05 §4.2, D-155): a `:gauge` is a level sampled at instants and never sums over time; a `:counter` holds the increments of an accumulating count, which sum over time when the quantity sums at all; a `:rate` is per unit time and integrates rather than sums. Absent, the quantity's defaults hold |
 | `bounds` | `[min, max]`, each a number or `nil`, `min` below `max` when both are given | `:number` | where the field's values physically lie, overriding its quantity's bounds (spec/05 §4.2): a **display hint** an axis may anchor at, never validation — a value outside them is not refused |
 | `identity` | a boolean | `:category`, `:text` or `:number` | `true`: the field's value **names a thing**, and every row with that value is about the same thing — a service, a car, a host's interface (below, D-167). Compared by equality. Several fields may say `true`, together one composite identity |
+| `values` | a non-empty list of distinct strings, atoms or numbers | `:category` | **every** value the field takes: a closed set (#643, D-194). A mapping by the field — a style named by its value, a `:choose` — is checked to cover each one or to have an `else`, a legend lists them, and the builder offers them as rows to fill in. A row whose value is not among them does not conform (§10.5.7) |
 
-`Visualize.Data.Schema.attributes/0` is the thirteen keys in that order, the vocabulary spec/14 §7.4's contract names, so a slot's `requires` can require `identity` of a field as it requires a `unit`.
+`Visualize.Data.Schema.attributes/0` is the fourteen keys in that order, the vocabulary spec/14 §7.4's contract names, so a slot's `requires` can require `identity` of a field as it requires a `unit`.
 
 **Identity** (#622, #625, D-167). Which rows are about the same thing is a fact about the feed, like its units, so the feed declares it: `identity: true` on each field whose value names the entity a row is about. Nothing else in visualize decides it — not a mark's `series`, not the order of the schema's `:category` fields — since a guess silently merges two entities that share a color or splits one whose label changed.
 
@@ -903,7 +904,7 @@ The faults of `new/1`:
 | `{:type, :name}` | at `[name]`: a field name that is not an atom (other than `nil`, `true`, `false`) or a non-empty string |
 | `{:duplicate_field, other}` | at `[name]`: the field is named twice, as an atom and as the string that spells it (`:v` and `"v"`), which are one column (6.2); reported at the later of the two by term order |
 | `{:type, :description}` | at `[name]`: the description is not a map |
-| `:unknown_key` | at `[name, key]`: a key that is not one of the thirteen |
+| `:unknown_key` | at `[name, key]`: a key that is not one of the fourteen |
 | `{:color_key, key}` | at `[name, key]`: a color, which a schema never names |
 | `:required` | at `[name, :type]`: the description gives no `type` |
 | `{:enum, allowed}` | at `[name, :type]`, `[name, :polarity]` or `[name, :metric_kind]`: a value not among the allowed |
@@ -911,10 +912,11 @@ The faults of `new/1`:
 | `{:unknown_quantity, quantity}` | at `[name, :quantity]`: an atom that is not one of `Visualize.Quantity.all/0` (D-157) |
 | `{:quantity, quantity, code}` | at `[name, :quantity]`: the unit does not measure the quantity, by `Visualize.Quantity.resolve/1` (D-157) |
 | `{:invalid_for, type}` | at `[name, key]`: a key the field's type does not take — a `unit` on a `:category` field, an `order` on a `:number` one, a `window` on a `:category` or `:text` one, an `identity` on a `:time` one |
-| `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive`, `:boolean`, `:bounds` |
+| `{:type, expected}` | at `[name, key]`: a value of the wrong shape, `expected` one of `:unit`, `:name`, `:string`, `:order`, `:status`, `:number`, `:positive`, `:boolean`, `:bounds`, `:values` |
 | `{:duplicate_window, other}` | at `[name, :window]`: the field says `window: true` and so does `other`; a feed's windows are over one field. Reported at the later of the two by term order |
-| `:duplicate` | at `[name, :order, i]`: a state `order` lists twice |
+| `:duplicate` | at `[name, :order, i]` or `[name, :values, i]`: a state `order` or `values` lists twice |
 | `:not_in_order` | at `[name, :status, state]`: a state `status` names that `order` does not list |
+| `:not_in_values` | at `[name, :order, i]` or `[name, :status, state]`: a state `order` lists, or `status` names, that `values` does not: the values are every value there is |
 
 `Visualize.Data.Schema.fetch/2` reads a field's description by either spelling of its name (6.2), `{:ok, description}` or `:error`; `Visualize.Data.Schema.fetch/3` reads one attribute of it, `{:ok, value}` or `:error` when the field or the attribute is absent.
 
@@ -972,9 +974,9 @@ The cache never evicts: a schema is a few hundred bytes and a feed's versions ch
 
 A delivery is data like a design: a struct with no function in it, which a codec can hold (#531's *a chart is data, not JSON*).
 
-### 10.5 Virtual sources: the sandbox
+### 10.5 Virtual sources
 
-**Implemented** (#643, work item #748, D-194). A **virtual source** is a source computed from other sources by a function: rows in, rows out (#643). Its function is Elixir, never a language of this library's own: either a `def` in a host module, which is the host's own trusted code, or **source text stored in a design**, which is untrusted, since a builder, a store or a shared host can put any text there. This section is the sandbox every such function runs in: the **checker** a stored function passes before it is compiled (10.5.1, 10.5.2), the **compile-once cache** (10.5.3) and the **bounded runner** that every function, stored or the host's, is called through (10.5.4). `Visualize.VirtualSource.Sandbox` is its module. The design follows Dune's (an allowlist written as `{module, function, arity}` triples, a process per run with heap and time limits, failure kinds rather than raises) without adopting it, since Dune interprets its rewritten AST on every call and a virtual source is compiled once and called on every update (#643's prior-art review).
+**Implemented** (#643, work item #748, D-194). A **virtual source** is a source computed from other sources by a function: rows in, rows out (#643). Its function is Elixir, never a language of this library's own: either a `def` in a host module, which is the host's own trusted code, or **source text stored in a design**, which is untrusted, since a builder, a store or a shared host can put any text there. This section is the sandbox every such function runs in — the **checker** a stored function passes before it is compiled (10.5.1, 10.5.2), the **compile-once cache** (10.5.3) and the **bounded runner** that every function, stored or the host's, is called through (10.5.4), `Visualize.VirtualSource.Sandbox` — and the virtual source as a value: what it reads and answers (10.5.5–10.5.7), a host's functions (10.5.8), where it is defined and how a name finds it (10.5.9), and its forms (10.5.10). The design follows Dune's (an allowlist written as `{module, function, arity}` triples, a process per run with heap and time limits, failure kinds rather than raises) without adopting it, since Dune interprets its rewritten AST on every call and a virtual source is compiled once and called on every update (#643's prior-art review).
 
 #### 10.5.1 The checker
 
@@ -1072,6 +1074,112 @@ The allowlist is the one #643 decided on 2026-10-15, in two notes: start small, 
 
 **What the limits do not bound.** A heap limit is checked when the process collects, so a single allocation larger than the limit — `String.duplicate("x", 10_000_000_000)`, a padded string, a huge `**` — is made before the VM kills the process: the host must have room for one such allocation. The limit then kills the process at its next collection and the call is `:memory`; the node is unaffected unless the one allocation exceeds its memory. The check does not refuse these functions, since cost is the developer's to weigh (#643's second allowlist decision); D-194 records the residue.
 
+#### 10.5.5 The value
+
+**Implemented** (#643, work item #749, D-194). `%Visualize.VirtualSource{}` is a virtual source: what it reads, what it answers, and the function between. It is data like a design — a struct with no function in it, its function a name or a source text — so a board holds it and a codec writes it (10.5.10).
+
+| Field | Value | Default |
+|---|---|---|
+| `id` | the source's name, an atom other than `nil`, `true` and `false` | required |
+| `from` | its inputs, a non-empty list of `{name, window}` (10.5.6) | required |
+| `schema` | its output's fields, a `%Visualize.Data.Schema{}` (10.1); in the map form, the map of descriptions `Schema.new/1` takes | required |
+| `elixir` | the function as source text: one `fn` of one argument, checked by the sandbox (10.5.1) | one of `elixir` and `function` |
+| `function` | the name of a host's function, defined with `defsource` (10.5.8) | one of `elixir` and `function` |
+| `per` | `nil`, `:identity` or `{:identity, input}` (10.5.7) | `nil` |
+
+`Visualize.VirtualSource.new/1` takes the map form (10.5.10), or a keyword list of the same keys, and answers `{:ok, source}` or `{:error, errors}` with every fault, each `{path, reason}` in the shape of spec/14 §10.1, the path from the source to the value, ordered by path; `new!/1` answers the source or raises `ArgumentError` naming every fault. `{:window, opts}` is accepted for an input's window and read as the map `opts` makes (10.5.6), the proposal's spelling.
+
+**Alone and in context.** `new/1` checks what the source says of itself: its keys and their types, its schema through `Visualize.Data.Schema.new/1`, its inputs' shapes, `per` against the inputs' count, and the function's text through `Visualize.VirtualSource.Sandbox.check/2` with the fields of its own schema and no input's. `Visualize.VirtualSource.validate(source, opts)` checks it **given what it reads**: `inputs:` — a map from each input's name to the input's `%Visualize.Data.Schema{}`, where it is known — and `functions:` — the host functions' registry (10.5.8). With `inputs:` the function's text is checked against the fields of its inputs' schemas and its own (`{:unknown_field, name}` for any other, 10.5.1), each box is checked against its input's schema (`Visualize.Feed.Window.check/2`), and `per` against the identity input's declared identity (10.5.7). The engine validates every source in context when a board starts (the board's engine, #643), where every input's schema is known.
+
+| Reason | Meaning |
+|---|---|
+| `{:type, :virtual_source}` | at `[]`: neither a map nor a keyword list |
+| `:unknown_key` | at `[key]`: a key not of the table above |
+| `:required` | at `[:id]`, `[:from]` or `[:schema]`; at `[:elixir]` when neither `elixir` nor `function` is given |
+| `{:type, expected}` | at the key: `:name` for `id` and `function`, `:inputs` for `from` (not a non-empty list), `:input` for an entry that is not a `{name, window}` pair, `:input_name` for a name that is not an atom, a string or a list of atoms, `:string` for `elixir`, `:schema` for `schema` (not a map of descriptions), `:window` for a window that is none of 10.5.6's, `:pos_integer` for a `last` that is not a positive integer |
+| `{:exclusive, :elixir}` | at `[:function]`: both `elixir` and `function` are given; a source has one function |
+| `{:duplicate_input, key}` | at `[:from, i]`: two inputs read under the same key (10.5.6) |
+| `{:check, line, reason}` | at `[:elixir]`: a fault of the sandbox's checker, `{line, reason}` of 10.5.1 |
+| `{:undeclared, :function, name}` | at `[:function]`: no registered host module defines it (10.5.8) |
+| `{:enum, [:identity]}` | at `[:per]`: a `per` that is neither `nil`, `:identity` nor `{:identity, input}` |
+| `{:per, :ambiguous}` | at `[:per]`: `:identity` over several inputs, which must name the one whose entities it is per |
+| `{:per, {:unknown_input, name}}` | at `[:per]`: `{:identity, name}` naming no input |
+| `{:per, :no_identity}` | at `[:per]`, in context: the identity input's schema declares no identity (10.1, D-167) |
+| `{:per, {:identity, input, output}}` | at `[:schema]`, in context: the output's identity fields, `output`, are not the identity input's, `input` — each a list of names as strings, in order |
+| `{:per, {:identity_type, field, input, output}}` | at `[:schema, field]`, in context: an identity field the output describes as type `output` where the input describes it as `input` |
+| a box's fault | at `[:from, i, :window \| path]`, in context: `Visualize.Feed.Window.check/2`'s, with its path (11.1) |
+
+The schema's faults are reported at `[:schema | path]`, `path` the schema's own (`[:state, :values, 1]`). `Visualize.VirtualSource.format_error/1` words one fault, the root named `virtual source`, with spec/14's words for the reasons it shares.
+
+#### 10.5.6 The inputs and the history each needs
+
+An input is `{name, window}`:
+
+- **The name** says what is read: an **atom**, a virtual source's short id or a feed's name (resolved as 10.5.9 says: a virtual source from the inside out, else a feed); a **string**, a feed's name (`"vm.memory.total"`), which a dotted name never splits; or a **list of atoms**, a virtual source's full path. The function reads the input under its **key**: the name itself, or a path's last atom (`Visualize.VirtualSource.key/1`). Two inputs of one key are `{:duplicate_input, key}`.
+- **The window** says how much history the function needs (#643, D-168): `nil`, everything the owner holds of the input; `%{last: n}`, `n` a positive integer, **each identity's newest `n` rows** by the input's window field when its schema declares identity, else the newest `n` rows; or a **box**, `%{ranges: …, latest: …}` (11.1), the rows the box selects — its window field's range, its region and its `latest` — finished as the monitor finishes a delivery (11.2). The function **gets what is there** (#643, settled question 3): a window of `last: 20` over an entity with three rows hands it three, and its clauses can match on the length (`[a, b, c | _]`). A box is checked against its input's schema in context (10.5.5).
+
+The function receives the inputs as one map from key to rows: `fn %{hosts: rows} -> … end`. **v1 aligns nothing** (#643, settled question 13): each input's rows are its current window, and a function over inputs that arrive at different rates aligns them itself; a rule for joining by time is a later proposal.
+
+#### 10.5.7 The output and its conformance
+
+**Rows in, rows out.** A source's function answers a list of rows in its schema: one summary row (many to one), a row per region (many to many) or several rows per input row (one to many) all fall out of it. A row is a map whose keys are its schema's fields, by either spelling (6.2).
+
+**Per identity** (#643, settled question 5). With `per`, the function is called **once per entity** of one input, its identity input — the only input under `:identity`, the one named under `{:identity, input}` — whose schema MUST declare identity (`{:per, :no_identity}`). Each call is given that entity's rows of the identity input, its history in the input's window: the rows alone when the source has one input (`fn rows -> … end`), else the inputs' map with the identity input's key holding the entity's rows and every other input whole. It answers one row, a map, or a list of rows. The output's identity is the input's: its schema MUST declare as identity exactly the input's identity fields, of the same types (`{:per, {:identity, …}}`, `{:per, {:identity_type, …}}`); each answered row is given the entity's identity values, and a row that names another value for an identity field does not conform. The results are joined back by identity: the output holds every entity's rows, entity by entity in the input's order of first appearance. A `per` source's calls for every entity run in **one** bounded call (10.5.4), so a batch's limits are the batch's.
+
+**Conformance.** `Visualize.VirtualSource.conform(source, rows)` holds an answer to the schema: `{:ok, rows}`, or `{:error, {index, field, reason}}` for the first row that does not hold — `index` its position, `field` the field as the schema spells it (`nil` for a fault of the row or of the answer as a whole), and never the value (#643, settled question 4):
+
+| Reason | Meaning |
+|---|---|
+| `:not_a_list` | the answer is not a list of rows (`index` and `field` are `nil`) |
+| `:not_a_row` | a row is not a map (`field` is `nil`) |
+| `:undescribed` | a row has a key its schema does not describe |
+| `{:type, type}` | a field's value is not `nil` and not of the field's type: a number for `:number`, an instant (`Visualize.Feed.Window.instant?/1`) for `:time`, a string, an atom other than `true` and `false`, or a number for `:category`, a string for `:text` |
+| `:not_in_values` | a `:category` field's value is not one of its declared `values` (10.1) |
+| `:no_identity` | an identity field is `nil` or absent: a row that does not say what it is about names nothing (D-167) |
+| `:identity` | under `per`, a row names another identity than its entity's |
+
+An answer that does not conform is the fault `{:virtual_source, id, :nonconforming}` of the board's engine (#643), with this as its detail; the output it last held stays.
+
+#### 10.5.8 Host functions: `defsource`
+
+A host writes a virtual source's function as Elixir in its own module, tested with ExUnit, as it writes a generator (spec/14 §3.13, D-177):
+
+```elixir
+defmodule MyApp.Sources do
+  use Visualize.VirtualSources
+
+  defsource health(rows) do
+    cpu = Enum.map(rows, & &1.cpu)
+    %{state: if(List.last(cpu) > 90, do: :error, else: :ok)}
+  end
+end
+```
+
+- **`use Visualize.VirtualSources`** imports `defsource/2` and compiles `__virtual_sources__/0`: each function's name and its **source text**, `[{name, source}]` in definition order. `defsource name(arg) do … end` is a public `def` of that head, of one argument, which a stored function also takes; a function of several clauses is defined clause by clause and listed once, its source the clauses together. The text is captured **when the module compiles** (`Macro.to_string/1` of each clause as an `fn` clause), because a release strips the debug information a later reading of the source would need; the builder shows it (#643's last work item).
+- **Trusted, and bounded.** A host's function is the host's code: the checker does not read it, and it may call anything. It still runs through the bounded runner (10.5.4), so a runaway in it ends as `:memory` or `:timeout` like a stored one.
+- **Registered by module.** `Visualize.VirtualSources.registry/1` is the given modules' functions then `config :visualize, virtual_sources: [...]`'s, `%{name => module}`; a module without `__virtual_sources__/0`, or a name two modules define, is an `ArgumentError`, as the generators' registry is. A source naming a `function` no registered module defines is `{:undeclared, :function, name}` in context (10.5.5).
+- **Versioning is git's** (#643's review). A design names a host function; the code that runs is the host's current code, and its history is the host's repository's. A stored function travels with its design, and its history is wherever the design is kept.
+
+#### 10.5.9 Paths and scope
+
+A virtual source is defined at a **container**, and its **path** is the containers' names from the outside in, then its id: a **list of atoms** (#643, settled question 1), `[:ops, :health]`, so a name that holds a dot cannot break it, and it matches the container tree. It is shown **dotted**, `ops.health` (`Visualize.VirtualSource.dotted/1`).
+
+**One resolver, from the inside out** (#643, settled question 2). `Visualize.VirtualSource.resolve(paths, scope, ref)` finds what a reference names, given the paths of every definition (a list, or a map keyed by path) and the scope it is read from (a container's path): `{:ok, path}` or `:error`.
+
+- A **short id**, an atom, is looked for in the scope, then in each container around it, outward: from `[:ops, :box]`, `:health` is `[:ops, :box, :health]`, else `[:ops, :health]`, else `[:health]`. **The nearest definition wins**, so an inner definition may shadow an outer one.
+- A **full path**, a list, names exactly one: `[:ops, :health]` is that definition or nothing, from any scope.
+- A string is never resolved: it names a feed (10.5.6).
+
+Virtual sources resolve through it from day one. Moving a design's `styles` onto the same resolver changes the grammar and is a separate proposal (#643's acceptance).
+
+**On a board** the containers are the board and its cells (spec/15 §1.2, §1.3): a board's own virtual source's path is `[id]`, a cell's is `[cell, id]`. A cell's slot bound to a virtual source and a virtual source's input resolve from the scope they stand in — the cell, `[cell]`, or the definition's container — and a name no virtual source has is a feed's.
+
+#### 10.5.10 The map and JSON forms
+
+`Visualize.VirtualSource.to_map/1` is the source as a map of the keys of 10.5.5 with values: `from` as its list of `{name, window}` pairs, `schema` as its map of descriptions, and `nil` for an absent `elixir`, `function` or `per`. `new(to_map(source))` is `{:ok, source}` for every valid source.
+
+A virtual source is written in JSON inside the document that holds it — a board's (spec/15 §2.2) — with the terms of spec/14 §11.2 and **no tag of its own**: `from` is a list of `[name, window]` pairs, the name as a term (`{"$atom": "hosts"}`, `"vm.memory.total"`, a path as a list of atoms), the window `null`, `{"last": n}`, or a box `{"ranges": [[field, [from, to]], …], "latest": true}`, each field as a term and each end as a term (`{"$time": …}`), so the spelling of a field survives; `schema` is a list of `[name, description]` pairs and a description's `status` a list of `[value, role]` pairs, as a snapshot writes a schema (spec/15 §12.3); `elixir` is its string; `function` its name; `per` `null`, `"identity"` or `["identity", name]`. A pair list is used wherever a JSON object's string keys would lose a name's spelling.
+
 ### 10.6 Functions
 
 | Function | Contract |
@@ -1081,7 +1189,7 @@ The allowlist is the one #643 decided on 2026-10-15, in two notes: start small, 
 | `Visualize.Data.Schema.version/1` | The schema's version, the SHA-256 of its canonical encoding as 64 hex digits (10.2). |
 | `Visualize.Data.Schema.fetch/2` | A field's description by either spelling of its name, `{:ok, description}` or `:error`. |
 | `Visualize.Data.Schema.fetch/3` | One attribute of a field's description, `{:ok, value}` or `:error`. |
-| `Visualize.Data.Schema.attributes/0` | The thirteen description keys, `:type` first (10.1). |
+| `Visualize.Data.Schema.attributes/0` | The fourteen description keys, `:type` first (10.1). |
 | `Visualize.Data.Schema.identity/1` | The fields the schema declares `identity: true`, as it spells them, ordered by name as a string; `[]` for none (10.1). |
 | `Visualize.Data.Schema.identity/2` | A row's identity under the schema: the bare value for one identity field, a map for several, `nil` when it declares none or the row lacks a value for one (10.1). |
 | `Visualize.Data.Schema.compatibility/2` | `:ok` when another schema's rows read as this one's, else `{:error, [{field, reason}]}`: `:missing`, `{:type, a, b}`, `{:unit, a, b}`, `{:identity, a, b}` (10.1). |
@@ -1109,6 +1217,20 @@ The allowlist is the one #643 decided on 2026-10-15, in two notes: start small, 
 | `Visualize.VirtualSource.Sandbox.Cache.new/0` | The empty cache. |
 | `Visualize.VirtualSource.Sandbox.Cache.compile/2` | `compile(cache, source, [])`. |
 | `Visualize.VirtualSource.Sandbox.Cache.compile/3` | `compile(cache, source, opts)`: `{:ok, compiled, cache}` or `{:error, faults, cache}`, compiled at most once per source, arity and fields (10.5.3). |
+| `Visualize.VirtualSource.new/1` | A virtual source of its map form or a keyword list, checked alone (10.5.5): `{:ok, source}` or `{:error, errors}` by path. |
+| `Visualize.VirtualSource.new!/1` | The source, or `ArgumentError` naming every fault. |
+| `Visualize.VirtualSource.validate/2` | `validate(source, opts)`: `:ok`, or every fault of the source given `inputs:` (each input's schema by name) and `functions:` (the host functions' registry) (10.5.5). |
+| `Visualize.VirtualSource.to_map/1` | The source's map form; `new(to_map(source))` is `{:ok, source}` (10.5.10). |
+| `Visualize.VirtualSource.key/1` | The key an input is read under: its name, or a path's last atom (10.5.6). |
+| `Visualize.VirtualSource.identity_input/1` | The name of the input a `per` source's entities come from, or `nil` without `per` (10.5.7). |
+| `Visualize.VirtualSource.conform/2` | `conform(source, rows)`: `{:ok, rows}`, or `{:error, {index, field, reason}}` for the first row that does not hold, never a value (10.5.7). |
+| `Visualize.VirtualSource.dotted/1` | A path shown dotted: `[:ops, :health]` is `"ops.health"` (10.5.9). |
+| `Visualize.VirtualSource.resolve/3` | `resolve(paths, scope, ref)`: the path a short id names from the inside out, or a full path exactly, `{:ok, path}` or `:error` (10.5.9). |
+| `Visualize.VirtualSource.format_error/1` | One fault as a line a person reads, the root named `virtual source`. |
+| `use Visualize.VirtualSources` | imports `defsource/2` and compiles `__virtual_sources__/0` into the module: `[{name, source}]`, in definition order (10.5.8) |
+| `Visualize.VirtualSources.defsource/2` | `defsource name(arg) do … end`: a public `def` of one argument, its source captured at compile time and recorded under `__virtual_sources__/0`; a function of several clauses is listed once; a head of another arity is a `CompileError` (10.5.8) |
+| `Visualize.VirtualSources.registry/0` | As `registry/1` with no modules: the configuration's alone. |
+| `Visualize.VirtualSources.registry/1` | `registry(modules)`: `%{name => module}` of the modules given and then `config :visualize, virtual_sources:`; an `ArgumentError` for a module without `__virtual_sources__/0`, or a name two modules define (10.5.8) |
 
 ## 11. Feeds: the behaviour, the monitor and two providers
 
