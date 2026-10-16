@@ -288,6 +288,7 @@ defmodule Visualize.Backend.PaintTest do
         rect = Element.rect(x, y, w, h, %{fill: fill})
         root = Element.root(240, 110, children: [Element.defs([Paint.definition(fill)]), rect])
         {:ok, png, []} = Visualize.Render.to_png(root, scale: 1, background: "#ffffff")
+        image = Visualize.PNGPixels.decode(png)
 
         [{"fillStyle", kind, args, stops}] = gradients(from_binary(rect))
         matrix = List.first(transforms(from_binary(rect)))
@@ -295,7 +296,7 @@ defmodule Visualize.Backend.PaintTest do
         for px <- (x + 3)..(x + w - 4)//7, py <- (y + 3)..(y + h - 4)//5 do
           {cx, cy} = {px + 0.5, py + 0.5}
           expected = evaluate(kind, args, stops, matrix, {cx, cy})
-          {r, g, b, _a} = Visualize.PNGPixels.pixel(png, px, py)
+          {r, g, b, _a} = Visualize.PNGPixels.pixel(image, px, py)
 
           for {got, want} <- Enum.zip([r, g, b], expected) do
             assert abs(got - want) <= 8,
@@ -512,6 +513,7 @@ defmodule Visualize.Backend.PaintTest do
         rect = Element.rect(10, 10, 200, 80, %{fill: fill})
         root = Element.root(220, 100, children: [Element.defs([Paint.definition(fill)]), rect])
         {:ok, png, []} = Visualize.Render.to_png(root, scale: 1, background: "#ffffff")
+        image = Visualize.PNGPixels.decode(png)
         [{"fillStyle", t, n}] = patterns(from_binary(rect))
         {a, s} = {:math.atan2(t["b"], t["a"]), :math.sqrt(t["a"] ** 2 + t["b"] ** 2) * n}
 
@@ -521,7 +523,7 @@ defmodule Visualize.Backend.PaintTest do
           {u, v} = {x * :math.cos(a) + y * :math.sin(a), -x * :math.sin(a) + y * :math.cos(a)}
           d = fn c -> abs(c - s * Float.floor(c / s) - s / 2) end
           distance = if pattern == :crosshatch, do: min(d.(v), d.(u)), else: d.(v)
-          {r, g, b, _} = Visualize.PNGPixels.pixel(png, px, py)
+          {r, g, b, _} = Visualize.PNGPixels.pixel(image, px, py)
 
           cond do
             distance < 3 / 2 - 0.9 -> assert_close({r, g, b}, {31, 119, 180}, {px, py})

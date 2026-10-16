@@ -184,6 +184,7 @@ defmodule Visualize.Backend.CanvasScopeTest do
       tree = Frame.generate(frame, sources: %{s: rows}, resolve: :literal)
       root = Element.root(240, 200, children: [tree])
       {:ok, png, _warnings} = Visualize.Render.to_png(root, scale: 1, background: "#ffffff")
+      image = Visualize.PNGPixels.decode(png)
 
       symbols =
         for %{"name" => "fill", "fillStyle" => "rgba(31,119,180,1)"} = d <- from_binary(tree),
@@ -194,7 +195,7 @@ defmodule Visualize.Backend.CanvasScopeTest do
       for %{"m" => %{"e" => x, "f" => y}} <- symbols do
         {px, py} = {trunc(x), trunc(y)}
         assert px in 0..239 and py in 0..199, "a symbol drawn off the canvas at #{x},#{y}"
-        {r, g, b, _a} = Visualize.PNGPixels.pixel(png, px, py)
+        {r, g, b, _a} = Visualize.PNGPixels.pixel(image, px, py)
 
         assert abs(r - 31) + abs(g - 119) + abs(b - 180) <= 24,
                "no symbol at #{x},#{y}: #{inspect({r, g, b})}"

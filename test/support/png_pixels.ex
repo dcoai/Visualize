@@ -22,10 +22,15 @@ defmodule Visualize.PNGPixels do
     {w, h, IO.iodata_to_binary(rows)}
   end
 
-  @doc "One `{r, g, b, a}` pixel."
-  @spec pixel(binary(), non_neg_integer(), non_neg_integer()) :: {byte(), byte(), byte(), byte()}
-  def pixel(png, x, y) do
-    {w, _h, pixels} = decode(png)
+  @doc """
+  One `{r, g, b, a}` pixel of an image `decode/1` returned. It takes the decoded image and
+  never the PNG, so a test that samples many pixels decodes once (#732): decoding per read
+  made a sampling test cost its sample count in whole-image decodes.
+  """
+  @spec pixel({pos_integer(), pos_integer(), binary()}, non_neg_integer(), non_neg_integer()) ::
+          {byte(), byte(), byte(), byte()}
+  def pixel({w, h, pixels}, x, y)
+      when is_binary(pixels) and x in 0..(w - 1)//1 and y in 0..(h - 1)//1 do
     <<r, g, b, a>> = binary_part(pixels, (y * w + x) * 4, 4)
     {r, g, b, a}
   end
