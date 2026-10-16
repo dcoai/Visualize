@@ -211,6 +211,9 @@ defmodule Visualize.Board.Snapshot do
       (default `[]` and `%{}`): the board's own, so the cells draw what the board draws for
       its viewer (spec/14 §3.13, spec/15 §12.2, D-181). A snapshot holds data, not modules
       or a viewer, so it records neither
+    * `:id` - the board's id, each cell's chart root `<id>-<cell>-chart` (default as the
+      board process derives it, so a cell's root id is its live drawing's, spec/15 §12.2,
+      D-188)
   """
   @spec views(t(), keyword()) :: %{atom() => View.t()}
   def views(%__MODULE__{} = snapshot, opts \\ []) do
@@ -219,6 +222,7 @@ defmodule Visualize.Board.Snapshot do
     boxes = Board.boxes(snapshot.board, width)
 
     drawing = %{
+      id: Keyword.get_lazy(opts, :id, fn -> Draw.board_id(snapshot.board) end),
       system: Keyword.get(opts, :system, :as_posted),
       generators: Keyword.get(opts, :generators, []),
       assigns: Keyword.get(opts, :assigns, %{})
@@ -245,6 +249,7 @@ defmodule Visualize.Board.Snapshot do
   defp view(snapshot, name, cell, size, theme, drawing) do
     Draw.once(%{
       name: name,
+      id: Draw.root_id(drawing.id, name),
       title: title(snapshot, name),
       chart: cell.chart,
       vars: cell.vars,

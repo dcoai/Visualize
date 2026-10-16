@@ -336,6 +336,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         `Visualize.Board.realize/4` takes it: the schema of a slot's feed
       * `:refused` - each cell the binding's type check refused, by its name, with its
         faults (D-153): it is not realized, and is drawn as the fault panel
+      * `:id` - the stem of each cell's root id, `<id>-<cell>` (default
+        `vis-builder-board`), so two cells drawing one design never share a root's ids or
+        its dark-mode rule (D-188)
 
     A cell whose binding has the wrong type — refused, or reporting a `{:type_mismatch, …}`
     from application — is `{:fault, svg, lines}`: the board runtime's cell-state panel of
@@ -349,6 +352,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       pools = Keyword.get(opts, :pools, %{})
       refused = Keyword.get(opts, :refused, %{})
       theme = Keyword.get(opts, :theme) || Visualize.Theme.default()
+      stem = Keyword.get(opts, :id, "vis-builder-board")
       shared = [width: @width] ++ Keyword.take(opts, [:theme, :describe])
 
       Map.new(cells, fn {name, cell} ->
@@ -359,7 +363,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
             :error ->
               alone = %{board | cells: %{name => cell}}
-              realized(alone, name, cell, fetch, Map.get(pools, name, %{}), shared, theme)
+              realized(alone, name, cell, fetch, Map.get(pools, name, %{}), shared, theme, stem)
           end
 
         {name, drawn}
@@ -368,12 +372,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The cell applied alone and drawn; one whose application reports a type fault is the
     # fault panel, any other fault its lines.
-    defp realized(alone, name, cell, fetch, pool, shared, theme) do
+    defp realized(alone, name, cell, fetch, pool, shared, theme, stem) do
       case Board.realize(alone, fetch, %{name => pool}, shared) do
         {:ok, %{^name => applied}, _cache} ->
           {:ok,
            Chart.render(applied,
              root: true,
+             id: "#{stem}-#{name}",
              responsive: true,
              title: Map.get(cell, :title) || Atom.to_string(name)
            )}

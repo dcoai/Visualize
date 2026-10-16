@@ -160,6 +160,33 @@ defmodule Visualize.Board.ExportTest do
       assert Export.svg(snapshot) =~ live.a.svg
     end
 
+    test "each cell's root is named by its board and its cell, live, in a snapshot and exported (D-188)" do
+      {feed, agent} = Feeds.scripted(schema: @schema, rows: rows(20))
+      Process.unlink(agent)
+      on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+
+      # `a` and `c` draw one component under titles of their own, `b` under its summary.
+      {:ok, server} = start(id: "ops", feeds: %{f: feed}, binding: binding([:a, :b, :c], :f))
+      {:ok, _info} = Server.subscribe(server)
+
+      live =
+        for name <- [:a, :b, :c], into: %{}, do: {name, view_until(name, &(&1.state == :live))}
+
+      for name <- [:a, :b, :c] do
+        assert live[name].svg =~ ~r/^<svg[^>]* id="ops-#{name}-chart"/
+        assert live[name].svg =~ ~s(id="ops-#{name}-chart-desc")
+      end
+
+      snapshot = Server.snapshot(server)
+      assert Snapshot.views(snapshot, id: "ops").b.svg == live.b.svg
+      assert Server.export(server, :svg) =~ live.b.svg
+
+      # A snapshot drawn with no id names its cells as the board's default does.
+      default = Visualize.Board.Draw.board_id(snapshot.board)
+      assert "vis-board-" <> _ = default
+      assert Snapshot.views(snapshot).a.svg =~ ~s(id="#{default}-a-chart")
+    end
+
     test "a cell in a state with no chart exports the state's panel, as the component draws it" do
       {feed, agent} = Feeds.scripted(schema: @schema, error: :timeout)
       Process.unlink(agent)

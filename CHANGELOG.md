@@ -17,6 +17,18 @@ release it merely follows.
 
 ### Added
 
+- **A chart's root takes an `id:`** (#712, D-188). `Visualize.Chart.render/2` and
+  `generate/2` with `root: true` take `id:`: the root's id, its `<title>`'s and `<desc>`'s
+  ids (`<id>-title`, `<id>-desc`) and the selector of the automatic dark-mode rule. Without
+  it the id is still a hash of the title and description, so two charts with the same
+  title and description on one page share it — and one's dark-mode rule restyled the
+  other; pass each its own. **A board names each cell's root** `<board id>-<cell>-chart`:
+  `Visualize.Board.Server` takes `id:` (by default `vis-board-` and a hash of the board's
+  `meta` and cell names), and `Visualize.Board.Snapshot.views/2` and the exports take the
+  same, so a snapshot's cell keeps its live drawing's id; the builder's board preview names
+  its cells `vis-builder-board-<cell>`. A board cell's root id changes accordingly from the
+  title-and-summary hash.
+
 - **The examples app shows this release's colors and paints** (#705). Two gallery charts
   are written in the new grammar, as references to copy: *Colors* (`/chart/colors`) draws
   `color(:blue)` through `intensity`, `lighten`, `darken`, `blend` and `alpha`, a role, a

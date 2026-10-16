@@ -80,9 +80,23 @@ defmodule Visualize.Board.Draw do
   end
 
   @doc false
-  # Every frame stepped over the sources at `at` and drawn inside one accessible root:
-  # `{svg, compiled}`, the compiled charts as the step left them.
-  def step(compiled, sources, at, %{size: {w, h}, title: title, summary: summary}) do
+  # The id a board gives its cells' roots when the host gives it none (spec/15 §8.2, D-188):
+  # `vis-board-` and a hash of the board's meta and its cells' names, which a running board
+  # and a snapshot of it derive alike.
+  def board_id(%{meta: meta, cells: cells}) do
+    names = cells |> Map.keys() |> Enum.sort()
+    "vis-board-" <> String.downcase(Integer.to_string(:erlang.phash2({meta, names}), 36))
+  end
+
+  @doc false
+  # A cell's chart root id on its board (spec/15 §8.3, D-188), apart from the cell's own DOM
+  # id, `<board>-<cell>` (§9.1).
+  def root_id(board_id, cell), do: "#{board_id}-#{cell}-chart"
+
+  @doc false
+  # Every frame stepped over the sources at `at` and drawn inside one accessible root, under
+  # the cell's root id: `{svg, compiled}`, the compiled charts as the step left them.
+  def step(compiled, sources, at, %{size: {w, h}, title: title, summary: summary} = cell) do
     {groups, stepped} =
       Enum.map_reduce(compiled, [], fn {name, one}, acc ->
         {group, one} = Compiled.step(one, sources, at: at)
@@ -91,6 +105,7 @@ defmodule Visualize.Board.Draw do
 
     svg =
       Element.root(w, h,
+        id: Map.get(cell, :id),
         title: title || summary.name,
         description: summary.text,
         responsive: true,

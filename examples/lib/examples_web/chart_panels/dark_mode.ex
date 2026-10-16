@@ -41,8 +41,8 @@ defmodule ExamplesWeb.ChartPanels.DarkMode do
   @doc """
   The two drawings of `module`'s design under the implicit theme: `implicit`, whose root
   carries the automatic dark mode rule, and `fixed`, drawn with `color_scheme: false`. Each
-  is titled for what it is, so the two roots — and the chart above them — never share an
-  id, which the rule is scoped to.
+  root is given its own `id:` (spec/14 §4.7, D-188), so the two — and the chart above them,
+  one design drawn three times — never share the id the rule is scoped to.
   """
   @spec drawings(module()) :: %{implicit: String.t(), fixed: String.t()}
   def drawings(module) do
@@ -51,12 +51,8 @@ defmodule ExamplesWeb.ChartPanels.DarkMode do
     opts = [root: true, responsive: true, summary: false]
 
     %{
-      implicit: Chart.render(applied, [title: module.title() <> " (implicit theme)"] ++ opts),
-      fixed:
-        Chart.render(
-          applied,
-          [title: module.title() <> " (color_scheme: false)", color_scheme: false] ++ opts
-        )
+      implicit: Chart.render(applied, [id: "dark-mode-implicit"] ++ opts),
+      fixed: Chart.render(applied, [id: "dark-mode-fixed", color_scheme: false] ++ opts)
     }
   end
 

@@ -917,6 +917,9 @@ defmodule Visualize.Chart do
     * `:color_scheme` - `false` to leave out the root's automatic dark mode: in `:css`
       output, under the implicit default theme, the root carries a `<style>` that switches
       to the theme's dark counterpart when the viewer prefers it (spec/08 §7.3, #668)
+    * `:id` - the root's id, the stem of its title's and description's ids and the selector
+      of its scoped rules (spec/14 §4.7, #712, D-188); default `vis-` and a hash of the
+      title and description, which two alike charts on one page share
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
   def generate(
@@ -935,12 +938,14 @@ defmodule Visualize.Chart do
       title = Keyword.get_lazy(opts, :title, fn -> title(meta, summary, applied) end)
       description = described(description, summary)
 
+      id = Keyword.get(opts, :id)
+
       Element.root(frame.size.width, frame.size.height,
+        id: id,
         title: title,
         description: description,
         responsive: Keyword.get(opts, :responsive, false),
-        children:
-          scheme(applied, Element.label_ids(nil, title, description).root, opts) ++ [group]
+        children: scheme(applied, Element.label_ids(id, title, description).root, opts) ++ [group]
       )
     else
       group
@@ -1053,7 +1058,8 @@ defmodule Visualize.Chart do
   @doc """
   The applied chart drawn: `generate/2` serialized through `Visualize.Render.to_string/2`
   — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), and
-  `paths:`, `root:`, `title:`, `description:` and `responsive:` as `generate/2` takes them.
+  `paths:`, `root:`, `id:`, `title:`, `description:`, `summary:`, `responsive:` and
+  `color_scheme:` as `generate/2` takes them.
   """
   @spec render(Applied.t(), keyword()) :: String.t()
   def render(%Applied{} = applied, opts) do
@@ -1064,6 +1070,7 @@ defmodule Visualize.Chart do
       Keyword.split(opts, [
         :paths,
         :root,
+        :id,
         :title,
         :description,
         :summary,
