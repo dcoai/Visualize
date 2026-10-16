@@ -2432,4 +2432,22 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A board-mode pass on the examples' board costs about 73,000 reductions where it cost 2,120,000, on the cost test's board about 36,000 where it cost 405,000; a selection is a pass that draws nothing. An event that retitles one cell costs about 615,000 on the examples' board (2,120,000 before), most of it the board's validation, and draws one preview.
 - A host that hands the builder a new catalog has its sample rows end at that instant; a preview's time axis no longer advances with every render, only with the data.
 - The examples' board has eight cells; the saving grows with the cells, since an edit draws one.
+## 192. D-192 — A group's presentation attributes are its children's state on the binary canvas of SVG elements
 
+**Context.** #734, recorded in spec/09 §4.7 by #727. `Visualize.Backend.CanvasBinary.SVG`, the binary encoder for `Visualize.SVG.Element` trees, read presentation attributes on the drawing elements only, so a child that relied on its `:g` for its fill, stroke, width, opacity, dash, cap or join drew on the binary canvas without it — or, with no fill or stroke of its own, not at all — while SVG drew it with the group's. The IR encoder already passes a group's style to its children as canvas state inside `save` … `restore` and decides each element's draws by its effective style (D-37, D-111). #727's parity guard put each paint key on the drawing element only, so the gap passed it.
+
+**Decision.**
+- **What a group sets is its children's state** (spec/09 §4.7). A `:g` — and the root `:svg`, which SVG's children inherit from too — that sets `fill`, `fill-opacity`, `stroke`, `stroke-opacity`, `stroke-width`, `stroke-linecap`, `stroke-linejoin` or `stroke-dasharray` writes, inside `save` … `restore` and after its transform, a style record of the fill and the stroke it touches and its width, and a `paint_state` record of its cap, join and dash. The children draw in it, as the IR encoder's children draw in their group's style.
+- **The encoder carries the inherited attributes down the tree**, the nearest group's value for each. A drawing element's fill and stroke draws follow its effective attributes — its own over the groups' — and each color a record writes is the effective color at the effective opacity, so a color and an opacity set on different elements combine as SVG combines them.
+- **A group's opacity is its children's global alpha**, bit 3 of the group's style record, which the SVG encoder had never set; nested groups multiply, since each record writes the product of its own opacity and the ones above it.
+- **A tree with no group that sets one is the stream it was**, byte for byte.
+
+**Rejected.**
+- **Merging the inherited attributes into every drawing element and writing nothing on the group.** It is correct for colors, but it repeats the group's style in every child's record, and it has no place for the group's opacity, which is not inherited in SVG and must not become the child's own.
+- **Folding a group's opacity into each child's colors.** A child's own `opacity` is folded into its fill alone (§4.7); folding the group's the same way would leave the stroke opaque, and a nested group's opacity would have to be folded through every level of colors.
+- **Compositing the group offscreen** to draw a group's opacity exactly where children overlap. The binary format has no record for it, and a new record would be a version 4 stream for every reader; the global alpha is exact where children do not overlap.
+
+**Consequences.**
+- Inherited group attributes draw the same on SVG and the binary canvas: `test/visualize/backend/canvas_binary_svg_group_test.exs` holds the records and a translucent group's two bands to resvg's pixels, and `test/visualize/backend/paint_opacity_test.exs`'s parity guard now puts every paint key on a group above a child that sets none, for every canvas encoder.
+- A group whose overlapping children it makes translucent draws the overlap more opaque on the binary canvas than SVG does, the lower child showing through the upper.
+- A drawing element's own `opacity` still reaches only its fill's alpha, as before; this decision does not change it.
