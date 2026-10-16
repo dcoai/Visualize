@@ -428,7 +428,9 @@ A cell is always in exactly one state, and **every state is drawn deliberately**
 
 The first row that holds is the state, in this order: a cell whose feed is down is not also called loading, and a stale chart that is capped says stale.
 
-**Two drawings.** `Visualize.Board.State.render(state, theme, {w, h})` is the **whole cell**: the theme's `surface` filling the box, a frame in the role's color, and the glyph and the words centered in the theme's `text` color, as an accessible SVG root whose title is the words. It is drawn where there is no chart: loading, no data, crashed, invalid, and down or stale before anything was drawn. `Visualize.Board.State.banner(state, theme, width)` is a **banner**: one line across the top of a chart, in the role's color, glyph and words. It is drawn over the chart for stale, capped and down, so a person still sees the last data with what is wrong with it. `:live` draws neither. Both are in `:css` mode (spec/08 §7.3), so a page's stylesheet themes them as it themes the charts.
+**Two drawings.** `Visualize.Board.State.render(state, theme, {w, h})` is the **whole cell**: the theme's `surface` filling the box, a frame in the role's color, and the glyph and the words centered in the theme's `text` color, as an accessible SVG root whose title is the words. It is drawn where there is no chart: loading, no data, crashed, invalid, and down or stale before anything was drawn. `Visualize.Board.State.banner(state, theme, width)` is a **banner**: one line across the top of a chart, in the role's color, glyph and words. It is drawn over the chart for stale, capped and down, so a person still sees the last data with what is wrong with it. `:live` draws neither. Both are in `:css` mode (spec/08 §7.3), so a page's stylesheet themes them as it themes the charts. Without an id each root's id is content-derived from its title (spec/14 §4.7), as a chart's is; `render/4` and `banner/4` take `id:`, the root's id and its title's id stem, as `Visualize.Chart.render/2` does (D-188).
+
+**A board names every panel by its cell** (#722). A whole-cell panel stands where the cell's chart would, never beside it, so it takes the cell's chart root id, `<board id>-<cell>-chart` (§8.2, §8.3); a banner is drawn over the chart, so it takes `<board id>-<cell>-chart-banner`. The cell process, the board's crashed view and a snapshot's views (§12.2) all name them so, and the component's placeholder before a cell's first view is the loading panel under `<cell DOM id>-chart` (§9.1). Two cells in one state under one title therefore never share a root's ids, and nothing a page scopes to one panel's root reaches another's; every root a board draws has a per-cell id.
 
 ### 8.5 Time
 
@@ -465,6 +467,8 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.Cell.child_spec/1` | A cell's child spec, `restart: :temporary`: the board starts its cells and restarts them itself (§8.3). |
 | `Visualize.Board.State.render/3` | A state drawn as the whole cell, an SVG root string (§8.4). |
 | `Visualize.Board.State.banner/3` | A state drawn as a banner across a chart, an SVG root string, or `nil` for `:live` (§8.4). |
+| `Visualize.Board.State.render/4` | `render/3` with options: `id:`, the root's id (§8.4, #722). |
+| `Visualize.Board.State.banner/4` | `banner/3` with options: `id:`, the root's id (§8.4, #722). |
 | `Visualize.Board.State.role/1` | A state's role. |
 | `Visualize.Board.State.words/1` | A state's words, as the drawings print them. |
 | `Visualize.Board.State.name/1` | A state's name, the `data-vis-state` its drawings carry: `"stale"`, `"down"`, …. |

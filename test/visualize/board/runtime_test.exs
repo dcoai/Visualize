@@ -219,9 +219,12 @@ defmodule Visualize.Board.RuntimeTest do
       {good, _} = scripted(schema: @schema, rows: rows(20))
       binding = Binding.new(%{{:a, :primary} => :bad, {:b, :primary} => :good})
 
-      {:ok, board} = start(feeds: %{bad: bad, good: good}, binding: binding)
+      {:ok, board} = start(id: "ops", feeds: %{bad: bad, good: good}, binding: binding)
       Server.subscribe(board)
-      assert match?({:crashed, _}, view_until(:a, &match?({:crashed, _}, &1.state)).state)
+      crashed = view_until(:a, &match?({:crashed, _}, &1.state))
+      assert match?({:crashed, _}, crashed.state)
+      # The board's crashed panel takes the cell's root id (spec/15 §8.4, #722).
+      assert crashed.note =~ ~r/^<svg[^>]* id="ops-a-chart"/
       assert view_until(:b, &(&1.state == :live)).frames >= 1
     end
   end

@@ -377,7 +377,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             svg: view && view.svg,
             note:
               (view && view.note) ||
-                (view == nil && State.render(:loading, assigns.theme, {300, 150})),
+                (view == nil &&
+                   State.render(:loading, assigns.theme, {300, 150}, id: "#{assigns.id}-chart")),
             crosshair: (view && view.crosshair) || %{},
             keyboard: (view && view.keyboard) || %{},
             drawn: view && view.drawn,

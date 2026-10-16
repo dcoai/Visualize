@@ -166,9 +166,13 @@ defmodule Visualize.Board.State do
   titled with the words, the theme's `surface` filling it inside a frame of the role's
   color, and the role's glyph and the words centered in the theme's `text`. `:live` is
   drawn as the empty surface.
+
+  `id:` is the root's id and its title's id stem (spec/14 §4.7, D-188): a board passes the
+  cell's root id, so two cells in one state never share one (#722). Without it the id is
+  derived from the title.
   """
-  @spec render(t(), Theme.t(), {number(), number()}) :: String.t()
-  def render(state, %Theme{} = theme, {w, h}) do
+  @spec render(t(), Theme.t(), {number(), number()}, keyword()) :: String.t()
+  def render(state, %Theme{} = theme, {w, h}, opts \\ []) do
     role = role(state)
     words = words(state)
 
@@ -204,7 +208,12 @@ defmodule Visualize.Board.State do
         )
 
     w
-    |> Element.root(h, title: title(state), responsive: true, children: children)
+    |> Element.root(h,
+      id: Keyword.get(opts, :id),
+      title: title(state),
+      responsive: true,
+      children: children
+    )
     |> Element.set_attrs(%{class: "vis-cell-state", data_vis_state: name(state)})
     |> Render.to_string()
   end
@@ -212,12 +221,14 @@ defmodule Visualize.Board.State do
   @doc """
   A state drawn as a banner across the top of a chart `width` wide (spec/15 §8.4): an SVG
   root one line high, the role's color behind the role's glyph and the words in the
-  contrast ink of `Visualize.Theme.ink/2`. `nil` for `:live`, which needs none.
+  contrast ink of `Visualize.Theme.ink/2`. `nil` for `:live`, which needs none. `id:` as
+  `render/4` takes it; a board passes `<cell root id>-banner` (#722).
   """
-  @spec banner(t(), Theme.t(), number()) :: String.t() | nil
-  def banner(:live, _theme, _width), do: nil
+  @spec banner(t(), Theme.t(), number(), keyword()) :: String.t() | nil
+  def banner(state, theme, width, opts \\ [])
+  def banner(:live, _theme, _width, _opts), do: nil
 
-  def banner(state, %Theme{} = theme, width) do
+  def banner(state, %Theme{} = theme, width, opts) do
     role = role(state)
     color = Theme.resolve(theme, role, :literal)
     ink = Theme.ink(theme, color)
@@ -239,7 +250,7 @@ defmodule Visualize.Board.State do
     ]
 
     width
-    |> Element.root(h, title: title(state), children: children)
+    |> Element.root(h, id: Keyword.get(opts, :id), title: title(state), children: children)
     |> Element.set_attrs(%{class: "vis-cell-banner", data_vis_state: name(state)})
     |> Render.to_string()
   end

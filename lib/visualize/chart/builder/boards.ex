@@ -359,7 +359,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         drawn =
           case Map.fetch(refused, name) do
             {:ok, errors} ->
-              fault(errors, theme)
+              fault(errors, theme, "#{stem}-#{name}")
 
             :error ->
               alone = %{board | cells: %{name => cell}}
@@ -385,13 +385,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         {:error, errors} ->
           if Enum.any?(errors, &match?({_path, {:type_mismatch, _, _, _, _}}, &1)),
-            do: fault(errors, theme),
+            do: fault(errors, theme, "#{stem}-#{name}"),
             else: {:error, Enum.map(errors, &Board.format_error/1)}
       end
     end
 
-    defp fault(errors, theme) do
-      {:fault, State.render({:invalid, errors}, theme, @fault_size),
+    # The fault panel stands where the cell's chart would, under its root id (#722).
+    defp fault(errors, theme, id) do
+      {:fault, State.render({:invalid, errors}, theme, @fault_size, id: id),
        Enum.map(errors, &Board.format_error/1)}
     end
 

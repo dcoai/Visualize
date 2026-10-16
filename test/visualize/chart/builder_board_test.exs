@@ -746,6 +746,8 @@ defmodule Visualize.Chart.BuilderBoardTest do
       latency = body(html, "latency")
       assert latency =~ ~s(<div class="vis-builder-fault">)
       assert latency =~ "Wrong binding"
+      # The panel stands where the cell's chart would, under its root id (#722).
+      assert latency =~ ~r/<svg[^>]* class="vis-cell-state"[^>]* id="vis-builder-board-latency"/
 
       assert latency =~
                "cells.latency.marks[0].channels.x: field :t of slot :primary is a category"

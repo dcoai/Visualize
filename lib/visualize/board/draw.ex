@@ -94,6 +94,11 @@ defmodule Visualize.Board.Draw do
   def root_id(board_id, cell), do: "#{board_id}-#{cell}-chart"
 
   @doc false
+  # A banner's root id over a cell's chart (spec/15 §8.4, #722); none for a cell with none.
+  def banner_id(nil), do: nil
+  def banner_id(root_id), do: root_id <> "-banner"
+
+  @doc false
   # Every frame stepped over the sources at `at` and drawn inside one accessible root, under
   # the cell's root id: `{svg, compiled}`, the compiled charts as the step left them.
   def step(compiled, sources, at, %{size: {w, h}, title: title, summary: summary} = cell) do
@@ -158,14 +163,22 @@ defmodule Visualize.Board.Draw do
   # The view of a cell (spec/15 §8.3): its chart's frame, if one is drawn, and its state's
   # own drawing — the whole cell where there is no chart, a banner over one that is not
   # live, nothing over a live one.
-  def view(%{name: name, title: title, size: {w, _h} = size, theme: theme}, cell_state, drawn) do
+  def view(
+        %{name: name, title: title, size: {w, _h} = size, theme: theme} = cell,
+        cell_state,
+        drawn
+      ) do
     %{svg: svg, attrs: {crosshair, keyboard}, frames: frames} = drawn
+
+    # A panel takes the cell's root id: the whole cell stands in the chart's place, a
+    # banner over it is apart from it (spec/15 §8.4, #722).
+    id = Map.get(cell, :id)
 
     note =
       cond do
-        svg == nil -> State.render(cell_state, theme, size)
+        svg == nil -> State.render(cell_state, theme, size, id: id)
         cell_state == :live -> nil
-        true -> State.banner(cell_state, theme, w)
+        true -> State.banner(cell_state, theme, w, id: banner_id(id))
       end
 
     %View{

@@ -215,7 +215,8 @@ defmodule Visualize.Board.ExportTest do
       view = Snapshot.views(snapshot).b
 
       assert view.state == {:crashed, ":killed"} and view.svg == nil
-      assert view.note == State.render({:crashed, ":killed"}, snapshot.theme, view.size)
+      id = Visualize.Board.Draw.root_id(Visualize.Board.Draw.board_id(snapshot.board), :b)
+      assert view.note == State.render({:crashed, ":killed"}, snapshot.theme, view.size, id: id)
       assert Export.svg(snapshot) =~ ~s(data-vis-cell="b" data-vis-state="crashed")
     end
 
@@ -537,5 +538,82 @@ defmodule Visualize.Board.ExportTest do
     if rounded == trunc(rounded),
       do: Integer.to_string(trunc(rounded)),
       else: Float.to_string(rounded)
+  end
+
+  describe "every panel a board draws is named by its cell (spec/15 §8.4, #722)" do
+    # Four cells of one component under one title.
+    defp alike(extra \\ %{}) do
+      cells =
+        for {name, x} <- [a: 0, b: 3, c: 6, d: 9], into: %{} do
+          {name, %{x: x, y: 0, w: 3, h: 3, ref: {:composite, 1}, title: "Same"}}
+        end
+
+      board(Map.merge(%{cells: cells}, extra))
+    end
+
+    defp root_id(svg),
+      do: hd(Regex.run(~r/^<svg[^>]* id="([^"]+)"/, svg, capture: :all_but_first))
+
+    defp ids(svg),
+      do: ~r/\bid="([^"]+)"/ |> Regex.scan(svg, capture: :all_but_first) |> List.flatten()
+
+    # Every id a drawing holds is its root's or under its stem, and every selector its
+    # stylesheet scopes to an id names one of its own.
+    defp own!(svg) do
+      root = root_id(svg)
+      assert Enum.all?(ids(svg), &String.starts_with?(&1, root)), svg
+
+      for [id] <-
+            Regex.scan(
+              ~r/#([A-Za-z][\w-]*)/,
+              Enum.join(Regex.scan(~r/<style>.*?<\/style>/s, svg) |> List.flatten())
+            ) do
+        assert String.starts_with?(id, root), "#{root}'s rule reaches ##{id}"
+      end
+
+      root
+    end
+
+    test "two loading and two crashed cells under one title share no root or id" do
+      snapshot = realized(board: alike())
+      snapshot = put_in(snapshot.cells.a.slots, nil)
+      snapshot = put_in(snapshot.cells.b.slots, nil)
+      snapshot = put_in(snapshot.cells.c.crashed, ":killed")
+      snapshot = put_in(snapshot.cells.d.crashed, ":killed")
+      views = Snapshot.views(snapshot, id: "ops")
+
+      assert views.a.state == :loading and views.b.state == :loading
+      assert {:crashed, _} = views.c.state
+      assert {:crashed, _} = views.d.state
+
+      roots = for name <- [:a, :b, :c, :d], do: own!(views[name].note)
+      assert roots == ["ops-a-chart", "ops-b-chart", "ops-c-chart", "ops-d-chart"]
+
+      all = Enum.flat_map([:a, :b, :c, :d], &ids(views[&1].note))
+      assert all == Enum.uniq(all)
+
+      # The export holds them as drawn.
+      assert Export.svg(snapshot, id: "ops") =~ views.c.note
+    end
+
+    test "a banner over a chart is apart from the chart's root and from the other cells' banners" do
+      # The monitor says every feed is stale.
+      snapshot = realized(board: alike())
+
+      snapshot =
+        Enum.reduce([:a, :b], snapshot, fn name, acc ->
+          put_in(acc.cells[name].slots.primary.status, :stale)
+        end)
+
+      views = Snapshot.views(snapshot, id: "ops")
+
+      for name <- [:a, :b] do
+        assert {:stale, _} = views[name].state
+        assert root_id(views[name].svg) == "ops-#{name}-chart"
+        assert own!(views[name].note) == "ops-#{name}-chart-banner"
+      end
+
+      assert ids(views.a.note) -- ids(views.b.note) == ids(views.a.note)
+    end
   end
 end

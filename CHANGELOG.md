@@ -493,6 +493,15 @@ release it merely follows.
 
 ### Fixed
 
+- **A board names its cells' state panels by the cell** (#722). The loading, crashed and
+  other whole-cell panels, and the banner over a stale, capped or down chart, took a root id
+  derived from their title, so two cells in one state shared one — and any rule scoped to
+  it. A whole-cell panel now takes the cell's root id `<board id>-<cell>-chart` (it stands
+  where the chart would) and a banner `<board id>-<cell>-chart-banner`, live, in a snapshot
+  and exported; the builder's board preview gives its fault panel the cell's preview id.
+  `Visualize.Board.State.render/4` and `banner/4` take `id:`; the three-argument forms are
+  unchanged.
+
 - **A compiled chart declares a gradient a later row first selects** (#721, D-190). A
   style stack with a field entry laid over another style's in-place gradient
   (`style: [:a, {:field, :look}]`) reaches a merged gradient on whichever row first names
