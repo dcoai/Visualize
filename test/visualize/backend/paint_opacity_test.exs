@@ -96,6 +96,24 @@ defmodule Visualize.Backend.PaintOpacityTest do
       end
     end
 
+    # SVG's children inherit a group's presentation attributes, so a key a group sets must
+    # change what every encoder draws for a child that sets none (#734).
+    test "every canvas encoder carries it from a group to a child that sets none" do
+      keys = Parts.paint_keys() -- @not_element_keys
+      grouped = fn style -> Element.group([rect(%{})], style: style) end
+
+      for key <- keys, {encoder, encode} <- @encoders do
+        sample = Map.get(@samples, key) || flunk("no sample for the paint key #{inspect(key)}")
+        {with, without} = {Map.put(@base, key, sample), Map.delete(@base, key)}
+        markup = &Visualize.Render.to_string(grouped.(&1))
+
+        if markup.(with) != markup.(without) do
+          assert encode.(grouped.(with)) != encode.(grouped.(without)),
+                 "SVG's child inherits #{inspect(key)} from its group; #{inspect(encoder)}'s does not"
+        end
+      end
+    end
+
     test "a paint's alpha is the element's times the paint's, set around its own draw" do
       style = %{fill: "#336699", fill_opacity: 0.4, stroke: "#cc0000", opacity: 0.5}
 
@@ -293,15 +311,20 @@ defmodule Visualize.Backend.PaintOpacityTest do
       unread = stroke_path([{0, 0}, {10, 0}], %{stroke_dasharray: "four", stroke_linecap: :wide})
       assert svg_stream(unread) == svg_stream(plain)
 
-      # A group's attributes are not read here, so they make no version 3 stream.
+      # A group's dash is its children's (#734): the group's state, in its save and restore.
       group =
         Visualize.SVG.Element.g(%{"stroke-dasharray": "4 2"})
         |> Map.put(:children, [Visualize.SVG.Element.from_ir(plain)])
 
-      refute Enum.any?(
-               Decoder.decode(CanvasBinary.encode_element!(group)),
-               &match?({:version, _}, &1)
-             )
+      assert [
+               {:version, 3},
+               :save,
+               {:paint_state, %{dash: [4.0, 2.0]}},
+               {:style, _},
+               {:path_cubic32, _},
+               :stroke,
+               :restore
+             ] = Decoder.decode(CanvasBinary.encode_element!(group))
     end
 
     test "the dash ends with its element" do
