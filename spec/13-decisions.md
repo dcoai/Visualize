@@ -2451,3 +2451,22 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Inherited group attributes draw the same on SVG and the binary canvas: `test/visualize/backend/canvas_binary_svg_group_test.exs` holds the records and a translucent group's two bands to resvg's pixels, and `test/visualize/backend/paint_opacity_test.exs`'s parity guard now puts every paint key on a group above a child that sets none, for every canvas encoder.
 - A group whose overlapping children it makes translucent draws the overlap more opaque on the binary canvas than SVG does, the lower child showing through the upper.
 - A drawing element's own `opacity` still reaches only its fill's alpha, as before; this decision does not change it.
+
+## 193. D-193 — A drawing element's records are its own on the binary canvas of SVG elements, wherever it stands
+
+**Context.** #744, reported by #743 (#742) from reading the encoder; work item #745. Reproduced at d6a60d1: two root-level `<line>`s, the first `stroke-width: 6`, the second stroked with none, encoded by `Visualize.Backend.CanvasBinary.SVG` as two style records, the second without the width flag; the binary hook sets `lineWidth` only when the flag is present, so the second line drew 6 wide where SVG draws it 1 wide. D-179 scoped a leaf's state on the IR encoders' streams (spec/09 §3.3.1, §4.4) and its guard, `canvas_scope_test.exs`, drew only those; the SVG-element encoder (§4.7) is a module of its own and was never under it. Its leaves were scoped piecemeal since: a leaf with a dash, a cap or a join (#693), and a leaf whose style changes a group's fill, stroke or width state (#742, under D-192's promise that a tree with no such group is the stream it was). A leaf that set only colors or a width at the root, under a group that set nothing, or under a group that set only a dash, kept no pair. Of the state a leaf sets, the width leaked to any later sibling that strokes; the colors reach a sibling only where it draws a paint it does not set, which outside a group's state is a `<line>` (its stroke is unconditional, spec/09 §4.7); the alpha never, since a leaf folds its opacities into its colors; the dash, the cap and the join were already scoped.
+
+**Decision.**
+- **A drawing element that writes a style record or a `paint_state` record writes all its records inside `save` … `restore`, wherever it stands** (spec/09 §4.7): D-179's rule, on this encoder too. #742's group-conditional wrap is the case of it under a group's state, and #693's the case of a paint state; the one rule replaces both.
+- **A leaf that writes neither has no pair**, as on the IR encoders: a child that draws in its group's state alone costs nothing.
+- **The guard is one list of encoders and one set of state keys.** The encoder list #727 introduced moves to `test/support/canvas_encoders.ex`, each encoder with the hook that replays it, and `canvas_scope_test.exs` runs, for every encoder and every state key, two siblings — the first setting the key, the second not — at the root, under a bare group and under a group with state, holding the second's draws on the stub to its draws alone. The stub records the width, cap, join and dash with each draw.
+
+**Rejected.**
+- **Writing every state field on every leaf's record** (the width at its default when a leaf sets none). It costs bytes on every leaf, and it would have to restate the group's state to keep inheritance, which is what `save` … `restore` keeps for free.
+- **Keeping the byte-for-byte promise for trees with no group state.** The promise preserved the defect; a stream that draws differently from SVG is not worth keeping identical.
+- **Making the hook reset the width when a style record lacks the flag.** The record's missing field means "unchanged" on every stream, the IR encoder's included, where a group's width is its children's.
+
+**Consequences.**
+- A styled SVG-element leaf costs two bytes more where it had no pair; nothing else in the stream changes. No golden changes: the goldens hold SVG.
+- Every canvas encoder is held to the same sibling rule for every state key, so a new encoder or a new piece of leaf state cannot leak unnoticed.
+- A `<line>` without a stroke still strokes in the context's current color on this encoder, where SVG draws nothing; after this decision that color is the groups' or the default black, never a sibling's.
