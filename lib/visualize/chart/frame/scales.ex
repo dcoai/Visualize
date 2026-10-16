@@ -649,6 +649,11 @@ defmodule Visualize.Chart.Frame.Scales do
     raise ArgumentError, "scale #{inspect(name)}: an empty range has no value to map to"
   end
 
+  # A color scale's list is the stops it interpolates, each resolved through the theme to
+  # its literal first, as a ramp's anchors are (spec/14 §4.3, D-185).
+  defp range(kind, _name, list, _plot, theme, _axes) when kind in @color and is_list(list),
+    do: Enum.map(list, &Style.color(&1, theme, :literal))
+
   defp range(_kind, _name, list, _plot, _theme, _axes) when is_list(list), do: list
 
   # A range over one of the theme's ramps (spec/14 §4.3, #533). A color scale interpolates

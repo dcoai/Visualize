@@ -291,10 +291,28 @@ defmodule Visualize.ChartGen do
     ])
   end
 
+  # A list range (spec/14 §1.4, D-185): positions, or colors in their canonical typed form —
+  # a name of the table, a transform, a literal — so a design round-trips as it was made.
+  defp range do
+    color =
+      member_of([
+        "#3b6fa8",
+        {:color, :red},
+        {:color, :good},
+        {:intensity, {:color, :blue}, 0.5},
+        {:shade, {:color, :red}, 300}
+      ])
+
+    one_of([
+      list_of(number(), min_length: 1, max_length: 4),
+      list_of(color, min_length: 1, max_length: 4)
+    ])
+  end
+
   defp scale do
     node(%{kind: member_of(Schema.scale_kinds())}, %{
       domain: extent(),
-      range: one_of([extent(), member_of([:category10, :viridis])]),
+      range: one_of([constant(:auto), range(), member_of([:category10, :viridis])]),
       nice: boolean(),
       clamp: boolean(),
       base: number(),

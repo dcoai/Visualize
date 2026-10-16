@@ -116,6 +116,23 @@ defmodule Visualize.Chart.Validator.Types do
     if extent?(v), do: [], else: [{path, {:type, :extent}}]
   end
 
+  # A scale's range as a list (spec/14 §1.4, §4.3, D-185): each entry a position, or a
+  # color checked as a `:color` at its own index.
+  def check(:range, :auto, _path, _ctx), do: []
+
+  # `:auto` is a domain's bound, never a range's entry: a scale has nothing to map to there.
+  def check(:range, v, path, ctx) when is_list(v) do
+    if :auto in v do
+      [{path, {:type, :range}}]
+    else
+      v
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {entry, i} ->
+        if position?(entry), do: [], else: check(:color, entry, path ++ [i], ctx)
+      end)
+    end
+  end
+
   def check(:text, v, path, ctx) when is_list(v) do
     v |> Enum.with_index() |> Enum.flat_map(fn {part, i} -> text_part(part, path ++ [i], ctx) end)
   end
@@ -306,6 +323,10 @@ defmodule Visualize.Chart.Validator.Types do
     Enum.all?(list, &(category?(&1) or &1 == :auto)) and
       (:auto not in list or length(list) == 2)
   end
+
+  # A range's position: what a position scale maps to, or a stand-in typed at application.
+  defp position?(v),
+    do: is_number(v) or is_struct(v, DateTime) or is_struct(v, Var) or is_struct(v, Fact)
 
   defp category?(%DateTime{}), do: true
   # A variable or a fact stands for one member — a threshold at a feed's target (§4.3,

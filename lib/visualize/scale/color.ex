@@ -426,25 +426,31 @@ defmodule Visualize.Scale.Color do
     func.(t)
   end
 
+  # A stop with an alpha (`#rrggbbaa`, what a transform's `alpha` resolves to, spec/08
+  # §1.9) interpolates its alpha too; two opaque stops give an opaque `#rrggbb`.
   defp interpolate_rgb(c0, c1, t) do
-    {r0, g0, b0} = parse_hex(c0)
-    {r1, g1, b1} = parse_hex(c1)
+    {r0, g0, b0, a0} = parse_hex(c0)
+    {r1, g1, b1, a1} = parse_hex(c1)
 
     r = channel(r0 + (r1 - r0) * t)
     g = channel(g0 + (g1 - g0) * t)
     b = channel(b0 + (b1 - b0) * t)
+    a = channel(a0 + (a1 - a0) * t)
 
-    "#" <> hex_byte(r) <> hex_byte(g) <> hex_byte(b)
+    "#" <> hex_byte(r) <> hex_byte(g) <> hex_byte(b) <> if(a == 255, do: "", else: hex_byte(a))
   end
 
   defp parse_hex("#" <> hex) do
     case hex do
+      <<rgb::binary-size(6), a::binary-size(2)>> ->
+        put_elem(parse_hex("#" <> rgb), 3, String.to_integer(a, 16))
+
       <<r::binary-size(2), g::binary-size(2), b::binary-size(2)>> ->
-        {String.to_integer(r, 16), String.to_integer(g, 16), String.to_integer(b, 16)}
+        {String.to_integer(r, 16), String.to_integer(g, 16), String.to_integer(b, 16), 255}
 
       <<r::binary-size(1), g::binary-size(1), b::binary-size(1)>> ->
         {String.to_integer(r <> r, 16), String.to_integer(g <> g, 16),
-         String.to_integer(b <> b, 16)}
+         String.to_integer(b <> b, 16), 255}
     end
   end
 

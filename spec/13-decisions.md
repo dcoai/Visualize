@@ -2292,3 +2292,24 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - One editing pass on the board test's board costs a fraction of what it did, and the board-mode test runs well inside its timeout (numbers on #704).
 - A node kind's table is changed in `Schema.Design`, `Schema.Frame` or `Schema.Mark`; a table may call any pure function at compile time, and none may read the application's environment, since a compile-time table could not see it.
 - A per-name or per-field rebuild that returns fails `builder_cost_test.exs` by name.
+
+## 185. D-185 — A scale's list range is a color position
+
+**Context.** #710; work item #716. Since D-173 every color position of a stored design holds a typed color, and `Migration.canonical/1` reads a bare atom there as `{:color, atom}`. Building the 0.7.0 examples (#705) found one position that was not one: a scale's `range: [color(:red), color(:amber)]` was refused by the validator as `{:type, :extent}`, while `range: [:red, :amber]` passed, so the grammar's own canonical form was rejected where a color scale takes its colors, and the gallery's Colors chart (#707) chose a style per row instead. The cause is the schema: a range given as a list was typed `:extent`, the *domain's* type, whose entries are categories — numbers, strings, atoms — and which has no tuple in it. Neither `canonical/1` nor the validator could see a color there, so a bare atom stayed bare (D-173 wrote it down as "at render a bare atom in a scale's range is still read as a name"), a typed color was no category, and #664's tests, which reached every `:color`-typed key through the schema, never reached a key that was not typed so. The same gap let a `:sequential` scale take `range: [:red, :amber]` and then crash at render, interpolating `:red` as a hex string.
+
+**Decision.**
+- **A list range has its own type, `:range`** (spec/14 §1.4): each entry a position — a number, a `DateTime`, a variable or a fact — or a color position, a `:color` of every form that type takes. A scale's `range` is `{:one_of, [:range, :ramp, :color_map, :name]}`; the domain keeps `:extent`.
+- **Its atoms are colors.** A range's entries are what the scale maps to, and nothing but a color is ever an atom there, so `canonical/1` types a bare atom `a` as `{:color, a}` as in every color position (spec/14 §9), the validator checks each entry that is no position as a `:color` at its own index — a name the table lacks is `{:undeclared, :color, name}` there — and the JSON codec writes a color entry by its tag.
+- **A color scale given a list resolves its stops through the theme** (spec/14 §4.3): a `:sequential` or `:diverging` scale interpolates the literals of its entries, as it does a ramp's anchors.
+- **A theme's ramp anchor may be a transform** (spec/08 §7.5), the one color position the guard found refusing one: it is measured as the literal it computes once each name in it is replaced by its literal, so it can no more reach itself than a name can.
+- **One list of every color position guards the rule**: a test holds every color position — the style parts, the frame's background, a scale's list range and its map of colors, a theme's colors and ramps — checks each with a typed color and a transform through validation, canonicalization and render, and fails by name when the schema gains a color-typed key the list lacks (spec/12 §6).
+
+**Rejected.**
+- **Accepting typed colors in `:extent`.** The domain would accept colors it cannot use, and an atom there must stay a category, so canonicalization could not type a range's atoms without typing a domain's.
+- **Typing a range by its scale's kind** (colors on a color scale, positions on a position scale). An ordinal or threshold scale is a color scale by what it is bound to, not by its kind, so the schema cannot know; a range's entries say what they are, a number or a color.
+- **Leaving bare atoms bare in a range.** The design would hold two spellings of one color, and the validator would check one of them.
+
+**Consequences.**
+- `range: [color(:good), color(:warning), color(:bad)]`, a transform or a shade works in a scale range on every backend; `range: [:good, :warning, :bad]` reads, validates and draws as before, stored as the typed form.
+- A range's atom that is no name of the theme's table, which passed before, is now `{:undeclared, :color, name}` at its index, as it is in a style.
+- A stored design's JSON writes a range's colors as `{"$color": …}` where it wrote `{"$atom": …}`; the old form still reads.

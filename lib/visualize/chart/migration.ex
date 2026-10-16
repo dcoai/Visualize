@@ -250,6 +250,12 @@ defmodule Visualize.Chart.Migration do
   defp value(:color_map, v, _text?) when is_map(v) and not is_struct(v),
     do: Map.new(v, fn {category, c} -> {category, color(c)} end)
 
+  # A scale's list range holds positions or colors, and an atom there is a color (spec/14
+  # §1.4, §4.3, D-185); a number, a string or a struct passes through `color/1` as it is,
+  # and an `:auto`, which no range holds, is left for the validator to name.
+  defp value(:range, v, _text?) when is_list(v),
+    do: Enum.map(v, fn entry -> if entry == :auto, do: :auto, else: color(entry) end)
+
   defp value({:node, kind}, v, text?) when is_map(v) and not is_struct(v),
     do: node(kind, v, text?)
 

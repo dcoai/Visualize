@@ -149,7 +149,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def widget(type) when type in @text_types, do: :text
     def widget({:ref, _kind}), do: :text
     # A channel is a field's name or a constant, an extent `auto` or `min, max` (#371).
-    def widget(type) when type in [:channel, :extent], do: :text
+    def widget(type) when type in [:channel, :extent, :range], do: :text
     # A list of scalars is a list of items, each with an ×, and a + to add one (§18.6).
     def widget({:list, scalar}) when is_atom(scalar) and scalar != :term, do: {:items, scalar}
     def widget({:one_of, [first | _rest]}), do: widget(first)
@@ -236,6 +236,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # An extent: `auto`, or `min, max` of numbers, ISO 8601 date-times or `auto`; else the
     # literal forms a design can hold (§4.1).
     defp read(:extent, "auto"), do: {:ok, :auto}
+    # A range reads as an extent does: `auto`, `min, max`, or the literal list (#710).
+    defp read(:range, string), do: read(:extent, string)
 
     defp read(:extent, string) do
       case String.split(string, ",") do

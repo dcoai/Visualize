@@ -664,7 +664,38 @@ defmodule Visualize.Theme do
     end
   end
 
+  # A transform of colors (spec/08 §1.9, #710, D-185) is the literal it computes once every
+  # name in it is replaced by its literal, each found as above, so it can no more loop than
+  # a name can; one that reads a ramp or a series reaches none.
+  defp anchor_literal(theme, value, seen) when is_tuple(value) do
+    with true <- Color.value?(value),
+         literal_names when literal_names != nil <- literal_names(theme, value, seen) do
+      Color.resolve(literal_names, theme, :literal)
+    else
+      _no -> nil
+    end
+  end
+
   defp anchor_literal(_theme, _anchor, _seen), do: nil
+
+  defp literal_names(_theme, literal, _seen) when is_binary(literal), do: literal
+  defp literal_names(theme, {:color, _} = name, seen), do: anchor_literal(theme, name, seen)
+  defp literal_names(_theme, {:contrast, :under}, _seen), do: nil
+
+  defp literal_names(theme, {:blend, list}, seen) do
+    literals = Enum.map(list, &literal_names(theme, &1, seen))
+    if nil in literals, do: nil, else: {:blend, literals}
+  end
+
+  defp literal_names(theme, {:contrast, c}, seen) do
+    with c when c != nil <- literal_names(theme, c, seen), do: {:contrast, c}
+  end
+
+  defp literal_names(theme, {op, c, t}, seen) when is_atom(op) and is_number(t) do
+    with c when c != nil <- literal_names(theme, c, seen), do: {op, c, t}
+  end
+
+  defp literal_names(_theme, _other, _seen), do: nil
 
   defp color!(name, anchor) do
     (is_binary(anchor) && Color.parse(anchor)) ||
