@@ -88,7 +88,10 @@ defmodule ExamplesWeb.PerformanceLive do
     end
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, reason}, %{assigns: %{task: %Task{ref: ref}}} = socket) do
+  def handle_info(
+        {:DOWN, ref, :process, _pid, reason},
+        %{assigns: %{task: %Task{ref: ref}}} = socket
+      ) do
     {:noreply, assign(socket, task: nil, error: inspect(reason))}
   end
 
@@ -114,20 +117,23 @@ defmodule ExamplesWeb.PerformanceLive do
           Every chart's own page runs the same comparison live, with a target FPS and the metrics, in its Performance drawer.
         </p>
         <p class="tab-pages">
-          Also under this tab: the <a href="/hybrid">Hybrid SVG/Canvas demo</a> — static axes in SVG over the data on a canvas,
+          Also under this tab: the <a href="/hybrid">Hybrid SVG/Canvas demo</a>
+          — static axes in SVG over the data on a canvas,
           its render times and payload measured live.
         </p>
       </div>
 
       <form phx-change="pick" class="compare-controls">
-        <label>Chart
+        <label>
+          Chart
           <select name="slug">
-            <option :for={c <- @charts} value={c.slug} selected={c.slug == @slug}><%= c.title %></option>
+            <option :for={c <- @charts} value={c.slug} selected={c.slug == @slug}>{c.title}</option>
           </select>
         </label>
-        <label>Ticks
+        <label>
+          Ticks
           <select name="ticks">
-            <option :for={t <- @ticks_choices} value={t} selected={t == @ticks}><%= t %></option>
+            <option :for={t <- @ticks_choices} value={t} selected={t == @ticks}>{t}</option>
           </select>
         </label>
         <button type="button" phx-click="compare" class="perf-btn perf-start" disabled={@task != nil}>Compare this chart</button>
@@ -136,31 +142,41 @@ defmodule ExamplesWeb.PerformanceLive do
         <span :if={@task} class="compare-running">comparing…</span>
       </form>
 
-      <p :if={@error} class="perf-error" role="alert">the comparison failed: <%= @error %></p>
+      <p :if={@error} class="perf-error" role="alert">the comparison failed: {@error}</p>
 
       <table :if={@rows} class="perf-compare">
-        <caption><%= title(@charts, @slug) %>, <%= @ticks %> ticks per backend</caption>
-        <thead><tr><th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>Static bytes</th></tr></thead>
+        <caption>{title(@charts, @slug)}, {@ticks} ticks per backend</caption>
+        <thead>
+          <tr>
+            <th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>Static bytes</th>
+          </tr>
+        </thead>
         <tbody>
           <tr :for={row <- @rows}>
-            <td><%= backend(row.backend) %></td>
-            <td><%= ms(row.avg_render_us) %></td>
-            <td><%= kb(row.avg_bytes) %></td>
-            <td><%= kb(row.static_bytes) %></td>
+            <td>{backend(row.backend)}</td>
+            <td>{ms(row.avg_render_us)}</td>
+            <td>{kb(row.avg_bytes)}</td>
+            <td>{kb(row.static_bytes)}</td>
           </tr>
         </tbody>
       </table>
 
       <table :if={@all} class="perf-compare">
-        <caption>Every design, <%= @ticks %> ticks per backend</caption>
-        <thead><tr><th>Chart</th><th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>Static bytes</th></tr></thead>
+        <caption>Every design, {@ticks} ticks per backend</caption>
+        <thead>
+          <tr>
+            <th>Chart</th><th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>
+              Static bytes
+            </th>
+          </tr>
+        </thead>
         <tbody>
           <tr :for={row <- @all}>
-            <td><a href={"/chart/#{row.slug}"}><%= row.title %></a></td>
-            <td><%= backend(row.backend) %></td>
-            <td><%= ms(row.avg_render_us) %></td>
-            <td><%= kb(row.avg_bytes) %></td>
-            <td><%= kb(row.static_bytes) %></td>
+            <td><a href={"/chart/#{row.slug}"}>{row.title}</a></td>
+            <td>{backend(row.backend)}</td>
+            <td>{ms(row.avg_render_us)}</td>
+            <td>{kb(row.avg_bytes)}</td>
+            <td>{kb(row.static_bytes)}</td>
           </tr>
         </tbody>
       </table>

@@ -106,5 +106,4 @@ defmodule Examples.Charts.IncrementalLineTest do
 
   # A frame carries one plot per frame of the design (spec/14 §12.1, #432); these have one.
   defp only(%{plots: [plot]}), do: plot
-
 end

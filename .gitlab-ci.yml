@@ -54,10 +54,17 @@ default:
     # With --mix-get, mix deps.get's own failure is this line's failure, as it was before.
     - elixir scripts/depdep.exs --pull --mix-get --compile-deps --exclude examples || mix deps.get
 
+# Both projects (spec/12 §4, #702). The examples app has its own .formatter.exs, which
+# imports Phoenix's settings and runs the HEEx formatter plugin, so the check runs in its
+# directory with its dependencies on disk for the plugin to load: pulled from the store as
+# examples:test does, and not pushed, since that job is the one that builds them.
 format:
   extends: .elixir
   stage: check
   script:
+    - mix format --check-formatted
+    - cd examples
+    - elixir ../scripts/depdep.exs --pull --mix-get --compile-deps || mix deps.get
     - mix format --check-formatted
 
 compile:

@@ -17,9 +17,11 @@ defmodule ExamplesWeb.PerformanceDrawer do
   attr(:compare, :list, default: nil, doc: "Compare's rows, `Examples.Compare.run/3`")
   attr(:comparing, :boolean, default: false, doc: "whether a comparison is running")
   attr(:ticks, :integer, default: 100, doc: "the ticks Compare runs per backend")
+
   attr(:stream, :map,
     default: nil,
-    doc: "a streaming design's window: `%{samples_per_px, count, span, series, points, mode}` (#327, #359), or nil"
+    doc:
+      "a streaming design's window: `%{samples_per_px, count, span, series, points, mode}` (#327, #359), or nil"
   )
 
   attr(:points, :map,
@@ -37,13 +39,20 @@ defmodule ExamplesWeb.PerformanceDrawer do
       assign(assigns, acks?: Frames.acks?(assigns.backend), segments: segments(assigns.run))
 
     ~H"""
-    <section class={"perf-drawer" <> if(@open, do: " perf-drawer-open", else: "")} id="performance-drawer">
-      <button type="button" class="perf-drawer-toggle" phx-click="drawer_toggle" aria-expanded={to_string(@open)}>
-        <span class="perf-drawer-caret"><%= if @open, do: "▾", else: "▸" %></span>
+    <section
+      class={"perf-drawer" <> if(@open, do: " perf-drawer-open", else: "")}
+      id="performance-drawer"
+    >
+      <button
+        type="button"
+        class="perf-drawer-toggle"
+        phx-click="drawer_toggle"
+        aria-expanded={to_string(@open)}
+      >
+        <span class="perf-drawer-caret">{if @open, do: "▾", else: "▸"}</span>
         Performance
         <span class="perf-drawer-summary">
-          <%= backend_name(@backend) %> ·
-          <%= if @run.running, do: "#{trunc(@run.fps)} fps", else: "idle" %>
+          {backend_name(@backend)} · {if @run.running, do: "#{trunc(@run.fps)} fps", else: "idle"}
         </span>
       </button>
 
@@ -58,20 +67,41 @@ defmodule ExamplesWeb.PerformanceDrawer do
               aria-pressed={to_string(b == @backend)}
               phx-click="run_backend"
               phx-value-backend={b}
-            ><%= backend_name(b) %></button>
+            >{backend_name(b)}</button>
           </div>
 
           <form phx-change="run_fps" class="perf-group">
             <label class="perf-label" for="perf-fps">Target FPS</label>
-            <input id="perf-fps" type="range" name="fps" min="1" max={Examples.Run.max_fps() + 1} step="1" value={@run.target_fps} class="perf-slider" />
-            <span class="perf-value"><%= if Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps %></span>
+            <input
+              id="perf-fps"
+              type="range"
+              name="fps"
+              min="1"
+              max={Examples.Run.max_fps() + 1}
+              step="1"
+              value={@run.target_fps}
+              class="perf-slider"
+            />
+            <span class="perf-value">{if Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps}</span>
           </form>
 
           <form phx-change="run_data_rate" class="perf-group perf-group-stream">
             <label class="perf-label" for="perf-rate">Data rate</label>
-            <input id="perf-rate" type="range" name="data_rate" min={@points.min} max={@points.max} step={@points.step} value={@run.data_rate} class="perf-slider" />
-            <span class="perf-value perf-rate-value"><%= @run.data_rate %> <%= @points.unit %></span>
-            <span :if={@stream} class="perf-note"><%= @stream.samples_per_px %>/px · <%= @stream.count %> samples · <%= Float.round(@stream.span, 1) %> s across</span>
+            <input
+              id="perf-rate"
+              type="range"
+              name="data_rate"
+              min={@points.min}
+              max={@points.max}
+              step={@points.step}
+              value={@run.data_rate}
+              class="perf-slider"
+            />
+            <span class="perf-value perf-rate-value">{@run.data_rate} {@points.unit}</span>
+            <span :if={@stream} class="perf-note">{@stream.samples_per_px}/px · {@stream.count} samples · {Float.round(
+              @stream.span,
+              1
+            )} s across</span>
           </form>
 
           <button
@@ -81,30 +111,53 @@ defmodule ExamplesWeb.PerformanceDrawer do
             title="Hold frames back while 250 ms of them are in flight"
             phx-click="run_flow_control"
           >
-            <%= cond do
+            {cond do
               not @run.flow_control -> "Flow control OFF"
               @run.acking == :no -> "Flow control: no acks"
               true -> "Flow control ON (250 ms)"
-            end %>
+            end}
           </button>
 
-          <button :if={not @run.running} type="button" class="perf-btn perf-start" phx-click="run_start">Start</button>
+          <button
+            :if={not @run.running}
+            type="button"
+            class="perf-btn perf-start"
+            phx-click="run_start"
+          >Start</button>
           <button :if={@run.running} type="button" class="perf-btn perf-stop" phx-click="run_stop">Stop</button>
-          <button type="button" class="perf-btn" disabled={@comparing or @run.running} phx-click="run_compare">
-            <%= if @comparing, do: "Comparing…", else: "Compare (#{@ticks} ticks)" %>
+          <button
+            type="button"
+            class="perf-btn"
+            disabled={@comparing or @run.running}
+            phx-click="run_compare"
+          >
+            {if @comparing, do: "Comparing…", else: "Compare (#{@ticks} ticks)"}
           </button>
         </div>
 
-        <p :if={@run.error} class="perf-error" role="alert">the render failed and the run stopped: <%= @run.error %></p>
+        <p :if={@run.error} class="perf-error" role="alert">
+          the render failed and the run stopped: {@run.error}
+        </p>
 
         <div class="perf-metrics">
           <.metric value={trunc(@run.fps)} label="FPS" />
-          <.metric value={if(Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps)} label="Target" />
+          <.metric
+            value={if(Examples.Run.unlimited?(@run), do: "∞", else: @run.target_fps)}
+            label="Target"
+          />
           <.metric :if={@acks?} value={trunc(@run.client_fps)} label="Client FPS" />
           <.metric :if={@acks?} value={Run.in_flight(@run)} label="In flight" />
-          <.metric :if={@acks?} value={if(Examples.Run.unlimited?(@run), do: "—", else: "#{round(@run.lag)} ms")} label="Lag" />
+          <.metric
+            :if={@acks?}
+            value={if(Examples.Run.unlimited?(@run), do: "—", else: "#{round(@run.lag)} ms")}
+            label="Lag"
+          />
           <.metric :if={@acks?} value={@run.dropped} label="Dropped" />
-          <.metric :if={@acks?} value={if(@run.ack_age, do: "#{@run.ack_age} ms", else: "none")} label="Last ack" />
+          <.metric
+            :if={@acks?}
+            value={if(@run.ack_age, do: "#{@run.ack_age} ms", else: "none")}
+            label="Last ack"
+          />
           <.metric :if={@acks?} value={@run.stalls} label="Stalls" />
           <.metric value={@run.skipped} label="Skipped" />
           <.metric value={round(@run.measured_rate)} label={@points.rate_label} />
@@ -122,9 +175,9 @@ defmodule ExamplesWeb.PerformanceDrawer do
         <div :if={@frames != []} class="perf-frames">
           <span class="perf-frames-label">Frames</span>
           <span :for={plot <- @frames} class="perf-frame">
-            <span class="perf-frame-name"><%= plot.name %></span>
-            <span class="perf-frame-bytes"><%= Float.round(plot.bytes / 1024, 1) %> KB</span>
-            <span class="perf-frame-mode"><%= plot.mode %></span>
+            <span class="perf-frame-name">{plot.name}</span>
+            <span class="perf-frame-bytes">{Float.round(plot.bytes / 1024, 1)} KB</span>
+            <span class="perf-frame-mode">{plot.mode}</span>
           </span>
         </div>
 
@@ -134,34 +187,43 @@ defmodule ExamplesWeb.PerformanceDrawer do
         <table :if={@segments != []} class="perf-compare perf-segments">
           <caption>This run, by backend</caption>
           <thead>
-            <tr><th>Backend</th><th>Frames</th><th>FPS</th><th>Client FPS</th><th>Render / frame</th><th>Last payload</th><th>Dropped</th><th>Stalls</th><th>Skipped</th></tr>
+            <tr>
+              <th>Backend</th><th>Frames</th><th>FPS</th><th>Client FPS</th><th>Render / frame</th><th>
+                Last payload
+              </th><th>Dropped</th><th>Stalls</th><th>Skipped</th>
+            </tr>
           </thead>
           <tbody>
-            <tr :for={{segment, i} <- Enum.with_index(@segments)} class={if i == 0, do: "perf-segment-now", else: "perf-segment"}>
-              <td><%= backend_name(segment.backend) %><%= if i == 0, do: " (now)" %></td>
-              <td><%= segment.frames %></td>
-              <td><%= trunc(segment.fps) %></td>
-              <td><%= if Frames.acks?(segment.backend), do: trunc(segment.client_fps), else: "—" %></td>
-              <td><%= Float.round(segment.avg_render_us / 1000, 2) %> ms</td>
-              <td><%= Float.round(segment.payload_size / 1024, 1) %> KB</td>
-              <td><%= segment.dropped %></td>
-              <td><%= segment.stalls %></td>
-              <td><%= segment.skipped %></td>
+            <tr
+              :for={{segment, i} <- Enum.with_index(@segments)}
+              class={if i == 0, do: "perf-segment-now", else: "perf-segment"}
+            >
+              <td>{backend_name(segment.backend)}{if i == 0, do: " (now)"}</td>
+              <td>{segment.frames}</td>
+              <td>{trunc(segment.fps)}</td>
+              <td>{if Frames.acks?(segment.backend), do: trunc(segment.client_fps), else: "—"}</td>
+              <td>{Float.round(segment.avg_render_us / 1000, 2)} ms</td>
+              <td>{Float.round(segment.payload_size / 1024, 1)} KB</td>
+              <td>{segment.dropped}</td>
+              <td>{segment.stalls}</td>
+              <td>{segment.skipped}</td>
             </tr>
           </tbody>
         </table>
 
         <table :if={@compare} class="perf-compare">
-          <caption>This chart, <%= @ticks %> ticks per backend, headless</caption>
+          <caption>This chart, {@ticks} ticks per backend, headless</caption>
           <thead>
-            <tr><th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>Static bytes</th></tr>
+            <tr>
+              <th>Backend</th><th>Render / frame</th><th>Bytes / frame</th><th>Static bytes</th>
+            </tr>
           </thead>
           <tbody>
             <tr :for={row <- @compare}>
-              <td><%= backend_name(row.backend) %></td>
-              <td><%= Float.round(row.avg_render_us / 1000, 2) %> ms</td>
-              <td><%= Float.round(row.avg_bytes / 1024, 1) %> KB</td>
-              <td><%= Float.round(row.static_bytes / 1024, 1) %> KB</td>
+              <td>{backend_name(row.backend)}</td>
+              <td>{Float.round(row.avg_render_us / 1000, 2)} ms</td>
+              <td>{Float.round(row.avg_bytes / 1024, 1)} KB</td>
+              <td>{Float.round(row.static_bytes / 1024, 1)} KB</td>
             </tr>
           </tbody>
         </table>
@@ -176,8 +238,8 @@ defmodule ExamplesWeb.PerformanceDrawer do
   defp metric(assigns) do
     ~H"""
     <div class="perf-metric">
-      <span class="perf-metric-value"><%= @value %></span>
-      <span class="perf-metric-label"><%= @label %></span>
+      <span class="perf-metric-value">{@value}</span>
+      <span class="perf-metric-label">{@label}</span>
     </div>
     """
   end

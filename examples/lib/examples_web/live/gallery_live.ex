@@ -43,7 +43,8 @@ defmodule ExamplesWeb.GalleryLive do
     <main>
       <p class="gallery-note">
         Every chart here is a design (spec/14): a map that says what the chart is, applied to rows and rendered by the
-        library on any backend. Open one for the <code>Visualize.Chart.Build</code> calls that make it — the thing to copy — the map
+        library on any backend. Open one for the <code>Visualize.Chart.Build</code>
+        calls that make it — the thing to copy — the map
         they fold to, and the same design on SVG and canvas.
       </p>
       <div class="gallery">
@@ -52,14 +53,14 @@ defmodule ExamplesWeb.GalleryLive do
             <a href={"/chart/#{slug}"}>
               <div class="chart-preview">
                 <%= if svg = @previews[module] do %>
-                  <%= Phoenix.HTML.raw(svg) %>
+                  {Phoenix.HTML.raw(svg)}
                 <% else %>
                   <div class="chart-preview-pending" aria-label="rendering"></div>
                 <% end %>
               </div>
               <div class="chart-info">
-                <h3><%= module.title() %></h3>
-                <p><%= module.description() %></p>
+                <h3>{module.title()}</h3>
+                <p>{module.description()}</p>
               </div>
             </a>
           </div>

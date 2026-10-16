@@ -153,6 +153,7 @@ defmodule ExamplesWeb.ChartPanelsTest do
 
     s = event(s, "chart_panel", %{"panel" => "explain", "datum" => "2"})
     [explain] = for {:explain, state} <- s.assigns.panels, do: state
+
     assert [%{layer: :theme}, %{layer: :kind}, %{layer: :field, style: :down, via: [:bad]}] =
              explain.look.parts.stroke.chain
 
