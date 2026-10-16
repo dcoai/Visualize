@@ -13,11 +13,9 @@ defmodule Visualize.Geo.ProjectionRotationTest do
   use ExUnitProperties
 
   alias Visualize.Geo.Projection
-  alias Visualize.Geo.ProjectionGoldenTest, as: Golden
+  alias Visualize.Geo.ProjectionTypes
 
-  Code.require_file("test/visualize/geo/projection_golden_test.exs")
-
-  @types Golden.types()
+  @types ProjectionTypes.all()
   @deg :math.pi() / 180
 
   defp gen_point, do: {float(min: -179.0, max: 179.0), float(min: -85.0, max: 85.0)}
