@@ -125,9 +125,13 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
     x2 = Map.get(attrs, :x2, 0) |> PathEncoder.to_float()
     y2 = Map.get(attrs, :y2, 0) |> PathEncoder.to_float()
 
-    # A move and a line, always stroked.
+    # A move and a line, stroked where its effective stroke is present and never filled: a
+    # line has no area, and SVG's stroke is `none` until one is set (spec/09 §4.7, #757).
     geometry = PathEncoder.encode_cubic_path([{:M, x1, y1}, {:L, x2, y2}], precision)
-    leaf(attrs, inherited, geometry, fn _effective -> [<<Opcodes.stroke()::8>>] end)
+
+    leaf(attrs, inherited, geometry, fn effective ->
+      if has_color?(effective[:stroke]), do: [<<Opcodes.stroke()::8>>], else: []
+    end)
   end
 
   # Text is not representable in the binary format, and any other tag draws nothing.
