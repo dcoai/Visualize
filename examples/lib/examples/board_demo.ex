@@ -114,8 +114,12 @@ defmodule Examples.BoardDemo do
     end
   end
 
+  # Each system's board under a name written here, so no name is ever built at run time
+  # (atoms are never collected; #778).
   defp name(:as_posted), do: @board
-  defp name(system), do: Module.concat(@board, system |> Atom.to_string() |> Macro.camelize())
+  defp name(:metric), do: Examples.BoardDemo.Board.Metric
+  defp name(:us), do: Examples.BoardDemo.Board.Us
+  defp name(:uk), do: Examples.BoardDemo.Board.Uk
 
   defp start(system) do
     opts = [
