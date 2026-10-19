@@ -184,7 +184,7 @@ defmodule ExamplesWeb.InteractionLive do
 
       <p class="tab-pages">
         Also under this tab: the <a href="/dashboard">Synced dashboard</a>
-        — one crosshair and one brush across three panels — and a <a href="/board">Live board</a>, eight cells over live feeds, each its own process, whose services drill down to a <a href="/board/detail">detail board</a>, and a <a href="/tenants">Tenant chat</a>, a board whose messages are styled by the host's generators.
+        — one crosshair and one brush across three panels — a <a href="/board">Live board</a>, eight cells over live feeds, each its own process, whose services drill down to a <a href="/board/detail">detail board</a>, a <a href="/tenants">Tenant chat</a>, a board whose messages are styled by the host's generators, and <a href="/minesweeper">Minesweeper</a>, a clickable grid drawn by a design, the game in the host.
       </p>
 
       <div class="panels panels-row" style={panel_width()}>

@@ -38,6 +38,7 @@ defmodule ExamplesWeb.Router do
     post "/board/export/:format", BoardExportController, :export
     live "/board/detail", BoardDetailLive, :index
     live "/tenants", TenantsLive, :index
+    live "/minesweeper", MinesweeperLive, :index
     live "/builder", BuilderLive, :index
   end
 
