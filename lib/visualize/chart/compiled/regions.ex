@@ -185,8 +185,13 @@ defmodule Visualize.Chart.Compiled.Regions do
     scales_status(chart, [Enum.at(axes, i).scale], viewport)
   end
 
+  # A legend of declared values reads no scale (spec/14 §4.5, D-194): its entries change
+  # only with the schema, which recompiles the chart.
   defp status(:legend, chart, _axes, viewport) do
-    scales_status(chart, [only_frame(chart).legend.scale], viewport)
+    case only_frame(chart).legend do
+      %{values: values} when is_list(values) -> :static
+      legend -> scales_status(chart, [legend.scale], viewport)
+    end
   end
 
   defp status(:labels, %{labels: labels} = chart, _axes, viewport) do

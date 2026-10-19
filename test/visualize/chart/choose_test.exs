@@ -113,6 +113,13 @@ defmodule Visualize.Chart.ChooseTest do
 
       svg = Chart.render(applied)
       assert svg =~ ~s(data-series="ok")
+
+      # A compiled chart's legend region is static: it reads no scale.
+      {:ok, %{main: compiled}} = Chart.compile(applied)
+
+      assert Visualize.Chart.Compiled.svg(compiled, %{hosts: delivery()}) =~
+               ~s(data-series="warning")
+
       assert svg =~ ~s(data-series="warning")
       assert svg =~ ~s(fill="var(--vis-warning)
     end
