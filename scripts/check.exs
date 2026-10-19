@@ -12,6 +12,7 @@ defmodule Visualize.Check do
     {"verify:headings", "dev", ~w(vis.headings)},
     {"verify:citations", "dev", ~w(vis.citations)},
     {"verify:spelling", "dev", ~w(vis.spelling)},
+    {"verify:atoms", "dev", ~w(vis.atoms)},
     {"verify:models", "dev", ~w(vis.verify)},
     {"verify:hooks", "test", ~w(test --warnings-as-errors --only js --include js_resvg), ".",
      :node},

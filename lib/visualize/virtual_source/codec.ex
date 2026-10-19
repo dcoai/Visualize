@@ -13,7 +13,8 @@ defmodule Visualize.VirtualSource.Codec do
   alias Visualize.Board.Snapshot.Codec, as: SnapshotCodec
   alias Visualize.Chart.Codec
 
-  @keys [:id, :from, :schema, :elixir, :function, :per]
+  # The source's own keys, looked up and never made atoms of (spec/14 §9.4, D-195).
+  @keys Visualize.Vocabulary.table([:id, :from, :schema, :elixir, :function, :per])
 
   # -- encode ------------------------------------------------------------------------------
 
@@ -64,6 +65,7 @@ defmodule Visualize.VirtualSource.Codec do
       case known(key) do
         :from -> {:from, read_inputs(value)}
         :schema -> {:schema, SnapshotCodec.read_schema_json(value)}
+        # #778 class (a-host): a host function's name, looked up in the host's registry.
         :function when is_binary(value) -> {:function, String.to_atom(value)}
         :per -> {:per, read_per(value)}
         other -> {other, value}
@@ -113,6 +115,6 @@ defmodule Visualize.VirtualSource.Codec do
   defp read_per(["identity", name]), do: {:identity, read_name(name)}
   defp read_per(other), do: other
 
-  defp known(key) when is_binary(key), do: Enum.find(@keys, key, &(Atom.to_string(&1) == key))
+  defp known(key) when is_binary(key), do: Visualize.Vocabulary.read(@keys, key)
   defp known(key), do: key
 end

@@ -27,7 +27,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.Builder.{Editor, Params, Stack, StyleForm, StyleStack}
     alias Visualize.Chart.{Fragment, Schema, Use, Var}
-    alias Visualize.Theme
+    alias Visualize.{Theme, Vocabulary}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
@@ -40,41 +40,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     def events, do: @events
 
+    # The sides an axis may stand on, from its schema: an event's side is looked up in them.
+    @sides Vocabulary.table(elem(Schema.key(:axis, :side).type, 1))
+
     # -- axes ticked where their scale is (spec/14 §18.16, #373) --------------------------
 
     # A side ticked adds `%{scale, side}` to the frame's axes in the frame's layer, the
     # scale declared first when the frame lacks it; unticked, that axis leaves its layer.
     @doc false
     def handle_event("toggle_axis", %{"scale" => scale, "side" => side} = params, socket) do
-      scale = String.to_atom(scale)
-      side = String.to_atom(side)
-      %{design: design} = editing(socket.assigns)
-      # The frame the row is of — the mark's or the scale's own (#615).
-      frame_path = [:frames, ticked_frame(design, params)]
-
-      axes =
-        design
-        |> get_in(frame_path ++ [:axes])
-        |> List.wrap()
-        |> Enum.with_index()
-
-      case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale and axis[:side] == side end) do
-        {axis, index} ->
-          {:noreply, axis_removed(socket, frame_path, axis, index)}
-
-        nil ->
-          socket =
-            if Map.has_key?(get_in(design, frame_path ++ [:scales]) || %{}, scale),
-              do: socket,
-              else:
-                update_layer(
-                  socket,
-                  frame_path ++ [:scales],
-                  scale,
-                  {:ok, %{kind: :linear, domain: :auto}}
-                )
-
-          {:noreply, appended(socket, frame_path, :axes, %{scale: scale, side: side})}
+      case Vocabulary.fetch(@sides, side) do
+        # #778 class (b): a scale's name from the event.
+        {:ok, side} -> axis_toggled(socket, String.to_atom(scale), side, params)
+        # A side an axis does not have is no edit: nothing is made of the string.
+        :error -> {:noreply, socket}
       end
     end
 
@@ -412,6 +391,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
        |> Editor.changes(params, node)
        |> Enum.reduce(socket, &edited(&2, entry, &1))
        |> derived_scales()}
+    end
+
+    # The side is looked up in the axis's enumeration (spec/14 §9.4, D-195).
+    defp axis_toggled(socket, scale, side, params) do
+      %{design: design} = editing(socket.assigns)
+      # The frame the row is of — the mark's or the scale's own (#615).
+      frame_path = [:frames, ticked_frame(design, params)]
+
+      axes =
+        design
+        |> get_in(frame_path ++ [:axes])
+        |> List.wrap()
+        |> Enum.with_index()
+
+      case Enum.find(axes, fn {axis, _i} -> axis[:scale] == scale and axis[:side] == side end) do
+        {axis, index} ->
+          {:noreply, axis_removed(socket, frame_path, axis, index)}
+
+        nil ->
+          socket =
+            if Map.has_key?(get_in(design, frame_path ++ [:scales]) || %{}, scale),
+              do: socket,
+              else:
+                update_layer(
+                  socket,
+                  frame_path ++ [:scales],
+                  scale,
+                  {:ok, %{kind: :linear, domain: :auto}}
+                )
+
+          {:noreply, appended(socket, frame_path, :axes, %{scale: scale, side: side})}
+      end
     end
 
     # A composed axis taken out of the layer that gives it: an axis site leaves the stack;

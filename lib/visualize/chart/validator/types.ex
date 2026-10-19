@@ -28,6 +28,16 @@ defmodule Visualize.Chart.Validator.Types do
   @not_names [nil, true, false]
 
   @doc false
+  # A text anchor (spec/14 §6.3): the codec reads a document's anchor in these (§9.4).
+  @spec anchors() :: [atom(), ...]
+  def anchors, do: @frame_anchors
+
+  @doc false
+  # The plot's points a `$frame` anchor names (spec/14 §6.3, #489).
+  @spec frame_points() :: [atom(), ...]
+  def frame_points, do: @frame_points
+
+  @doc false
   # The faults of `v` read as the schema type `type` at `path`.
   @spec check(Visualize.Chart.Schema.type(), term(), list(), map()) :: [{list(), term()}]
   def check(_type, %Var{name: name}, path, ctx), do: ref(:var, name, path, ctx)
