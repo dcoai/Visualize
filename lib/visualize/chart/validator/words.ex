@@ -184,6 +184,9 @@ defmodule Visualize.Chart.Validator.Words do
       "(config :visualize, generators:, or the generators: option)"
   end
 
+  def words({:undeclared, :function, name}),
+    do: "no registered virtual-source module defines #{inspect(name)} (spec/08 §10.5.8)"
+
   def words({:undeclared, kind, name}), do: "#{kind} #{inspect(name)} is not declared"
 
   def words({:arity, :generator, name, n}) do
@@ -301,6 +304,52 @@ defmodule Visualize.Chart.Validator.Words do
   # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
   def words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
 
+  # A virtual source's own faults (spec/08 §10.5.5, D-194).
+  def words({:exclusive, :elixir}),
+    do: "is given with elixir: a virtual source has one function, stored or the host's"
+
+  def words({:duplicate_input, key}),
+    do: "is read under #{inspect(key)}, as another input is: each input has its own key"
+
+  def words({:check, line, reason}),
+    do: Visualize.VirtualSource.Sandbox.format_error({line, reason})
+
+  def words({:per, :ambiguous}),
+    do: "is :identity over several inputs: name the input, {:identity, input}"
+
+  def words({:per, {:unknown_input, name}}), do: "names #{inspect(name)}, which is not an input"
+
+  def words({:per, :no_identity}),
+    do: "is per identity over an input whose schema declares none (spec/08 §10.1)"
+
+  def words({:per, {:identity, input, output}}) do
+    "declares identity #{inspect(output)} where its identity input declares " <>
+      "#{inspect(input)}: per identity, the output's identity is the input's"
+  end
+
+  def words({:per, {:identity_type, field, input, output}}),
+    do:
+      "describes identity field #{inspect(field)} as #{inspect(output)}; the input, #{inspect(input)}"
+
+  # A schema's faults, where a document holds one (spec/08 §10.1).
+  def words(:duplicate), do: "is listed twice"
+  def words(:not_in_order), do: "is a state the field's order does not list"
+
+  def words(:not_in_values),
+    do: "is a state the field's values do not list: the values are every value there is"
+
+  def words({:color_key, key}),
+    do: "#{inspect(key)} names a color, which a schema never does: describe the meaning"
+
+  def words({:duplicate_field, name}),
+    do: "names the same column as #{inspect(name)}: a field is described once"
+
+  def words({:duplicate_window, other}),
+    do: "is a second window field beside #{inspect(other)}: a feed's windows are over one field"
+
+  def words({:unknown_quantity, quantity}),
+    do: "#{inspect(quantity)} is not a quantity: one of Visualize.Quantity.all/0"
+
   # A map that is many things is no kind of fragment (spec/14 §19.8).
   def words(:many_kinds),
     do: "is many things at once, which is no kind of fragment; make it a composite of sites"
@@ -349,6 +398,19 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:positive), do: "a positive number"
   defp type_words(:non_neg_integer), do: "a non-negative integer"
   defp type_words(:pos_integer), do: "a positive integer"
+  defp type_words(:virtual_source), do: "a virtual source: a map or a keyword list"
+  defp type_words(:inputs), do: "a non-empty list of inputs, {name, window}"
+  defp type_words(:input), do: "an input, {name, window}"
+  defp type_words(:input_name), do: "an input's name: an atom, a string or a list of atoms"
+
+  defp type_words(:input_window),
+    do: "nil, %{last: n} or a box %{ranges: …, latest: …} (spec/08 §10.5.6)"
+
+  defp type_words(:schema), do: "a map from field names to descriptions"
+
+  defp type_words(:values),
+    do: "a non-empty list of the field's values: strings, atoms or numbers"
+
   defp type_words(:utc_datetime), do: "a DateTime in Etc/UTC"
   defp type_words(:board), do: "a board map"
   defp type_words(:snapshot), do: "a snapshot map"

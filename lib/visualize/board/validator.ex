@@ -8,6 +8,7 @@ defmodule Visualize.Board.Validator do
   alias Visualize.Chart
   alias Visualize.Chart.{Composite, Migration, Validator, Var}
   alias Visualize.Scale.Time
+  alias Visualize.VirtualSource
 
   @columns 12
 
@@ -24,9 +25,10 @@ defmodule Visualize.Board.Validator do
     :sync,
     :layout,
     :stale_after,
-    :links
+    :links,
+    :virtual_sources
   ]
-  @cell_keys [:x, :y, :w, :h, :ref, :title, :vars, :sync, :drill]
+  @cell_keys [:x, :y, :w, :h, :ref, :title, :vars, :sync, :drill, :virtual_sources]
   @drill_keys [:board, :vars]
   @cell_required [:x, :y, :w, :h, :ref]
   @meta_keys [:name, :description]
@@ -69,7 +71,8 @@ defmodule Visualize.Board.Validator do
         sync(Map.get(map, :sync)) ++
         layout(Map.get(map, :layout, %{})) ++
         stale_after(Map.get(map, :stale_after)) ++
-        links(Map.get(map, :links, %{}))
+        links(Map.get(map, :links, %{})) ++
+        virtual_sources(Map.get(map, :virtual_sources, %{}), [:virtual_sources])
 
     done(errors)
   end
@@ -145,6 +148,7 @@ defmodule Visualize.Board.Validator do
   defp cell_key(:sync, sync, _path) when is_boolean(sync), do: []
   defp cell_key(:sync, _sync, path), do: [{path, {:type, :boolean}}]
   defp cell_key(:drill, drill, path), do: drill(drill, path)
+  defp cell_key(:virtual_sources, sources, path), do: virtual_sources(sources, path)
   defp cell_key(_key, _value, _path), do: []
 
   # A component is a composite id (spec/15 §1.3); an id of another kind is refused by its
@@ -265,6 +269,27 @@ defmodule Visualize.Board.Validator do
   end
 
   defp links(_links), do: [{[:links], {:type, {:map, :name}}}]
+
+  # Each virtual source read as `Visualize.VirtualSource.new/1` reads it, with its id, its
+  # faults under it (spec/15 §3.1, spec/08 §10.5.5). What its inputs name is checked when
+  # the board starts, where its feeds are known.
+  defp virtual_sources(sources, path) when is_map(sources) and not is_struct(sources) do
+    Enum.flat_map(sources, fn
+      {id, source} when is_atom(id) and id not in [nil, true, false] and is_map(source) ->
+        case VirtualSource.new(Map.put(source, :id, id)) do
+          {:ok, _source} -> []
+          {:error, errors} -> for {at, reason} <- errors, do: {path ++ [id | at], reason}
+        end
+
+      {id, _source} when is_atom(id) and id not in [nil, true, false] ->
+        [{path ++ [id], {:type, {:node, :virtual_source}}}]
+
+      {id, _source} ->
+        [{path ++ [id], {:type, :name}}]
+    end)
+  end
+
+  defp virtual_sources(_sources, path), do: [{path, {:type, {:map, {:node, :virtual_source}}}}]
 
   defp name?(name), do: is_atom(name) and not is_boolean(name) and not is_nil(name)
 

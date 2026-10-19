@@ -33,6 +33,23 @@ release it merely follows.
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
   :raised, detail}`; a raise is reported by the exception's module, never its message.
 
+- **Virtual sources as values** (#749, D-194). `Visualize.VirtualSource` is a source
+  computed from other sources: `id`, its inputs (`from: [hosts: {:window, last: 20}]` —
+  each input a feed's or another virtual source's name with the history the function
+  needs: `nil`, the newest `n` rows per entity, or a window box), its output `schema`, and
+  its function as stored source text (`elixir:`, checked by the sandbox) or a host
+  function's name (`function:`). `per: :identity` runs the function once per entity of an
+  input that declares identity and joins the results back by it. `new/1` checks a source
+  alone, `validate/2` given its inputs' schemas and your functions, and `conform/2` holds
+  a function's answer to the schema, naming the row and the field but never the value.
+  `resolve/3` finds a source by short id from the inside out, or by full path. Write
+  trusted functions with `use Visualize.VirtualSources` and `defsource name(rows) do …
+  end`, and register the module with `config :visualize, virtual_sources: [...]`.
+  **A board and its cells take a `virtual_sources` key** (a map from id to the source's
+  map form), validated with the board and written in its JSON;
+  `Visualize.Board.virtual_sources/1` lists them by path. **A schema field may declare
+  `values`**, the closed set of a `:category` field's values: the fourteenth description key.
+
 - **A chart's root takes an `id:`** (#712, D-188). `Visualize.Chart.render/2` and
   `generate/2` with `root: true` take `id:`: the root's id, its `<title>`'s and `<desc>`'s
   ids (`<id>-title`, `<id>-desc`) and the selector of the automatic dark-mode rule. Without

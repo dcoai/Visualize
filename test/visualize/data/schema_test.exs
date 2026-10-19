@@ -45,7 +45,7 @@ defmodule Visualize.Data.SchemaTest do
       assert {:ok, %Schema{fields: @full}} = Schema.new(@full)
     end
 
-    test "the thirteen keys are the vocabulary" do
+    test "the fourteen keys are the vocabulary" do
       assert Schema.attributes() ==
                [
                  :type,
@@ -60,10 +60,56 @@ defmodule Visualize.Data.SchemaTest do
                  :window,
                  :metric_kind,
                  :bounds,
-                 :identity
+                 :identity,
+                 :values
                ]
 
       assert Map.keys(@full.latency) -- Schema.attributes() == []
+    end
+
+    test "a category field declares the values it takes, every one (D-194)" do
+      values = [:ok, :warning, :error]
+
+      assert {:ok, schema} =
+               Schema.new(%{
+                 state: %{
+                   type: :category,
+                   values: values,
+                   order: [:ok, :warning, :error],
+                   status: %{ok: :good, error: :bad}
+                 }
+               })
+
+      assert Schema.fetch(schema, :state, :values) == {:ok, values}
+
+      assert {:error, errors} =
+               Schema.new(%{
+                 a: %{type: :category, values: [:ok, :ok]},
+                 b: %{type: :category, values: []},
+                 c: %{type: :number, values: [1]},
+                 d: %{
+                   type: :category,
+                   values: [:ok],
+                   order: [:ok, :error],
+                   status: %{warning: :warning}
+                 }
+               })
+
+      assert errors == [
+               {[:a, :values, 1], :duplicate},
+               {[:b, :values], {:type, :values}},
+               {[:c, :values], {:invalid_for, :number}},
+               {[:d, :order, 1], :not_in_values},
+               {[:d, :status, :warning], :not_in_order},
+               {[:d, :status, :warning], :not_in_values}
+             ]
+
+      for error <- errors, do: assert(is_binary(Schema.format_error(error)))
+    end
+
+    test "values do not move the version of a schema that does not use them" do
+      assert Schema.version(Schema.new!(%{v: %{type: :number}})) ==
+               "39b0c8eff6adfa6c6c9ada7fb3ee3a308675a1a5869afcd1ef1aca19378d0a81"
     end
 
     test "a numeric field says its metric kind and its bounds (D-155)" do

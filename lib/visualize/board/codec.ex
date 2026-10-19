@@ -10,12 +10,14 @@ defmodule Visualize.Board.Codec do
   # makes no atom and is reported at its own spelling. A cell's name and a variable's name
   # are made atoms, as a design's names are (spec/14 §11.1). A drill variable taken from a
   # datum is the board's own tag, `{"$datum": field}`, and `links` is names to names
-  # (spec/15 §2.2, §13).
+  # (spec/15 §2.2, §13). A virtual source, the board's or a cell's, is its own JSON form
+  # under its id (spec/08 §10.5.10).
 
   alias Visualize.Board.Validator
   alias Visualize.Chart.Codec
   alias Visualize.Chart.Codec.Tags
   require Tags
+  alias Visualize.VirtualSource.Codec, as: VirtualSourceCodec
 
   @stamp "$version"
   @datum "$datum"
@@ -35,11 +37,13 @@ defmodule Visualize.Board.Codec do
 
   defp encode(:cells, cells), do: Map.new(cells, fn {name, cell} -> {name(name), cell(cell)} end)
   defp encode(:links, links), do: Map.new(links, fn {from, to} -> {name(from), name(to)} end)
+  defp encode(:virtual_sources, sources), do: sources(sources)
   defp encode(_key, value), do: plain(value)
 
   defp cell(cell) do
     Map.new(cell, fn
       {:drill, %{} = drill} -> {"drill", drill(drill)}
+      {:virtual_sources, sources} -> {"virtual_sources", sources(sources)}
       {key, value} -> {Atom.to_string(key), plain(value)}
     end)
   end
@@ -55,6 +59,10 @@ defmodule Visualize.Board.Codec do
     do: {name(name), Tags.tag("$datum", Atom.to_string(field))}
 
   defp drill_var({name, value}), do: {name(name), Codec.encode_term(value)}
+
+  # Virtual sources by id, each in its own JSON form (spec/08 §10.5.10).
+  defp sources(sources),
+    do: Map.new(sources, fn {id, source} -> {name(id), VirtualSourceCodec.encode(source)} end)
 
   # A map with name keys, its values as tagged terms.
   defp plain(map) when is_map(map) and not is_struct(map),
@@ -81,6 +89,7 @@ defmodule Visualize.Board.Codec do
         :zone -> {:zone, value}
         :sync -> {:sync, value}
         :links -> {:links, links(value)}
+        :virtual_sources -> {:virtual_sources, read_sources(value)}
         other -> {other, value}
       end
     end)
@@ -97,6 +106,7 @@ defmodule Visualize.Board.Codec do
         :ref -> {:ref, Codec.decode_term(value)}
         :vars -> {:vars, names(value)}
         :drill -> {:drill, read_drill(value)}
+        :virtual_sources -> {:virtual_sources, read_sources(value)}
         other -> {other, value}
       end
     end)
@@ -126,6 +136,11 @@ defmodule Visualize.Board.Codec do
   end
 
   defp drill_vars(other), do: other
+
+  defp read_sources(sources) when is_map(sources),
+    do: Map.new(sources, fn {id, source} -> {atom(id), VirtualSourceCodec.decode(source)} end)
+
+  defp read_sources(other), do: other
 
   defp links(links) when is_map(links),
     do: Map.new(links, fn {from, to} -> {atom(from), atom(to)} end)

@@ -5,7 +5,8 @@ defmodule Visualize.Data.Schema do
   A schema maps a field — named as the feed's rows name it, an atom or a string — to a
   **description**: its `type`, and as much of `unit`, `quantity`, `label`, `order`,
   `status`, `polarity`, `target`, `continuity`, `window`, `metric_kind`, `bounds` and
-  `identity` as the feed knows. It says what
+  `identity` as the feed knows, and for a `:category` field the `values` it takes, every
+  one (#643, D-194). It says what
   the numbers *are*, whoever draws them, and never how they are drawn: a description has
   no color key, since color is the theme's to choose from the meaning (#533). A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
@@ -66,7 +67,8 @@ defmodule Visualize.Data.Schema do
           optional(:window) => boolean(),
           optional(:metric_kind) => :gauge | :counter | :rate,
           optional(:bounds) => [number() | nil],
-          optional(:identity) => boolean()
+          optional(:identity) => boolean(),
+          optional(:values) => [String.t() | atom() | number(), ...]
         }
 
   @type t :: %__MODULE__{fields: %{name() => description()}, version: String.t()}
@@ -87,7 +89,8 @@ defmodule Visualize.Data.Schema do
     :window,
     :metric_kind,
     :bounds,
-    :identity
+    :identity,
+    :values
   ]
   @types [:time, :number, :category, :text]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
@@ -98,7 +101,7 @@ defmodule Visualize.Data.Schema do
   # The keys a field's type takes; every other key but `type`, `label` and `continuity` is
   # `{:invalid_for, type}` on it. `window` is a clock's: a `:time` or a `:number` field's.
   @numeric [:unit, :quantity, :polarity, :target, :metric_kind, :bounds]
-  @categorical [:order, :status]
+  @categorical [:order, :status, :values]
   @clocks [:time, :number]
   # `identity` names a thing, which a `:time` field never does: it says when (D-167).
   @identities [:category, :text, :number]
@@ -108,7 +111,7 @@ defmodule Visualize.Data.Schema do
 
   @not_names [nil, true, false]
 
-  @doc "The thirteen description keys, `:type` first (spec/08 §10.1)."
+  @doc "The fourteen description keys, `:type` first (spec/08 §10.1)."
   @spec attributes() :: [atom(), ...]
   def attributes, do: @attributes
 
@@ -345,14 +348,47 @@ defmodule Visualize.Data.Schema do
 
   defp field(name, _description), do: [{[name], {:type, :description}}]
 
-  # Every state `status` names is one of `order`'s, when the description gives both.
-  defp unordered(name, %{order: order, status: status}) when is_list(order) and is_map(status) do
+  # Every state `status` names is one of `order`'s, when the description gives both; and
+  # with `values`, every state `order` lists and `status` names is one of them (D-194).
+  defp unordered(name, description) do
+    in_order(name, description) ++ in_values(name, description)
+  end
+
+  defp in_order(name, %{order: order, status: status}) when is_list(order) and is_map(status) do
     for {state, _role} <- status,
         state not in order,
         do: {[name, :status, state], :not_in_order}
   end
 
-  defp unordered(_name, _description), do: []
+  defp in_order(_name, _description), do: []
+
+  defp in_values(name, %{values: [_ | _] = values} = description) do
+    order =
+      case Map.get(description, :order) do
+        [_ | _] = order ->
+          for {state, i} <- Enum.with_index(order),
+              state not in values,
+              do: {[name, :order, i], :not_in_values}
+
+        _none ->
+          []
+      end
+
+    status =
+      case Map.get(description, :status) do
+        status when is_map(status) ->
+          for {state, _role} <- status,
+              state not in values,
+              do: {[name, :status, state], :not_in_values}
+
+        _none ->
+          []
+      end
+
+    order ++ status
+  end
+
+  defp in_values(_name, _description), do: []
 
   # Two spellings of one column (spec/08 §6.2) are one field named twice: reported at the
   # later spelling by term order, which is the string.
@@ -419,6 +455,8 @@ defmodule Visualize.Data.Schema do
   end
 
   defp key(name, _type, :order, value), do: order(value, [name, :order])
+
+  defp key(name, _type, :values, value), do: values(value, [name, :values])
 
   defp key(name, _type, :status, value) do
     if is_map(value) and not is_struct(value) and
@@ -501,6 +539,15 @@ defmodule Visualize.Data.Schema do
   end
 
   defp order(_other, path), do: [{path, {:type, :order}}]
+
+  # A closed set of values is a list like an order, each distinct (D-194).
+  defp values([_ | _] = values, path) do
+    if Enum.all?(values, &state?/1),
+      do: order(values, path),
+      else: [{path, {:type, :values}}]
+  end
+
+  defp values(_other, path), do: [{path, {:type, :values}}]
 
   # `[min, max]`, each a number or `nil`, the first below the second when both are given.
   defp bounds?([min, max]) when is_number(min) and is_number(max), do: min < max
@@ -601,6 +648,9 @@ defmodule Visualize.Data.Schema do
 
   defp words({:type, :status}), do: "must be a map from a state to a role atom"
 
+  defp words({:type, :values}),
+    do: "must be a non-empty list of the field's values: strings, atoms or numbers"
+
   defp words({:duplicate_field, name}),
     do: "names the same column as #{inspect(name)}: a field is described once"
 
@@ -615,4 +665,7 @@ defmodule Visualize.Data.Schema do
   defp words({:invalid_for, type}), do: "is not a key a #{inspect(type)} field takes"
   defp words(:duplicate), do: "is listed twice"
   defp words(:not_in_order), do: "is a state the field's order does not list"
+
+  defp words(:not_in_values),
+    do: "is a state the field's values do not list: the values are every value there is"
 end
