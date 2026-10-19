@@ -23,7 +23,8 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ ~s(phx-hook="BoardHook")
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
+    for cell <-
+          ~w(load memory queue wave offline requests errors services hosts weather latency status) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -125,15 +126,19 @@ defmodule ExamplesWeb.BoardLiveTest do
     ticks = fn board ->
       {:ok, _info} = Server.subscribe(board)
       :ok = Server.tick(board)
-      views = views_of(board, %{}, ~w(weather memory)a)
+      views = drawn_of(board, %{}, ~w(weather memory)a)
       Server.unsubscribe(board, self())
       views.weather.svg <> views.memory.svg
     end
 
+    # Memory is in bytes, scaled to whatever its readings need — MB on one node, GB on a
+    # busier one — so the test asks for a byte unit, not one magnitude of it.
+    bytes = ~r/ [kMGT]?B</
+
     posted = ticks.(posted)
-    assert posted =~ " °C<" and posted =~ " km/h<" and posted =~ " MB<"
+    assert posted =~ " °C<" and posted =~ " km/h<" and posted =~ bytes
     us = ticks.(us)
-    assert us =~ " °F<" and us =~ " mi/h<" and us =~ " MB<"
+    assert us =~ " °F<" and us =~ " mi/h<" and us =~ bytes
     refute us =~ " °C<" or us =~ " km/h<"
     uk = ticks.(uk)
     assert uk =~ " °C<" and uk =~ " mi/h<"
@@ -141,6 +146,37 @@ defmodule ExamplesWeb.BoardLiveTest do
     # The export is the board the viewer was looking at.
     svg = build_conn() |> post("/board/export/svg", %{"units" => "us"}) |> response(200)
     assert svg =~ " °F<"
+  end
+
+  test "overlays are marks read from the feeds' facts: targets, status colors, a timeline" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    views = drawn_of(board, %{}, ~w(memory queue latency status)a)
+    Server.unsubscribe(board, self())
+
+    # The telemetry definitions carry the facts (D-160) the metric design reads.
+    %{"examples.vm.memory" => memory} =
+      Visualize.Feed.Telemetry.feeds(Examples.BoardDemo.Telemetry)
+
+    {_version, schema, _supports} = Visualize.Feed.describe(memory)
+    assert %{target: 200, polarity: :lower_is_better, bounds: [0, nil]} = schema.fields.value
+
+    # A rule at the target, the newest reading a dot in its status, the brush the design's.
+    for cell <- ~w(memory queue latency)a do
+      svg = views[cell].svg
+      assert svg =~ ~s(class="mark mark-rule"), "#{cell}"
+      assert svg =~ ~r/<circle[^>]*fill="var\(--vis-(good|bad)/, "#{cell}"
+      assert svg =~ ~s(data-vis-brush="x"), "#{cell}"
+    end
+
+    assert views.latency.svg =~ ~s(class="mark mark-percentile_band")
+    assert views.latency.svg =~ " ms<"
+
+    # The timeline's stretches are colored by the feed's own meaning of each state.
+    assert views.status.svg =~ ~s(class="mark mark-band")
+    assert views.status.svg =~ ~r/class="band" fill="var\(--vis-(good|warning|bad)/
+    for state <- ~w(ok degraded down), do: assert(views.status.svg =~ ">#{state}<")
   end
 
   test "the station's readings are rewritten in the page's system" do
@@ -193,7 +229,8 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
     assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
+    for cell <-
+          ~w(load memory queue wave offline requests errors services hosts weather latency status) do
       assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -201,7 +238,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(errors hosts load memory offline queue requests services wave weather)a
+             ~w(errors hosts latency load memory offline queue requests services status wave weather)a
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 
@@ -287,19 +324,21 @@ defmodule ExamplesWeb.BoardLiveTest do
     end
   end
 
-  # The first view of each cell of one board that is no longer loading: several boards'
-  # messages may be in the mailbox at once.
-  defp views_of(_board, seen, []), do: seen
+  # The first view of each cell of one board that draws its chart — a view whose marks are
+  # drawn, not a state panel such as "No data yet" before a feed's first reading (spec/12
+  # §6): the wait is on the board's own messages, bounded by the test's timeout, and other
+  # boards' messages in the mailbox are passed over.
+  defp drawn_of(_board, seen, []), do: seen
 
-  defp views_of(board, seen, waiting) do
+  defp drawn_of(board, seen, waiting) do
     receive do
-      {:visualize_board, ^board, {:cell, cell, %{state: state} = view}} when state != :loading ->
-        if cell in waiting,
-          do: views_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
-          else: views_of(board, seen, waiting)
+      {:visualize_board, ^board, {:cell, cell, %{svg: svg} = view}} when is_binary(svg) ->
+        if cell in waiting and svg =~ ~s(class="mark mark-),
+          do: drawn_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
+          else: drawn_of(board, seen, waiting)
 
       {:visualize_board, _board, _other} ->
-        views_of(board, seen, waiting)
+        drawn_of(board, seen, waiting)
     end
   end
 

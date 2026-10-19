@@ -137,6 +137,13 @@ defmodule ExamplesWeb.BoardLive do
             its readings' <code>continuity</code> makes that a gap, not a bridge.
           </p>
           <p class="panel-note">
+            Overlays are marks of the designs, read from the feeds' facts: the dashed rule is
+            each feed's <code>target</code>, and the dots are good or bad by it through a
+            threshold scale placed by the feed's <code>polarity</code>. <em>Latency</em> is a
+            percentile band; <em>Service status</em> is a state timeline colored by the feed's
+            own <code>status</code> map.
+          </p>
+          <p class="panel-note">
             The last row interacts across cells. <em>Requests</em> and <em>Errors</em> are one
             design over two feeds: click a line, or press Enter on a point, to select its service
             in every cell, the others dimmed. <em>Services</em> names the field <code>name</code>,

@@ -45,9 +45,13 @@ defmodule ExamplesWeb.DashboardLiveTest do
     for id <- ~w(requests latency errors) do
       assert page =~ ~s(id="dash-#{id}" phx-hook="CrosshairHook")
 
-      assert page =~
-               ~r/id="dash-#{id}-brush" phx-hook="BrushHook" phx-update="ignore" data-brush-type="x" data-brush-extent="[\d.]+,[\d.]+,[\d.]+,[\d.]+"/
+      # The page gives the brush nothing: the design's `brush: :x` says it in the chart.
+      assert page =~ ~s(id="dash-#{id}-brush" phx-hook="BrushHook" phx-update="ignore">)
     end
+
+    refute page =~ "data-brush-extent"
+    assert length(Regex.scan(~r/data-vis-brush="x"/, page)) == 3
+    assert length(Regex.scan(~r/data-vis-brush-extent="[\d.]+,[\d.]+,[\d.]+,[\d.]+"/, page)) == 3
 
     # Every panel reads one time axis: the same domain in milliseconds.
     domains =

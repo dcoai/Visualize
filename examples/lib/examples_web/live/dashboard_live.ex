@@ -66,7 +66,7 @@ defmodule ExamplesWeb.DashboardLive do
     Design.fold([
       chart(meta: %{name: "#{id}"}),
       source(:metric, [:t, :v]),
-      interaction(sync: @group),
+      interaction(sync: @group, brush: :x),
       style(:trace, stroke: :series_1, stroke_width: 2),
       cartesian(margin: %{top: 12, right: 16, bottom: 28, left: left}),
       time_scale(:x),
@@ -78,16 +78,14 @@ defmodule ExamplesWeb.DashboardLive do
   end
 
   @doc """
-  Every panel rendered once: its SVG, the crosshair's arrays (with the group's attributes)
-  and the brush's extent, the plot area in the chart's pixels.
+  Every panel rendered once: its SVG and the crosshair's arrays (with the group's
+  attributes). The brush needs nothing from the page: the design's `brush: :x` writes the
+  plot area and the x mapping on the chart (spec/14 §2.9, D-143), which `BrushHook` reads.
   """
   def build do
     for {id, title, unit, width, left} <- @panels do
       {:ok, applied} =
         Chart.apply(design(id, left), sources: %{metric: rows(id)}, size: {width, @height})
-
-      frame = applied.frame
-      %{left: l, top: t} = frame.margin
 
       %{
         id: id,
@@ -95,8 +93,7 @@ defmodule ExamplesWeb.DashboardLive do
         unit: unit,
         width: width,
         svg: Chart.render(applied, root: true, title: "#{title} over the day"),
-        crosshair: Crosshair.attrs(frame, applied.sources),
-        extent: Enum.join([l, t, l + frame.plot.width, t + frame.plot.height], ",")
+        crosshair: Crosshair.attrs(applied.frame, applied.sources)
       }
     end
   end
@@ -158,13 +155,7 @@ defmodule ExamplesWeb.DashboardLive do
             <Panel.panel :for={panel <- @panels} heading="h3" class={"dash-panel dash-#{panel.id}"}>
               <:title>{panel.title} <small>({panel.unit})</small></:title>
               <div id={"dash-#{panel.id}"} phx-hook="CrosshairHook" {panel.crosshair}>
-                <div
-                  id={"dash-#{panel.id}-brush"}
-                  phx-hook="BrushHook"
-                  phx-update="ignore"
-                  data-brush-type="x"
-                  data-brush-extent={panel.extent}
-                >
+                <div id={"dash-#{panel.id}-brush"} phx-hook="BrushHook" phx-update="ignore">
                   {Phoenix.HTML.raw(panel.svg)}
                 </div>
               </div>
@@ -216,13 +207,14 @@ defmodule ExamplesWeb.DashboardLive do
   # Elixir a reader can paste: the template sits in its ~H sigil, highlighted as HEEx.
   defp design_code do
     ~S'''
-    # One key per panel joins the group (spec/14 §2.9).
-    interaction(sync: "dashboard")
+    # One key per panel joins the group, and one says the design brushes its x (spec/14 §2.9).
+    interaction(sync: "dashboard", brush: :x)
 
-    # The crosshair's arrays carry the group; the brush reads it from the chart's SVG.
+    # The crosshair's arrays carry the group; the brush reads its kind, its plot area and
+    # its x mapping from the chart's SVG, so the page passes no extent and no margin.
     ~H"""
     <div id="requests" phx-hook="CrosshairHook" {Crosshair.attrs(applied.frame, applied.sources)}>
-      <div id="requests-brush" phx-hook="BrushHook" phx-update="ignore" data-brush-type="x">
+      <div id="requests-brush" phx-hook="BrushHook" phx-update="ignore">
         {raw(svg)}
       </div>
     </div>
