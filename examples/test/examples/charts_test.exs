@@ -295,10 +295,15 @@ defmodule Examples.ChartsTest do
     end
 
     test "every gallery palette gives a surface apart from its grid and its page" do
-      for key <- Examples.ColorPalettes.list_palettes() do
+      # Print is paper: its surface is the page on purpose, so a printer lays no ink under
+      # the data (spec/08 §7.6, D-150).
+      for key <- Examples.ColorPalettes.list_palettes() -- [:print] do
         theme = Examples.ColorPalettes.theme(key)
         refute theme.surface in [theme.grid, theme.background], "#{key}: surface #{theme.surface}"
       end
+
+      print = Examples.ColorPalettes.theme(:print)
+      assert print.surface == print.background and print.name == :print
 
       assert Examples.ColorPalettes.theme(:dark).surface == Visualize.Theme.dark().surface
     end

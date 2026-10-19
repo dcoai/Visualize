@@ -18,7 +18,8 @@ config :phoenix, :json_library, Jason
 config :elixir, :time_zone_database, Tz.TimeZoneDatabase
 
 # The host's generators (spec/14 §3.13): the tenant chat's styles and brand colors,
-# computed when a chart is drawn (`Examples.Tenants`, #654).
-config :visualize, generators: [Examples.Tenants.Generators]
+# computed when a chart is drawn (`Examples.Tenants`, #654), and the live board's service
+# colors (`Examples.BoardDemo.Generators`).
+config :visualize, generators: [Examples.Tenants.Generators, Examples.BoardDemo.Generators]
 
 import_config "#{config_env()}.exs"

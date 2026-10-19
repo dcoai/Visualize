@@ -14,7 +14,9 @@ defmodule ExamplesWeb.TenantsLiveTest do
   @endpoint ExamplesWeb.Endpoint
 
   test "the generators are the configuration's, and the designs validate against them" do
-    assert Application.get_env(:visualize, :generators) == [Examples.Tenants.Generators]
+    assert Application.get_env(:visualize, :generators) ==
+             [Examples.Tenants.Generators, Examples.BoardDemo.Generators]
+
     assert {:ok, _chart} = Visualize.Chart.from_map(Examples.Tenants.transcript())
     assert {:ok, _chart} = Visualize.Chart.from_map(Examples.Tenants.per_tenant())
   end

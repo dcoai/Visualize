@@ -3,6 +3,13 @@ defmodule ExamplesWeb.BoardLive do
   A live board (#576, spec/15 §8–§10, D-146): `Examples.BoardDemo`'s cells, drawn by
   `Visualize.Components.Board` over the board process the library runs.
 
+  The page owns the board's window (`brush: :host`, D-161): the window buttons, a brush and
+  *Reset window* each become the page's URL, and `handle_params/3` applies the URL's window
+  to the board, so a link reopens it; a selection is kept in the URL the same way. A click
+  on a host's bar is the design's declared event `host_picked`, which the page shows; and a
+  button makes the host function one cell calls raise for a while, so that cell is drawn
+  crashed and restarted.
+
   The *Units* switch is the viewer's unit system (D-156): `?units=us` mounts the board
   that runs in it, every axis with a measure drawn in its units, and the station's newest
   readings above the board are written in it with `Visualize.Quantity.format/3`.
@@ -31,6 +38,8 @@ defmodule ExamplesWeb.BoardLive do
   # The page's own loop over the station turns this often (spec/08 §11.4).
   @station_every 2000
   @firmware [{"°C", "°C"}, {"°F", "°F"}, {"K", "K"}]
+  # How long the board's host function fails when the page asks it to.
+  @outage 20_000
 
   @impl true
   def mount(params, _session, socket) do
@@ -46,7 +55,9 @@ defmodule ExamplesWeb.BoardLive do
        system: system,
        firmware: @firmware,
        memory_compatibility: BoardDemo.memory_compatibility(),
-       station: system |> Station.new() |> Station.tick()
+       station: system |> Station.new() |> Station.tick(),
+       params: %{},
+       picked: nil
      )}
   end
 
@@ -101,7 +112,106 @@ defmodule ExamplesWeb.BoardLive do
     {:noreply, push_navigate(socket, to: "/board/detail?" <> URI.encode_query(vars))}
   end
 
+  # The page owns the window (`brush: :host`, D-161): a brush, or the header's Reset window,
+  # arrives as an event and becomes the page's URL, which `handle_params/3` applies.
+  def handle_info(
+        {:visualize_event, "demo-board", %Event{event: :brush, value: %{domain: nil}}},
+        socket
+      ) do
+    :ok = Server.reset_window(socket.assigns.board)
+    {:noreply, push_patch(socket, to: path(socket, %{"from" => nil, "to" => nil, "last" => nil}))}
+  end
+
+  def handle_info(
+        {:visualize_event, "demo-board", %Event{event: :brush, value: %{domain: [from, to]}}},
+        socket
+      ) do
+    window = %{
+      "from" => DateTime.to_iso8601(from),
+      "to" => DateTime.to_iso8601(to),
+      "last" => nil
+    }
+
+    {:noreply, push_patch(socket, to: path(socket, window))}
+  end
+
+  # The selection is kept in the URL too, so a link reopens the board with it (D-170).
+  def handle_info(
+        {:visualize_event, "demo-board", %Event{event: :select, value: %{identity: identity}}},
+        socket
+      ) do
+    {:noreply, push_patch(socket, to: path(socket, %{"select" => selection(identity)}))}
+  end
+
+  # A host bar clicked: the event the design declares on the mark, with the row it drew.
+  def handle_info(
+        {:visualize_event, "demo-board", %Event{event: "host_picked", row: row}},
+        socket
+      ) do
+    {:noreply, assign(socket, picked: row)}
+  end
+
   def handle_info({:visualize_event, "demo-board", %Event{}}, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    board = socket.assigns.board
+
+    case window(params) do
+      nil -> :ok
+      window -> :ok = Server.window(board, window)
+    end
+
+    case identity(params["select"]) do
+      nil -> :ok
+      identity -> :ok = Server.select(board, identity)
+    end
+
+    {:noreply, assign(socket, params: Map.take(params, ~w(units from to last select)))}
+  end
+
+  # The window a URL holds: a brushed span, the last so many seconds, or none.
+  defp window(%{"from" => from, "to" => to}) do
+    with {:ok, from, _} <- DateTime.from_iso8601(from),
+         {:ok, to, _} <- DateTime.from_iso8601(to),
+         do: %{from: from, to: to},
+         else: (_ -> nil)
+  end
+
+  defp window(%{"last" => last}) do
+    case Integer.parse(last) do
+      {seconds, ""} when seconds > 0 -> %{last: seconds}
+      _ -> nil
+    end
+  end
+
+  defp window(_params), do: nil
+
+  # A selection as the URL writes it, `field:value`, for the fields the board selects by.
+  @selectable %{"service" => :service, "host" => :host}
+
+  defp selection({field, value}) when field in [:service, :host], do: "#{field}:#{value}"
+  defp selection(_identity), do: nil
+
+  defp identity(nil), do: nil
+
+  defp identity(param) do
+    with [field, value] <- String.split(param, ":", parts: 2),
+         {:ok, field} <- Map.fetch(@selectable, field),
+         do: {field, value},
+         else: (_ -> nil)
+  end
+
+  # The page's URL with some parameters changed, `nil` dropping one.
+  defp path(socket, changes) do
+    query =
+      socket.assigns.params
+      |> Map.merge(changes)
+      |> Enum.reject(fn {_key, value} -> value in [nil, ""] end)
+      |> Enum.sort()
+
+    if query == [], do: "/board", else: "/board?" <> URI.encode_query(query)
+  end
 
   @impl true
   # New firmware for the station: what it posts changes, and the page's loop sees it.
@@ -110,9 +220,16 @@ defmodule ExamplesWeb.BoardLive do
     {:noreply, update(socket, :station, &(&1 |> Station.firmware(symbol) |> Station.tick()))}
   end
 
-  def handle_event("window", %{"last" => last}, socket) do
-    :ok = Server.window(socket.assigns.board, %{last: String.to_integer(last)})
+  # The host function behind *Services, colored by a host function* raises for a while: that
+  # cell alone is shown crashed and restarted until it works again (spec/15 §8.3).
+  def handle_event("chaos", _params, socket) do
+    :ok = Examples.BoardDemo.Chaos.fail_for(@outage)
     {:noreply, socket}
+  end
+
+  def handle_event("window", %{"last" => last}, socket) do
+    window = %{"last" => last, "from" => nil, "to" => nil}
+    {:noreply, push_patch(socket, to: path(socket, window))}
   end
 
   @impl true
@@ -174,7 +291,9 @@ defmodule ExamplesWeb.BoardLive do
             >
               {name}
             </button>
-            — or brush a time chart; Reset window restores it.
+            — or brush a time chart; Reset window restores it. The page owns the window
+            (<code>brush: :host</code>): every one is kept in its URL, and so is a selection,
+            so a link reopens the board as it stands.
           </p>
 
           <p class="board-units">
@@ -208,11 +327,32 @@ defmodule ExamplesWeb.BoardLive do
             — the board frozen as it stands; a snapshot reopens with no feeds.
           </form>
 
+          <p class="board-cell-states">
+            <button type="button" phx-click="chaos">Make the host function raise for 20 s</button>
+            — <em>Services, colored by a host function</em>
+            calls the host's own function to
+            color each bar. While it raises, only that cell is down: it is drawn
+            <em>Crashed, restarting</em>
+            and retried with a backoff, its siblings drawing on.
+            Before a cell's first view it is drawn <em>Loading…</em>, and <em>Offline</em>
+            is
+            always <em>Feed down</em>.
+          </p>
+          <p class="board-picked">
+            Hover a host's bar for its reading, health and trend; click one and the page is told:
+            <span :if={@picked} class="board-picked-host">
+              <strong>{@picked.host}</strong>
+              at {@picked.cpu}% CPU, {@picked[:"health.state"]}, {@picked[:"trend.trend"]}
+            </span>
+            <span :if={!@picked}>nothing picked yet.</span>
+          </p>
+
           <.live_component
             module={Visualize.Components.Board}
             id="demo-board"
             server={@board}
             board={@value}
+            brush={:host}
           />
         </Panel.panel>
 

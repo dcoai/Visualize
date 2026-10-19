@@ -47,7 +47,7 @@ defmodule Examples.SummaryTest do
     Charts.RadialBarChart => ["rose chart"],
     Charts.RidgelinePlot => ["area chart"],
     Charts.SankeyDiagram => ["Sankey diagram"],
-    Charts.ScatterPlot => ["bubble chart"],
+    Charts.ScatterPlot => ["Voronoi diagram", "bubble chart"],
     Charts.ScrollingSeries => ["area chart"],
     Charts.SpectrumChart => ["area chart", "spectrum"],
     Charts.StackedAreaChart => ["stacked area chart"],

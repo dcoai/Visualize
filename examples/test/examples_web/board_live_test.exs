@@ -15,6 +15,7 @@ defmodule ExamplesWeb.BoardLiveTest do
   alias ExamplesWeb.BoardLive
   alias ExamplesWeb.BoardLive.Station
   alias Visualize.Board.Server
+  alias Visualize.Event
 
   @endpoint ExamplesWeb.Endpoint
 
@@ -258,9 +259,56 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert_received {:phoenix, :send_update,
                      {{Visualize.Components.Board.Cell, "demo-board-load"}, %{view: ^view}}}
 
-    {:noreply, socket} = BoardLive.handle_event("window", %{"last" => "60"}, socket)
+    # The page owns the window: a button patches the URL, and the URL sets the window.
+    {:noreply, socket} = BoardLive.handle_params(%{}, "/board", socket)
+    {:noreply, patched} = BoardLive.handle_event("window", %{"last" => "60"}, socket)
+    assert {:live, :patch, %{to: "/board?last=60"}} = patched.redirected
+    {:noreply, socket} = BoardLive.handle_params(%{"last" => "60"}, "/board?last=60", socket)
     assert Server.info(board).board.window == %{last: 60}
-    {:noreply, _socket} = BoardLive.handle_event("window", %{"last" => "300"}, socket)
+    {:noreply, _socket} = BoardLive.handle_params(%{"last" => "300"}, "/board?last=300", socket)
+    assert Server.info(board).board.window == %{last: 300}
+  end
+
+  test "brush: :host — a brush, a reset and a selection are the page's URL, which sets the board" do
+    {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    {:noreply, socket} = BoardLive.handle_params(%{"units" => "as_posted"}, "/board", socket)
+    board = socket.assigns.board
+    html = build_conn() |> get("/board") |> html_response(200)
+    assert html =~ "brush: :host"
+
+    from = ~U[2026-10-19 10:00:00Z]
+    to = ~U[2026-10-19 10:05:00Z]
+    brushed = %Event{event: :brush, value: %{domain: [from, to]}}
+    {:noreply, patched} = BoardLive.handle_info({:visualize_event, "demo-board", brushed}, socket)
+    assert {:live, :patch, %{to: url}} = patched.redirected
+    %{query: query} = URI.parse(url)
+    params = URI.decode_query(query)
+    assert params["from"] == "2026-10-19T10:00:00Z" and params["units"] == "as_posted"
+
+    {:noreply, socket} = BoardLive.handle_params(params, url, socket)
+    assert Server.info(board).board.window == %{from: from, to: to}
+
+    # The selection is kept in the URL, and a URL holding one selects it.
+    selected = %Event{event: :select, value: %{identity: {:service, "web"}}}
+
+    {:noreply, patched} =
+      BoardLive.handle_info({:visualize_event, "demo-board", selected}, socket)
+
+    assert {:live, :patch, %{to: url}} = patched.redirected
+    assert URI.decode_query(URI.parse(url).query)["select"] == "service:web"
+    {:noreply, socket} = BoardLive.handle_params(%{"select" => "service:web"}, url, socket)
+    assert Server.info(board).selection == {:service, "web"}
+
+    # A field the board does not select by is not made an atom: the URL is ignored.
+    {:noreply, socket} = BoardLive.handle_params(%{"select" => "nope:web"}, url, socket)
+    assert Server.info(board).selection == {:service, "web"}
+    :ok = Server.select(board, nil)
+
+    # Reset window: the board's own window again, and the URL loses the brushed one.
+    reset = %Event{event: :brush, value: %{domain: nil}}
+    {:noreply, patched} = BoardLive.handle_info({:visualize_event, "demo-board", reset}, socket)
+    assert {:live, :patch, %{to: url}} = patched.redirected
+    refute url =~ "from="
     assert Server.info(board).board.window == %{last: 300}
   end
 
@@ -288,7 +336,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(errors hosts latency load memory offline queue requests services status wave weather)a
+             ~w(colored errors hosts latency load memory offline queue requests services status wave weather)a
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 
@@ -337,10 +385,10 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:noreply, %{redirected: {:live, :redirect, %{to: "/board/detail?service=db"}}}} =
              BoardLive.handle_info({:visualize_event, "demo-board", drill}, socket)
 
-    # A selection change is the board's own: the page stays where it is.
+    # A selection change keeps the page where it is: only its URL takes the selection.
     select = %Visualize.Event{event: :select, value: %{identity: {:service, "db"}}}
 
-    assert {:noreply, %{redirected: nil}} =
+    assert {:noreply, %{redirected: {:live, :patch, %{to: "/board?select=service%3Adb"}}}} =
              BoardLive.handle_info({:visualize_event, "demo-board", select}, socket)
   end
 
@@ -357,6 +405,100 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, %{row: %{service: "web"}}} = Server.pick(board, :requests, 0, 0)
     assert Server.pick(board, :requests, 1, 0) == :error
     Server.stop(board)
+  end
+
+  test "the detail board's endpoints legend cuts long names and keeps them whole for a reader" do
+    html = build_conn() |> get("/board/detail?service=db") |> html_response(200)
+    assert html =~ ~s(data-vis-cell="endpoints")
+
+    {:ok, board} = Examples.BoardDemo.detail("db")
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    %{endpoints: %{svg: svg}} = views_of(board, %{}, [:endpoints])
+    Server.stop(board)
+
+    # max_label: 24 — a longer name is cut to 23 characters and "…", its entry carrying the
+    # whole name as its aria-label and its <title>; a short one is drawn as it is.
+    long = "SELECT orders JOIN customers (by customer_id)"
+    assert svg =~ ~s(aria-label="#{long}")
+    assert svg =~ "<title>#{long}</title>"
+    assert svg =~ ">SELECT orders JOIN cust…</text>"
+    assert svg =~ ">VACUUM</text>"
+    # Only the chosen service's endpoints are sliced.
+    refute svg =~ "/api/v2/health"
+  end
+
+  # The cell's crashes are logged, as a host's would be; the test keeps them out of its output.
+  @tag :capture_log
+  test "a cell whose host function raises is drawn crashed and restarted, alone" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    assert %{colored: %{state: :live}} = views_of(board, %{}, [:colored])
+
+    {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    {:noreply, _socket} = BoardLive.handle_event("chaos", %{}, socket)
+    assert Examples.BoardDemo.Chaos.failing?()
+    :ok = Server.tick(board)
+
+    assert {:crashed, {%RuntimeError{message: "the palette service is unreachable"}, _}} =
+             crashed(board, :colored)
+
+    # Its siblings draw on.
+    assert %{hosts: %{state: :live}} = views_of(board, %{}, [:hosts])
+
+    Examples.BoardDemo.Chaos.recover()
+    :ok = Server.tick(board)
+    assert %{colored: %{state: :live}} = live_again(board, :colored)
+    Server.unsubscribe(board, self())
+  end
+
+  test "before its first view every cell is drawn loading, each panel its own root id" do
+    html = build_conn() |> get("/board") |> html_response(200)
+    cells = Map.keys(Examples.BoardDemo.value().cells)
+
+    for cell <- cells do
+      assert html =~ ~r/data-vis-cell="#{cell}" data-vis-state="loading"/, "#{cell}"
+      assert html =~ ~s(id="demo-board-#{cell}-chart"), "#{cell}"
+    end
+
+    assert html =~ "Loading…"
+  end
+
+  test "a host bar's tooltip names its health and trend, and a click is the page's event" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    %{hosts: %{svg: svg}} = views_of(board, %{}, [:hosts])
+    Server.unsubscribe(board, self())
+
+    assert svg =~ ~s(data-tooltip-template="{host}: {cpu}% CPU, {health.state}, {trend.trend}")
+    assert svg =~ ~s(data-tooltip-event="host_picked")
+
+    {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    row = %{host: "h2", cpu: 64.5, "health.state": :warning, "trend.trend": :increasing}
+    picked = %Event{event: "host_picked", cell: :hosts, row: row}
+    {:noreply, socket} = BoardLive.handle_info({:visualize_event, "demo-board", picked}, socket)
+    assert socket.assigns.picked == row
+  end
+
+  # The first crashed view of a board's cell; the test's own timeout bounds the wait.
+  defp crashed(board, cell) do
+    receive do
+      {:visualize_board, ^board, {:cell, ^cell, %{state: {:crashed, reason}}}} ->
+        {:crashed, reason}
+
+      {:visualize_board, _board, _other} ->
+        crashed(board, cell)
+    end
+  end
+
+  # The first live view of a board's cell after a crash, the backoff waited out.
+  defp live_again(board, cell) do
+    receive do
+      {:visualize_board, ^board, {:cell, ^cell, %{state: :live} = view}} -> %{cell => view}
+      {:visualize_board, _board, _other} -> live_again(board, cell)
+    end
   end
 
   # The first view of each cell whose chart dims something.
