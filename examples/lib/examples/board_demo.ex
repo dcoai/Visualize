@@ -1,6 +1,6 @@
 defmodule Examples.BoardDemo do
   @moduledoc """
-  The demo board of `/board` (spec/15 §8–§10, #576, D-146): eight cells over live feeds,
+  The demo board of `/board` (spec/15 §8–§10, #576, D-146): ten cells over live feeds,
   run by the library's board runtime under `Examples.Boards`, the
   `Visualize.Board.Supervisor` in the examples' tree.
 
@@ -20,17 +20,22 @@ defmodule Examples.BoardDemo do
     `name` is `service`. A click on a bar drills down to the detail board (`detail/1`),
     which the page opens with the bar's service (spec/15 §13.3).
 
+  - **memory** and **queue**'s axes, and **weather**'s two, take their `measure` from the
+    feed's own facts (D-138, D-155..D-157): the telemetry unit `MBy` and the station's `Cel`
+    and `km/h`, shown in the viewer's unit system.
+
   The board shares one window, the last five minutes by default, in UTC and shown in the
   board's zone; one sync group joins the time charts' hover and brush. The board is
-  started once, on the first visit, and every visitor sees the same board: its window is
-  the board's shared state (spec/15 §8.2).
+  started once per unit system, on the first visit in it, and every visitor in that system
+  sees the same board: its window is the board's shared state (spec/15 §8.2), and the
+  system is the viewer's, so it is a board per system rather than a setting of one.
   """
 
   use Supervisor
 
   import Visualize.Chart.Build
 
-  alias Examples.BoardDemo.{Fixed, Hosts, Latest, Services, Unreachable, Wave}
+  alias Examples.BoardDemo.{Fixed, Hosts, Latest, Services, Unreachable, Wave, Weather}
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
@@ -62,21 +67,43 @@ defmodule Examples.BoardDemo do
     ]
   end
 
+  @systems [{"As posted", :as_posted}, {"Metric", :metric}, {"US", :us}, {"UK", :uk}]
+
+  @doc "The unit systems a viewer may choose, with their names (spec/14 §4.4, D-156)."
+  def systems, do: @systems
+
   @doc """
-  The demo board, started under `Examples.Boards` on the first call and the same process
-  on every later one: `{:ok, pid}`, or the reason it could not start.
+  The system a page's `units` parameter names, `:as_posted` for anything else: the
+  parameter is a person's, so it is matched against the four, never made an atom.
   """
-  @spec board() :: {:ok, pid()} | {:error, term()}
-  def board do
-    case Process.whereis(@board) do
-      nil -> start()
+  @spec system(String.t() | nil) :: atom()
+  def system(param) do
+    Enum.find_value(@systems, :as_posted, fn {_name, system} ->
+      if Atom.to_string(system) == param, do: system
+    end)
+  end
+
+  @doc """
+  The demo board in a unit system (default `:as_posted`), started under `Examples.Boards`
+  on the first call and the same process on every later one: `{:ok, pid}`, or the reason
+  it could not start. The system is the viewer's choice and every cell is drawn in it, so a
+  board runs per system (spec/15 §8), each registered by its own.
+  """
+  @spec board(atom()) :: {:ok, pid()} | {:error, term()}
+  def board(system \\ :as_posted) do
+    case Process.whereis(name(system)) do
+      nil -> start(system)
       pid -> {:ok, pid}
     end
   end
 
-  defp start do
+  defp name(:as_posted), do: @board
+  defp name(system), do: Module.concat(@board, system |> Atom.to_string() |> Macro.camelize())
+
+  defp start(system) do
     opts = [
-      name: @board,
+      name: name(system),
+      system: system,
       board: value(),
       store: store(),
       binding: slots(),
@@ -104,7 +131,7 @@ defmodule Examples.BoardDemo do
       links: %{name: :service},
       cells: %{
         load: %{x: 0, y: 0, w: 8, h: 4, ref: {:composite, 1}, title: "Load", sync: false},
-        memory: %{x: 8, y: 0, w: 4, h: 2, ref: {:composite, 3}, title: "Memory (MB)"},
+        memory: %{x: 8, y: 0, w: 4, h: 2, ref: {:composite, 3}, title: "Memory"},
         queue: %{x: 8, y: 2, w: 4, h: 2, ref: {:composite, 3}, title: "Run queue"},
         wave: %{x: 0, y: 4, w: 8, h: 3, ref: {:composite, 2}, title: "Wave"},
         offline: %{x: 8, y: 4, w: 4, h: 3, ref: {:composite, 2}, title: "Offline"},
@@ -128,6 +155,14 @@ defmodule Examples.BoardDemo do
           ref: {:composite, 7},
           title: "Hosts: health and trend",
           sync: false
+        },
+        weather: %{
+          x: 0,
+          y: 13,
+          w: 12,
+          h: 3,
+          ref: {:composite, 8},
+          title: "Weather station: temperature and wind"
         }
       },
       virtual_sources: virtual_sources()
@@ -180,7 +215,8 @@ defmodule Examples.BoardDemo do
       {:composite, 4} => by_service(nil),
       {:composite, 5} => latest(),
       {:composite, 6} => by_service(Visualize.Chart.var(:service)),
-      {:composite, 7} => hosts()
+      {:composite, 7} => hosts(),
+      {:composite, 8} => weather()
     }
   end
 
@@ -229,7 +265,9 @@ defmodule Examples.BoardDemo do
     ])
   end
 
-  # One metric over time: the shape every telemetry feed has (`t`, `value`).
+  # One metric over time: the shape every telemetry feed has (`t`, `value`). The axis says
+  # what the value is from the feed's own facts (D-138, D-156), so the telemetry unit — `MBy`
+  # for memory, `1` of `:count` for the run queue — reaches it, shown in the viewer's system.
   defp metric do
     Design.fold([
       chart(meta: %{name: "Metric"}),
@@ -239,9 +277,43 @@ defmodule Examples.BoardDemo do
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
-      axis(:y, :left, ticks: 3, grid: true),
+      axis(:y, :left, ticks: 3, grid: true, measure: measure(:metric, :value)),
       line(:metric, %{x: :t, y: :value}, style: :trace)
     ])
+  end
+
+  # A station's temperature on the left axis and its wind on the right, each axis's
+  # measure read from the station's schema: the viewer's system shows them in °F and mi/h,
+  # or °C and mi/h, without the design naming a unit (spec/14 §4.4, D-156). The axes give no
+  # tick count or format: each derives its own from its size and its domain (D-138).
+  defp weather do
+    Design.fold([
+      chart(meta: %{name: "Weather"}),
+      source(:weather, [:t, :temperature, :wind],
+        types: %{t: :time, temperature: :number, wind: :number}
+      ),
+      style(:temperature, stroke: %{color: :series_3, width: 2}),
+      style(:wind, stroke: %{color: :series_1, width: 1.5, dash: [4, 3]}),
+      cartesian(margin: %{top: 10, right: 56, bottom: 26, left: 56}),
+      time_scale(:x),
+      linear_scale(:y, nice: true),
+      linear_scale(:wind, domain: [0, :auto], nice: true),
+      axis(:x, :bottom),
+      axis(:y, :left, grid: true, measure: measure(:weather, :temperature)),
+      axis(:wind, :right, measure: measure(:weather, :wind)),
+      label({:axis, :y}, ~S"#{fact(:weather, :temperature, :label)}"),
+      label({:axis, :wind}, ~S"#{fact(:weather, :wind, :label)}"),
+      line(:weather, %{x: :t, y: :temperature}, style: :temperature),
+      line(:weather, %{x: :t, y: :wind}, style: :wind, scales: %{y: :wind})
+    ])
+  end
+
+  # An axis's measure as the feed's schema states it: its unit and its quantity.
+  defp measure(slot, field) do
+    %{
+      unit: Visualize.Chart.fact(slot, field, :unit),
+      quantity: Visualize.Chart.fact(slot, field, :quantity)
+    }
   end
 
   @doc "The connector's part (spec/15 §4.2): each cell's slots bound to a feed by name."
@@ -256,7 +328,8 @@ defmodule Examples.BoardDemo do
       {:requests, :requests} => :requests,
       {:errors, :requests} => :errors,
       {:services, :latest} => :latest,
-      {:hosts, :hosts} => :hosts
+      {:hosts, :hosts} => :hosts,
+      {:weather, :weather} => :weather
     })
   end
 
@@ -272,7 +345,8 @@ defmodule Examples.BoardDemo do
       requests: Services.new(1),
       errors: Services.new(0.08),
       latest: Latest.new(),
-      hosts: Hosts.new()
+      hosts: Hosts.new(),
+      weather: Weather.new()
     })
   end
 

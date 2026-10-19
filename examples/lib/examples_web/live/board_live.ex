@@ -1,7 +1,11 @@
 defmodule ExamplesWeb.BoardLive do
   @moduledoc """
-  A live board (#576, spec/15 §8–§10, D-146): `Examples.BoardDemo`'s eight cells, drawn by
+  A live board (#576, spec/15 §8–§10, D-146): `Examples.BoardDemo`'s cells, drawn by
   `Visualize.Components.Board` over the board process the library runs.
+
+  The *Units* switch is the viewer's unit system (D-156): `?units=us` mounts the board
+  that runs in it, every axis with a measure drawn in its units, and the station's newest
+  readings above the board are written in it with `Visualize.Quantity.format/3`.
 
   The page holds nothing of the board's but its pid: the component subscribes the page
   when it connects, and the page's one `handle_info/2` clause forwards the board's
@@ -17,17 +21,71 @@ defmodule ExamplesWeb.BoardLive do
   """
   use Phoenix.LiveView
 
+  alias Examples.BoardDemo
+  alias Examples.BoardDemo.Weather
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Board.Server
-  alias Visualize.Event
+  alias Visualize.{Event, Quantity, Unit}
 
   @windows [{"1 min", 60}, {"5 min", 300}, {"15 min", 900}]
+  # The station reads every ten seconds; the page rewrites its newest readings as often.
+  @station_every 10_000
 
   @impl true
-  def mount(_params, _session, socket) do
-    {:ok, board} = Examples.BoardDemo.board()
-    {:ok, assign(socket, board: board, value: Examples.BoardDemo.value(), windows: @windows)}
+  def mount(params, _session, socket) do
+    system = BoardDemo.system(params["units"])
+    {:ok, board} = BoardDemo.board(system)
+    if connected?(socket), do: :timer.send_interval(@station_every, :station)
+
+    {:ok,
+     assign(socket,
+       board: board,
+       value: BoardDemo.value(),
+       windows: @windows,
+       system: system,
+       station: station(system)
+     )}
   end
+
+  # The station's newest readings, written in the viewer's system (D-156): what a host's
+  # header writes beside a board, read from the same feed the Weather cell draws. A reading
+  # shown in another unit than the station posts says how it was converted, exactly
+  # (`Visualize.Unit.conversion/2`, D-155).
+  defp station(system) do
+    feed = Weather.new()
+    reading = Weather.latest(DateTime.utc_now())
+
+    for field <- [:temperature, :wind, :pressure] do
+      %{label: label, unit: posted} = described = Weather.field(feed, field)
+      measure = Map.take(described, [:unit, :quantity])
+      value = reading[field]
+      shown = Quantity.display_unit([value, value], measure, system: system)
+
+      %{
+        label: label,
+        value: Quantity.format(value, measure, system: system, precision: 1),
+        conversion: conversion(posted, shown)
+      }
+    end
+  end
+
+  defp conversion(unit, unit), do: nil
+
+  defp conversion(from, to) do
+    {:ok, {scale, offset}} = Unit.conversion(from, to)
+
+    "from #{Unit.symbol(from)}: × #{ratio(scale)}" <>
+      if(offset == {0, 1}, do: "", else: " + #{ratio(offset)}")
+  end
+
+  # A ratio as a person reads it: a small fraction as itself, any other to four places.
+  defp ratio({n, 1}), do: Integer.to_string(n)
+  defp ratio({n, d}) when d <= 10, do: "#{n}/#{d}"
+  defp ratio({n, d}), do: :erlang.float_to_binary(n / d, decimals: 4)
+
+  @impl true
+  def handle_info(:station, socket),
+    do: {:noreply, assign(socket, station: station(socket.assigns.system))}
 
   @impl true
   def handle_info({:visualize_board, _board, _message} = message, socket) do
@@ -72,6 +130,13 @@ defmodule ExamplesWeb.BoardLive do
             window to stack the cells.
           </p>
           <p class="panel-note">
+            <em>Memory</em>, <em>Run queue</em> and <em>Weather station</em> read their axes'
+            units from their feeds' schemas — the telemetry definition's <code>:megabyte</code>,
+            the station's <code>°C</code> and <code>km/h</code> — and draw them in the unit
+            system chosen below. The station goes quiet for forty seconds every four minutes;
+            its readings' <code>continuity</code> makes that a gap, not a bridge.
+          </p>
+          <p class="panel-note">
             The last row interacts across cells. <em>Requests</em> and <em>Errors</em> are one
             design over two feeds: click a line, or press Enter on a point, to select its service
             in every cell, the others dimmed. <em>Services</em> names the field <code>name</code>,
@@ -92,9 +157,31 @@ defmodule ExamplesWeb.BoardLive do
             — or brush a time chart; Reset window restores it.
           </p>
 
+          <p class="board-units">
+            Units:
+            <.link
+              :for={{name, system} <- BoardDemo.systems()}
+              navigate={"/board?units=#{system}"}
+              class={["board-unit", system == @system && "board-unit-current"]}
+              aria-current={system == @system && "true"}
+            >
+              {name}
+            </.link>
+            — the viewer's choice, never the design's: a board runs per system, and every
+            axis with a measure redraws in it.
+          </p>
+          <p class="board-station">
+            Weather station now:
+            <span :for={reading <- @station} class="board-reading">
+              {reading.label} <strong>{reading.value}</strong>
+              <small :if={reading.conversion} class="board-conversion">({reading.conversion})</small>
+            </span>
+          </p>
+
           <form class="board-exports" method="post" action="/board/export/svg">
             <input type="hidden" name="_csrf_token" value={Phoenix.Controller.get_csrf_token()} />
-            Export: <button type="submit" formaction="/board/export/svg">SVG</button>
+            <input type="hidden" name="units" value={@system} /> Export:
+            <button type="submit" formaction="/board/export/svg">SVG</button>
             <button type="submit" formaction="/board/export/png">PNG</button>
             <button type="submit" formaction="/board/export/snapshot">Snapshot</button>
             <button type="submit" formaction="/board/export/print" formtarget="_blank">Print</button>
@@ -118,6 +205,9 @@ defmodule ExamplesWeb.BoardLive do
 
     <style>
       .board-windows button, .board-exports button { margin: 0 0.25rem; }
+      .board-unit { margin: 0 0.25rem; }
+      .board-unit-current { font-weight: 600; text-decoration: none; color: inherit; }
+      .board-reading { margin-right: 1rem; }
       .vis-board-header { display: flex; gap: 1rem; align-items: baseline; }
       .vis-board-title { font-size: 1.1rem; margin: 0.25rem 0; }
       .vis-board-window { color: #555; margin: 0; }
@@ -138,9 +228,13 @@ defmodule ExamplesWeb.BoardLive do
     # In the host's tree: where boards live (spec/15 §8.1).
     children = [{Visualize.Board.Supervisor, name: MyApp.Boards}]
 
+    # One board per unit system, the viewer's choice (D-156): :as_posted, :metric, :us or :uk.
     {:ok, board} =
       Visualize.Board.Server.start(MyApp.Boards,
-        board: board, store: store, binding: binding, feeds: feeds)
+        board: board, store: store, binding: binding, feeds: feeds, system: :us)
+
+    # An axis says what its values are from the feed's own facts, and is drawn in the system.
+    axis(:y, :left, measure: %{unit: fact(:weather, :temperature, :unit)})
 
     ~H"""
     <.live_component module={Visualize.Components.Board} id="ops" server={@board} board={@value} />
