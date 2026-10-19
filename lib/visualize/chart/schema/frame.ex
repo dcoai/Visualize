@@ -137,6 +137,8 @@ defmodule Visualize.Chart.Schema.Frame do
   def describe(:legend) do
     [
       spec(:scale, {:ref, :scale}, :geometry, required: true),
+      # The declared values a legend lists in place of a scale's ticks (§4.5, D-194).
+      spec(:values, {:list, :term}, :content),
       spec(:position, {:enum, @positions}, :geometry, default: :top_right),
       spec(:inside, :boolean, :geometry, default: true),
       spec(:title, :text, :content, default: ""),

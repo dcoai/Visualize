@@ -11,7 +11,7 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
   alias Visualize.Data.Schema
   alias Visualize.Test.Feeds
 
-  @names ~w(raw doubled t v)a
+  @names ~w(raw doubled t v host state health)a
   setup_all do
     {:ok, names: @names}
   end
@@ -121,6 +121,47 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
              {:error,
               {:virtual_sources,
                [{[:virtual_sources, :lost, :from, 0], {:unknown_input, :nowhere}}]}}
+  end
+
+  test "a row carries a per-identity source's answer for its own identity (spec/15 §14.7)" do
+    hosts =
+      Schema.new!(%{
+        t: %{type: :time},
+        v: %{type: :number},
+        host: %{type: :category, identity: true}
+      })
+
+    rows =
+      for {host, i} <- Enum.with_index(["a", "b", "a"]),
+          do: %{t: DateTime.add(@t0, i * 60), v: i, host: host}
+
+    {feed, agent} = Feeds.scripted(schema: hosts, rows: rows)
+    Process.unlink(agent)
+    on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+
+    health = %{
+      from: [{:raw, nil}],
+      per: :identity,
+      schema: %{
+        host: %{type: :category, identity: true},
+        state: %{type: :category, values: [:ok, :error]}
+      },
+      elixir: "fn rows -> %{state: if(Enum.count(rows) > 1, do: :error, else: :ok)} end"
+    }
+
+    {{:ok, board}, _agent} =
+      start(
+        board: board(%{health: health}),
+        binding: Binding.new(%{{:a, :primary} => :raw}),
+        feeds: %{raw: feed}
+      )
+
+    :ok = Server.tick(board)
+    %{delivery: delivery, schema: schema} = Server.snapshot(board).cells.a.slots.primary
+
+    assert Enum.map(delivery.rows, & &1[:"health.state"]) == [:error, :ok, :error]
+    assert {:ok, [:ok, :error]} = Schema.fetch(schema, :"health.state", :values)
+    assert delivery.schema == Schema.version(schema)
   end
 
   test "a binding to a name that is neither a feed nor a source is still a missing feed" do

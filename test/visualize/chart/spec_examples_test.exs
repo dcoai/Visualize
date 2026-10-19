@@ -109,6 +109,7 @@ defmodule Visualize.Chart.SpecExamplesTest do
     {"3.11 Motion: animations", 1},
     {"3.12 Motion: enter and exit", 1},
     {"3.13 Generators: styles and colors resolved at render", 1},
+    {"5.2 Types and channels", 1},
     {"7.4 Schemas: the contract and the facts", 1},
     {"7.4 Schemas: the contract and the facts", 2},
     {"16.2 The design and its declarations", 1},

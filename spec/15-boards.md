@@ -872,7 +872,11 @@ A binding names a virtual source as it names a feed: a cell's slot bound to a na
 
 `info/1` holds `virtual_sources`: for each source's path, `%{state: state, fault: nil | %{kind: kind, detail: detail}, runs: n}`, `runs` how many times it has run.
 
-### 14.7 Functions
+### 14.7 Joined fields
+
+**An item reads a virtual source's answer for its own identity** (#643, D-194). Each turn, a cell's slot bound to a feed — or to a virtual source — is handed rows that carry, beside their own fields, the fields of every per-identity virtual source (§14.4) whose identity input is what the slot reads: each row's identity (D-167) is looked up in the source's last good output, and the output's every field but its identity is written on the row as `:"<id>.<field>"` — `:"health.state"`, `:"health.trend"` — `nil` for a row whose entity the output does not hold (the source loading, or failing before its first answer). The sources joined are the ones the cell sees: for each id, the one its scope resolves to (spec/08 §10.5.9), so a cell's own `health` shadows the board's. The slot's schema is the input's with each joined field described as the source's output describes it, without `identity`, so a joined field's `values` reach the design's coverage check and its legend (spec/14 §4.5, §7.4); its version is computed as any schema's, and a cell's chart recompiles when it changes. A joined name is an atom made from the source's id and its output's fields when the board starts, a bounded set the host defined. A slot that no per-identity source reads is handed as it was.
+
+### 14.8 Functions
 
 | Function | Contract |
 |---|---|

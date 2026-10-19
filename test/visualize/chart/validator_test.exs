@@ -133,6 +133,16 @@ defmodule Visualize.Chart.ValidatorTest do
           subdomains: ["a", "b"],
           max_zoom: 18
         }
+      },
+      # A choice by value (#643, D-194).
+      %{
+        type: :choose,
+        data: :primary,
+        frame: :main,
+        channels: %{x: :t, y: :v},
+        on: :sha,
+        cases: %{ok: %{type: :circle, style: :series, options: %{radius: 2}}},
+        else: %{type: :text}
       }
     ],
     labels: [
@@ -188,6 +198,7 @@ defmodule Visualize.Chart.ValidatorTest do
     mark_label: [:marks, 1, :label],
     tooltip: [:marks, 2, :tooltip],
     tiles: [:marks, 3, :tiles],
+    choice: [:marks, 4, :cases, :ok],
     fit: [:frames, :main, :projection, :fit]
   }
 

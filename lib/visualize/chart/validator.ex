@@ -324,6 +324,12 @@ defmodule Visualize.Chart.Validator do
         do: %{s | required: s.required or s.key in required}
   end
 
+  # A legend of declared values needs no scale (spec/14 §4.5, D-194).
+  defp specs(:legend, %{legend_values?: true}) do
+    for s <- Schema.describe(:legend),
+        do: if(s.key == :scale, do: %{s | required: false}, else: s)
+  end
+
   defp specs(kind, _ctx), do: Schema.describe(kind)
 
   # A `:tiles` mark reads no rows and names its provider (spec/14 §5.2, #475): `data` is
@@ -336,6 +342,12 @@ defmodule Visualize.Chart.Validator do
         _other -> s
       end
     end
+  end
+
+  # A `:choose` mark names its field and its cases (spec/14 §5.2, D-194).
+  defp by_type(:mark, %{mark_type: :choose}) do
+    for s <- Schema.describe(:mark),
+        do: if(s.key in [:on, :cases], do: %{s | required: true}, else: s)
   end
 
   defp by_type(kind, _ctx), do: Schema.describe(kind)
@@ -381,6 +393,8 @@ defmodule Visualize.Chart.Validator do
     if :y in keys, do: [], else: [:x]
   end
 
+  # A choice's channels are laid over its `:choose` mark's: none is required of it.
+  defp required(:channels, _type, %{choice?: true}), do: []
   defp required(:channels, type, _ctx), do: Schema.channels(type).required
   defp required(:options, _type, _ctx), do: []
 

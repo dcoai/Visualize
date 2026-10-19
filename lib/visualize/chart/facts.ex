@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Facts do
   # in and the grown cache goes out with the result.
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Fact, Template, Types, Validator}
+  alias Visualize.Chart.{Coverage, Fact, Template, Types, Validator}
   alias Visualize.Data.{Delivery, Schema}
   alias Visualize.Data.Schema.Cache
 
@@ -95,6 +95,13 @@ defmodule Visualize.Chart.Facts do
 
     {schemas, cache, unresolved} =
       followed(following, contract, entries, schemas, cache, describe)
+
+    # A mapping by a field reads its declared values (spec/14 §7.4, D-194), where the slot
+    # resolves; nothing requires it.
+    mapped =
+      map |> Coverage.mapped() |> Enum.map(fn {i, slot, _kind, field} -> {i, slot, field} end)
+
+    {schemas, cache} = typed(mapped, contract, entries, schemas, cache, describe)
 
     errors =
       errors ++

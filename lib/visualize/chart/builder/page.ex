@@ -372,8 +372,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp facet_sections(page) do
-      specs = Editor.describe(page.kind)
       node = page.node || %{}
+      specs = page.kind |> Editor.describe() |> of_type(page.kind, node)
 
       for facet <- @facets, own = Enum.filter(specs, &(&1.facet == facet)), own != [] do
         {nodes, values} = Enum.split_with(own, &(node?(&1.type) and holds_node?(node, &1)))
@@ -393,6 +393,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
       |> Enum.reject(&(&1.keys == [] and &1.children == []))
     end
+
+    # A `:choose` mark's own keys are offered on a `:choose` mark alone (spec/14 §5.2).
+    defp of_type(specs, :mark, %{type: :choose}), do: specs
+
+    defp of_type(specs, :mark, _node),
+      do: Enum.reject(specs, &(&1.key in [:on, :cases, :else]))
+
+    defp of_type(specs, _kind, _node), do: specs
 
     # A frame's defaults and the design's (spec/14 §3.8, §18.7, #684): a section of the
     # frame's page, each a style form in its parts, written where the frame and the design

@@ -124,6 +124,32 @@ defmodule Visualize.Chart.Mark do
     Tiles.generate(frame, mark, Keyword.get(opts, :resolve, :css))
   end
 
+  # A choice by value (spec/14 §5.2, D-194): the mark's rows split by the case their `on`
+  # value names, each case's rows drawn by its child as a mark of the child's type over the
+  # choose mark's channels, the cases in name order and then `else`.
+  def generate(%Frame{} = frame, %{type: :choose} = mark, opts) do
+    sources = Keyword.get(opts, :sources, %{})
+    index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
+    rows = frame |> rows(mark, sources) |> panel(frame, Keyword.fetch(opts, :panel))
+    cases = Map.get(mark, :cases, %{})
+    by_case = Enum.group_by(rows, &chosen(cases, Table.get(&1, mark.on)))
+    slot = slot(mark.data)
+
+    named = cases |> Enum.sort_by(fn {name, _child} -> to_string(name) end)
+    choices = Enum.map(named, fn {name, child} -> {{:case, name}, child} end)
+    choices = choices ++ [{:else, Map.get(mark, :else)}]
+
+    children =
+      for {key, child} <- choices,
+          child != nil,
+          [_ | _] = chosen_rows <- [Map.get(by_case, key, [])] do
+        child_opts = Keyword.merge(opts, sources: %{slot => chosen_rows}, index: index)
+        generate(frame, choice_mark(mark, child, slot), child_opts)
+      end
+
+    Element.group(children, style: %{class: "mark mark-choose"})
+  end
+
   def generate(%Frame{} = frame, %{type: type} = mark, opts) do
     frame = colored(frame, mark)
     sources = Keyword.get(opts, :sources, %{})
@@ -204,6 +230,36 @@ defmodule Visualize.Chart.Mark do
   def tiles?(mark), do: Map.get(mark, :type) == :tiles
 
   # -- construction ---------------------------------------------------------------------
+
+  # The case a value names: an atom key of `cases`, or a string spelling one, never made
+  # into an atom (spec/14 §5.2); any other value is `else`'s.
+  defp chosen(cases, value) when is_atom(value) and value != nil do
+    if Map.has_key?(cases, value), do: {:case, value}, else: :else
+  end
+
+  defp chosen(cases, value) when is_binary(value) do
+    case Enum.find(Map.keys(cases), &(Atom.to_string(&1) == value)) do
+      nil -> :else
+      name -> {:case, name}
+    end
+  end
+
+  defp chosen(_cases, _value), do: :else
+
+  defp slot(%{source: source}), do: source
+  defp slot(source), do: source
+
+  # A child drawn as a mark of its own type over the case's rows, already through the
+  # choose mark's pipeline, in its frame and over its channels with the child's own over them.
+  defp choice_mark(mark, child, slot) do
+    child
+    |> Map.put(:data, slot)
+    |> Map.put(
+      :channels,
+      Map.merge(Map.get(mark, :channels, %{}), Map.get(child, :channels, %{}))
+    )
+    |> Map.merge(Map.take(mark, [:frame, :scales, :offset, :render]))
+  end
 
   defp position(frame, mark) do
     case Enum.find_index(frame.marks, &(&1 == mark)) do

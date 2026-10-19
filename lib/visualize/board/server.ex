@@ -94,7 +94,7 @@ defmodule Visualize.Board.Server do
   alias Visualize.Board.{Binding, Cell, Draw, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Feed.Monitor
-  alias Visualize.VirtualSource.Engine
+  alias Visualize.VirtualSource.{Engine, Join}
   alias Visualize.VirtualSources
 
   @backoff 100
@@ -180,7 +180,13 @@ defmodule Visualize.Board.Server do
       {:ok,
        opts
        |> Map.new()
-       |> Map.merge(%{components: components, needs: needs, engine: engine, slot_refs: slot_refs})}
+       |> Map.merge(%{
+         components: components,
+         needs: needs,
+         engine: engine,
+         slot_refs: slot_refs,
+         joins: Join.plan(engine, slot_refs)
+       })}
     end
   end
 
@@ -438,7 +444,8 @@ defmodule Visualize.Board.Server do
         :boards,
         :debounce,
         :engine,
-        :slot_refs
+        :slot_refs,
+        :joins
       ])
       |> Map.merge(%{
         # The board's id, its cells' root ids' stem, fixed while it runs (D-188).
@@ -741,7 +748,18 @@ defmodule Visualize.Board.Server do
     tell(%{state | sent: sent})
   end
 
+  # A slot's delivery, schema and status, its rows carrying the joined fields of the
+  # per-identity sources over what it reads (spec/15 §14.7).
   defp slot(state, cell, slot, deliveries, statuses, cache) do
+    %{delivery: delivery, schema: schema} =
+      data = read(state, cell, slot, deliveries, statuses, cache)
+
+    joins = Map.get(state.joins, {cell, slot}, [])
+    {delivery, schema} = Join.join(delivery, schema, joins, state.engine)
+    %{data | delivery: delivery, schema: schema}
+  end
+
+  defp read(state, cell, slot, deliveries, statuses, cache) do
     case Map.fetch(state.slot_refs, {cell, slot}) do
       {:ok, {:source, path}} ->
         %{

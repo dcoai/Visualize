@@ -23,8 +23,12 @@ defmodule Visualize.Chart.Schema.Mark do
     {:circle, [:x, :y], [:value, :series], [:radius]},
     {:text, [:x, :y], [:value, :series], []},
     # A basemap: no channels, no rows (spec/14 §5.2, #475).
-    {:tiles, [], [], []}
+    {:tiles, [], [], []},
+    # A choice by value: a child per case at the datum's position (spec/14 §5.2, #643).
+    {:choose, [:x, :y], [:series], []}
   ]
+  # The types a `:choose` mark's child may be (spec/14 §5.2, D-194).
+  @choices [:circle, :symbol, :text, :rect]
   @types Enum.map(@marks, &elem(&1, 0))
   @channel_keys [
     :x,
@@ -127,6 +131,9 @@ defmodule Visualize.Chart.Schema.Mark do
   def types, do: @types
 
   @doc false
+  def choices, do: @choices
+
+  @doc false
   def ops, do: @ops
 
   @doc false
@@ -178,7 +185,22 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:id, :name, :content),
       spec(:frame, {:ref, :frame}, :binding),
       # The defaults of the layers and groups it was placed from (spec/14 §3.8, #651).
-      spec(:defaults, {:node, :defaults}, :style)
+      spec(:defaults, {:node, :defaults}, :style),
+      # A `:choose` mark's field and its children by the field's value (§5.2, D-194).
+      spec(:on, :field, :binding),
+      spec(:cases, {:map, {:node, :choice}}, :content),
+      spec(:else, {:node, :choice}, :content)
+    ]
+  end
+
+  # A `:choose` mark's child: a mark of a point type without data or frame (§5.2).
+  def describe(:choice) do
+    [
+      spec(:type, {:enum, @choices}, :channel, required: true),
+      spec(:channels, {:node, :channels}, :channel, default: %{}),
+      spec(:options, {:node, :options}, :geometry, default: %{}),
+      spec(:style, style_stack(), :style),
+      spec(:label, {:node, :mark_label}, :content)
     ]
   end
 
