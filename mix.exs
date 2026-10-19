@@ -184,6 +184,7 @@ defmodule Visualize.MixProject do
         ],
         Feeds: [
           ~r"Visualize\.Feed",
+          ~r"Visualize\.VirtualSource",
           Visualize.Data.Schema,
           Visualize.Data.Schema.Cache,
           Visualize.Data.Delivery,

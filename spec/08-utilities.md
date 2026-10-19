@@ -972,7 +972,107 @@ The cache never evicts: a schema is a few hundred bytes and a feed's versions ch
 
 A delivery is data like a design: a struct with no function in it, which a codec can hold (#531's *a chart is data, not JSON*).
 
-### 10.5 Functions
+### 10.5 Virtual sources: the sandbox
+
+**Implemented** (#643, work item #748, D-194). A **virtual source** is a source computed from other sources by a function: rows in, rows out (#643). Its function is Elixir, never a language of this library's own: either a `def` in a host module, which is the host's own trusted code, or **source text stored in a design**, which is untrusted, since a builder, a store or a shared host can put any text there. This section is the sandbox every such function runs in: the **checker** a stored function passes before it is compiled (10.5.1, 10.5.2), the **compile-once cache** (10.5.3) and the **bounded runner** that every function, stored or the host's, is called through (10.5.4). `Visualize.VirtualSource.Sandbox` is its module. The design follows Dune's (an allowlist written as `{module, function, arity}` triples, a process per run with heap and time limits, failure kinds rather than raises) without adopting it, since Dune interprets its rewritten AST on every call and a virtual source is compiled once and called on every update (#643's prior-art review).
+
+#### 10.5.1 The checker
+
+`Visualize.VirtualSource.Sandbox.check(source, opts)` reads a stored function and answers `{:ok, quoted}`, the checked AST, or `{:error, faults}` with **every** fault found, each `{line, reason}`, `line` the source line the fault is on (`nil` for a fault of the whole source), ordered by line. It evaluates nothing. Its options are `arity:` (the function's arity, `1`), `fields:` (the field names a `row.field` may read, below; `nil`, the default, reads any) and `max_source:` (the most bytes a source may have, `10_000`).
+
+- **Parsing.** A source longer than `max_source` is `{:too_long, max, size}` and is not parsed. The allowed aliases' own names (`:Enum`, `:Keyword`, …) are atoms of the checker's code, so they exist before any source is parsed, whatever the node has compiled. Otherwise it is parsed with `Code.string_to_quoted(source, existing_atoms_only: true)`: a name the node has never seen — an atom, a variable, a map key, a field — is refused **at parse**, so no atom is ever made from a stored function (`{:unknown_atom, name}`). A schema's fields and its declared values are atoms by the time its design is decoded, so a function over them parses; a variable name the node does not know must be renamed to one it does. Any other syntax error is `{:syntax, message}`, the parser's own words.
+- **The shape.** The source is **one `fn`** whose every clause takes `arity` arguments; anything else is `{:not_a_function, arity}`.
+- **The walk.** Every form of the AST is then held to the allowlist of 10.5.2, before macros expand, in one of three contexts: an **expression**, a **pattern** (a clause's head, the left of `=`, `<-` in `for` and `with`) and a **guard** (after `when`). Whatever the allowlist does not name is refused: a remote call is `{:restricted, {module, function, arity}}`, a local one `{:restricted, {function, arity}}`, so `send/2`, `receive`, `spawn/1`, `self/0`, `try`, `raise/1`, `throw/1`, `exit/1`, `apply/2,3`, `import`, `require`, `alias`, `quote`, `unquote`, `defmodule`, `binding/0`, `dbg`, a module attribute (`@`, `{:restricted, {:@, 1}}`), every sigil (`~r`, `~w`, … as `{:restricted, {:sigil_r, 2}}`), `to_string/1`, `inspect/1`, `then/2`, `length/1`, `elem/2` and the rest of `Kernel` are refused by name. **A failure is the runner's to report, not something the function catches**, so `try` and `raise` are refused with the rest (#643's first allowlist decision).
+- **A map read is not a call** (#643, point 1). `row.field` and `module.function(x)` share one AST shape, `{{:., _, [receiver, name]}, meta, args}`. The receiver decides: an alias of an allowed module (`Enum`, `String`) or the atom `:math` makes a **remote call**, held to the module's list at the arity written, with the arguments a `|>` adds counted; any other receiver — a variable, a field, a call's result — with **no parentheses and no arguments** is a **map read**; and any other receiver with parentheses or arguments is a **dynamic call**, `{:dynamic_call, name}`, refused, since its module is unknown when the function is checked. An anonymous call `f.(x)` is allowed: a function value a stored function can reach was made by the function itself.
+- **A field is a schema's** (#643, settled question 10). With `fields:` given, the name of every map read must be one of them, by either spelling (6.2): `{:unknown_field, name}` otherwise. A virtual source gives the fields of its inputs' schemas and its own.
+- **A collectable is a literal** (#643, point 2). `for … into:` and `Enum.into/2,3` take only a literal empty `%{}`, `[]` or `""`; any other target is `{:into, :literal}`, since every other collectable would need a call that is not on the list. `for`'s `uniq:` is a literal boolean (`{:uniq, :literal}`); `reduce:` is any expression.
+- **No struct, no module as a value.** A struct literal (`%Mod{}`) is `{:restricted, :struct}`. An alias anywhere but a remote call's receiver, an atom literal whose name begins `Elixir.` (`:"Elixir.File.Stream"`) and the atom `:__struct__` are `{:restricted_atom, atom}`, and a variable named as a special form (`__MODULE__`, `__ENV__`, `__CALLER__`, `__DIR__`, `__STACKTRACE__`) is `{:restricted, {name, 0}}`: a map that names a module under `:__struct__` dispatches a protocol — `Enumerable`, `Collectable`, `Access` — to that module's implementation, which is a call the checker never saw. The modules a value from the data can name (`DateTime`, `NaiveDateTime`, `Date`, `Time`, `Calendar.ISO`) implement none of those protocols, so a struct rebuilt from a row's time raises rather than calling anything (10.5.4: `:raised`).
+- **What compiles.** A variable read before it is bound in its scope is `{:undefined_variable, name}`, and a pinned one (`^x`) likewise; a guard holds only the guard-safe part of the list (10.5.2), else `{:guard, call}`; a pattern holds only patterns — literals, variables, `^`, lists, tuples, maps with literal or pinned keys, binaries and `<>` with a literal prefix, `=` — else `{:pattern, form}`; the clauses of one `fn` take one arity, else `{:fn_arity, arities}`. Each is a fault the compiler would raise for; finding it here names its line where the compiler's error, read through the runner, says only that the source does not compile (10.5.3).
+
+A refused function's faults are its check's and are what the builder shows at their lines (D-194); nothing is evaluated until the check passes.
+
+**Cost is not the checker's** (#643's second allowlist decision). `1..10_000_000_000`, a large `**`, `Stream.cycle`'s equivalent written with `Enum`, a comprehension over a huge range: each passes the check, and the runner's heap limit and timeout stop it, reported as a fault (10.5.4).
+
+| Reason | Meaning |
+|---|---|
+| `{:too_long, max, size}` | the source is `size` bytes, more than `max_source` |
+| `{:unknown_atom, name}` | a name the node has never seen, refused at parse (`existing_atoms_only`) |
+| `{:syntax, message}` | the source does not parse |
+| `{:not_a_function, arity}` | the source is not one `fn` whose clauses take `arity` arguments |
+| `{:restricted, {module, function, arity}}` | a remote call the allowlist does not name; `module` is the module's atom for `Kernel`, an allowed module or an Erlang one (`:os`), and the alias as written for any other (`"Process"`), since naming it by its atom could make one |
+| `{:restricted, {function, arity}}` | a local call or a special form the allowlist does not name |
+| `{:restricted, :struct}` | a struct literal |
+| `{:restricted_atom, atom}` | an atom naming an Elixir module (`:"Elixir.File.Stream"`), `:__struct__`, or an alias as a value, given as written (`"File.Stream"`) |
+| `{:dynamic_call, name}` | a call whose receiver is not an allowed module |
+| `{:unknown_field, name}` | a map read of a name `fields:` does not hold |
+| `{:into, :literal}` | `for … into:` or `Enum.into` with a target other than a literal empty `%{}`, `[]` or `""` |
+| `{:uniq, :literal}` | `for … uniq:` that is not `true` or `false` |
+| `{:undefined_variable, name}` | a variable read, or pinned, before it is bound |
+| `{:guard, call}` | a call in a guard that is not guard-safe |
+| `{:pattern, form}` | a form in a pattern that is not a pattern |
+| `{:fn_arity, arities}` | the clauses of one `fn` take different arities |
+| `{:compile, message}` | the checked source does not compile (10.5.3) |
+
+`Visualize.VirtualSource.Sandbox.format_error/1` words one fault: `line 3: Process.send/3 is not allowed in a virtual source`.
+
+#### 10.5.2 The allowlist
+
+The allowlist is the one #643 decided on 2026-10-15, in two notes: start small, and grow one entry at a time. `Visualize.VirtualSource.Sandbox.Allowlist` holds it as **explicit lists**, never "a module minus a few".
+
+- **Control:** `case`, `cond`, `if`, `unless`, `with`, `for`, `fn`, pattern matching (`=`), guards (`when`), the pin `^`, blocks, and `&` captures — of an allowed function (`&Enum.sum/1`, `&max/2`) or of an expression over `&1`, `&2`, ….
+- **Math and comparison:** `+`, `-`, `*`, `/` and unary `-` and `+`; `==`, `!=`, `===`, `!==`, `<`, `>`, `<=`, `>=`; `and`, `or`, `not`, `&&`, `||`, `!`; `in` and `not in`; `div/2`, `rem/2`, `abs/1`, `round/1`, `trunc/1`, `min/2`, `max/2` and `**/2`; and every `is_*` guard of `Kernel` (`is_atom/1` … `is_tuple/1`, `is_nil/1`, `is_map_key/2`, `is_struct/1,2`, `is_exception/1,2`, `is_non_struct_map/1`, `is_function/1,2`).
+- **Data:** literals, ranges (`..`, `..//`), tuples, lists (`|`, `++`, `--`), maps (`%{}`, `%{m | k: v}`), binaries (`<<>>` with the segment types `binary`, `bits`, `bitstring`, `bytes`, `integer`, `float`, `utf8`, `utf16`, `utf32`, `signed`, `unsigned`, `big`, `little`, `native`, `size/1` and `unit/1`; `<>`), `|>`, `[]` access (`row[:key]`, `Access.get/2`) and `row.field`. String interpolation is a call of `Kernel.to_string/1`, which is not on the list: a label is joined with `<>` and `Integer.to_string/1` or `Float.to_string/1`.
+- **Modules:** `Enum`, `Map`, `Keyword`, `String`, `Integer`, `Float` and `:math`, each an explicit list of `{function, arity}`. Every export of these modules in **Elixir 1.20.4 on OTP 29** is on its module's allowed list or its excluded list, and the test suite holds each module's exports to the union of the two (`allowed ++ excluded`, exactly): a new Elixir that adds a function fails that test, and the function is reviewed before it is allowed. `Integer.is_even/1` and `Integer.is_odd/1` are macros and allowed; a compiled function requires `Integer` for them (10.5.3).
+
+| Module | Excluded | Why |
+|---|---|---|
+| `Enum` | `random/1`, `shuffle/1`, `take_random/2` | nondeterministic: a function gives the same output for the same input |
+| `Enum` | `chunk/2,3,4`, `filter_map/3`, `partition/2`, `uniq/2` | deprecated; their replacements (`chunk_every`, `filter` and `map`, `split_with`, `uniq_by`) are allowed |
+| `Enum` | `__in__/2` | internal to the compiler, documented nowhere |
+| `String` | `to_atom/1`, `to_existing_atom/1` | atom creation, and probing which atoms exist |
+| `String` | `to_char_list/1`, `strip/1,2`, `lstrip/1,2`, `rstrip/1,2`, `ljust/2,3`, `rjust/2,3`, `valid_character?/1` | deprecated; their replacements (`to_charlist`, `trim`, `trim_leading`, `trim_trailing`, `pad_trailing`, `pad_leading`, `valid?`) are allowed |
+| `Integer` | `to_char_list/1,2` | deprecated |
+| `Float` | `to_char_list/1,2`, `to_string/2` | deprecated |
+| `Map` | `map/2`, `size/1` | deprecated |
+| `Keyword` | `delete/3`, `map/2`, `size/1` | deprecated |
+| `:math` | none | pure; random numbers live in `:rand`, which is not on the list |
+
+`Enum.into/2,3` is allowed with a literal empty target only (10.5.1). Everything else these modules export is allowed, `String.splitter/2,3` included, which is lazy and consumed by `Enum`.
+
+**The guard-safe part** is what Erlang allows in a guard of it: the comparison, arithmetic and boolean operators (`and`, `or`, `not`; not `&&`, `||` or `!`), `in` over a literal list or range, `div`, `rem`, `abs`, `round`, `trunc`, `min`, `max`, every `is_*` guard, `Integer.is_even/1`, `Integer.is_odd/1` and a map read.
+
+`Visualize.VirtualSource.Sandbox.Allowlist.modules/0` is the seven modules; `allowed/1` a module's allowed `{function, arity}` list, `excluded/1` its excluded list with each reason (`:nondeterministic`, `:deprecated`, `:atoms`, `:internal`), and `kernel/0` the `{function, arity}` of every `Kernel` function and special form a function may call.
+
+#### 10.5.3 Compiling once
+
+`Visualize.VirtualSource.Sandbox.compile(source, opts)` checks the source (10.5.1) and, when it passes, compiles it **once into a closure**: `{:ok, %Visualize.VirtualSource.Sandbox.Compiled{hash, fun, arity, warnings}}`, or `{:error, faults}` with the checker's faults. It takes the checker's options and the runner's (10.5.4).
+
+- **Rewritten first.** Every map read becomes `:erlang.map_get(field, receiver)`: in Elixir 1.20 `x.name` on an **atom** still calls the function `name/0` of the module the atom names (with a deprecation warning), so a stored `m.halt` with `m` bound to `:erlang` would halt the node; `map_get` reads a map and raises on anything else, and it is guard-safe, so a map read stands in a guard as in a body. The function is evaluated with `require Integer` before it, for `is_even` and `is_odd`. The rewrite is the library's own code, after the check, so the checked AST is what runs.
+- **An interpreted closure.** The rewritten `fn` is evaluated with `Code.eval_quoted/3`, once, into an ordinary function value (#643, settled question 8): no module is made per function, so compiling makes no atom and leaves nothing to purge. Calling it interprets the body, which costs little at the rates virtual sources run at (minutes or hours, #643). The compiler's warnings — an unused variable, a deprecation — are kept in `warnings`, each `{line, message}`, through `Code.with_diagnostics/2`, and printed nowhere.
+- **In the bounded runner.** The evaluation runs as any call does (10.5.4). A source the checker passed but the compiler refuses — a form the checker does not model — is the fault `{nil, {:compile, message}}`, the compiler's exception message, read from the process's exit reason and never rescued.
+- **The cache is a value.** `%Visualize.VirtualSource.Sandbox.Cache{}`, held by whatever owns the functions (the board's engine and the builder, #643), not a process or a table: `Visualize.VirtualSource.Sandbox.Cache.compile(cache, source, opts)` is `{:ok, compiled, cache}` or `{:error, faults, cache}`, keyed by the **SHA-256 of the source** together with the arity and the fields it was checked against. A source compiled before is a map lookup, a refusal included, so a refused function is not checked again on every update. `hash` is that SHA-256, 64 lowercase hexadecimal digits. The cache never evicts; its owner replaces it, as a schema cache's owner does (10.3).
+
+#### 10.5.4 The bounded runner
+
+`Visualize.VirtualSource.Sandbox.run(function, args, opts)` calls a function — a `Compiled`, or a host's function value — with a list of arguments in a **process of its own** and answers `{:ok, value}` or `{:error, kind, detail}`. Its options are `timeout:` (milliseconds, `1_000`) and `max_heap:` (words, `10_000_000`, 80 MB on a 64-bit host). A host's function (`defsource`, #643) is trusted, so it skips the checker, but it runs here too: a runaway in it is contained like one in a stored function, and cannot take the graph down (#643's recommendation).
+
+- **The process.** It is spawned with `spawn_opt` and `:monitor`, its `max_heap_size` set at the spawn — `%{size: max_heap, kill: true, error_logger: false, include_shared_binaries: true}` — so there is no moment it runs without the limit; it sends its result to the caller and ends. The arguments are copied into it and count against its heap.
+- **The outcome is read from the process, never rescued.** The caller waits for the result or the `:DOWN`, and kills the process when `timeout` passes first: a result is `{:ok, value}`; a `:DOWN` of `:killed` is the heap limit, `{:error, :memory, max_heap}`; the timer's kill is `{:error, :timeout, timeout}`; any other exit reason is a raise, `{:error, :raised, name}`, `name` the exception's module (`ArithmeticError`, `KeyError`, `FunctionClauseError`) as `Exception.normalize/3` reads the reason — never its message, which may quote the rows. A killed process is waited for before the call returns, so nothing it does outlives the call.
+- **A pulse's batch is one process** (#643): a `per: :identity` source's calls for every entity run in one `run/3`, so its limits are the batch's.
+
+| Kind | When | Detail |
+|---|---|---|
+| `:restricted` | the checker refused the function, or the compiler did (10.5.1, 10.5.3) | the faults, `[{line, reason}]` |
+| `:timeout` | the call did not answer within `timeout` | the timeout, milliseconds |
+| `:memory` | the process's heap passed `max_heap` and the VM killed it | the limit, words |
+| `:raised` | the function raised | the exception's module |
+| `:nonconforming` | the function answered rows that are not its schema's (the virtual source checks them, #643) | the field, never a value |
+
+`:restricted` and `:nonconforming` are not the runner's: the first is the checker's and the compiler's, the second the virtual source's conformance check. They are listed here because a virtual source's fault (`{:virtual_source, id, kind}`, #643) is one of the five.
+
+**What the limits do not bound.** A heap limit is checked when the process collects, so a single allocation larger than the limit — `String.duplicate("x", 10_000_000_000)`, a padded string, a huge `**` — is made before the VM kills the process: the host must have room for one such allocation. The limit then kills the process at its next collection and the call is `:memory`; the node is unaffected unless the one allocation exceeds its memory. The check does not refuse these functions, since cost is the developer's to weigh (#643's second allowlist decision); D-194 records the residue.
+
+### 10.6 Functions
 
 | Function | Contract |
 |---|---|
@@ -994,6 +1094,21 @@ A delivery is data like a design: a struct with no function in it, which a codec
 | `Visualize.Data.Delivery.new/1` | `new(rows, [])`: a delivery of the rows and no other fact. |
 | `Visualize.Data.Delivery.new/2` | A delivery of the rows with the given facts, checked (10.4). |
 | `Visualize.Data.Delivery.source/1` | The source a delivery carries; any other source as it is. |
+| `Visualize.VirtualSource.Sandbox.check/1` | `check(source, [])`. |
+| `Visualize.VirtualSource.Sandbox.check/2` | `{:ok, quoted}` for a stored function the allowlist admits, else `{:error, [{line, reason}]}` with every fault, by line (10.5.1); evaluates nothing. |
+| `Visualize.VirtualSource.Sandbox.compile/1` | `compile(source, [])`. |
+| `Visualize.VirtualSource.Sandbox.compile/2` | The checked function compiled once, in the bounded runner, into `%Compiled{hash, fun, arity, warnings}`, or `{:error, faults}` (10.5.3). |
+| `Visualize.VirtualSource.Sandbox.run/2` | `run(function, args, [])`. |
+| `Visualize.VirtualSource.Sandbox.run/3` | The function called in a heap-limited, timed process: `{:ok, value}`, or `{:error, kind, detail}` with `kind` `:timeout`, `:memory` or `:raised` (10.5.4). |
+| `Visualize.VirtualSource.Sandbox.hash/1` | A source's SHA-256 as 64 lowercase hexadecimal digits: its key in the cache (10.5.3). |
+| `Visualize.VirtualSource.Sandbox.format_error/1` | One checker fault as a line a person reads (10.5.1). |
+| `Visualize.VirtualSource.Sandbox.Allowlist.modules/0` | The modules a stored function may call, in order: `Enum`, `Map`, `Keyword`, `String`, `Integer`, `Float`, `:math` (10.5.2). |
+| `Visualize.VirtualSource.Sandbox.Allowlist.allowed/1` | A module's allowed `{function, arity}` list. |
+| `Visualize.VirtualSource.Sandbox.Allowlist.excluded/1` | A module's excluded `{{function, arity}, reason}` list. |
+| `Visualize.VirtualSource.Sandbox.Allowlist.kernel/0` | The `{function, arity}` of every `Kernel` function, operator and special form a stored function may use. |
+| `Visualize.VirtualSource.Sandbox.Cache.new/0` | The empty cache. |
+| `Visualize.VirtualSource.Sandbox.Cache.compile/2` | `compile(cache, source, [])`. |
+| `Visualize.VirtualSource.Sandbox.Cache.compile/3` | `compile(cache, source, opts)`: `{:ok, compiled, cache}` or `{:error, faults, cache}`, compiled at most once per source, arity and fields (10.5.3). |
 
 ## 11. Feeds: the behaviour, the monitor and two providers
 
