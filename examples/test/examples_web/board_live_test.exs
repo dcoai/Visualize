@@ -23,7 +23,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ ~s(phx-hook="BoardHook")
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts) do
+    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -104,6 +104,63 @@ defmodule ExamplesWeb.BoardLiveTest do
     end
   end
 
+  test "the units switch: a board per system, its own process, every measure in its units" do
+    html = build_conn() |> get("/board?units=us") |> html_response(200)
+
+    for system <- ~w(as_posted metric us uk),
+        do: assert(html =~ ~s(href="/board?units=#{system}"), system)
+
+    assert html =~ ~r/aria-current="true"[^>]*>\s*US\s*</
+    assert html =~ ~r/Temperature <strong>-?[\d.]+ °F/
+    assert html =~ ~r/Pressure <strong>[\d.]+ inHg/
+
+    {:ok, posted} = Examples.BoardDemo.board()
+    {:ok, us} = Examples.BoardDemo.board(:us)
+    {:ok, uk} = Examples.BoardDemo.board(:uk)
+    assert Enum.uniq([posted, us, uk]) |> length() == 3
+    assert {:ok, ^us} = Examples.BoardDemo.board(Examples.BoardDemo.system("us"))
+    assert Examples.BoardDemo.system("bogus") == :as_posted
+
+    # The weather's axes and the memory axis, each measure read from its feed's facts.
+    ticks = fn board ->
+      {:ok, _info} = Server.subscribe(board)
+      :ok = Server.tick(board)
+      views = views_of(board, %{}, ~w(weather memory)a)
+      Server.unsubscribe(board, self())
+      views.weather.svg <> views.memory.svg
+    end
+
+    posted = ticks.(posted)
+    assert posted =~ " °C<" and posted =~ " km/h<" and posted =~ " MB<"
+    us = ticks.(us)
+    assert us =~ " °F<" and us =~ " mi/h<" and us =~ " MB<"
+    refute us =~ " °C<" or us =~ " km/h<"
+    uk = ticks.(uk)
+    assert uk =~ " °C<" and uk =~ " mi/h<"
+
+    # The export is the board the viewer was looking at.
+    svg = build_conn() |> post("/board/export/svg", %{"units" => "us"}) |> response(200)
+    assert svg =~ " °F<"
+  end
+
+  test "the station's readings are rewritten in the page's system" do
+    {:ok, socket} = BoardLive.mount(%{"units" => "uk"}, %{}, %Phoenix.LiveView.Socket{})
+    assert socket.assigns.system == :uk
+
+    {:noreply, socket} = BoardLive.handle_info(:station, socket)
+    readings = Map.new(socket.assigns.station, &{&1.label, &1})
+    assert %{value: "" <> _ = celsius, conversion: nil} = readings["Temperature"]
+    assert celsius =~ " °C"
+    # Shown in another unit than posted, a reading says how it was converted.
+    assert readings["Wind"].value =~ " mi/h"
+    assert readings["Wind"].conversion == "from km/h: × 0.6214"
+    assert readings["Pressure"].value =~ " hPa"
+
+    {:ok, us} = BoardLive.mount(%{"units" => "us"}, %{}, %Phoenix.LiveView.Socket{})
+    us = Map.new(us.assigns.station, &{&1.label, &1})
+    assert us["Temperature"].conversion == "from °C: × 9/5 + 32"
+  end
+
   test "the page forwards the board's messages and its buttons set the board's window" do
     {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
     board = socket.assigns.board
@@ -136,7 +193,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
     assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts) do
+    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
       assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -144,7 +201,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(errors hosts load memory offline queue requests services wave)a
+             ~w(errors hosts load memory offline queue requests services wave weather)a
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 
@@ -227,6 +284,22 @@ defmodule ExamplesWeb.BoardLiveTest do
 
       {:visualize_board, _board, _other} ->
         dimmed(seen, waiting)
+    end
+  end
+
+  # The first view of each cell of one board that is no longer loading: several boards'
+  # messages may be in the mailbox at once.
+  defp views_of(_board, seen, []), do: seen
+
+  defp views_of(board, seen, waiting) do
+    receive do
+      {:visualize_board, ^board, {:cell, cell, %{state: state} = view}} when state != :loading ->
+        if cell in waiting,
+          do: views_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
+          else: views_of(board, seen, waiting)
+
+      {:visualize_board, _board, _other} ->
+        views_of(board, seen, waiting)
     end
   end
 

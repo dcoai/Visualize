@@ -13,8 +13,9 @@ defmodule ExamplesWeb.BoardExportController do
 
   alias Visualize.Board.{Server, Snapshot}
 
-  def export(conn, %{"format" => format}) do
-    {:ok, board} = Examples.BoardDemo.board()
+  # The board the viewer was looking at: the system its page was showing (D-156).
+  def export(conn, %{"format" => format} = params) do
+    {:ok, board} = Examples.BoardDemo.board(Examples.BoardDemo.system(params["units"]))
     send_export(conn, format, board)
   end
 
