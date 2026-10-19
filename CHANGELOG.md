@@ -550,6 +550,18 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG element's own `transform` is drawn on the binary canvas** (#746, D-193).
+  `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
+  read `transform` only on a `<g>`, so a `<rect>`, `<circle>`, `<path>` or `<line>` with a
+  transform of its own — as `Visualize.SVG.Element.from_ir/1` writes for a transformed IR
+  element — drew untransformed. It also read only a leading `translate(…)` or `scale(…)`,
+  so a `rotate(…)`, `skewX(…)`, `skewY(…)` or `matrix(…)`, and every operation after the
+  first in a list such as `translate(50,40) rotate(30)`, were dropped, on a group too. The
+  attribute is now read as SVG reads it, the whole list, on a group and on a drawing
+  element, whose transform is its own and does not reach its next sibling; a transform in
+  error is ignored, as SVG ignores it. A group's lone `scale(…)` is now written as a matrix
+  record: the same drawing in 16 more bytes.
+
 - **An SVG element's stroke width no longer carries over to its next sibling on the binary
   canvas** (#744, D-193). `Visualize.Backend.CanvasBinary.encode_element/2` given a
   `Visualize.SVG.Element` tree left an element's own `stroke-width`, fill and stroke colors
