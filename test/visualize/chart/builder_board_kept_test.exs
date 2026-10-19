@@ -112,7 +112,17 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     assert Editing.editing(assigns).board_mode ==
              Editing.editing(Map.delete(assigns, :board_kept)).board_mode
 
-    computed
+    # The virtual sources' run is held to its own inputs below.
+    Map.delete(computed, :virtual)
+  end
+
+  test "the virtual sources run again only when what they read moved (spec/14 §22.9)" do
+    s = opened()
+    {_kept, computed} = BoardMode.kept(s.assigns)
+    assert computed.virtual == false
+
+    {_kept, computed} = BoardMode.kept(assign(s, :catalog, %{}).assigns)
+    assert computed.virtual == true
   end
 
   @all [:a, :b, :c, :d]

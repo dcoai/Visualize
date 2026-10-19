@@ -393,6 +393,7 @@ defmodule ExamplesWeb.BuilderLive do
         on_save={:design_saved}
         on_deploy={:design_deployed}
         catalog={@catalog}
+        virtual_sources={[Examples.BoardDemo.Sources]}
         board_bindings={@bindings}
         on_bind={:board_bound}
       />

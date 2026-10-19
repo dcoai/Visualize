@@ -205,7 +205,8 @@ defmodule ExamplesWeb.BuilderLiveTest do
           id: "builder",
           store: Library,
           on_bind: :board_bound,
-          board_bindings: page.assigns.bindings
+          board_bindings: page.assigns.bindings,
+          virtual_sources: [Examples.BoardDemo.Sources]
         })
 
       {:ok, s} = Visualize.Chart.Builder.mount(%Socket{})
@@ -239,10 +240,9 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert map_size(mode.board.cells) == 9
       assert mode.faults == []
 
-      # Every cell previews over rows shaped like its feed's. The hosts cell reads fields
-      # the board's virtual sources join (spec/15 §14.7), which the builder's sample rows
-      # do not carry until the builder runs the board's sources (#753).
-      for cell <- mode.cells, to_string(cell.name) != "hosts" do
+      # Every cell previews over rows shaped like its feed's, the hosts cell over the
+      # fields the board's virtual sources join, which the builder runs (spec/14 §22.9).
+      for cell <- mode.cells do
         assert {:ok, "<svg" <> _} = cell.preview, "#{cell.name}: #{inspect(cell.preview)}"
       end
     end

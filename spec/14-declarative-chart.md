@@ -2675,6 +2675,7 @@ It is optional exactly as `Visualize.Components` is (spec/10 §1.1, D-45): every
 | `tick_ms` | `:integer` | `500` | the period of the signals' tick while playing (§19.10) |
 | `catalog` | `:map` | `nil` | the **connector catalog** of the board mode (§22.8): each feed the host offers, by the name its binding uses, to its `%Visualize.Data.Schema{}`, what the feed's `describe` answers; `nil` binds a board's slots to the sample pool |
 | `board_bindings` | `:map` | `%{}` | a binding the host already holds for a board, `%Visualize.Board.Binding{}` by the board entry's id, taken when that board is opened (§22.8) |
+| `virtual_sources` | `:list` | `[]` | the modules of the host's virtual-source functions (`use Visualize.VirtualSources`, spec/08 §10.5.8) a board's sources may name, beside `config :visualize, virtual_sources:`, so the board mode runs them as the board does (§22.9) |
 | `on_bind` | `:any` | `:visualize_board_bound` | the tag of the binding message (§22.8): `{on_bind, id, board_id, binding}` |
 | `generators` | `:list` | `[]` | host modules of generators (§3.13, D-177), beside `config :visualize, generators:` — the preview applies with them and the style stack offers them (§18.18, #686) |
 | `class` | `:string` | `nil` | placed on the builder's root element |
@@ -3944,7 +3945,17 @@ The *validity* section lists `Visualize.Board.validate/3` of the board given the
 
 **Where a binding starts.** Opening a board takes the host's binding for its id from `board_bindings`; a board the host holds none for, and every cell added, starts with each of its unbound slots **bound by name** to the bindable feed of the slot's own name, when there is one — the rule the preview of one design binds by (§7.3). A slot with no such feed starts unbound and says so. Removing a cell removes its slots' bindings, and the change is sent.
 
-### 22.9 Functions
+### 22.9 Virtual sources in the board mode
+
+**Implemented** (#643, work item #753, D-194). A board's virtual sources (spec/08 §10.5, [15-boards](15-boards.md) §14) run in the board mode **as the board runs them, over the preview's data**: the bindable feeds' sample rows (§22.6), each a delivery under its catalog schema, are pushed to a `Visualize.VirtualSource.Engine` of the board's sources and the host's `virtual_sources` modules, and one pulse runs at once (`debounce: 0`), so every source has an answer, or a fault, from the rows the cells preview. No process is started: the engine is a value, and its calls are the sandbox's bounded calls (spec/08 §10.5.4).
+
+- **The cells preview over them.** A slot bound to a virtual source previews over its answer; a slot bound to a feed previews over the feed's rows with the joined fields of every per-identity source over it ([15-boards](15-boards.md) §14.7), described in its schema. So a cell that styles by `{:field, :"health.state"}` or chooses by it previews as the board draws it, and the binding check (§22.8) reads each feed's schema with its joined fields — a fact of a joined field (`fact(:hosts, :"health.state", :values)`) is no fault — where a cell reads the board's own sources.
+- **The sources section.** The inspector's *virtual sources* section (`Visualize.Chart.Builder.Boards.panel/1`, after *variables*) lists each source by its dotted path: its state (`loading`, `live`, or its fault's kind), a **text box holding its function** — `<textarea name="elixir">` for a stored function; the host's captured source, read-only, for a `defsource` (spec/08 §10.5.8) — its faults inline, each `line N: …` in `Visualize.VirtualSource.Sandbox.format_error/1`'s words, and its **preview rows**: the first five rows of its answer, a table of its output's fields.
+- **Editing the text** (`board_source`, with the source's dotted path and the text). The text is checked as the board would check it — `Visualize.VirtualSource.new/1`, then `validate/2` given its inputs' schemas where they are known, so a field a function reads that no input has is named. A text that holds is **written** into the board (its `virtual_sources`, or the cell's), the board validated alone as every write is (§22.2), and the sources run again over the same rows, so the preview rows and every cell that reads the source change as it is typed. A text the checker refuses is **kept as a draft** beside its faults — the board keeps the last function that held, and the preview its rows — so a half-typed function is never lost and never written while the board stays open; opening a board shows its stored text.
+- **Faults stay where they are.** A source whose function raises, times out, passes its heap limit or answers rows outside its schema on the preview's rows shows its fault's kind and detail (spec/08 §10.5.4) and keeps its last answer; nothing else in the mode is held back by it. A board whose sources cannot be defined — an input no feed or source names, a cycle — lists those faults in the section, and its cells preview over the feeds alone.
+- **Kept by its inputs.** The sources' answers are a function of the board's sources, the binding, the bindable feeds' rows and schemas and the host's modules; a pass keeps them under those (§22.5, D-191) and runs the engine only when one moved.
+
+### 22.10 Functions
 
 | Function | Contract |
 |---|---|
@@ -3954,4 +3965,5 @@ The *validity* section lists `Visualize.Board.validate/3` of the board given the
 | `Visualize.Chart.Builder.Boards.free/3` | `free(board, w, h)`: the first `{x, y}` in reading order where a `w`-by-`h` rectangle overlaps no cell (§22.3) |
 | `Visualize.Chart.Builder.Boards.declared/2` | `declared(ref, fetch)`: the variables a component declares, from its flattened design, sorted (§22.4) |
 | `Visualize.Chart.Builder.Boards.sample/2` | `sample(schema, now)`: sixty rows made from a schema for a preview (§22.6): a `:time` field a second apart and ending at `now`, a `:number` window field (`window: true`) its row's place, `0` to `59`, as a tick counts, any other `:number` field a slow sine, a `:category` field its `order` in turn (else `"a"`, `"b"`, `"c"`), a `:text` field its name |
+| `Visualize.Chart.Builder.Boards.sources/1` | `sources(mode)`: the board mode's view of its virtual sources (§22.9) — each one's path, state, function text, faults and preview rows |
 | `Visualize.Chart.Builder.Boards.preview/3` | `preview(board, fetch, opts)`: each cell realized alone (§22.6), `%{cell => {:ok, svg} \| {:error, lines}}`; `pools:` by cell, `theme:`, and `describe:` as `Visualize.Board.realize/4` takes it |

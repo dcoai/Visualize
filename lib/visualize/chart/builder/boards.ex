@@ -396,6 +396,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
        Enum.map(errors, &Board.format_error/1)}
     end
 
+    # -- the virtual sources (§22.9) -------------------------------------------------------------
+
+    @doc """
+    The board mode's view of its virtual sources (spec/14 §22.9): each source's dotted
+    path, its state, its function's text — a draft the checker refused in place of the
+    stored text, with the draft's faults — its faults inline, and its preview rows, from
+    `%{run: run, drafts: drafts}`, the sources' run over the preview's data and the drafts
+    by path.
+    """
+    @spec sources(%{run: map(), drafts: map()}) :: [map()]
+    def sources(%{run: %{sources: views}, drafts: drafts}) do
+      for view <- views do
+        rows = for row <- view.rows, do: Enum.map(view.fields, &cell_text(Map.get(row, &1)))
+        fields = Enum.map(view.fields, &to_string/1)
+
+        case Map.fetch(drafts, view.path) do
+          {:ok, %{text: text, faults: faults}} ->
+            %{view | text: text, faults: faults}
+            |> Map.merge(%{draft?: true, columns: fields, cells: rows})
+
+          :error ->
+            Map.merge(view, %{draft?: false, columns: fields, cells: rows})
+        end
+      end
+    end
+
+    defp cell_text(nil), do: ""
+    defp cell_text(value) when is_binary(value), do: value
+    defp cell_text(value) when is_atom(value) or is_number(value), do: to_string(value)
+    defp cell_text(%DateTime{} = value), do: DateTime.to_iso8601(value)
+    defp cell_text(value), do: inspect(value)
+
     # -- the panel (§22.4) -----------------------------------------------------------------------
 
     attr(:id, :string, required: true, doc: "the panel's id")
@@ -581,6 +613,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </label>
           </fieldset>
         </form>
+        <section :if={@mode.sources != [] or @mode.source_errors != []} class="vis-builder-board-sources">
+          <h3 class="vis-builder-control-label">virtual sources</h3>
+          <ul :if={@mode.source_errors != []} class="vis-builder-errors">
+            <li :for={line <- @mode.source_errors} class="vis-builder-error">{line}</li>
+          </ul>
+          <form
+            :for={source <- @mode.sources}
+            id={@id <> "-source-" <> source.path}
+            class="vis-builder-board"
+            phx-change="board_source"
+            phx-submit="submitted"
+            phx-target={@target}
+          >
+            <fieldset class="vis-builder-board-section" data-board-source={source.path}>
+              <legend>{source.path} — {source.state}{if source.draft?, do: " (draft not written)", else: ""}</legend>
+              <input type="hidden" name="source" value={source.path} />
+              <textarea
+                :if={source.stored?}
+                name="elixir"
+                class="vis-builder-board-source-text"
+                spellcheck="false"
+                phx-debounce="400"
+              >{source.text}</textarea>
+              <pre :if={not source.stored?} class="vis-builder-board-source-text" title="the host's own function, edited where it lives">{source.text}</pre>
+              <ul :if={source.faults != []} class="vis-builder-errors">
+                <li :for={line <- source.faults} class="vis-builder-error">{line}</li>
+              </ul>
+              <table :if={source.cells != []} class="vis-builder-board-source-rows">
+                <thead><tr><th :for={column <- source.columns}>{column}</th></tr></thead>
+                <tbody><tr :for={row <- source.cells}><td :for={value <- row}>{value}</td></tr></tbody>
+              </table>
+              <p :if={source.cells == []} class="vis-builder-board-note">no rows yet</p>
+            </fieldset>
+          </form>
+        </section>
         <section class="vis-builder-board-validity">
           <h3 class="vis-builder-control-label">validity</h3>
           <ul :if={@mode.faults != []} class="vis-builder-errors">

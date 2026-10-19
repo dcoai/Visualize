@@ -33,12 +33,22 @@ release it merely follows.
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
   :raised, detail}`; a raise is reported by the exception's module, never its message.
 
+- **The builder's board mode runs and edits virtual sources** (#753, D-194). A board's
+  virtual sources run over the preview's sample rows, so cells preview over their answers
+  and joined fields, and the binding check sees the joined fields. A *virtual sources*
+  section lists each source with its function in a text box (a `defsource`'s captured
+  source, read-only), its faults at their lines and its first rows. A text that holds is
+  written and run as you type; one the checker refuses is kept as a draft beside its
+  faults, the board keeping the last function that held. Give the builder your
+  `defsource` modules with its new `virtual_sources` assign.
+
 - **The examples' `/board` judges hosts with virtual sources** (#752, D-194). A *Hosts*
   cell over a synthetic hosts feed draws each host's newest CPU reading as a bar in its
   health's style, a `:choose` icon per host by the same joined field, and a legend of the
   field's declared values. `health` is a stored function in the board value; `trend` is
   a `defsource` in `Examples.BoardDemo.Sources`, registered with the board's
-  `virtual_sources:` — the two ways a host writes one.
+  `virtual_sources:` — the two ways a host writes one. The legend lists
+  `fact(:hosts, :"health.state", :values)`.
 
 - **Reading a virtual source by value** (#751, D-194). On a board, each row of a feed now
   carries the answer of every per-identity virtual source over that feed for its own
