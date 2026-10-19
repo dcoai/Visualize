@@ -4,7 +4,7 @@
 
 A **board** is a dashboard as data: designs laid out on a grid, sharing a time window, variables and a sync group, but never geometry. It is the layer above the composite of [14-declarative-chart](14-declarative-chart.md) §19.6. A composite is overlapping parts that **flatten** into one chart in one coordinate space, such as a gauge drawn over a line. A board **never flattens**: each cell is its own chart, applied, rendered and updated on its own, and the cells share *state*, not pixels (#531 §1).
 
-This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542). A board leaves the screen as a picture — an SVG, a PNG or printed pages — drawn from a frozen snapshot of its data (§12, #578, D-150). A board's cells interact through its shared state: a brush sets every cell's window, a selection is highlighted in every cell that shows it, and a click drills down to another board (§13, #545, D-151).
+This document is the board as a **value**: its keys, its codecs, its validation, the sources it needs and how a connector binds them (#539, D-141). The processes that keep a board live, its feeds and its cells' designed states are the board runtime's, §8 (#540, D-146). A board travels to another host in a bundle with its components and themes, re-keyed on import (§11, #542). A board leaves the screen as a picture — an SVG, a PNG or printed pages — drawn from a frozen snapshot of its data (§12, #578, D-150). A board's cells interact through its shared state: a brush sets every cell's window, a selection is highlighted in every cell that shows it, and a click drills down to another board (§13, #545, D-151). A board computes virtual sources from its feeds where they run, on the board process, and its cells read them as sources (§14, #643, D-194).
 
 ```
 board      — layout + shared state                       (this document)
@@ -151,7 +151,7 @@ For the board and each of its nodes, in this order: unknown keys, required keys,
 - **Variables.** A board's or a cell's variable name that is not an atom is `{:type, :name}` at its path. A value that is itself a variable (`%Visualize.Chart.Var{}`) is `{:var_binding, name}`, because a board's variables are values, and resolution is single level (spec/14 §7.1).
 - **A component reference** that is not an id `{kind, n}` is `{:type, {:id, :composite}}`. An id of another kind, `{:style, 3}`, is `{:ref_kind, :composite, :style}`, as the validator refuses a wrong-kind id before resolution (spec/14 §19.7).
 - **Links.** A `links` that is not a map is `{:type, {:map, :name}}` at `[:links]`. A key or a value that is not an atom is `{:type, :name}` at `[:links, key]`.
-- **Virtual sources** (spec/08 §10.5, #643). A `virtual_sources` that is not a map is `{:type, {:map, {:node, :virtual_source}}}` at its path; an id that is not an atom is `{:type, :name}` at `[:virtual_sources, id]`; each source is read by `Visualize.VirtualSource.new/1` with its id, and every fault of it is reported under its id, `[:virtual_sources, id | path]` for the board's and `[:cells, cell, :virtual_sources, id | path]` for a cell's. A board alone does not know its feeds, so what an input names, a cycle and a source's fields are checked when the board starts (#643).
+- **Virtual sources** (spec/08 §10.5, #643). A `virtual_sources` that is not a map is `{:type, {:map, {:node, :virtual_source}}}` at its path; an id that is not an atom is `{:type, :name}` at `[:virtual_sources, id]`; each source is read by `Visualize.VirtualSource.new/1` with its id, and every fault of it is reported under its id, `[:virtual_sources, id | path]` for the board's and `[:cells, cell, :virtual_sources, id | path]` for a cell's. A board alone does not know its feeds, so what an input names, a cycle and a source's fields are checked when the board starts (§14.1).
 - **A drill node** (§13.3) that is not a map is `{:type, {:node, :drill}}` at the cell's `drill`. Its unknown keys are `:unknown_key`, a missing `board` is `:required`, and a `board` that is neither `:self`, an atom, a non-empty string nor a positive integer is `{:type, :board_ref}`. Its `vars` are checked as a board's variables are, and a `{:datum, field}` whose field is not an atom is `{:type, :field}` at the variable's path.
 
 ### 3.2 Given a store
@@ -357,11 +357,14 @@ children = [
 | `clock:` | `DateTime.utc_now/0` | the board's "now": a function of no argument answering a UTC `DateTime` |
 | `limits:` | the defaults | the limits the components' designs are read under (spec/14 §9.2) |
 | `boards:` | `%{}` | the boards the cells' drill targets may name, as `Visualize.Board.validate/3` takes them (§3.2, §13.3) |
-| `debounce:` | `250` | milliseconds a brushed window waits for the next before it is applied (§13.1); `0` applies each at once |
+| `debounce:` | `250` | milliseconds a brushed window waits for the next before it is applied (§13.1), and a virtual source's pulse waits for more changes (§14.2); `0` applies each at once |
+| `virtual_sources:` | `[]` | the modules of the host's virtual-source functions (§14.6) |
+| `virtual_source_timeout:` | `1_000` | milliseconds a virtual source's call may run (§14.3) |
+| `virtual_source_heap:` | `10_000_000` | words a virtual source's call may hold (§14.3) |
 | `id:` | `vis-board-<h>`, `<h>` the lower-case base-36 `:erlang.phash2/1` of the board's `meta` and its cells' names, sorted | the board's id: each cell's chart root is `<id>-<cell>-chart` (§8.3), so two cells that draw one component never share a root's ids or a scoped rule (spec/14 §4.7, #712, D-188); a host placing two copies of one board on a page gives each its own — the component's `id` (§9.1) serves |
 | `name:` | none | a registered name, as `GenServer.start_link/3` takes it |
 
-**Starting** prepares every cell with `Visualize.Board.components/3` (§6). A board that does not validate alone and given the store and `boards:`, does not prepare, or that names a feed in its binding that `feeds:` does not hold, is **not started**: `start/2` answers `{:error, {:board, errors}}` with the faults of §3, or `{:error, {:feeds, names}}`. A board is refused as a whole, before any process runs, because a dashboard that half starts is the quiet difference §3 exists to prevent. The board then starts its cells' `DynamicSupervisor`, linked to it as its parent, so the cells go when the board goes, and one `Visualize.Board.Cell` per cell under it, each monitored.
+**Starting** prepares every cell with `Visualize.Board.components/3` (§6). A board that does not validate alone and given the store and `boards:`, does not prepare, that names a feed in its binding that `feeds:` does not hold and no virtual source of the board is, or whose virtual sources cannot be defined (§14.1), is **not started**: `start/2` answers `{:error, {:board, errors}}` with the faults of §3, `{:error, {:feeds, names}}`, or `{:error, {:virtual_sources, errors}}`. A board is refused as a whole, before any process runs, because a dashboard that half starts is the quiet difference §3 exists to prevent. The board then starts its cells' `DynamicSupervisor`, linked to it as its parent, so the cells go when the board goes, and one `Visualize.Board.Cell` per cell under it, each monitored.
 
 **It owns the shared state** (#531, further considerations §3):
 
@@ -385,7 +388,7 @@ children = [
 | `{:board, info}` | on subscribing, and whenever the resolved window, the zone, the width or the selection changes: `info` is `%{window: {from, to} \| nil, zone: zone, now: now, width: width, sync: group, selection: {field, value} \| %{field => value} \| nil, moved: boolean}`, `moved` whether the window is other than the one the board was started with (§13.1) |
 | `{:cell, name, view}` | a cell's view changed: a new frame, a new state, or both (§8.3) |
 
-`info/1` answers the board's present state: `%{board: board, window: window, zone: zone, now: now, width: width, sync: group, selection: selection, moved: moved, cells: %{name => %{pid: pid \| nil, state: state, restarts: n}}}`. `tick/1` runs one turn now and returns once it is done: the way a test, or a host that drives time itself (`tick: nil`), moves the board. `stop/1` stops the board and its cells.
+`info/1` answers the board's present state: `%{board: board, window: window, zone: zone, now: now, width: width, sync: group, selection: selection, moved: moved, cells: %{name => %{pid: pid \| nil, state: state, restarts: n}}, virtual_sources: %{path => %{state: state, fault: fault, runs: n}}}` (§14.6). `tick/1` runs one turn now and returns once it is done: the way a test, or a host that drives time itself (`tick: nil`), moves the board. `stop/1` stops the board and its cells.
 
 ### 8.3 The cell process
 
@@ -448,7 +451,7 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 |---|---|
 | `Visualize.Board.Supervisor.start_link/1` | A `DynamicSupervisor` for boards; `name:` as `DynamicSupervisor.start_link/1` takes it. |
 | `Visualize.Board.Supervisor.child_spec/1` | Its child spec, for a host's tree: a supervisor, its id the name given. |
-| `Visualize.Board.Server.start/2` | A board started under a `DynamicSupervisor`: `{:ok, pid}`, `{:error, {:board, errors}}` or `{:error, {:feeds, names}}` (§8.2). |
+| `Visualize.Board.Server.start/2` | A board started under a `DynamicSupervisor`: `{:ok, pid}`, `{:error, {:board, errors}}`, `{:error, {:feeds, names}}` or `{:error, {:virtual_sources, errors}}` (§8.2, §14.1). |
 | `Visualize.Board.Server.start_link/1` | A board started linked to the caller, for a host's own supervisor. |
 | `Visualize.Board.Server.child_spec/1` | Its child spec, `restart: :transient`. |
 | `Visualize.Board.Server.subscribe/1` | As `subscribe/2` for `self()`. |
@@ -820,3 +823,67 @@ drill: %{board: :detail, vars: %{service: {:datum, :name}, range: "1h"}}
 ### 13.4 Functions
 
 The functions are listed with their modules: `link/2`, `linked/2` and `drill/3` in §7.1, and `brush/2`, `reset_window/1`, `select/2` and `pick/4` in §8.6.
+
+## 14. Virtual sources on the board
+
+**Implemented** (#643, work item #750, D-194). A virtual source (spec/08 §10.5) runs **where feeds run**: on the board process, which owns the feeds (§8.2), not in each chart. It recomputes when an input changes, and its result is shared by every cell that reads it — a trend over twenty values is computed once, not in five places (#643). `Visualize.VirtualSource.Engine` is the engine, a **value** the board process holds beside its feed monitor and calls from its own callbacks, as the monitor is (spec/08 §11.4, D-140): one owner per board, and no second process between the board and its feeds' rows.
+
+### 14.1 Defining: references, cycles, ranks
+
+When a board starts, its virtual sources — the board's and its cells', by path (§1.2, §1.3, `Visualize.Board.virtual_sources/1`) — are defined in three steps, each over all of them, and a board whose sources fail any step is **not started**: `Visualize.Board.Server.start/2` answers `{:error, {:virtual_sources, errors}}`, each `{path, reason}` at the source's path in the board, `[:virtual_sources, id | at]` or `[:cells, cell, :virtual_sources, id | at]`, as a board's faults are (§3).
+
+1. **References.** Every input's name resolves (spec/08 §10.5.9) from the scope the source is defined in: an atom to a virtual source from the inside out, else to a feed of the board's `feeds:`; a string to a feed; a list to a virtual source's full path. A name that resolves to nothing is `{:unknown_input, name}` at `[:from, i]`. A source naming a host `function` the registry (`virtual_sources:`, below) does not hold is `{:undeclared, :function, name}` at `[:function]`.
+2. **Cycles.** The sources and the sources they read are a directed graph; a cycle is refused, **named**: each strongly connected component that holds a cycle, by `:digraph_utils.cyclic_strong_components/1` — a source that reads itself included — is `{:cycle, paths}` at `[:from]` of the first of its members, `paths` every member's path, sorted. A count of what is left after a topological sort cannot name the cycle, since it also holds every source downstream of one (#643's prior-art review).
+3. **Ranks.** A source that reads only feeds has rank `0`; any other, one more than the greatest rank of the sources it reads. The engine runs sources in rank order, so a source always runs after its inputs.
+
+Each stored function is compiled once into the engine's cache (spec/08 §10.5.3) when it is defined; a function the checker refuses was refused when the board was validated (§3.1).
+
+### 14.2 Pulses
+
+**A pulse is the unit of recompute** (#643, settled questions 4 and 11). Each turn (§8.2), after the monitor's tick, the engine is shown every feed's delivery and schema. A feed whose delivery is not the one the engine last saw has **changed**, and every source that reads it is marked. The first mark after a pulse makes the next pulse **due** `debounce:` milliseconds later — the board's existing option, so changes that land within it, from any number of pushes and feeds, are one pulse (`0`: due at once, in the same turn). When a pulse is due the engine runs it:
+
+- **In rank order, each source at most once.** The marked sources run from the lowest rank to the highest. A source whose answer differs from its last one marks the sources that read it, which run later in the same pulse, after every input they have; a source whose answer is unchanged marks nothing, and an unmarked source does not run. So a source with two inputs that changed in one pulse runs once, with both (#643: no glitches).
+- **Whole windows.** A source is called with each input's whole current window (spec/08 §10.5.6), not with what changed: v1 recomputes, and carrying changes by identity is a later proposal (#643's acceptance).
+- **Every input present.** A source with an input that has no delivery yet — a feed loading, a source not yet computed — does not run; it stays `:loading`.
+- **In context.** Before a source first runs, and again when an input's schema version changes, it is validated given its inputs' schemas and the registry (`Visualize.VirtualSource.validate/2`, spec/08 §10.5.5): what its function reads, its boxes, its identity. A source that fails is the fault `:restricted`, its detail the faults.
+
+After a pulse the board hands its cells their data as a turn does (§8.2), so a cell reading a source sees its new answer without waiting for the next turn. A host that drives time itself (`tick: nil`) runs a due pulse with `Visualize.Board.Server.tick/1`, and a test sets `debounce: 0`, so a pulse is in the turn that saw the change and nothing waits on the clock (spec/12 §6).
+
+### 14.3 Faults
+
+A source's call is one bounded call (spec/08 §10.5.4), with the board's `virtual_source_timeout:` and `virtual_source_heap:`. **When it fails, the source keeps its last good output, and the pulse does not propagate past it**: the sources that read it are not marked by it (#643, settled question 4). Its state is `{:down, {:virtual_source, id, kind}}`, `kind` one of spec/08 §10.5.4's five — `:restricted`, `:timeout`, `:memory`, `:raised`, `:nonconforming` — and a cell bound to it draws its last output under the down banner (§8.4). The fault's **detail** — the checker's faults, the limit, the exception's module, the row and field of a nonconforming answer (spec/08 §10.5.7) — never a value of the rows, is in `info/1`. The next pulse that marks the source runs it again; a good answer clears the fault.
+
+### 14.4 Per identity
+
+A `per` source (spec/08 §10.5.7) is called once per entity of its identity input, grouped by the input's declared identity (`Visualize.Data.Schema.identity/2`, D-167), entities in their order of first appearance and a row with no identity dropped; the calls for every entity are **one** bounded call. Each entity's answer is given the entity's identity and the answers are joined into one output, which is then held to the schema.
+
+### 14.5 Binding a cell to a virtual source
+
+A binding names a virtual source as it names a feed: a cell's slot bound to a name resolves **from the cell's scope** (`[cell]`, spec/08 §10.5.9) to a virtual source, and else to a feed. The cell is handed the source's last good output as a delivery naming the output schema's version, the schema itself, and the source's state — `:loading`, `:live`, or `{:down, {:virtual_source, id, kind}}` — exactly as it is handed a feed's (§8.2), so every chart, gauge and tile draws a virtual source's fields as any source's. A binding that names neither a feed `feeds:` holds nor a virtual source is refused at start as before (`{:error, {:feeds, names}}`).
+
+### 14.6 The options and the state
+
+| Option | Default | Meaning |
+|---|---|---|
+| `virtual_sources:` | `[]` | the modules of the host's functions (`use Visualize.VirtualSources`, spec/08 §10.5.8), beside `config :visualize, virtual_sources:` |
+| `virtual_source_timeout:` | `1_000` | milliseconds a source's call may run (spec/08 §10.5.4) |
+| `virtual_source_heap:` | `10_000_000` | words a source's call may hold (spec/08 §10.5.4) |
+| `debounce:` | `250` | §8.2's option: milliseconds a pulse waits for more changes |
+
+`info/1` holds `virtual_sources`: for each source's path, `%{state: state, fault: nil | %{kind: kind, detail: detail}, runs: n}`, `runs` how many times it has run.
+
+### 14.7 Functions
+
+| Function | Contract |
+|---|---|
+| `Visualize.VirtualSource.Engine.new/1` | `new(sources, [])`. |
+| `Visualize.VirtualSource.Engine.new/2` | `new(sources, opts)`: the engine over virtual sources by path, defined (§14.1) — `{:ok, engine}` or `{:error, [{path, at, reason}]}`; options `feeds:` (the feeds' names), `functions:` (the registry), `debounce:`, `timeout:`, `max_heap:`. |
+| `Visualize.VirtualSource.Engine.push/4` | `push(engine, deliveries, schemas, now)`: the sources that read a changed feed marked, and the next pulse due (§14.2). |
+| `Visualize.VirtualSource.Engine.run/2` | `run(engine, now)`: the due pulse run, in rank order, each marked source at most once; the engine unchanged when none is due (§14.2). |
+| `Visualize.VirtualSource.Engine.due/1` | The monotonic millisecond the next pulse is due, or `nil`. |
+| `Visualize.VirtualSource.Engine.resolve/3` | `resolve(engine, scope, name)`: `{:source, path}`, `{:feed, name}` or `:error`: what a name read from a scope names (§14.5). |
+| `Visualize.VirtualSource.Engine.outputs/1` | Every source's last good output, a `%Visualize.Data.Delivery{}`, by path. |
+| `Visualize.VirtualSource.Engine.schemas/1` | Every source's output schema, by path. |
+| `Visualize.VirtualSource.Engine.status/1` | Every source's state by path: `:loading`, `:live` or `{:down, {:virtual_source, id, kind}}` (§14.3). |
+| `Visualize.VirtualSource.Engine.faults/1` | Every failing source's fault by path, `%{kind: kind, detail: detail}` (§14.3). |
+| `Visualize.VirtualSource.Engine.runs/1` | How many times each source has run, by path. |

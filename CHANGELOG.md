@@ -33,6 +33,21 @@ release it merely follows.
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
   :raised, detail}`; a raise is reported by the exception's module, never its message.
 
+- **Virtual sources run on the board** (#750, D-194). `Visualize.Board.Server` computes a
+  board's virtual sources (and its cells') where its feeds run, and a cell's slot bound to
+  a source's name draws its answer as it draws a feed's. When the board starts, every
+  input must name a feed or a source and the sources must not form a cycle, else
+  `start/2` answers `{:error, {:virtual_sources, errors}}` naming each fault (a cycle by
+  its members). A feed that changes makes a recompute due after the board's `debounce:`
+  (now also the virtual sources' coalescing window); it recomputes only the sources that
+  read what changed, in dependency order, each once. A source that raises, times out,
+  passes its heap limit, is refused in context or answers rows outside its schema keeps
+  its last good output, its readers are left alone, and its cells show
+  `{:down, {:virtual_source, id, kind}}` over the last drawing; `info/1` lists each
+  source's state, fault and run count. New options: `virtual_sources:` (your
+  `defsource` modules), `virtual_source_timeout:` and `virtual_source_heap:`. The engine
+  is also usable alone as a value, `Visualize.VirtualSource.Engine`.
+
 - **Virtual sources as values** (#749, D-194). `Visualize.VirtualSource` is a source
   computed from other sources: `id`, its inputs (`from: [hosts: {:window, last: 20}]` —
   each input a feed's or another virtual source's name with the history the function

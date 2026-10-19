@@ -35,9 +35,18 @@ defmodule Visualize.Board.Server do
 
       def handle_info({:visualize_board, _board, {:cell, name, view}}, socket), do: …
 
-  A board that does not validate given its store, or whose binding names a feed `feeds:`
-  does not hold, is not started: `{:error, {:board, errors}}` or `{:error, {:feeds,
-  names}}`, before any process runs.
+  A board that does not validate given its store, whose binding names a feed `feeds:`
+  does not hold and no virtual source of the board is, or whose virtual sources cannot be
+  defined, is not started: `{:error, {:board, errors}}`, `{:error, {:feeds, names}}` or
+  `{:error, {:virtual_sources, errors}}`, before any process runs.
+
+  ## Virtual sources
+
+  The board's virtual sources and its cells' (spec/15 §14, D-194) run here, where the
+  feeds run: a `Visualize.VirtualSource.Engine` held beside the monitor. Each turn shows
+  it the feeds' deliveries; a change makes a pulse due `debounce:` later, and the pulse
+  recomputes the sources that read what changed, in rank order, each once. A cell's slot
+  bound to a virtual source's name is handed its last good output as it is handed a feed's.
 
   ## Options
 
@@ -65,8 +74,15 @@ defmodule Visualize.Board.Server do
     * `:limits` - the limits the components' designs are read under
     * `:boards` - the boards the cells' drill targets may name, as
       `Visualize.Board.validate/3` takes them (default `%{}`)
-    * `:debounce` - milliseconds a brushed window waits for the next (default `250`);
-      `0` applies each at once
+    * `:debounce` - milliseconds a brushed window waits for the next, and a virtual
+      source's pulse waits for more changes (default `250`); `0` applies each at once
+    * `:virtual_sources` - the modules of the host's virtual-source functions
+      (`use Visualize.VirtualSources`), beside `config :visualize, virtual_sources:`
+      (default `[]`, spec/15 §14.6)
+    * `:virtual_source_timeout` - milliseconds a virtual source's call may run
+      (default `1_000`)
+    * `:virtual_source_heap` - words a virtual source's call may hold (default
+      `10_000_000`)
     * `:id` - the board's id, each cell's chart root `<id>-<cell>-chart` (default
       `vis-board-` and a hash of the board's meta and cell names, spec/15 §8.2, D-188)
     * `:name` - a registered name
@@ -78,6 +94,8 @@ defmodule Visualize.Board.Server do
   alias Visualize.Board.{Binding, Cell, Draw, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Feed.Monitor
+  alias Visualize.VirtualSource.Engine
+  alias Visualize.VirtualSources
 
   @backoff 100
   @backoff_max 10_000
@@ -137,7 +155,10 @@ defmodule Visualize.Board.Server do
         tick: 1000,
         budget: nil,
         max_heap: 25_000_000,
-        clock: &DateTime.utc_now/0
+        clock: &DateTime.utc_now/0,
+        virtual_sources: [],
+        virtual_source_timeout: 1_000,
+        virtual_source_heap: 10_000_000
       ])
 
     board = Keyword.fetch!(opts, :board)
@@ -149,22 +170,57 @@ defmodule Visualize.Board.Server do
              Board.components(board, store, Keyword.take(opts, [:limits, :boards, :generators]))
            ),
          {:ok, required} <- board_check(Board.required_sources(board, store, limits)),
-         :ok <- feeds_check(opts[:binding], opts[:feeds]) do
+         {:ok, engine} <- engine(board, opts),
+         {:ok, slot_refs} <- feeds_check(opts[:binding], engine) do
       needs =
         Enum.reduce(Map.keys(required), Map.new(board.cells, fn {name, _} -> {name, []} end), fn
           {cell, slot}, acc -> Map.update!(acc, cell, &[slot | &1])
         end)
 
-      {:ok, opts |> Map.new() |> Map.merge(%{components: components, needs: needs})}
+      {:ok,
+       opts
+       |> Map.new()
+       |> Map.merge(%{components: components, needs: needs, engine: engine, slot_refs: slot_refs})}
     end
   end
 
   defp board_check({:ok, value}), do: {:ok, value}
   defp board_check({:error, errors}), do: {:error, {:board, errors}}
 
-  defp feeds_check(%Binding{slots: slots}, feeds) do
-    case slots |> Map.values() |> Enum.uniq() |> Enum.reject(&Map.has_key?(feeds, &1)) do
-      [] -> :ok
+  # The board's virtual sources and its cells' defined over its feeds (spec/15 §14.1), a
+  # fault at the source's path in the board.
+  defp engine(board, opts) do
+    engine_opts = [
+      feeds: Map.keys(opts[:feeds]),
+      functions: VirtualSources.registry(opts[:virtual_sources]),
+      debounce: opts[:debounce],
+      timeout: opts[:virtual_source_timeout],
+      max_heap: opts[:virtual_source_heap]
+    ]
+
+    case Engine.new(Board.virtual_sources(board), engine_opts) do
+      {:ok, engine} ->
+        {:ok, engine}
+
+      {:error, errors} ->
+        {:error,
+         {:virtual_sources, for({path, at, reason} <- errors, do: {at(path) ++ at, reason})}}
+    end
+  end
+
+  defp at([id]), do: [:virtual_sources, id]
+  defp at([cell, id]), do: [:cells, cell, :virtual_sources, id]
+
+  # Every bound slot's name resolved from its cell (spec/15 §14.5): a virtual source, else
+  # a feed; a name that is neither is a feed the board was not given.
+  defp feeds_check(%Binding{slots: slots}, engine) do
+    resolved =
+      Map.new(slots, fn {{cell, _slot} = key, name} ->
+        {key, Engine.resolve(engine, [cell], name)}
+      end)
+
+    case for({key, :error} <- resolved, do: slots[key]) |> Enum.uniq() do
+      [] -> {:ok, resolved}
       missing -> {:error, {:feeds, Enum.sort(missing)}}
     end
   end
@@ -380,7 +436,9 @@ defmodule Visualize.Board.Server do
         :max_heap,
         :clock,
         :boards,
-        :debounce
+        :debounce,
+        :engine,
+        :slot_refs
       ])
       |> Map.merge(%{
         # The board's id, its cells' root ids' stem, fixed while it runs (D-188).
@@ -399,7 +457,8 @@ defmodule Visualize.Board.Server do
         sent: %{},
         now: nil,
         window: nil,
-        told: nil
+        told: nil,
+        pulse_at: nil
       })
 
     {:ok, state, {:continue, :start}}
@@ -543,6 +602,15 @@ defmodule Visualize.Board.Server do
     {:noreply, state}
   end
 
+  # A pulse due after the debounce (spec/15 §14.2): only the latest timer runs it.
+  def handle_info({:pulse, due}, %{pulse_at: due} = state) do
+    now = System.monotonic_time(:millisecond)
+    engine = Engine.run(state.engine, now)
+    {:noreply, %{state | engine: engine, pulse_at: nil} |> schedule_pulse(now) |> hand()}
+  end
+
+  def handle_info({:pulse, _superseded}, state), do: {:noreply, state}
+
   def handle_info({:brush, brushed, window}, %{brushed: brushed} = state),
     do: {:noreply, windowed(state, window)}
 
@@ -601,20 +669,60 @@ defmodule Visualize.Board.Server do
   # -- a turn -------------------------------------------------------------------------------
 
   # One turn (spec/15 §8.2): now read once, the window resolved at it, the monitor ticked,
-  # and each cell sent its slots when they changed — else only the new now.
+  # the virtual sources shown the feeds (spec/15 §14.2), and each cell sent its slots when
+  # they changed — else only the new now.
   defp turn(state) do
     now = state.clock.()
     window = Board.window(state.board, now)
+    ms = System.monotonic_time(:millisecond)
 
     monitor =
       state.monitor
       |> Monitor.window(window && Tuple.to_list(window))
-      |> Monitor.tick(now: System.monotonic_time(:millisecond))
+      |> Monitor.tick(now: ms)
 
-    state = %{state | monitor: monitor, now: now, window: window}
-    deliveries = Monitor.deliveries(monitor)
-    statuses = Monitor.status(monitor)
-    cache = Monitor.cache(monitor)
+    %{state | monitor: monitor, now: now, window: window}
+    |> pulse(ms)
+    |> hand()
+  end
+
+  # The feeds' deliveries and schemas shown to the engine; a due pulse run now, a later
+  # one timed.
+  defp pulse(state, ms) do
+    deliveries = Monitor.deliveries(state.monitor)
+    cache = Monitor.cache(state.monitor)
+
+    schemas =
+      for {feed, delivery} <- deliveries,
+          schema = schema(cache, feed, delivery),
+          schema != nil,
+          into: %{},
+          do: {feed, schema}
+
+    engine = state.engine |> Engine.push(deliveries, schemas, ms) |> Engine.run(ms)
+    schedule_pulse(%{state | engine: engine}, ms)
+  end
+
+  defp schedule_pulse(state, ms) do
+    case Engine.due(state.engine) do
+      nil ->
+        state
+
+      due when due == state.pulse_at ->
+        state
+
+      due ->
+        Process.send_after(self(), {:pulse, due}, max(due - ms, 0))
+        %{state | pulse_at: due}
+    end
+  end
+
+  # Each cell handed its slots when they changed, else only the board's now.
+  defp hand(state) do
+    now = state.now
+    deliveries = Monitor.deliveries(state.monitor)
+    statuses = Monitor.status(state.monitor)
+    cache = Monitor.cache(state.monitor)
 
     sent =
       Map.new(state.needs, fn {cell, slots} ->
@@ -634,8 +742,15 @@ defmodule Visualize.Board.Server do
   end
 
   defp slot(state, cell, slot, deliveries, statuses, cache) do
-    case Binding.fetch(state.binding, cell, slot) do
-      {:ok, feed} ->
+    case Map.fetch(state.slot_refs, {cell, slot}) do
+      {:ok, {:source, path}} ->
+        %{
+          delivery: Map.get(Engine.outputs(state.engine), path),
+          schema: Map.fetch!(Engine.schemas(state.engine), path),
+          status: Map.fetch!(Engine.status(state.engine), path)
+        }
+
+      {:ok, {:feed, feed}} ->
         delivery = Map.get(deliveries, feed)
         %{delivery: delivery, schema: schema(cache, feed, delivery), status: statuses[feed]}
 
@@ -793,13 +908,14 @@ defmodule Visualize.Board.Server do
     }
 
     if cells? do
-      Map.put(
-        base,
+      base
+      |> Map.put(
         :cells,
         Map.new(state.cells, fn {name, e} ->
           {name, %{pid: e.pid, state: e.state, restarts: e.restarts}}
         end)
       )
+      |> Map.put(:virtual_sources, virtual_sources(state.engine))
     else
       Map.drop(base, [:board])
     end
@@ -830,6 +946,16 @@ defmodule Visualize.Board.Server do
   end
 
   defp moved?(state), do: state.board.window != state.given
+
+  # Each virtual source's state, fault and runs, by path (spec/15 §14.6).
+  defp virtual_sources(engine) do
+    faults = Engine.faults(engine)
+    runs = Engine.runs(engine)
+
+    Map.new(Engine.status(engine), fn {path, status} ->
+      {path, %{state: status, fault: Map.get(faults, path), runs: Map.fetch!(runs, path)}}
+    end)
+  end
 
   defp message(message), do: {:visualize_board, self(), message}
 end
