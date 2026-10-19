@@ -13,6 +13,10 @@ config :logger, :console,
 
 config :phoenix, :json_library, Jason
 
+# A time scale's display zone reads the host's time zone database (D-115); the library
+# takes no tz dependency, so the host configures one.
+config :elixir, :time_zone_database, Tz.TimeZoneDatabase
+
 # The host's generators (spec/14 §3.13): the tenant chat's styles and brand colors,
 # computed when a chart is drawn (`Examples.Tenants`, #654).
 config :visualize, generators: [Examples.Tenants.Generators]

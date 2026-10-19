@@ -57,7 +57,7 @@ defmodule Examples.RingLabelsTest do
       {cx, cy} = center(svg)
       points = Map.new(label_points(svg))
 
-      assert points["$1000K"] == {cx, cy - 10}
+      assert points["$1,000,000"] == {cx, cy - 10}
       assert points["Total Revenue"] == {cx, cy + 15}
       # The plot is 280 wide: the 400 box less the 120 legend margin.
       assert {cx, cy} == {140.0, 200.0}
