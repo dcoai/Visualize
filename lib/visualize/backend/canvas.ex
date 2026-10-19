@@ -639,7 +639,8 @@ defmodule Visualize.Backend.Canvas do
       alpha(stroke_commands(style[:stroke], element), style, :stroke_opacity)
   end
 
-  # A line is always stroked (spec/09 §3.3.1), at its stroke's own opacity.
+  # A line is stroked where its effective stroke is present, at its own opacity, and never
+  # filled (spec/09 §3.3.1, #757).
   defp line_stroke(style, element),
     do: alpha(stroke_commands(style[:stroke], element), style, :stroke_opacity)
 

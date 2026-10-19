@@ -550,6 +550,16 @@ release it merely follows.
 
 ### Fixed
 
+- **An SVG `<line>` with no stroke draws nothing on the binary canvas** (#747, D-122).
+  `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
+  stroked every `<line>`, in its group's stroke color or black, even with no stroke or
+  with `stroke="none"`, where SVG draws nothing. A line is now stroked only where it has a
+  stroke of its own or inherits one from a group, as in SVG and as the other canvas
+  encoders already draw it. Nothing in the gallery changes: its canvases are encoded from
+  IR elements, and the only stroke-less lines among its charts are ticks a design hides
+  with `stroke: none`, which now stay hidden when converted with
+  `Visualize.SVG.Element.from_ir/1` as well.
+
 - **An SVG element's own `transform` is drawn on the binary canvas** (#746, D-193).
   `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree
   read `transform` only on a `<g>`, so a `<rect>`, `<circle>`, `<path>` or `<line>` with a

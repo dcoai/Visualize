@@ -301,6 +301,81 @@ defmodule Visualize.Backend.CanvasScopeTest do
     end
   end
 
+  # A line with no stroke of its own, where it stands: alone, under a group's fill (a line
+  # has no area to fill), under a group whose stroke is `none`, and — the control — under
+  # a group's stroke, which it strokes in.
+  @line_places [
+    alone: &Function.identity/1,
+    group_fill: &__MODULE__.under_fill/1,
+    group_none: &__MODULE__.under_no_stroke/1,
+    group_stroke: &__MODULE__.under_stroke/1
+  ]
+
+  @doc false
+  def under_fill(line), do: Element.group([line], style: %{fill: "blue"})
+
+  @doc false
+  def under_no_stroke(line), do: Element.group([line], style: %{stroke: :none})
+
+  @doc false
+  def under_stroke(line), do: under_state([line])
+
+  describe "a line with no stroke draws nothing on every encoder, as SVG (#757)" do
+    @describetag :js
+
+    test "it is stroked only where a group gives it a stroke" do
+      line = Element.line(20, 40, 220, 40)
+      trees = for {_place, wrap} <- @line_places, do: wrap.(line)
+
+      for encoder <- Map.keys(CanvasEncoders.encoders()) do
+        strokes =
+          for draws <- CanvasEncoders.draws(encoder, trees),
+              do: Enum.count(draws, &(&1["name"] == "stroke"))
+
+        assert Enum.zip(Keyword.keys(@line_places), strokes) ==
+                 [alone: 0, group_fill: 0, group_none: 0, group_stroke: 1],
+               "#{inspect(encoder)} strokes a line as #{inspect(strokes)}"
+      end
+    end
+
+    test "the SVG-element encoder writes no stroke record for a root <line> without one" do
+      line = SVG.Element.line(%{x1: 0, y1: 0, x2: 10, y2: 0})
+      assert [{:path_cubic32, _}] = Decoder.decode(CanvasBinary.encode_element!(line))
+
+      under = %{SVG.Element.g(%{stroke: "#000000"}) | children: [line]}
+
+      assert [:save, {:style, _}, {:path_cubic32, _}, :stroke, :restore] =
+               Decoder.decode(CanvasBinary.encode_element!(under))
+
+      unset = %{under | children: [SVG.Element.line(%{x2: 10, stroke: "none", fill: "red"})]}
+      refute :stroke in Decoder.decode(CanvasBinary.encode_element!(unset))
+      refute :fill in Decoder.decode(CanvasBinary.encode_element!(unset))
+    end
+
+    # Both node and resvg (test_helper, #652).
+    @tag :js_resvg
+    test "resvg draws no ink for it either" do
+      svg = %{
+        SVG.Element.svg(%{width: 240, height: 120})
+        | children: [SVG.Element.line(%{x1: 20, y1: 60, x2: 220, y2: 60, "stroke-width": 6})]
+      }
+
+      {:ok, png, _warnings} =
+        Visualize.Render.to_png(to_string(svg), scale: 1, background: "#ffffff")
+
+      image = Visualize.PNGPixels.decode(png)
+
+      assert for(
+               y <- 54..66,
+               {r, g, b, _} = Visualize.PNGPixels.pixel(image, 120, y),
+               do: {r, g, b}
+             )
+             |> Enum.uniq() == [{255, 255, 255}]
+
+      assert [] = from_binary(svg)
+    end
+  end
+
   describe "a symbol scatter on the binary canvas is the SVG's (#679)" do
     # Both node and resvg (test_helper, #652).
     @describetag :js_resvg
