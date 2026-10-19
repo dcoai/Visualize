@@ -217,6 +217,86 @@ defmodule Visualize.Data do
   end
 
   @doc """
+  Returns the least-squares slope of the points the elements read as (spec/08 §5.1).
+
+  A `{x, y}` tuple is a point; a number `v` at index `i` is the point `{i, v}`, so a
+  series of numbers gives its trend per sample. `nil` for fewer than two points, or when
+  every `x` is the same.
+
+  ## Examples
+
+      iex> Visualize.Data.slope([1, 3, 5])
+      2.0
+
+      iex> Visualize.Data.slope([{0, 1}, {2, 2}, {4, 3}])
+      0.5
+
+      iex> Visualize.Data.slope([%{t: 10, load: 4}, %{t: 20, load: 2}], &{&1.t, &1.load})
+      -0.2
+
+      iex> Visualize.Data.slope([{1, 2}, {1, 5}])
+      nil
+
+  """
+  @spec slope([any()], (any() -> number() | {number(), number()}) | nil) :: float() | nil
+  def slope(data, accessor \\ nil)
+  def slope([], _), do: nil
+  def slope([_], _), do: nil
+
+  def slope(data, accessor) when is_nil(accessor) or is_function(accessor, 1) do
+    get = accessor || (& &1)
+
+    points =
+      data
+      |> Enum.with_index()
+      |> Enum.map(fn {element, i} ->
+        case get.(element) do
+          {x, y} -> {x, y}
+          v when is_number(v) -> {i, v}
+        end
+      end)
+
+    n = length(points)
+    mx = Enum.sum_by(points, &elem(&1, 0)) / n
+    my = Enum.sum_by(points, &elem(&1, 1)) / n
+
+    {sxy, sxx} =
+      Enum.reduce(points, {0.0, 0.0}, fn {x, y}, {sxy, sxx} ->
+        dx = x - mx
+        {sxy + dx * (y - my), sxx + dx * dx}
+      end)
+
+    if sxx == 0, do: nil, else: sxy / sxx
+  end
+
+  @doc """
+  Returns the last value minus the first (spec/08 §5.1); `nil` for `[]`.
+
+  ## Examples
+
+      iex> Visualize.Data.delta([3, 8, 5])
+      2
+
+      iex> Visualize.Data.delta([%{v: 1.5}, %{v: 4.0}], & &1.v)
+      2.5
+
+      iex> Visualize.Data.delta([7])
+      0
+
+      iex> Visualize.Data.delta([])
+      nil
+
+  """
+  @spec delta([any()], (any() -> number()) | nil) :: number() | nil
+  def delta(data, accessor \\ nil)
+  def delta([], _), do: nil
+
+  def delta([first | _] = data, nil), do: List.last(data) - first
+
+  def delta([first | _] = data, accessor) when is_function(accessor, 1),
+    do: accessor.(List.last(data)) - accessor.(first)
+
+  @doc """
   Groups data by a key function.
 
   Returns a map where keys are the result of the key function

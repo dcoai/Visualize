@@ -1,7 +1,8 @@
 defmodule Visualize.VirtualSource.AllowlistTest do
   # The allowlist held to the exports (spec/12 §7, spec/08 §10.5.2, D-194): each module's
   # allowed and excluded lists together are its exports on Elixir 1.20.4 / OTP 29, exactly,
-  # so a function a new release adds fails here until it is reviewed and listed.
+  # so a function a new release adds fails here until it is reviewed and listed — and a
+  # function the library adds to `Visualize.Data` likewise (#769).
   use ExUnit.Case, async: true
 
   alias Visualize.VirtualSource.Sandbox.Allowlist
@@ -20,11 +21,13 @@ defmodule Visualize.VirtualSource.AllowlistTest do
     Enum.uniq(functions ++ module.__info__(:macros))
   end
 
-  test "the seven modules, in order" do
-    assert Allowlist.modules() == [Enum, Map, Keyword, String, Integer, Float, :math]
+  @modules [Enum, Map, Keyword, String, Integer, Float, :math, Visualize.Data]
+
+  test "the eight modules, in order" do
+    assert Allowlist.modules() == @modules
   end
 
-  for module <- [Enum, Map, Keyword, String, Integer, Float, :math] do
+  for module <- @modules do
     test "#{inspect(module)}'s exports are its allowed and excluded lists, exactly" do
       module = unquote(module)
       allowed = Allowlist.allowed(module)
@@ -64,6 +67,18 @@ defmodule Visualize.VirtualSource.AllowlistTest do
         Kernel.__info__(:macros) ++ Kernel.SpecialForms.__info__(:macros)
 
     for fa <- Allowlist.kernel(), do: assert(fa in kernel, "#{inspect(fa)} is not Kernel's")
+  end
+
+  test "Visualize.Data excludes nothing: its statistics are pure" do
+    assert Allowlist.excluded(Visualize.Data) == []
+    assert {:slope, 2} in Allowlist.allowed(Visualize.Data)
+    assert {:delta, 1} in Allowlist.allowed(Visualize.Data)
+  end
+
+  test "to_string/1, string interpolation's call, is on the Kernel list (#769)" do
+    assert {:to_string, 1} in Allowlist.kernel()
+    assert Allowlist.remote?(Kernel, :to_string, 1)
+    refute Allowlist.guard?(:to_string, 1)
   end
 
   test "every is_* guard of Kernel is on the Kernel list" do

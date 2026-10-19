@@ -17,6 +17,16 @@ release it merely follows.
 
 ### Added
 
+- **String interpolation and `Visualize.Data` in stored functions** (#769, D-194). A
+  virtual source's stored function may now build a label with interpolation,
+  `"#{row.host}: #{row.load}"`, and call `to_string/1`; an atom written with interpolation
+  (`:"a#{x}"`) is still refused. It may also call every function of `Visualize.Data` —
+  `mean`, `median`, `quantile`, `variance`, `deviation`, `extent`, `group`, `rollup`,
+  `bin`, `lttb`, `m4` and the rest — held, like the other modules, to an explicit list.
+- **`Visualize.Data.slope/1,2` and `delta/1,2`** (#769). `slope` is the least-squares
+  slope of `{x, y}` points, or of numbers over their index (`slope([1, 3, 5])` is `2.0`),
+  `nil` for fewer than two points or when every `x` is equal; `delta` is the last value
+  minus the first, `nil` for `[]`. Both take an accessor, as the other statistics do.
 - **A sandbox for stored Elixir functions** (#748, D-194), the first part of virtual
   sources (#643): sources computed from other sources by a function, rows in and rows
   out. `Visualize.VirtualSource.Sandbox.check/2` reads a function stored as source text —
@@ -24,10 +34,10 @@ release it merely follows.
   name: the allowed calls are control structures, arithmetic and comparison, data access
   (`row.field`, `row[:key]`) and explicit lists of `Enum`, `Map`, `Keyword`, `String`,
   `Integer`, `Float` and `:math` functions (no random, atom-making or deprecated ones);
-  `send`, `receive`, `spawn`, `try`, `raise`, `apply`, other modules, sigils, structs and
-  string interpolation are refused. A name the node has never seen is refused at parse,
-  so a function makes no atoms; a variable name must already exist as an atom.
-  `compile/2` compiles a checked function once into a closure, and
+  `send`, `receive`, `spawn`, `try`, `raise`, `apply`, other modules, sigils and structs
+  are refused (string interpolation is allowed since #769, above). A name the node has
+  never seen is refused at parse, so a function makes no atoms; a variable name
+  must already exist as an atom. `compile/2` compiles a checked function once into a closure, and
   `Visualize.VirtualSource.Sandbox.Cache` keeps compiled functions by source hash as a
   value. `run/3` calls any function — stored or your own — in a process with a heap
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |

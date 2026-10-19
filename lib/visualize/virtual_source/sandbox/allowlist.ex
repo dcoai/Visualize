@@ -6,10 +6,12 @@ defmodule Visualize.VirtualSource.Sandbox.Allowlist do
 
   Each module's allowed list and its excluded list together are exactly its exports on
   Elixir 1.20.4 and OTP 29; the test suite holds them to it, so a function a new Elixir
-  adds fails that test until it is reviewed and listed.
+  adds fails that test until it is reviewed and listed. `Visualize.Data` (#769) is the
+  library's own and held the same way: a function added to it is listed before a stored
+  function may call it.
   """
 
-  @modules [Enum, Map, Keyword, String, Integer, Float, :math]
+  @modules [Enum, Map, Keyword, String, Integer, Float, :math, Visualize.Data]
 
   @enum [
     all?: 1,
@@ -346,6 +348,49 @@ defmodule Visualize.VirtualSource.Sandbox.Allowlist do
     tau: 0
   ]
 
+  # The library's statistics, grouping and shaping (spec/08 §5, #769): every export.
+  @data [
+    bin: 1,
+    bin: 2,
+    cross: 2,
+    cross: 3,
+    delta: 1,
+    delta: 2,
+    deviation: 1,
+    deviation: 2,
+    extent: 1,
+    extent: 2,
+    group: 2,
+    lttb: 2,
+    lttb: 3,
+    m4: 2,
+    m4: 3,
+    max: 1,
+    max: 2,
+    mean: 1,
+    mean: 2,
+    median: 1,
+    median: 2,
+    min: 1,
+    min: 2,
+    quantile: 2,
+    quantile: 3,
+    range: 2,
+    range: 3,
+    rollup: 3,
+    slope: 1,
+    slope: 2,
+    sort: 2,
+    sort: 3,
+    sum: 1,
+    sum: 2,
+    ticks: 3,
+    unique: 1,
+    unique: 2,
+    variance: 1,
+    variance: 2
+  ]
+
   # The decided exclusions (#643, 2026-10-15) and every deprecated export (D-194).
   @excluded %{
     Enum => [
@@ -388,7 +433,8 @@ defmodule Visualize.VirtualSource.Sandbox.Allowlist do
       {{:to_char_list, 2}, :deprecated},
       {{:to_string, 2}, :deprecated}
     ],
-    :math => []
+    :math => [],
+    Visualize.Data => []
   }
 
   @allowed %{
@@ -398,7 +444,8 @@ defmodule Visualize.VirtualSource.Sandbox.Allowlist do
     String => @string,
     Integer => @integer,
     Float => @float,
-    :math => @math
+    :math => @math,
+    Visualize.Data => @data
   }
 
   @is_guards [
@@ -469,7 +516,9 @@ defmodule Visualize.VirtualSource.Sandbox.Allowlist do
                  |>: 2,
                  **: 2,
                  if: 2,
-                 unless: 2
+                 unless: 2,
+                 # String interpolation's call (#769).
+                 to_string: 1
                ]
 
   # The special forms, at `Kernel.SpecialForms`' own arities (a variadic form's is `1`).
