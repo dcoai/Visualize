@@ -37,6 +37,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       `Visualize.Data.Schema`, or `nil` to bind a board's slots to the sample pool
       (spec/14 §22.8)
     * `board_bindings` - a `Visualize.Board.Binding` the host holds, by the board entry's id
+    * `virtual_sources` - the modules of the host's virtual-source functions
+      (`use Visualize.VirtualSources`) a board's sources may name, beside
+      `config :visualize, virtual_sources:` (default `[]`, spec/14 §22.9)
     * `on_bind` - the tag of the binding message, `{on_bind, id, board_id, binding}`, sent
       on every change of a board's binding; the binding is never stored in the board
       (default `:visualize_board_bound`)
@@ -136,6 +139,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         catalog: nil,
         board_bindings: %{},
         on_bind: :visualize_board_bound,
+        virtual_sources: [],
         styles: true,
         class: nil
       ]
@@ -184,6 +188,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:board_bindings, :map,
       default: %{},
       doc: "a `Visualize.Board.Binding` the host holds, by the board entry's id (spec/14 §22.8)"
+    )
+
+    attr(:virtual_sources, :list,
+      default: [],
+      doc:
+        "the modules of the host's virtual-source functions a board's sources may name " <>
+          "(`use Visualize.VirtualSources`), beside the configuration's (spec/14 §22.9)"
     )
 
     attr(:on_bind, :any,
@@ -247,6 +258,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          board_cell: nil,
          binding: nil,
          board_view: :wide,
+         board_drafts: %{},
          return_to: nil
        )}
     end

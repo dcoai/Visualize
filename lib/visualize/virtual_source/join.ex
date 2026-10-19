@@ -14,22 +14,20 @@ defmodule Visualize.VirtualSource.Join do
   # board starts: a bounded set of the host's definitions.
   @spec plan(Engine.t(), %{{atom(), atom()} => Engine.ref() | :error}) :: map()
   def plan(%Engine{} = engine, slot_refs) do
-    joining =
-      for {path, %VirtualSource{per: per} = source} <- engine.sources,
-          per != nil,
-          name = VirtualSource.identity_input(source),
-          {_key, ^name, ref, _window} <- engine.inputs[path],
-          do: {ref, path, source}
+    Map.new(slot_refs, fn {{cell, _slot} = key, ref} -> {key, joins(engine, [cell], ref)} end)
+  end
 
-    Map.new(slot_refs, fn {{cell, _slot} = key, ref} ->
-      joins =
-        for {^ref, path, source} <- joining,
-            Engine.resolve(engine, [cell], source.id) == {:source, path} do
-          {path, fields(source)}
-        end
-
-      {key, Enum.sort(joins)}
-    end)
+  @doc false
+  # The sources joined into what `ref` names, read from `scope`: for each id, the one the
+  # scope sees (spec/08 §10.5.9).
+  @spec joins(Engine.t(), [atom()], Engine.ref()) :: list()
+  def joins(%Engine{} = engine, scope, ref) do
+    for {path, %VirtualSource{per: per} = source} <- Enum.sort(engine.sources),
+        per != nil,
+        name = VirtualSource.identity_input(source),
+        {_key, ^name, ^ref, _window} <- engine.inputs[path],
+        Engine.resolve(engine, scope, source.id) == {:source, path},
+        do: {path, fields(source)}
   end
 
   defp fields(source) do
@@ -86,6 +84,12 @@ defmodule Visualize.VirtualSource.Join do
 
   # The input's schema with each joined field described as the source's output does,
   # without identity (spec/15 §14.7).
+  @doc false
+  # The schema with the joined fields described (spec/15 §14.7); as it is with no join.
+  @spec schema(Schema.t(), list(), Engine.t()) :: Schema.t()
+  def schema(schema, [], _engine), do: schema
+  def schema(schema, joins, engine), do: joined_schema(schema, joins, engine)
+
   defp joined_schema(schema, joins, engine) do
     joined =
       for {path, fields} <- joins,

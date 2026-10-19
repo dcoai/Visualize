@@ -24,13 +24,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Board
     alias Visualize.Board.Binding
     alias Visualize.Chart
-    alias Visualize.Chart.Builder.{BoardKept, Boards, Stack, Store, Typed}
+    alias Visualize.Chart.Builder.{BoardKept, Boards, BoardSources, Stack, Store, Typed}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
     # each here.
     @events ~w(
       board_select board_place board_add board_remove board_cell board_cell_var board_edit
-      board_var board_view board_edit_component board_return board_bind
+      board_var board_view board_edit_component board_return board_bind board_source
     )
 
     @doc false
@@ -136,6 +136,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("board_bind", _params, socket), do: {:noreply, socket}
+
+    # A virtual source's function written as text (§22.9): written and run when it holds,
+    # else kept as a draft beside its faults, the board keeping the last that held.
+    def handle_event("board_source", %{"source" => path, "elixir" => text}, socket) do
+      %{board: board} = socket.assigns
+      drafts = socket.assigns[:board_drafts] || %{}
+
+      case BoardSources.write(board, path, text, source_schemas(socket.assigns, board)) do
+        {:ok, edited} ->
+          socket = written(socket, fn _board -> {:ok, edited} end)
+          {:noreply, assign(socket, :board_drafts, Map.delete(drafts, path))}
+
+        {:error, lines} ->
+          draft = %{text: text, faults: lines}
+          {:noreply, assign(socket, :board_drafts, Map.put(drafts, path, draft))}
+      end
+    end
+
+    def handle_event("board_source", _params, socket), do: {:noreply, socket}
 
     # -- the forms (§22.4) ---------------------------------------------------------------------
 
@@ -349,10 +368,29 @@ if Code.ensure_loaded?(Phoenix.Component) do
       required = per_cell |> Map.values() |> Enum.reduce(%{}, &Map.merge(&2, &1))
       binding = assigns.binding || Binding.new()
       sources = feed_sources(assigns)
-      bind_faults = binding_faults(assigns, binding, required, sources)
+
+      # The board's virtual sources run over the preview's data (§22.9), kept by what they
+      # are a function of.
+      {virtual, virtual_entry, virtual?} =
+        BoardKept.facts(
+          kept[:virtual],
+          {board.virtual_sources, cell_sources(board), binding, sources, assigns[:catalog],
+           assigns[:virtual_sources]},
+          fn ->
+            BoardSources.run(
+              board,
+              binding,
+              sources,
+              assigns[:catalog],
+              assigns[:virtual_sources] || []
+            )
+          end
+        )
+
+      bind_faults = binding_faults(assigns, binding, required, sources, virtual.feed_schemas)
       faults = facts.faults ++ bind_faults
       faulty = MapSet.new(for {[:cells, cell | _], _reason} <- faults, do: cell)
-      pools = Binding.pools(binding, sources)
+      pools = virtual.pools
       refused = refused(bind_faults)
 
       # Each preview is a function of these, and is drawn again only when one moved (§22.6).
@@ -371,7 +409,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           Boards.preview(%{board | cells: Map.take(board.cells, stale)}, fetch,
             pools: pools,
             theme: assigns.theme,
-            describe: describe(assigns, binding),
+            describe: describe(assigns, binding, virtual.slot_schemas),
             refused: refused
           )
         end)
@@ -407,12 +445,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
         components: for(%{kind: :composite} = e <- entries, do: {e.name, Store.encode_id(e.id)}),
         vars: facts.vars,
         window: window(board.window),
-        faults: Enum.map(faults, &Board.format_error/1)
+        faults: Enum.map(faults, &Board.format_error/1),
+        sources: Boards.sources(%{run: virtual, drafts: assigns[:board_drafts] || %{}}),
+        source_errors: virtual.errors
       }
 
-      {mode, %{facts: facts_entry, required: required_entries, previews: preview_entries},
-       %{facts: facts?, required: read, previews: drawn}}
+      {mode,
+       %{
+         facts: facts_entry,
+         required: required_entries,
+         previews: preview_entries,
+         virtual: virtual_entry
+       }, %{facts: facts?, required: read, previews: drawn, virtual: virtual?}}
     end
+
+    # What a source's inputs may name, with their schemas: the catalog's feeds and the
+    # board's sources by id.
+    defp source_schemas(assigns, board) do
+      own =
+        for {path, source} <- Board.virtual_sources(board),
+            into: %{},
+            do: {List.last(path), source.schema}
+
+      Map.merge(own, assigns[:catalog] || %{})
+    end
+
+    defp cell_sources(board),
+      do: for({name, %{virtual_sources: s}} <- board.cells, into: %{}, do: {name, s})
 
     # Each component the board's cells name, flattened through the store (spec/14 §19.8):
     # what the store says of it, nested references and all, by ref.
@@ -619,24 +678,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp feed_sources(assigns), do: pool(assigns)
 
     # A slot's schema for the preview: its bound feed's in the catalog (§22.6).
-    defp describe(%{catalog: catalog}, binding) when is_map(catalog) do
+    # A slot read through the board's virtual sources is described with what they answer
+    # and join (§22.9).
+    defp describe(%{catalog: catalog}, binding, slot_schemas) when is_map(catalog) do
       fn {cell, slot} ->
-        with {:ok, feed} <- Binding.fetch(binding, cell, slot),
+        with :error <- Map.fetch(slot_schemas, {cell, slot}),
+             {:ok, feed} <- Binding.fetch(binding, cell, slot),
              {:ok, schema} <- Map.fetch(catalog, feed) do
           {:ok, schema}
         else
+          {:ok, schema} -> {:ok, schema}
           :error -> {:error, :undescribed}
         end
       end
     end
 
-    defp describe(_assigns, _binding), do: nil
+    defp describe(_assigns, _binding, _slot_schemas), do: nil
 
     # The binding check (§22.8): every fault, but a stale binding of a cell whose component
     # did not resolve, which the board's own faults already name; and, since the preview
     # draws rows, the binding checked against what each feed's preview rows show (D-153).
-    defp binding_faults(assigns, binding, required, sources) do
-      schemas = if is_map(assigns[:catalog]), do: assigns.catalog, else: %{}
+    defp binding_faults(assigns, binding, required, sources, feed_schemas) do
+      schemas = if is_map(assigns[:catalog]), do: feed_schemas, else: %{}
       resolved = MapSet.new(for {{cell, _slot}, _need} <- required, do: cell)
 
       checked =

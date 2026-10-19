@@ -95,6 +95,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         open: %{id: entry.id, name: entry.name, kind: entry.kind},
         board: nil,
         board_cell: nil,
+        board_drafts: %{},
         binding: nil,
         return_to: nil,
         uses: uses,

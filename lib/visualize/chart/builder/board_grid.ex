@@ -332,6 +332,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
       .vis-builder .vis-builder-board-valid {
         color: var(--vis-builder-muted);
       }
+
+      .vis-builder .vis-builder-board-source-text {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 7em;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+
+      .vis-builder .vis-builder-board-source-rows {
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+
+      .vis-builder .vis-builder-board-source-rows th,
+      .vis-builder .vis-builder-board-source-rows td {
+        padding: 1px 6px;
+        text-align: left;
+      }
       """
     end
   end

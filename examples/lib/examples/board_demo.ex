@@ -350,10 +350,7 @@ defmodule Examples.BoardDemo do
         frames: %{
           main: %{
             legend: %{
-              # The health source's declared values, written out: a binding check that
-              # reads the hosts feed's own schema (the builder's) does not see the joined
-              # field, so a fact of it would be a fault there (spec/15 §14.7).
-              values: [:good, :warning, :bad],
+              values: Visualize.Chart.fact(:hosts, state, :values),
               title: "Health",
               position: :right,
               inside: false
