@@ -3,7 +3,7 @@ defmodule Visualize.VirtualSource.SandboxTest do
   use ExUnit.Case, async: true
 
   alias Visualize.VirtualSource.Sandbox
-  alias Visualize.VirtualSource.Sandbox.{Cache, Compiled}
+  alias Visualize.VirtualSource.Sandbox.{Allowlist, Cache, Compiled}
 
   @moduletag :capture_log
 
@@ -11,7 +11,7 @@ defmodule Visualize.VirtualSource.SandboxTest do
 
   # The names these functions use, made atoms when this module loads: a stored function's
   # names must already exist (`existing_atoms_only`), as a design's schema makes them.
-  @names ~w(xs row cpu mean hosts acc i y z mem a b n v)a
+  @names ~w(xs row cpu mean hosts acc i y z mem a b n v host load t trend change)a
   setup_all do
     {:ok, names: @names}
   end
@@ -189,6 +189,53 @@ defmodule Visualize.VirtualSource.SandboxTest do
 
     test "Integer's guards compile" do
       assert {:ok, :ok} = call("fn x when Integer.is_even(x) -> :ok; _ -> nil end", [2])
+    end
+  end
+
+  describe "string interpolation and Visualize.Data (#769)" do
+    test "interpolation checks: it is a binary over Kernel.to_string/1" do
+      assert ok?(~S|fn row -> "#{row.host}: #{row.load}" end|)
+      assert ok?(~S|fn row -> "load " <> "#{row.load * 2}%" end|)
+      assert ok?("fn row -> to_string(row.load) end")
+      assert ok?("fn row -> Kernel.to_string(row.load) end")
+      assert ok?("fn rows -> Enum.map(rows, &to_string/1) end")
+    end
+
+    test "interpolation is not guard-safe, and its holes are walked" do
+      assert [{:guard, {:to_string, 1}}] =
+               reasons(~S|fn x when to_string(x) == "1" -> x end|)
+
+      assert [{:restricted, {"File", :read, 1}}] = reasons(~S|fn x -> "#{File.read(x)}" end|)
+      assert [{:undefined_variable, :y}] = reasons(~S|fn x -> "#{y}" end|)
+    end
+
+    test "every allowed Visualize.Data function checks, called and captured" do
+      for {name, arity} <- Allowlist.allowed(Visualize.Data) do
+        args = Enum.map_join(1..arity//1, ", ", fn _ -> "rows" end)
+        assert ok?("fn rows -> Visualize.Data.#{name}(#{args}) end"), "#{name}/#{arity}"
+        assert ok?("fn rows -> &Visualize.Data.#{name}/#{arity} end"), "#{name}/#{arity}"
+      end
+    end
+
+    test "a function Visualize.Data does not export is refused" do
+      assert [{:restricted, {Visualize.Data, :mode, 1}}] =
+               reasons("fn rows -> Visualize.Data.mode(rows) end")
+    end
+
+    test "a stored function with interpolation and slope runs through the bounded runner" do
+      source = ~S"""
+      fn rows ->
+        trend = Visualize.Data.slope(rows, &{&1.t, &1.load})
+        change = Visualize.Data.delta(rows, & &1.load)
+        mean = Visualize.Data.mean(rows, & &1.load)
+        "#{Enum.count(rows)} samples, mean #{mean}, change #{change}, trend #{trend}/s"
+      end
+      """
+
+      rows = [%{t: 0, load: 1}, %{t: 10, load: 3}, %{t: 20, load: 5}]
+
+      assert {:ok, "3 samples, mean 3.0, change 4, trend 0.2/s"} = call(source, [rows])
+      assert {:ok, "0 samples, mean , change , trend /s"} = call(source, [[]])
     end
   end
 

@@ -27,7 +27,8 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     [:Integer] => Integer,
     [:Float] => Float,
     [:Access] => Access,
-    [:Kernel] => Kernel
+    [:Kernel] => Kernel,
+    [:Visualize, :Data] => Visualize.Data
   }
 
   @doc false

@@ -36,7 +36,8 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
     {"fn x -> x.never_made_field_q9 end", {:unknown_atom, "never_made_field_q9"}},
     {"fn x -> String.to_atom(x) end", {:restricted, {String, :to_atom, 1}}},
     {"fn x -> String.to_existing_atom(x) end", {:restricted, {String, :to_existing_atom, 1}}},
-    {~S|fn x -> :"a#{x}" end|, {:restricted, {Kernel, :to_string, 1}}},
+    # Interpolation is allowed (#769); an atom written with it is `:erlang.binary_to_existing_atom/2`.
+    {~S|fn x -> :"a#{x}" end|, {:restricted, {:erlang, :binary_to_existing_atom, 2}}},
     {"fn x -> List.to_atom(x) end", {:restricted, {"List", :to_atom, 1}}}
   ]
 
@@ -63,8 +64,7 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
     {"fn x -> Kernel.apply(x, []) end", {:restricted, {Kernel, :apply, 2}}},
     {"fn x -> then(x, & &1) end", {:restricted, {:then, 2}}},
     {"fn x -> x |> then(& &1) end", {:restricted, {:then, 2}}},
-    {"fn x -> inspect(x) end", {:restricted, {:inspect, 1}}},
-    {"fn x -> to_string(x) end", {:restricted, {:to_string, 1}}}
+    {"fn x -> inspect(x) end", {:restricted, {:inspect, 1}}}
   ]
 
   @processes [
@@ -168,6 +168,19 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
 
     assert {:error, :raised, Protocol.UndefinedError} =
              call(source, [%{at: DateTime.utc_now()}])
+  end
+
+  test "interpolating a struct rebuilt from a row's time dispatches String.Chars only to it" do
+    # Interpolation is `Kernel.to_string/1` (#769): the rebuilt map reaches `DateTime`'s
+    # `String.Chars`, which reads fields the map lacks and raises, never another module.
+    source = ~S"""
+    fn row ->
+      {key, module} = Enum.min_by(Map.to_list(row.at), fn {k, _} -> k end)
+      "at #{%{key => module, path: "/etc/passwd"}}"
+    end
+    """
+
+    assert {:error, :raised, _exception} = call(source, [%{at: DateTime.utc_now()}])
   end
 
   test "resources: the heap limit, the timeout and a raise end the call, never the caller" do
