@@ -1,7 +1,7 @@
 defmodule ExamplesWeb.BoardLiveTest do
   @moduledoc """
   The live board page (#576, spec/15 §10): the demo board runs under the examples'
-  `Visualize.Board.Supervisor`, the page renders its eight cells through
+  `Visualize.Board.Supervisor`, the page renders its nine cells through
   `Visualize.Components.Board`, a connected page receives every cell's view — the
   offline cell's designed "feed down" among them — and the window buttons move the
   board's window. The last row interacts (#545, spec/15 §13): a service picked in one
@@ -23,7 +23,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ ~s(phx-hook="BoardHook")
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
-    for cell <- ~w(load memory queue wave offline requests errors services) do
+    for cell <- ~w(load memory queue wave offline requests errors services hosts) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -59,6 +59,51 @@ defmodule ExamplesWeb.BoardLiveTest do
     Server.unsubscribe(board, self())
   end
 
+  test "the hosts cell is drawn by virtual sources: a stored health and a defsource trend" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+
+    view = hosts_view()
+    assert view.svg =~ ~s(class="mark mark-choose")
+    assert view.svg =~ ~s(class="legend")
+
+    for state <- ~w(good warning bad), do: assert(view.svg =~ ~s(data-series="#{state}"))
+
+    sources = Server.info(board).virtual_sources
+    assert %{state: :live, fault: nil} = sources[[:health]]
+    assert %{state: :live, fault: nil} = sources[[:trend]]
+
+    %{delivery: delivery} = Server.snapshot(board).cells.hosts.slots.hosts
+
+    for row <- delivery.rows do
+      assert row[:"health.state"] in [:good, :warning, :bad]
+      assert row[:"trend.trend"] in [:increasing, :decreasing, :neutral]
+    end
+
+    Server.unsubscribe(board, self())
+  end
+
+  test "the trend is the host's own function, tested as any function" do
+    rows = for cpu <- [10, 12, 30], do: %{cpu: cpu}
+    assert Examples.BoardDemo.Sources.trend(rows) == %{trend: :increasing}
+    assert [trend: source] = Examples.BoardDemo.Sources.__virtual_sources__()
+    assert source =~ "delta > 5 -> :increasing"
+  end
+
+  # The hosts cell's first view whose icons are drawn from the virtual sources' answers:
+  # their pulse comes after the board's debounce, so a live view with none may precede it.
+  defp hosts_view do
+    receive do
+      {:visualize_board, _board, {:cell, :hosts, %{state: :live, svg: svg} = view}}
+      when is_binary(svg) ->
+        if svg =~ ~s(mark-choose"><g class="mark mark-), do: view, else: hosts_view()
+
+      {:visualize_board, _board, _other} ->
+        hosts_view()
+    end
+  end
+
   test "the page forwards the board's messages and its buttons set the board's window" do
     {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
     board = socket.assigns.board
@@ -91,7 +136,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
     assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
 
-    for cell <- ~w(load memory queue wave offline requests errors services) do
+    for cell <- ~w(load memory queue wave offline requests errors services hosts) do
       assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -99,7 +144,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(errors load memory offline queue requests services wave)a
+             ~w(errors hosts load memory offline queue requests services wave)a
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 

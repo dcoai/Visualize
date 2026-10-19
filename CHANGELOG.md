@@ -33,6 +33,13 @@ release it merely follows.
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
   :raised, detail}`; a raise is reported by the exception's module, never its message.
 
+- **The examples' `/board` judges hosts with virtual sources** (#752, D-194). A *Hosts*
+  cell over a synthetic hosts feed draws each host's newest CPU reading as a bar in its
+  health's style, a `:choose` icon per host by the same joined field, and a legend of the
+  field's declared values. `health` is a stored function in the board value; `trend` is
+  a `defsource` in `Examples.BoardDemo.Sources`, registered with the board's
+  `virtual_sources:` — the two ways a host writes one.
+
 - **Reading a virtual source by value** (#751, D-194). On a board, each row of a feed now
   carries the answer of every per-identity virtual source over that feed for its own
   identity, as `:"<id>.<field>"` (`:"health.state"`), described in the slot's schema, so a
@@ -561,6 +568,11 @@ release it merely follows.
   name still wins.
 
 ### Fixed
+
+- **A board cell whose mark keeps each identity's latest row no longer crashes** (#752).
+  The board drew a cell's hover and keyboard hooks from a frame realized without the
+  slots' schemas and the board's now, so a `:window` step with `latest: true` raised and
+  the cell restarted forever; that frame is realized as the applied one is.
 
 - **An SVG `<line>` with no stroke draws nothing on the binary canvas** (#747, D-122).
   `Visualize.Backend.CanvasBinary.encode_element/2` given a `Visualize.SVG.Element` tree

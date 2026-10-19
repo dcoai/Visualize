@@ -135,12 +135,16 @@ defmodule Visualize.Board.Draw do
   def realized(%{frames: frames} = applied, sources, theme, size) when map_size(frames) == 1 do
     plain = Map.new(sources, fn {slot, d} -> {slot, Delivery.source(d)} end)
 
+    # Realized as the applied frame was: its slots' schemas, which a `latest` step groups
+    # by (D-168), and its now, which a `:window` step measures from.
     frame =
       Frame.new(applied.chart,
         sources: plain,
         theme: theme,
         system: applied.frame.system,
-        size: size
+        size: size,
+        schemas: applied.frame.schemas,
+        now: applied.frame.now
       )
 
     pickable = %{applied | frame: frame, sources: plain}
