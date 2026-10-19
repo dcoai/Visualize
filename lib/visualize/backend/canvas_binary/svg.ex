@@ -6,8 +6,9 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
 
   import Bitwise
 
-  alias Visualize.Backend.Canvas
+  alias Visualize.Backend.{Canvas, CanvasBinary}
   alias Visualize.Backend.CanvasBinary.{Opcodes, PathEncoder}
+  alias Visualize.IR.Transform
   require Opcodes
 
   # The tags that draw, and so read the stroke's attributes (spec/09 §4.7).
@@ -132,27 +133,30 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
   # Text is not representable in the binary format, and any other tag draws nothing.
   defp encode(_element, _precision, _inherited), do: <<>>
 
-  # A drawing element's records: its style, its geometry and its draws, and with a stroke's
-  # dash, cap or join its `paint_state` after the style (#693). The style carries what its
-  # own attributes set, each combined with what the groups pass on; the draws are its
-  # effective attributes', its own over the groups' (#734).
+  # A drawing element's records: its transform, its style, its geometry and its draws, and
+  # with a stroke's dash, cap or join its `paint_state` after the style (#693). The style
+  # carries what its own attributes set, each combined with what the groups pass on; the
+  # draws are its effective attributes', its own over the groups' (#734).
   #
-  # A leaf that writes either record writes all of them inside `save` … `restore`, wherever
-  # it stands, so its colors, width, dash, cap and join outlive it on no later sibling,
-  # which draws in the state of the groups above it (spec/09 §4.7, #744, D-193, as D-179
-  # for the IR encoders). A leaf that writes neither pays nothing.
+  # A leaf that writes a transform, a style or a paint state writes all its records inside
+  # `save` … `restore`, its transform first, wherever it stands, so its transform, colors,
+  # width, dash, cap and join outlive it on no later sibling, which draws in the state of
+  # the groups above it (spec/09 §4.7, #744, #746, D-193, as D-179 for the IR encoders). A
+  # leaf that writes none pays nothing.
   defp leaf(attrs, inherited, geometry, draws) do
     effective = Map.merge(inherited, presentation(attrs))
+    transform = encode_svg_transform(Map.get(attrs, :transform))
     style = leaf_style(attrs, effective)
     draws = draws.(effective)
 
     case paint_state(attrs) do
-      <<>> when style == <<>> ->
+      <<>> when style == <<>> and transform == <<>> ->
         IO.iodata_to_binary([geometry | draws])
 
       state ->
         IO.iodata_to_binary([
           <<Opcodes.save()::8>>,
+          transform,
           style,
           state,
           geometry,
@@ -320,61 +324,69 @@ defmodule Visualize.Backend.CanvasBinary.SVG do
         do: <<opcode::8>>
   end
 
-  defp encode_svg_transform(transform_str) when is_binary(transform_str) do
-    cond do
-      String.starts_with?(transform_str, "translate(") ->
-        case Regex.run(~r/translate\(([-\d.]+),?\s*([-\d.]+)?\)/, transform_str) do
-          [_, x_str] ->
-            x = parse_number_string(x_str)
-            <<Opcodes.transform()::8, 0x01::8, x::little-float-64, 0.0::little-float-64>>
-
-          [_, x_str, y_str] ->
-            x = parse_number_string(x_str)
-            y = parse_number_string(y_str)
-            <<Opcodes.transform()::8, 0x01::8, x::little-float-64, y::little-float-64>>
-
-          _ ->
-            <<>>
-        end
-
-      String.starts_with?(transform_str, "scale(") ->
-        case Regex.run(~r/scale\(([-\d.]+),?\s*([-\d.]+)?\)/, transform_str) do
-          [_, s_str] ->
-            s = parse_number_string(s_str)
-
-            <<Opcodes.transform()::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64,
-              s::little-float-64, s::little-float-64>>
-
-          [_, sx_str, sy_str] ->
-            sx = parse_number_string(sx_str)
-            sy = parse_number_string(sy_str)
-
-            <<Opcodes.transform()::8, 0x03::8, 0.0::little-float-64, 0.0::little-float-64,
-              sx::little-float-64, sy::little-float-64>>
-
-          _ ->
-            <<>>
-        end
-
-      true ->
-        <<>>
+  # The `transform` attribute as SVG reads it (spec/09 §4.7, #746): the whole list, each
+  # operation into its `Visualize.IR.Transform` operation, written as the IR encoder writes
+  # a transform. A list in error is ignored, as SVG ignores it, and so is an empty one.
+  defp encode_svg_transform(transform) when is_binary(transform) do
+    case transform_operations(transform, []) do
+      {:ok, []} -> <<>>
+      {:ok, ops} -> CanvasBinary.encode_transform(%Transform{operations: ops})
+      :error -> <<>>
     end
   end
 
-  defp encode_svg_transform(_), do: <<>>
+  defp encode_svg_transform(_absent), do: <<>>
 
-  defp parse_number_string(str) do
-    case Float.parse(str) do
-      {f, _} ->
-        f
+  @transform_op ~r/\A[\s,]*(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)/
+  @transform_number ~r/\A[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/
 
-      :error ->
-        case Integer.parse(str) do
-          {i, _} -> i * 1.0
-          :error -> 0.0
+  defp transform_operations(str, acc) do
+    case {String.trim(str), Regex.run(@transform_op, str)} do
+      {"", _} ->
+        {:ok, Enum.reverse(acc)}
+
+      {_, [whole, name, args]} ->
+        with {:ok, numbers} <- transform_numbers(String.trim(args), []),
+             {:ok, op} <- transform_operation(name, numbers) do
+          transform_operations(binary_slice(str, byte_size(whole)..-1//1), [op | acc])
         end
+
+      {_, nil} ->
+        :error
     end
   end
+
+  # The numbers of one operation, separated by commas or whitespace.
+  defp transform_numbers("", acc), do: {:ok, Enum.reverse(acc)}
+
+  defp transform_numbers(str, acc) do
+    case Regex.run(@transform_number, str) do
+      [number] ->
+        rest = binary_slice(str, byte_size(number)..-1//1)
+        rest = Regex.replace(~r/\A\s*,?\s*/, rest, "")
+        transform_numbers(rest, [transform_number(number) | acc])
+
+      nil ->
+        :error
+    end
+  end
+
+  # `Float.parse/1` wants a digit before the point: `.5` and `-.5` read as `0.5`, `-0.5`.
+  defp transform_number(number) do
+    {n, _} = number |> String.replace(~r/\A([+-]?)\./, "\\g{1}0.") |> Float.parse()
+    n
+  end
+
+  defp transform_operation("matrix", [a, b, c, d, e, f]), do: {:ok, {:matrix, a, b, c, d, e, f}}
+  defp transform_operation("translate", [x]), do: {:ok, {:translate, x, 0.0}}
+  defp transform_operation("translate", [x, y]), do: {:ok, {:translate, x, y}}
+  defp transform_operation("scale", [s]), do: {:ok, {:scale, s, s}}
+  defp transform_operation("scale", [sx, sy]), do: {:ok, {:scale, sx, sy}}
+  defp transform_operation("rotate", [a]), do: {:ok, {:rotate, a}}
+  defp transform_operation("rotate", [a, cx, cy]), do: {:ok, {:rotate, a, cx, cy}}
+  defp transform_operation("skewX", [a]), do: {:ok, {:skew_x, a}}
+  defp transform_operation("skewY", [a]), do: {:ok, {:skew_y, a}}
+  defp transform_operation(_name, _numbers), do: :error
 
   defp parse_svg_path(""), do: []
 

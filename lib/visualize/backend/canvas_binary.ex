@@ -385,9 +385,13 @@ defmodule Visualize.Backend.CanvasBinary do
     Path.from_commands([{:M, x, y} | for({px, py} <- rest, do: {:L, px, py})])
   end
 
-  # The two compact kinds cover the common cases exactly; everything else folds into one
-  # matrix with SVG composition order (`Visualize.IR.Transform.to_matrix/1`).
-  defp encode_transform(%Transform{operations: ops} = transform) do
+  @doc false
+  # A transform record (spec/09 §4.3.6), for an IR element's transform and for the one an
+  # SVG element's `transform` attribute reads as (§4.7, #746). The two compact kinds cover
+  # the common cases exactly; everything else folds into one matrix with SVG composition
+  # order (`Visualize.IR.Transform.to_matrix/1`).
+  @spec encode_transform(Transform.t()) :: binary()
+  def encode_transform(%Transform{operations: ops} = transform) do
     case ops do
       [{:translate, x, y}] ->
         <<Opcodes.transform()::8, 0x01::8, x * 1.0::little-float-64, y * 1.0::little-float-64>>

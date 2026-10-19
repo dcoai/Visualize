@@ -228,6 +228,18 @@ defmodule Visualize.Backend.CanvasScopeTest do
           assert both == first ++ second,
                  "#{inspect(encoder)}: a sibling after one that sets #{inspect(key)} " <>
                    "(#{place}) draws #{inspect(both -- first)}, alone #{inspect(second)}"
+
+          # The comparison holds as well for an encoder that drops the state as for one that
+          # scopes it, so the transform the first sets is asserted drawn (#746): turned by
+          # 30°, to the precision the commands write an angle in.
+          if key == :transform do
+            for %{"m" => m} <- first do
+              assert_in_delta m["b"],
+                              :math.sin(:math.pi() / 6),
+                              1.0e-4,
+                              "#{inspect(encoder)} (#{place}) drew the turned leaf at #{inspect(m)}"
+            end
+          end
         end
       end
     end
