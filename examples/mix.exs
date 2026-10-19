@@ -31,6 +31,9 @@ defmodule Examples.MixProject do
       # telemetry provider reads.
       {:telemetry_metrics, "~> 1.0"},
       {:nx, "~> 0.9"},
+      # The host's time zone database (D-115): the library reads whatever the host configures,
+      # and the synced dashboard shows its time axes in a zone the viewer picks.
+      {:tz, "~> 0.28"},
       # Code on the pages is highlighted server-side (#506): Elixir, and HEEx in its ~H sigil
       # (makeup_eex, which needs an HTML lexer for the markup).
       {:makeup_elixir, "~> 1.0"},

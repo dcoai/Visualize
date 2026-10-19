@@ -279,6 +279,8 @@ The table and the steps above describe a scale without a zone. A zoned scale rea
 
 `local(scale, value)` is a value as the scale shows it: a time value reduced as in 7.2 and shifted to the zone, or the value itself when the scale has none. An axis that formats explicit tick values passes them through it, so its labels read local time like the ticks it computes ([05-axes-and-formatting](05-axes-and-formatting.md) §2.8).
 
+**In the examples** (#754, work item #773). The synced dashboard (`/dashboard`) offers *UTC*, *New York* and *Tokyo*: each panel's design says `zone:` on its time scale (none for UTC), so its ticks fall on that zone's hours and its labels read its wall clock, and the brushed window is written in the same zone through `Visualize.Scale.Time.zone/2` and `local/2`. The examples configure `Tz.TimeZoneDatabase`, as a host does: the library takes no tz dependency (D-115). The data stay in UTC; a zone is only how they are shown.
+
 ### 7.5 Functions
 
 | Function | Contract |

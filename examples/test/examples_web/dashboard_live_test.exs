@@ -80,12 +80,44 @@ defmodule ExamplesWeb.DashboardLiveTest do
 
     page = html(socket)
     assert page =~ "06:00 – 12:00"
+    # The window's length in the compound form (Format.duration, style: :compound).
+    assert page =~ ~s{<span class="dash-length">(6h)</span>}
     assert page =~ ~s(<strong id="dash-events">1</strong>)
 
     {:noreply, cleared} = DashboardLive.handle_event("brush_clear", %{}, socket)
     assert cleared.assigns.events == 2
     assert cleared.assigns.window == nil
     assert html(cleared) =~ "No window brushed."
+  end
+
+  test "a zone picked: the axes tick on its hours and read its clock, and so does the window" do
+    html = build_conn() |> get("/dashboard?zone=Asia/Tokyo") |> html_response(200)
+    assert html =~ ~r/aria-current="true"[^>]*>\s*Tokyo\s*</
+    for {_name, zone} <- DashboardLive.zones(), zone, do: assert(html =~ "?zone=#{zone}")
+
+    {:ok, tokyo} = DashboardLive.mount(%{"zone" => "Asia/Tokyo"}, %{}, %Phoenix.LiveView.Socket{})
+    assert tokyo.assigns.zone == "Asia/Tokyo"
+    [requests | _] = tokyo.assigns.panels
+
+    # The day starts at 00:00 UTC, 09:00 in Tokyo: the first tick reads Tokyo's clock.
+    [first_utc | _] =
+      Regex.scan(~r/<text[^>]*>(\d\d:\d\d)<\/text>/, hd(mounted().assigns.panels).svg)
+
+    [first_tokyo | _] = Regex.scan(~r/<text[^>]*>(\d\d:\d\d)<\/text>/, requests.svg)
+    assert first_utc != first_tokyo
+
+    from = DateTime.to_unix(~U[2026-01-01 06:00:00Z], :millisecond)
+    to = DateTime.to_unix(~U[2026-01-01 07:30:00Z], :millisecond)
+
+    {:noreply, socket} =
+      DashboardLive.handle_event("brush_select", %{"domain" => [from, to]}, tokyo)
+
+    page = html(socket)
+    assert page =~ "15:00 – 16:30"
+    assert page =~ ~s{<span class="dash-length">(1h 30m)</span>}
+
+    # A zone the page does not offer is UTC.
+    assert DashboardLive.zone("Mars/Olympus") == nil
   end
 
   test "the page is routed, linked from the Client-side Interactions page (#500), and as cheap as a light chart" do

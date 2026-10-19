@@ -169,6 +169,8 @@ Options `:symbol` (default `"$"`), `:precision` (default `2`). Output is `sign <
 
 **By currency code** (#593, D-155). With `code:`, an ISO 4217 code of §4.1's table, the currency writes itself: `precision` defaults to the code's **minor units** (`USD` 2, `JPY` 0, `BHD` 3; 2 for a code with none, such as `XAU`), the integer digits are grouped by the locale's separator and the point is the locale's (`locale:`, `"en"` by default, as §3.1), and the symbol is the locale's for that code — in `"en"`, `$` for `USD`, `€` for `EUR`, `£` for `GBP` and `¥` for `JPY` — written before the number after the sign: `currency(1240, code: "USD")` is `"$1,240.00"`, `currency(1240, code: "JPY")` `"¥1,240"`, `currency(-9.5, code: "EUR")` `"-€9.50"`. A code the locale has no symbol for is written after the number, a space between: `currency(1240, code: "CHF")` is `"1,240.00 CHF"`. `symbol:` is not taken with `code:`; a code not in the table raises `ArgumentError`.
 
+**In the examples** (#754, work item #773). The gallery's *Donut Chart* writes its total in the hole as money in its code, `Visualize.Format.currency(total, code: "USD", locale: "en", precision: 0)` — `$1,000,000` — where it wrote `"$#{div(total, 1000)}K"` by hand.
+
 ### 2.7 `formatter/1`
 
 `formatter(specifier)` parses a d3-format specifier and returns a 1-arity formatter; the parser and the formatting pipeline are d3-format's (D-24). The grammar is
@@ -248,6 +250,8 @@ A `Date` has hour, minute, second and milliseconds `0`. Fields are printed as st
 `duration(seconds)` prints a length of time in the unit its magnitude chooses (#191) — the one thing a fixed specifier cannot express. The units are `d` (86400 s), `h` (3600), `m` (60), `s` and `ms`. The largest unit the value reaches is taken: a whole count prints as it is (`45s`, `2m`, `1h`, `3d`); a count whose remainder is whole in the next finer unit prints both (`2m30s`, `1h30m`, `1d1h`) — among `d`, `h`, `m` and `s` only, seconds never pairing with milliseconds; any other prints the count to one decimal with a trailing zero trimmed (`1.5h` for 5430 s, `2.5s`, `0.5ms`). Below one second the unit is `ms`; zero is `0s`; a negative value is the positive one with a leading `−`. The value MUST be a number.
 
 `duration(seconds, opts)` takes `style:` — `:magnitude`, the default, is `duration/1` — and `locale:` (§3.1). **`style: :compound`** is the label and tooltip form (#593, D-155): one second and above, the two largest non-zero of whole days, hours, minutes and seconds, joined by a space, the rest truncated (`1h 24m` for 5,040 s, `2d 3h`, `45s`, `1h 3s` for 3,603 s, a zero unit between two others dropped); below a second, milliseconds (`840ms`), and below a microsecond, nanoseconds (`500ns`), each to `precision:` decimals (default `2`) with trailing zeros and a trailing point trimmed (`0.5ms`, `1.25ms`); zero (and −0.0) is `0s`; a negative value is the positive one after `-`. An axis keeps §4.3's single scaled unit (`1.4 h`): one unit per axis, as one SI prefix per axis (D-134), so the compound form is never a tick format.
+
+**In the examples** (#754, work item #773). The synced dashboard (`/dashboard`, spec/10 §6.4) says a brushed window's length in the compound style beside its ends: `06:00 – 12:00 (6h)`, `(1h 30m)`.
 
 ### 2.10 Functions
 

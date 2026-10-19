@@ -9,6 +9,12 @@ defmodule ExamplesWeb.DashboardLive do
   panel brushed pushes `brush_select`, once, on release, with the window as `domain`, so
   the page counts one server event per window whichever panel was brushed. The page then
   summarizes each metric over the window on the server.
+
+  The *Zone* links show the day in a zone the viewer picks (D-115): each design's time
+  scale says `zone:`, so its ticks follow that zone's calendar and its labels its wall
+  clock, through the host's time zone database (`tz`, configured in the examples). The
+  brushed window is written in the same zone, its length in the compound form
+  (`Visualize.Format.duration/2`, `style: :compound`).
   """
   use Phoenix.LiveView
 
@@ -32,6 +38,15 @@ defmodule ExamplesWeb.DashboardLive do
     {:errors, "Errors", "%", 440, 44}
   ]
   @height 180
+
+  # The zones the viewer may pick: `nil` is UTC, a design's default (spec/14 §4.3).
+  @zones [{"UTC", nil}, {"New York", "America/New_York"}, {"Tokyo", "Asia/Tokyo"}]
+
+  @doc "The zones the page offers, by name."
+  def zones, do: @zones
+
+  @doc "The zone a page's `zone` parameter names, `nil` (UTC) for anything else."
+  def zone(param), do: Enum.find_value(@zones, fn {_name, zone} -> zone == param && zone end)
 
   @doc "The panels' ids, titles and units, in the order the page shows them."
   def panels, do: for({id, title, unit, _w, _left} <- @panels, do: {id, title, unit})
@@ -61,15 +76,18 @@ defmodule ExamplesWeb.DashboardLive do
   defp value(:errors, hour, i),
     do: Float.round(max(0.0, 1.5 + :math.sin(hour / 3) + 0.5 * :math.sin(i / 2)), 2)
 
-  @doc "One panel's design: a time x and a line, joined to the group by one key."
-  def design(id, left) do
+  @doc """
+  One panel's design: a time x shown in `zone` (`nil`, UTC) and a line, joined to the group
+  by one key and brushed by another.
+  """
+  def design(id, left, zone \\ nil) do
     Design.fold([
       chart(meta: %{name: "#{id}"}),
       source(:metric, [:t, :v]),
       interaction(sync: @group, brush: :x),
       style(:trace, stroke: :series_1, stroke_width: 2),
       cartesian(margin: %{top: 12, right: 16, bottom: 28, left: left}),
-      time_scale(:x),
+      time_scale(:x, if(zone, do: [zone: zone], else: [])),
       linear_scale(:y, domain: [0, :auto], nice: true),
       axis(:x, :bottom, ticks: 6),
       axis(:y, :left, ticks: 4, grid: true),
@@ -82,10 +100,10 @@ defmodule ExamplesWeb.DashboardLive do
   attributes). The brush needs nothing from the page: the design's `brush: :x` writes the
   plot area and the x mapping on the chart (spec/14 §2.9, D-143), which `BrushHook` reads.
   """
-  def build do
+  def build(zone \\ nil) do
     for {id, title, unit, width, left} <- @panels do
       {:ok, applied} =
-        Chart.apply(design(id, left), sources: %{metric: rows(id)}, size: {width, @height})
+        Chart.apply(design(id, left, zone), sources: %{metric: rows(id)}, size: {width, @height})
 
       %{
         id: id,
@@ -98,8 +116,18 @@ defmodule ExamplesWeb.DashboardLive do
     end
   end
 
-  def mount(_params, _session, socket) do
-    {:ok, assign(socket, panels: build(), window: nil, events: 0, summary: nil)}
+  def mount(params, _session, socket) do
+    zone = zone(params["zone"])
+
+    {:ok,
+     assign(socket,
+       panels: build(zone),
+       zone: zone,
+       zones: @zones,
+       window: nil,
+       events: 0,
+       summary: nil
+     )}
   end
 
   # One event per window, from the panel brushed, carrying the window in milliseconds.
@@ -132,8 +160,16 @@ defmodule ExamplesWeb.DashboardLive do
     end
   end
 
-  defp clock(ms),
-    do: ms |> round() |> DateTime.from_unix!(:millisecond) |> Calendar.strftime("%H:%M")
+  # A brushed instant as the axes show it: the wall clock of the page's zone, read through a
+  # time scale in that zone (`Visualize.Scale.Time.zone/2`, `local/2`).
+  defp clock(ms, zone) do
+    scale = Visualize.Scale.Time.zone(Visualize.Scale.Time.new(), zone)
+    instant = ms |> round() |> DateTime.from_unix!(:millisecond)
+    scale |> Visualize.Scale.Time.local(instant) |> Calendar.strftime("%H:%M")
+  end
+
+  @doc "How long a window of milliseconds lasts, as a label says it: `1h 30m`."
+  def length_of({from, to}), do: Visualize.Format.duration((to - from) / 1000, style: :compound)
 
   def render(assigns) do
     ~H"""
@@ -151,6 +187,20 @@ defmodule ExamplesWeb.DashboardLive do
             Double-click a panel to clear the window.
           </p>
 
+          <p class="dash-zones">
+            Zone:
+            <.link
+              :for={{name, zone} <- @zones}
+              navigate={"/dashboard" <> if(zone, do: "?zone=" <> zone, else: "")}
+              class="dash-zone"
+              aria-current={zone == @zone && "true"}
+            >
+              {name}
+            </.link>
+            — the time scales' <code>zone</code>: the ticks fall on that zone's hours and the
+            labels read its wall clock; the data stays in UTC.
+          </p>
+
           <div class="dash-grid">
             <Panel.panel :for={panel <- @panels} heading="h3" class={"dash-panel dash-#{panel.id}"}>
               <:title>{panel.title} <small>({panel.unit})</small></:title>
@@ -164,7 +214,9 @@ defmodule ExamplesWeb.DashboardLive do
 
           <p class="dash-window">
             <%= if @window do %>
-              <% {from, to} = @window %> Window: <strong>{clock(from)} – {clock(to)}</strong>
+              <% {from, to} = @window %> Window:
+              <strong>{clock(from, @zone)} – {clock(to, @zone)}</strong>
+              <span class="dash-length">({length_of(@window)})</span>
             <% else %>
               No window brushed.
             <% end %>
@@ -198,6 +250,8 @@ defmodule ExamplesWeb.DashboardLive do
       .dash-panel [phx-hook="CrosshairHook"] { display: inline-block; }
       .crosshair-rule { stroke-dasharray: 3 3; }
       .dash-window { margin-top: 1rem; color: #444; }
+      .dash-zone { margin: 0 0.25rem; }
+      .dash-zone[aria-current="true"] { font-weight: 600; text-decoration: none; color: inherit; }
       .dash-summary { margin-top: 0.5rem; border-collapse: collapse; }
       .dash-summary th, .dash-summary td { padding: 0.25rem 1rem 0.25rem 0; text-align: left; }
     </style>
@@ -209,6 +263,9 @@ defmodule ExamplesWeb.DashboardLive do
     ~S'''
     # One key per panel joins the group, and one says the design brushes its x (spec/14 §2.9).
     interaction(sync: "dashboard", brush: :x)
+
+    # The time shown in the viewer's zone, through the host's time zone database (D-115).
+    time_scale(:x, zone: "Asia/Tokyo")
 
     # The crosshair's arrays carry the group; the brush reads its kind, its plot area and
     # its x mapping from the chart's SVG, so the page passes no extent and no margin.

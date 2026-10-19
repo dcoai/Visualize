@@ -3,7 +3,8 @@ defmodule Examples.Charts.DonutChart do
   Donut chart as a design (#126): the pie chart's `:arc` with an inner radius, plus the two
   texts in the hole.
 
-  The hole's total and its caption are frame labels at `{:frame, :center}`, the plot's
+  The hole's total — money in its ISO 4217 code, `Visualize.Format.currency/2` with `code:`
+  and `locale:` — and its caption are frame labels at `{:frame, :center}`, the plot's
   center — the polar origin (spec/14 §6.3, #489) — so the frame declares no `angle` or `r`
   scale only to give the center coordinates.
 
@@ -49,7 +50,7 @@ defmodule Examples.Charts.DonutChart do
         chart(meta: %{name: title(), description: [description()]}),
         source(:slices, [:category, :revenue]),
         style(:slice, fill: {:field, :category}, stroke: :background, stroke_width: 1),
-        style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
+        style(:total, extends: :label, font_size: 22, font_weight: :bold, text_anchor: :middle),
         style(:total_caption, extends: :label, font_size: 14, text_anchor: :middle),
         polar(margin: @margin),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
@@ -76,7 +77,10 @@ defmodule Examples.Charts.DonutChart do
     end
   end
 
-  defp currency(value), do: "$#{trunc(value / 1000)}K"
+  # The total as money in its ISO 4217 code (spec/05 §2.6): the locale's symbol and
+  # grouping, whole dollars in the hole.
+  defp currency(value),
+    do: Visualize.Format.currency(value, code: "USD", locale: "en", precision: 0)
 
   # Animation: vary slice sizes with different phases.
   defp animated(data, tick) do
@@ -95,7 +99,7 @@ defmodule Examples.Charts.DonutChart do
         source(:slices, [:category, :revenue]),
         # A slice is filled by its category: the values the color scale's domain holds.
         style(:slice, fill: {:field, :category}, stroke: :background, stroke_width: 1),
-        style(:total, extends: :label, font_size: 28, font_weight: :bold, text_anchor: :middle),
+        style(:total, extends: :label, font_size: 22, font_weight: :bold, text_anchor: :middle),
         polar(margin: %{top: 0, right: 120, bottom: 0, left: 0}),
         ordinal_scale(:color, domain: Enum.map(rows, & &1.category)),
         legend(:color, position: :right, inside: false),
@@ -107,8 +111,11 @@ defmodule Examples.Charts.DonutChart do
           style: :slice
         ),
 
-        # The plot's center, the polar origin: the hole.
-        label({:frame, :center}, ["$1000K"], dy: -10, style: :total)
+        # The plot's center, the polar origin: the hole. The total is money in its code.
+        label({:frame, :center}, [Visualize.Format.currency(total, code: "USD", locale: "en", precision: 0)],
+          dy: -10,
+          style: :total
+        )
       ])
 
     {:ok, applied} = Visualize.Chart.apply(design, sources: %{slices: rows})

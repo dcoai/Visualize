@@ -75,6 +75,18 @@ defmodule Examples.DonutChartTest do
     end
   end
 
+  test "the hole's total is money in its code, and fits the hole" do
+    svg = DonutChart.render()
+    # Format.currency with code: "USD" and locale: "en": the symbol, grouped, whole dollars.
+    assert svg =~ ">$1,000,000</text>"
+
+    assert Visualize.Format.currency(1_000_000, code: "USD", locale: "en", precision: 0) ==
+             "$1,000,000"
+
+    # At 400 x 400 the hole is 0.6 of the 120 outer radius across: 144 wide.
+    assert Visualize.Chart.Text.width("$1,000,000", 22) < 2 * 0.6 * 120
+  end
+
   # The end points of a path's commands, in the group's own coordinates: `M x,y`, `L x,y`
   # and the end of `A rx,ry,rot,large,sweep,x,y`.
   defp points(d) do
