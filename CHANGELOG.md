@@ -589,6 +589,32 @@ release it merely follows.
 
 ### Fixed
 
+- **A document no longer makes atoms from its unknown keys or from the library's
+  vocabularies** (#779, #778, D-195). Atoms are never collected, and a node that runs out
+  of them stops. Reading a JSON design turned every key into an atom before validating it,
+  so a refused document cost as much as an accepted one: 1,000 unknown keys made 1,000
+  atoms, and one 5.4 MB design holding large maps under an unknown key made about 300,000.
+  Now `Visualize.Chart.from_json/2`, `Fragment.from_json/2`, the theme reader,
+  `Visualize.Board.from_json/2` and `Snapshot.from_json/2` look each key up in the schema's
+  own keys. A key the schema does not know **stays a string, is refused as `:unknown_key`
+  at that spelling, and nothing under it is read**, so it makes no atom. A string where a
+  library vocabulary goes is looked up the same way: an enumeration's member, a theme slot
+  (`series_k` up to 100,000), a text anchor, a `$frame` point, a `$fact` attribute, a
+  unit, a ramp, an id's kind, a color transform, and the side of an axis ticked in the
+  builder. An unknown one stays the string it was and is refused by type at its path.
+  - **What changes for a host.** An unknown key read from JSON is reported with the key
+    as a string in its path, `{[:frames, :main, "wdth"], :unknown_key}`, where it was
+    `:wdth`. `format/1` words both alike (`frames.main.wdth: is not a key of this node`).
+  - **Nothing that was accepted is refused now.** Every such key and value was already
+    refused by the validator, as `:unknown_key`, `{:enum, …}` or `{:type, …}`; the reader
+    made an atom of it first. It is refused the same way now, without the atom.
+  - **The builder's literal reader** now reads typed text with existing atoms only, so a
+    literal such as `:brand_new` typed into a field is a parse fault, not a new atom.
+  - **Still to come.** The names a document declares (sources, fields, variables, frames,
+    styles, cells) are still made atoms, one per distinct name. The next work items of
+    #778 make them strings in the map form, a breaking change for 0.7.0.
+  - **A new gate.** `mix vis.atoms` fails on any atom made from a string in `lib/` outside
+    `audit/atoms_allowlist.exs`, which gives each remaining site its class and bound.
 - **A board cell whose mark keeps each identity's latest row no longer crashes** (#752).
   The board drew a cell's hover and keyboard hooks from a frame realized without the
   slots' schemas and the board's now, so a `:window` step with `latest: true` raised and

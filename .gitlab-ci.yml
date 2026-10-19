@@ -140,6 +140,15 @@ verify:spelling:
   script:
     - mix vis.spelling
 
+# No atom is made from a string outside the allowlist (spec/12 §3, #778, D-195).
+verify:atoms:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - mix vis.atoms
+
 verify:models:
   extends: .elixir
   stage: verify

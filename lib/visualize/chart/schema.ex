@@ -115,6 +115,8 @@ defmodule Visualize.Chart.Schema do
           |> Map.merge(Map.new(@frame_kinds, &{&1, Frame.describe(&1)}))
           |> Map.merge(Map.new(@mark_kinds, &{&1, Mark.describe(&1)}))
   @by_key Map.new(@tables, fn {kind, specs} -> {kind, Map.new(specs, &{&1.key, &1})} end)
+  # Every key any node kind has: the vocabulary a document's keys are read in (spec/14 §9.4).
+  @key_names @tables |> Map.values() |> List.flatten() |> Enum.map(& &1.key) |> Enum.uniq()
 
   @doc "Every node kind of spec/14 §1.2, the design first."
   @spec kinds() :: [kind(), ...]
@@ -141,6 +143,11 @@ defmodule Visualize.Chart.Schema do
   defp unknown(kind) do
     raise ArgumentError, "not a node kind of the design schema: #{inspect(kind)}"
   end
+
+  @doc false
+  # Every key of every node kind, the hidden ones included, once each (spec/14 §9.4, D-195).
+  @spec key_names() :: [atom(), ...]
+  def key_names, do: @key_names
 
   @doc "Every `{kind, key}` pair carrying the facet, over every node kind (spec/14 §1.3)."
   @spec keys(facet()) :: [{kind(), atom()}]

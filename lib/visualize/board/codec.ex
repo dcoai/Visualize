@@ -18,9 +18,18 @@ defmodule Visualize.Board.Codec do
   alias Visualize.Chart.Codec.Tags
   require Tags
   alias Visualize.VirtualSource.Codec, as: VirtualSourceCodec
+  alias Visualize.Vocabulary
 
   @stamp "$version"
   @datum "$datum"
+
+  # The board's own keys, looked up and never made atoms of (spec/14 §9.4, D-195).
+  @board_keys Vocabulary.table(Validator.board_keys())
+  @cell_keys Vocabulary.table(Validator.cell_keys())
+  @drill_keys Vocabulary.table(Validator.drill_keys())
+  @window_keys Vocabulary.table([:last, :from, :to])
+  @meta_keys Vocabulary.table(Validator.meta_keys())
+  @layout_keys Vocabulary.table(Validator.layout_keys())
 
   @doc false
   def stamp, do: @stamp
@@ -80,12 +89,12 @@ defmodule Visualize.Board.Codec do
   # A parsed document, its stamp already taken off, as the board map.
   def decode(term) when is_map(term) do
     Map.new(term, fn {key, value} ->
-      case known(key, Validator.board_keys()) do
+      case known(key, @board_keys) do
         :cells -> {:cells, cells(value)}
         :vars -> {:vars, names(value)}
-        :window -> {:window, keyed(value, [:last, :from, :to])}
-        :meta -> {:meta, keyed(value, Validator.meta_keys())}
-        :layout -> {:layout, keyed(value, Validator.layout_keys())}
+        :window -> {:window, keyed(value, @window_keys)}
+        :meta -> {:meta, keyed(value, @meta_keys)}
+        :layout -> {:layout, keyed(value, @layout_keys)}
         :zone -> {:zone, value}
         :sync -> {:sync, value}
         :links -> {:links, links(value)}
@@ -102,7 +111,7 @@ defmodule Visualize.Board.Codec do
 
   defp read_cell(cell) when is_map(cell) do
     Map.new(cell, fn {key, value} ->
-      case known(key, Validator.cell_keys()) do
+      case known(key, @cell_keys) do
         :ref -> {:ref, Codec.decode_term(value)}
         :vars -> {:vars, names(value)}
         :drill -> {:drill, read_drill(value)}
@@ -116,9 +125,9 @@ defmodule Visualize.Board.Codec do
 
   defp read_drill(drill) when is_map(drill) do
     Map.new(drill, fn {key, value} ->
-      case known(key, Validator.drill_keys()) do
+      case known(key, @drill_keys) do
         :vars -> {:vars, drill_vars(value)}
-        other -> {other, Codec.decode_term(value)}
+        other -> known_value(other, value)
       end
     end)
   end
@@ -127,6 +136,7 @@ defmodule Visualize.Board.Codec do
 
   defp drill_vars(vars) when is_map(vars) do
     Map.new(vars, fn
+      # #778 class (b): a datum's field.
       {name, %{@datum => field} = v} when map_size(v) == 1 and is_binary(field) ->
         {atom(name), {:datum, String.to_atom(field)}}
 
@@ -153,17 +163,21 @@ defmodule Visualize.Board.Codec do
   defp names(other), do: other
 
   defp keyed(map, keys) when is_map(map),
-    do: Map.new(map, fn {key, value} -> {known(key, keys), Codec.decode_term(value)} end)
+    do: Map.new(map, fn {key, value} -> key |> known(keys) |> known_value(value) end)
 
   defp keyed(other, _keys), do: other
 
+  # A known key's value is read as a term; an unknown key's is left as parsed, so nothing
+  # under a key the board refuses is made an atom (spec/14 §9.4).
+  defp known_value(key, value) when is_atom(key), do: {key, Codec.decode_term(value)}
+  defp known_value(key, value), do: {key, value}
+
   # A key the board knows, as its atom; any other key as it was read.
-  defp known(key, keys) when is_binary(key) do
-    Enum.find(keys, key, &(Atom.to_string(&1) == key))
-  end
+  defp known(key, keys) when is_binary(key), do: Vocabulary.read(keys, key)
 
   defp known(key, _keys), do: key
 
+  # #778 class (b): a cell's, a variable's, a link's or a virtual source's name.
   defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
   defp atom(key), do: key
 end

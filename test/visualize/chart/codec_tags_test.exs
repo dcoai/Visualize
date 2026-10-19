@@ -12,6 +12,7 @@ defmodule Visualize.Chart.CodecTagsTest do
   alias Visualize.Chart
   alias Visualize.Chart.{Codec, Fact, Fragment, Use, Var}
   alias Visualize.Chart.Codec.Tags
+  alias Visualize.Chart.Validator.Types
 
   # A plain-words name, as a document's names are.
   defp word, do: StreamData.string(?a..?z, min_length: 1, max_length: 8)
@@ -81,7 +82,9 @@ defmodule Visualize.Chart.CodecTagsTest do
           &%{version: 3, marks: [%{type: :area, channels: %{y0: {:scale, &1}}}]}
         ),
       "$axis" => StreamData.map(name(), &label({:axis, &1})),
-      "$frame" => StreamData.map(name(), &label({:frame, &1})),
+      # A frame point is one of the plot's five, looked up, never made (spec/14 §9.4).
+      "$frame" =>
+        StreamData.map(StreamData.member_of(Types.frame_points()), &label({:frame, &1})),
       "$data" =>
         StreamData.map(
           StreamData.tuple({StreamData.integer(), StreamData.integer()}),

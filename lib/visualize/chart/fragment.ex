@@ -124,6 +124,12 @@ defmodule Visualize.Chart.Fragment do
 
   def frame_of(design, _node), do: frame_name(design)
 
+  @doc false
+  # Every singular wrapper key, `composite` among them, which the codec reads as an atom
+  # (spec/14 §9.4).
+  @spec wrapper_keys() :: [atom(), ...]
+  def wrapper_keys, do: Map.keys(@singular)
+
   @doc """
   The kind a singular wrapper key names — `:style` for `style:` — or `nil` for any other
   key, `composite` included (spec/14 §19.2).

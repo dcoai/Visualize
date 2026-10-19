@@ -195,6 +195,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A text is a string with interpolation (§7.1): kept as typed, and read by the
     # validator, so a hole that does not read is a fault under the field, not a refusal.
     defp read(:text, string), do: {:ok, string}
+    # #778 class (b): a name, a field or a slot the person typed.
     defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
     # A reference is a local name, or a library id spelled as the DOM carries one (§19.2).
     defp read({:ref, kind}, string) do
@@ -227,6 +228,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A channel: a number is the constant, a bare name the field, anything else a literal.
     defp read(:channel, string) do
       with :error <- number(string) do
+        # #778 class (b): a field's name the person typed.
         if Regex.match?(~r/^[a-z_][a-zA-Z0-9_?!]*$/, string),
           do: {:ok, String.to_atom(string)},
           else: literal(string)
@@ -282,11 +284,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # #778 class (b): a name the person typed, until the builder keeps names as strings.
     defp atom(":" <> rest), do: String.to_atom(rest)
     defp atom(string), do: String.to_atom(string)
 
     # What a person means by a bare word in a color, a size or a font: a leading `:` is an
     # atom, a numeral is a number, and everything else is the string itself.
+    # #778 class (b): a slot or a color's name the person typed.
     defp loose(":" <> rest), do: String.to_atom(rest)
 
     defp loose(string) do
@@ -298,8 +302,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the literal reader (spec/14 §18.6, D-86) -----------------------------------------
 
+    # Read with existing atoms only (spec/14 §9.4, D-195): a literal naming an atom the node
+    # lacks is a parse fault, never a new atom, so typing cannot fill the atom table.
     defp literal(string) do
-      case Code.string_to_quoted(string) do
+      case Code.string_to_quoted(string, existing_atoms_only: true) do
         {:ok, quoted} -> term(quoted)
         {:error, _reason} -> :error
       end

@@ -1133,7 +1133,11 @@ defmodule Visualize.Theme do
     end)
   end
 
-  defp series_atom(k), do: :"series_#{k}"
+  @doc false
+  # The series slot `:series_k`: one atom per index a theme holds, at most the `items` bound
+  # (spec/14 §9.4, D-195, class (d)), the same set across every theme and document.
+  @spec series_atom(pos_integer()) :: atom()
+  def series_atom(k) when is_integer(k) and k >= 1, do: :"series_#{k}"
 
   defp series_index(slot) do
     case Atom.to_string(slot) do

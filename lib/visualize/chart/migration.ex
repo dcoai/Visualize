@@ -129,6 +129,16 @@ defmodule Visualize.Chart.Migration do
   def legacy_type(:stop, :colour), do: :color
   def legacy_type(_kind, _key), do: nil
 
+  @doc false
+  # Every key only an earlier version had, which a step of `migrate/1` reads: the codec
+  # reads these as atoms beside the schema's own (spec/14 §9.4, D-195), so a stored document
+  # of that version still migrates. Version 1's `frame` and its `size`, before #663's
+  # `roles`, version 2's paint and stop words. A key added to `legacy_type/2` or to a step
+  # is added here.
+  @spec legacy_keys() :: [atom(), ...]
+  # spelling: allow — version 2's paint and stop words.
+  def legacy_keys, do: [:frame, :size, :roles, :kind, :centre, :offset, :colour]
+
   @doc """
   The type a flat style key of an earlier version had (spec/14 §9, D-172), `nil` for any
   other key: `fill`, `stroke`, `curve` and `effect` are flat when their value is not a part,

@@ -22,6 +22,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   alias Visualize.Chart.Codec.Tags
   require Tags
   alias Visualize.Data.Schema
+  alias Visualize.Vocabulary
 
   @stamp "$version"
   @absent Tags.tag("$absent", true)
@@ -30,6 +31,13 @@ defmodule Visualize.Board.Snapshot.Codec do
   @cell_keys [:chart, :vars, :slots, :crashed]
   @slot_keys [:rows, :window, :resolution, :capped, :reduced_by, :version, :schema, :status]
   @statuses [:loading, :live, :stale]
+
+  # The snapshot's own keys and words, looked up and never made atoms of (spec/14 §9.4).
+  @key_table Vocabulary.table(@keys)
+  @cell_key_table Vocabulary.table(@cell_keys)
+  @slot_key_table Vocabulary.table(@slot_keys)
+  @status_table Vocabulary.table(@statuses)
+  @attribute_table Vocabulary.table(Schema.attributes())
 
   @doc false
   def stamp, do: @stamp
@@ -133,7 +141,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   # A parsed document, its stamp already taken off, as the snapshot's map.
   def decode(term) do
     Map.new(term, fn {key, value} ->
-      case known(key, @keys) do
+      case known(key, @key_table) do
         :board -> {:board, board(value)}
         :now -> {:now, Codec.decode_term(value)}
         :window -> {:window, Codec.decode_term(value)}
@@ -157,7 +165,7 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp read_cell(cell) when is_map(cell) do
     Map.new(cell, fn {key, value} ->
-      case known(key, @cell_keys) do
+      case known(key, @cell_key_table) do
         :chart -> {:chart, Codec.decode(value)}
         :vars -> {:vars, names(value, &Codec.decode_term/1)}
         :slots -> {:slots, names(value, &read_slot/1)}
@@ -170,7 +178,7 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp read_slot(slot) when is_map(slot) do
     Map.new(slot, fn {key, value} ->
-      case known(key, @slot_keys) do
+      case known(key, @slot_key_table) do
         :rows -> {:rows, read_rows(value)}
         :schema -> {:schema, read_schema_json(value)}
         :status -> {:status, read_status(value)}
@@ -215,7 +223,7 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp read_description(description) do
     Map.new(description, fn {key, value} ->
-      case known(key, Schema.attributes()) do
+      case known(key, @attribute_table) do
         :status when is_list(value) -> {:status, read_pairs(value)}
         key when is_atom(key) -> {key, Codec.decode_term(value)}
         key -> {key, value}
@@ -232,7 +240,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp read_status(%{"down" => reason} = term) when map_size(term) == 1, do: {:down, reason}
 
   defp read_status(status) when is_binary(status),
-    do: Enum.find(@statuses, status, &(Atom.to_string(&1) == status))
+    do: Vocabulary.read(@status_table, status)
 
   defp read_status(other), do: other
 
@@ -242,14 +250,14 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp names(other, _read), do: other
 
   # A key the snapshot knows, as its atom; any other key as it was read.
-  defp known(key, keys) when is_binary(key),
-    do: Enum.find(keys, key, &(Atom.to_string(&1) == key))
+  defp known(key, keys) when is_binary(key), do: Vocabulary.read(keys, key)
 
   defp known(key, _keys), do: key
 
   # A name that starts with `$` is written with one more and read with one fewer (D-182).
   defp name(key), do: key |> Atom.to_string() |> Tags.escape()
 
+  # #778 class (b): a cell's, a variable's or a slot's name.
   defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
   defp atom(key), do: key
 end
