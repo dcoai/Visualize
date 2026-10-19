@@ -114,6 +114,16 @@ defmodule Visualize.Chart.ChooseTest do
       svg = Chart.render(applied)
       assert svg =~ ~s(data-series="ok")
 
+      # A style whose fill is a paint swatches by its stroke (the print theme hatches roles).
+      {:ok, print} =
+        Chart.apply(design(marks, frame),
+          sources: %{hosts: delivery()},
+          describe: describe(),
+          theme: Visualize.Theme.print()
+        )
+
+      refute Chart.render(print) =~ "{:paint"
+
       # A compiled chart's legend region is static: it reads no scale.
       {:ok, %{main: compiled}} = Chart.compile(applied)
 

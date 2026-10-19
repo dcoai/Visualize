@@ -205,9 +205,11 @@ defmodule Visualize.Chart.Frame.Legend do
   defp named_swatch(name, styles, i, theme, mode) do
     resolved = %{} |> Style.over(styles, name) |> Style.resolve(theme, mode)
 
+    # A swatch is one color: a fill that is a paint (a hatch, a gradient) gives way to the
+    # stroke's color, and that to the series'.
     case {Map.get(resolved, :fill), Map.get(resolved, :stroke)} do
-      {fill, _stroke} when fill not in [nil, :none] -> fill
-      {_fill, stroke} when stroke not in [nil, :none] -> stroke
+      {fill, _stroke} when is_binary(fill) -> fill
+      {_fill, stroke} when is_binary(stroke) -> stroke
       _neither -> Theme.resolve(theme, {:series, i}, mode)
     end
   end
