@@ -5,11 +5,28 @@ defmodule Examples.BoardDemo.FeedsTest do
   `ExUnit.Case`, the feed and the windows it is asked for, and six tests come of it.
 
   A board's window is over instants (spec/15 §1.5), so each wall-clock feed is asked for
-  no window and for the last five minutes; the signal under `Wave` counts ticks, and its
-  wrapper is held to answering in instants.
+  no window and for five minutes. Their clocks are pinned (`clock:`, read through
+  `Examples.BoardDemo.Clock`) at an instant whose sub-second phase is the one that matters:
+  the window's start lies a fraction of a second after a reading, so a feed that rounds the
+  start down to the second serves a row outside the window it says it served, every run.
+  The signal under `Wave` counts ticks on the wall clock, and its wrapper is held to
+  answering in instants over the last five minutes.
   """
 
-  # The last five minutes, as a board asks for them: evaluated in each test.
+  # Five minutes after a whole ten seconds, and 0.865612 s on: the window's start is
+  # 00:05:00.865612, just after the 00:05:00 reading.
+  @now ~U[2026-01-01 00:10:00.865612Z]
+
+  @doc "The pinned now."
+  def now, do: @now
+
+  @doc "The pinned clock a feed reads."
+  def clock, do: fn -> @now end
+
+  @doc "The five minutes up to the pinned now."
+  def window, do: [DateTime.add(@now, -300), @now]
+
+  # The last five minutes on the wall clock, as a board asks for them: evaluated in each test.
   defmacro last_five_minutes do
     quote do
       now = DateTime.utc_now()
@@ -43,8 +60,8 @@ defmodule Examples.BoardDemo.FeedsTest.Services do
 
   use Visualize.Feed.Conformance,
     name: "Services",
-    feed: Examples.BoardDemo.Services.new(1),
-    windows: [nil, Feeds.last_five_minutes()]
+    feed: Examples.BoardDemo.Services.new(1, clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
 end
 
 defmodule Examples.BoardDemo.FeedsTest.Hosts do
@@ -53,8 +70,8 @@ defmodule Examples.BoardDemo.FeedsTest.Hosts do
 
   use Visualize.Feed.Conformance,
     name: "Hosts",
-    feed: Examples.BoardDemo.Hosts.new(),
-    windows: [nil, Feeds.last_five_minutes()]
+    feed: Examples.BoardDemo.Hosts.new(clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
 end
 
 defmodule Examples.BoardDemo.FeedsTest.Weather do
@@ -63,8 +80,8 @@ defmodule Examples.BoardDemo.FeedsTest.Weather do
 
   use Visualize.Feed.Conformance,
     name: "Weather",
-    feed: Examples.BoardDemo.Weather.new(),
-    windows: [nil, Feeds.last_five_minutes()]
+    feed: Examples.BoardDemo.Weather.new(clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
 end
 
 defmodule Examples.BoardDemo.FeedsTest.Latency do
@@ -73,8 +90,8 @@ defmodule Examples.BoardDemo.FeedsTest.Latency do
 
   use Visualize.Feed.Conformance,
     name: "Latency",
-    feed: Examples.BoardDemo.Latency.new(),
-    windows: [nil, Feeds.last_five_minutes()]
+    feed: Examples.BoardDemo.Latency.new(clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
 end
 
 defmodule Examples.BoardDemo.FeedsTest.Status do
@@ -83,8 +100,8 @@ defmodule Examples.BoardDemo.FeedsTest.Status do
 
   use Visualize.Feed.Conformance,
     name: "Status",
-    feed: Examples.BoardDemo.Status.new(),
-    windows: [nil, Feeds.last_five_minutes()]
+    feed: Examples.BoardDemo.Status.new(clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
 end
 
 defmodule Examples.BoardDemo.FeedsTest.Memory do

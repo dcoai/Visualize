@@ -16,13 +16,13 @@ defmodule Examples.BoardDemo.Services do
   # At most this many readings per service, however wide the window.
   @most 400
 
-  defstruct [:scale, :schema]
+  defstruct [:scale, :schema, clock: &DateTime.utc_now/0]
 
   @doc "The services, in the order every design colors them."
   def services, do: @services
 
   @doc "A feed whose readings are the waves times `scale`."
-  def new(scale) do
+  def new(scale, opts \\ []) do
     schema =
       Schema.new!(%{
         t: %{type: :time, label: "Time"},
@@ -30,7 +30,7 @@ defmodule Examples.BoardDemo.Services do
         value: %{type: :number, label: "Rate", continuity: 3 * @every}
       })
 
-    %__MODULE__{scale: scale, schema: schema}
+    %__MODULE__{scale: scale, schema: schema, clock: Clock.clock(opts)}
   end
 
   @doc "One service's reading at an instant, at a scale."
@@ -47,7 +47,7 @@ defmodule Examples.BoardDemo.Services do
 
   @impl true
   def fetch(%__MODULE__{} = feed, window, _budget) do
-    with {:ok, from, to} <- Clock.window(window) do
+    with {:ok, from, to} <- Clock.window(window, feed.clock.()) do
       {ticks, served, capped} = Clock.ticks(from, to, @every, @most)
 
       rows =

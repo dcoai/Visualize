@@ -18,10 +18,12 @@ defmodule Examples.BoardDemo.Status do
   @slot 30
   @states ["ok", "degraded", "down"]
 
-  defstruct [:schema]
+  defstruct [:schema, clock: &DateTime.utc_now/0]
 
-  def new do
+  @doc "The feed; `clock:` is the now it reads (`Examples.BoardDemo.Clock.clock/1`)."
+  def new(opts \\ []) do
     %__MODULE__{
+      clock: Clock.clock(opts),
       schema:
         Schema.new!(%{
           service: %{type: :category, label: "Service", identity: true},
@@ -50,31 +52,36 @@ defmodule Examples.BoardDemo.Status do
   def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
 
   @impl true
-  def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    with {:ok, from, to} <- Clock.window(window) do
-      {from_s, to_s} = {DateTime.to_unix(from), DateTime.to_unix(to)}
+  def fetch(%__MODULE__{schema: schema} = feed, window, _budget) do
+    with {:ok, from, to} <- Clock.window(window, feed.clock.()) do
+      # Clipped to the microsecond, so every stretch lies inside the window served.
+      {from_us, to_us} =
+        {DateTime.to_unix(from, :microsecond), DateTime.to_unix(to, :microsecond)}
 
       rows =
         for service <- Services.services(),
-            {state, since, until} <- stretches(service, from_s, to_s),
+            {state, since, until} <- stretches(service, from_us, to_us),
             do: %{
               service: service,
               state: state,
-              since: DateTime.from_unix!(since),
-              until: DateTime.from_unix!(until)
+              since: DateTime.from_unix!(since, :microsecond),
+              until: DateTime.from_unix!(until, :microsecond)
             }
 
       {:ok, Delivery.new(rows, window: [from, to], schema: Schema.version(schema))}
     end
   end
 
-  # The slots from `from` to `to` merged where a state runs on, each clipped to the two.
+  # The slots from `from` to `to`, in microseconds, merged where a state runs on, each
+  # clipped to the two.
   defp stretches(_service, from, to) when from >= to, do: []
 
   defp stretches(service, from, to) do
-    div(from, @slot)..div(to - 1, @slot)
-    |> Enum.map(fn slot ->
-      {state(service, slot), max(slot * @slot, from), min((slot + 1) * @slot, to)}
+    slot = @slot * 1_000_000
+
+    Integer.floor_div(from, slot)..Integer.floor_div(to - 1, slot)
+    |> Enum.map(fn n ->
+      {state(service, n), max(n * slot, from), min((n + 1) * slot, to)}
     end)
     |> Enum.chunk_by(&elem(&1, 0))
     |> Enum.map(fn [{state, since, _} | _] = run ->

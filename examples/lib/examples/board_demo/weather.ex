@@ -32,7 +32,7 @@ defmodule Examples.BoardDemo.Weather do
     pressure: {"Pressure", "hPa"}
   }
 
-  defstruct [:schema, temperature: "Cel"]
+  defstruct [:schema, temperature: "Cel", clock: &DateTime.utc_now/0]
 
   @doc """
   The station's feed: its symbols read into codes, every reading described. Option:
@@ -56,7 +56,12 @@ defmodule Examples.BoardDemo.Weather do
     # The readings are ordered by `t`, and a board's window is over it (spec/08 §10.1).
     time = %{type: :time, label: "Time", window: true}
     schema = Schema.new!(Map.put(fields, :t, time))
-    %__MODULE__{schema: schema, temperature: schema.fields.temperature.unit}
+
+    %__MODULE__{
+      schema: schema,
+      temperature: schema.fields.temperature.unit,
+      clock: Clock.clock(opts)
+    }
   end
 
   @doc "The station's readings at an instant, in the units a feed of it posts them in."
@@ -103,7 +108,7 @@ defmodule Examples.BoardDemo.Weather do
 
   @impl true
   def fetch(%__MODULE__{schema: schema} = feed, window, _budget) do
-    with {:ok, from, to} <- Clock.window(window) do
+    with {:ok, from, to} <- Clock.window(window, feed.clock.()) do
       {ticks, served, capped} = Clock.ticks(from, to, @every, @most)
 
       rows =

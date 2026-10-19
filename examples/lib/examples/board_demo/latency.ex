@@ -17,9 +17,10 @@ defmodule Examples.BoardDemo.Latency do
   @most 400
   @target 250
 
-  defstruct [:schema]
+  defstruct [:schema, clock: &DateTime.utc_now/0]
 
-  def new do
+  @doc "The feed; `clock:` is the now it reads (`Examples.BoardDemo.Clock.clock/1`)."
+  def new(opts \\ []) do
     percentile = fn label ->
       %{type: :number, label: label, unit: "ms", quantity: :duration, continuity: 3 * @every}
     end
@@ -29,6 +30,7 @@ defmodule Examples.BoardDemo.Latency do
       |> Map.merge(%{target: @target, polarity: :lower_is_better, bounds: [0, nil]})
 
     %__MODULE__{
+      clock: Clock.clock(opts),
       schema:
         Schema.new!(%{
           t: %{type: :time, label: "Time"},
@@ -62,8 +64,8 @@ defmodule Examples.BoardDemo.Latency do
   def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
 
   @impl true
-  def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    with {:ok, from, to} <- Clock.window(window) do
+  def fetch(%__MODULE__{schema: schema} = feed, window, _budget) do
+    with {:ok, from, to} <- Clock.window(window, feed.clock.()) do
       {ticks, served, capped} = Clock.ticks(from, to, @every, @most)
 
       rows =
