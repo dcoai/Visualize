@@ -10,6 +10,7 @@ defmodule Examples.BoardDemo.Latency do
   """
   @behaviour Visualize.Feed
 
+  alias Examples.BoardDemo.Clock
   alias Visualize.Data.{Delivery, Schema}
 
   @every 10
@@ -62,16 +63,14 @@ defmodule Examples.BoardDemo.Latency do
 
   @impl true
   def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    now = DateTime.utc_now()
-    [from, to] = window || [DateTime.add(now, -300), now]
-    to = if DateTime.compare(to, now) == :gt, do: now, else: to
-    first = div(DateTime.to_unix(from) + @every - 1, @every)
-    last = div(DateTime.to_unix(to), @every)
+    with {:ok, from, to} <- Clock.window(window) do
+      {ticks, served, capped} = Clock.ticks(from, to, @every, @most)
 
-    rows =
-      for tick <- max(first, last - @most + 1)..last//1,
-          do: reading(DateTime.from_unix!(tick * @every))
+      rows =
+        for tick <- ticks,
+            do: reading(DateTime.from_unix!(tick * @every))
 
-    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
+      {:ok, Delivery.new(rows, window: served, capped: capped, schema: Schema.version(schema))}
+    end
   end
 end

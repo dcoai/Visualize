@@ -12,7 +12,7 @@ defmodule Examples.BoardDemo.Status do
   """
   @behaviour Visualize.Feed
 
-  alias Examples.BoardDemo.Services
+  alias Examples.BoardDemo.{Clock, Services}
   alias Visualize.Data.{Delivery, Schema}
 
   @slot 30
@@ -51,22 +51,21 @@ defmodule Examples.BoardDemo.Status do
 
   @impl true
   def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    now = DateTime.utc_now()
-    [from, to] = window || [DateTime.add(now, -300), now]
-    to = if DateTime.compare(to, now) == :gt, do: now, else: to
-    {from_s, to_s} = {DateTime.to_unix(from), DateTime.to_unix(to)}
+    with {:ok, from, to} <- Clock.window(window) do
+      {from_s, to_s} = {DateTime.to_unix(from), DateTime.to_unix(to)}
 
-    rows =
-      for service <- Services.services(),
-          {state, since, until} <- stretches(service, from_s, to_s),
-          do: %{
-            service: service,
-            state: state,
-            since: DateTime.from_unix!(since),
-            until: DateTime.from_unix!(until)
-          }
+      rows =
+        for service <- Services.services(),
+            {state, since, until} <- stretches(service, from_s, to_s),
+            do: %{
+              service: service,
+              state: state,
+              since: DateTime.from_unix!(since),
+              until: DateTime.from_unix!(until)
+            }
 
-    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
+      {:ok, Delivery.new(rows, window: [from, to], schema: Schema.version(schema))}
+    end
   end
 
   # The slots from `from` to `to` merged where a state runs on, each clipped to the two.
