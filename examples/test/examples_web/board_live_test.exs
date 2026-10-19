@@ -126,15 +126,19 @@ defmodule ExamplesWeb.BoardLiveTest do
     ticks = fn board ->
       {:ok, _info} = Server.subscribe(board)
       :ok = Server.tick(board)
-      views = views_of(board, %{}, ~w(weather memory)a)
+      views = drawn_of(board, %{}, ~w(weather memory)a)
       Server.unsubscribe(board, self())
       views.weather.svg <> views.memory.svg
     end
 
+    # Memory is in bytes, scaled to whatever its readings need — MB on one node, GB on a
+    # busier one — so the test asks for a byte unit, not one magnitude of it.
+    bytes = ~r/ [kMGT]?B</
+
     posted = ticks.(posted)
-    assert posted =~ " °C<" and posted =~ " km/h<" and posted =~ " MB<"
+    assert posted =~ " °C<" and posted =~ " km/h<" and posted =~ bytes
     us = ticks.(us)
-    assert us =~ " °F<" and us =~ " mi/h<" and us =~ " MB<"
+    assert us =~ " °F<" and us =~ " mi/h<" and us =~ bytes
     refute us =~ " °C<" or us =~ " km/h<"
     uk = ticks.(uk)
     assert uk =~ " °C<" and uk =~ " mi/h<"
@@ -148,7 +152,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     {:ok, board} = Examples.BoardDemo.board()
     {:ok, _info} = Server.subscribe(board)
     :ok = Server.tick(board)
-    views = views_of(board, %{}, ~w(memory queue latency status)a)
+    views = drawn_of(board, %{}, ~w(memory queue latency status)a)
     Server.unsubscribe(board, self())
 
     # The telemetry definitions carry the facts (D-160) the metric design reads.
@@ -171,7 +175,7 @@ defmodule ExamplesWeb.BoardLiveTest do
 
     # The timeline's stretches are colored by the feed's own meaning of each state.
     assert views.status.svg =~ ~s(class="mark mark-band")
-    assert views.status.svg =~ ~r/fill="var\(--vis-good/
+    assert views.status.svg =~ ~r/class="band" fill="var\(--vis-(good|warning|bad)/
     for state <- ~w(ok degraded down), do: assert(views.status.svg =~ ">#{state}<")
   end
 
@@ -320,19 +324,21 @@ defmodule ExamplesWeb.BoardLiveTest do
     end
   end
 
-  # The first view of each cell of one board that is no longer loading: several boards'
-  # messages may be in the mailbox at once.
-  defp views_of(_board, seen, []), do: seen
+  # The first view of each cell of one board that draws its chart — a view whose marks are
+  # drawn, not a state panel such as "No data yet" before a feed's first reading (spec/12
+  # §6): the wait is on the board's own messages, bounded by the test's timeout, and other
+  # boards' messages in the mailbox are passed over.
+  defp drawn_of(_board, seen, []), do: seen
 
-  defp views_of(board, seen, waiting) do
+  defp drawn_of(board, seen, waiting) do
     receive do
-      {:visualize_board, ^board, {:cell, cell, %{state: state} = view}} when state != :loading ->
-        if cell in waiting,
-          do: views_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
-          else: views_of(board, seen, waiting)
+      {:visualize_board, ^board, {:cell, cell, %{svg: svg} = view}} when is_binary(svg) ->
+        if cell in waiting and svg =~ ~s(class="mark mark-),
+          do: drawn_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
+          else: drawn_of(board, seen, waiting)
 
       {:visualize_board, _board, _other} ->
-        views_of(board, seen, waiting)
+        drawn_of(board, seen, waiting)
     end
   end
 
