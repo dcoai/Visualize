@@ -97,7 +97,8 @@ defmodule Visualize.Chart.Schema do
     :options,
     :mark_label,
     :tooltip,
-    :tiles
+    :tiles,
+    :choice
   ]
 
   @builtin_styles [:axis, :grid, :label, :title]

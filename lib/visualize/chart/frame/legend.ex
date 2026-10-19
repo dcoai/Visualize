@@ -111,7 +111,7 @@ defmodule Visualize.Chart.Frame.Legend do
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))
     inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
-    entries = entries(Map.fetch!(scales, node.scale), node, theme, mode)
+    entries = entries(node, scales, styles, theme, mode)
     font_size = font_size(style_node, theme)
 
     base = %{
@@ -169,6 +169,49 @@ defmodule Visualize.Chart.Frame.Legend do
   # One entry per tick: the value, its label with the legend's prefix and unit around it
   # (spec/14 §4.5, #135) cut to `max_label` (D-169), the full label when it was cut, and
   # its swatch.
+  defp entries(%{values: values} = node, _scales, styles, theme, mode) when is_list(values) do
+    values(values, node, styles, theme, mode)
+  end
+
+  defp entries(node, scales, _styles, theme, mode),
+    do: entries(Map.fetch!(scales, node.scale), node, theme, mode)
+
+  # A legend of declared values (spec/14 §4.5, D-194): one entry per value, in order,
+  # swatched by the fill of the style the value names, else its stroke, else the series'.
+  defp values(values, node, styles, theme, mode) do
+    prefix = Map.get(node, :prefix) || ""
+    unit = Map.get(node, :unit) || ""
+    max_label = Map.get(node, :max_label, Schema.default(:legend, :max_label))
+    names = Map.keys(styles) ++ Theme.style_names(theme)
+
+    values
+    |> Enum.with_index(1)
+    |> Enum.map(fn {value, i} ->
+      {label, full} = cut(prefix <> to_string(value) <> unit, max_label)
+      {value, label, full, named_swatch(named(names, value), styles, i, theme, mode)}
+    end)
+  end
+
+  defp named(names, value) when is_atom(value) and value != nil,
+    do: if(value in names, do: value)
+
+  defp named(names, value) when is_binary(value),
+    do: Enum.find(names, &(Atom.to_string(&1) == value))
+
+  defp named(_names, _value), do: nil
+
+  defp named_swatch(nil, _styles, i, theme, mode), do: Theme.resolve(theme, {:series, i}, mode)
+
+  defp named_swatch(name, styles, i, theme, mode) do
+    resolved = %{} |> Style.over(styles, name) |> Style.resolve(theme, mode)
+
+    case {Map.get(resolved, :fill), Map.get(resolved, :stroke)} do
+      {fill, _stroke} when fill not in [nil, :none] -> fill
+      {_fill, stroke} when stroke not in [nil, :none] -> stroke
+      _neither -> Theme.resolve(theme, {:series, i}, mode)
+    end
+  end
+
   defp entries(scale, node, theme, mode) do
     prefix = Map.get(node, :prefix) || ""
     unit = Map.get(node, :unit) || ""

@@ -304,6 +304,12 @@ defmodule Visualize.Chart.Validator.Words do
   # A fault of a composite rather than of a node (spec/14 §19.6): the stack reaching itself.
   def words({:cycle, chain}), do: "the stack refers to itself through #{inspect(chain)}"
 
+  # A mapping by a field that leaves declared values with nothing to draw (spec/14 §7.4).
+  def words({:uncovered, field, missing}) do
+    "maps #{inspect(field)} by value, and #{Enum.map_join(missing, ", ", &inspect/1)} " <>
+      "names no style or case: add one, or an else (spec/14 §7.4)"
+  end
+
   # A virtual source's own faults (spec/08 §10.5.5, D-194).
   def words({:exclusive, :elixir}),
     do: "is given with elixir: a virtual source has one function, stored or the host's"

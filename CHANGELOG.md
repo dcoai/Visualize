@@ -33,6 +33,18 @@ release it merely follows.
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
   :raised, detail}`; a raise is reported by the exception's module, never its message.
 
+- **Reading a virtual source by value** (#751, D-194). On a board, each row of a feed now
+  carries the answer of every per-identity virtual source over that feed for its own
+  identity, as `:"<id>.<field>"` (`:"health.state"`), described in the slot's schema, so a
+  design reads it as any column — declare it among the slot's `fields`. A **`:choose`
+  mark** (`Visualize.Chart.Build.choose/3`) draws, for each datum, the child its `on`
+  field's value names (`cases: %{ok: %{type: :circle, style: :good}, …}`, `else:`), at
+  the mark's `x` and `y`. A **legend** may list `values:` — usually
+  `fact(:hosts, :"health.state", :values)` — instead of a scale, each swatched by the
+  style the value names. At application, a style chosen by `{:field, f}` and a
+  `:choose` over a field that declares `values` must cover every value (a named style, a
+  case or an `else`), else `apply/2` answers `{:uncovered, f, missing}`.
+
 - **Virtual sources run on the board** (#750, D-194). `Visualize.Board.Server` computes a
   board's virtual sources (and its cells') where its feeds run, and a cell's slot bound to
   a source's name draws its answer as it draws a feed's. When the board starts, every

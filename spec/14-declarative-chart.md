@@ -2241,6 +2241,8 @@ The mark, transform and scale functions are generated from the schema (§16.6), 
 | `Visualize.Chart.Build.rect/3` | `rect(data, channels, opts)`: `mark/4` of the `:rect` type (§5.2) — required channels `x0`, `x1`, `y0`, `y1`; optional `value`; options `corner_radius`. |
 | `Visualize.Chart.Build.circle/2` | As `circle/3` with no options. |
 | `Visualize.Chart.Build.circle/3` | `circle(data, channels, opts)`: `mark/4` of the `:circle` type (§5.2) — required channels `x`, `y`; optional `value`; options `radius`. |
+| `Visualize.Chart.Build.choose/2` | As `choose/3` with no options. |
+| `Visualize.Chart.Build.choose/3` | `choose(data, channels, opts)`: `mark/4` of the `:choose` type (§5.2, D-194) — required channels `x`, `y`; `on:`, `cases:` and `else:` given in `opts` as the mark's keys. |
 | `Visualize.Chart.Build.text/2` | As `text/3` with no options. |
 | `Visualize.Chart.Build.text/3` | `text(data, channels, opts)`: `mark/4` of the `:text` type (§5.2, #134) — required channels `x`, `y`; optional `value`; no options; the text is the mark's `label`, else `value`. |
 | `Visualize.Chart.Build.tiles/2` | As `tiles/3` with no options. |

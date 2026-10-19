@@ -40,6 +40,8 @@ defmodule Visualize.Chart.Validator.Context do
       slots: theme_slots(theme),
       colors: theme_colors(theme),
       mark_type: nil,
+      choice?: false,
+      legend_values?: false,
       op: nil,
       transform_keys: [],
       fields: :unknown,
@@ -141,6 +143,15 @@ defmodule Visualize.Chart.Validator.Context do
   end
 
   def enter(:label, map, ctx), do: %{in_frame(ctx, map[:frame]) | datum?: false}
+
+  # A `:choose` mark's child is read as a mark of its own type over the mark's data
+  # (spec/14 §5.2, D-194).
+  def enter(:choice, map, ctx) do
+    type = map[:type]
+    %{ctx | mark_type: if(type in Schema.mark_types(), do: type), choice?: true}
+  end
+
+  def enter(:legend, map, ctx), do: %{ctx | legend_values?: Map.has_key?(map, :values)}
 
   # A generator is a site's and its styles' (spec/14 §3.13): a theme and a defaults node are
   # laid without a frame to call it.

@@ -44,6 +44,7 @@ defmodule Visualize.Chart do
     Compiled,
     Compose,
     Composite,
+    Coverage,
     Fact,
     Facts,
     Fragment,
@@ -495,11 +496,19 @@ defmodule Visualize.Chart do
 
       frame = frames |> Map.values() |> Enum.min_by(& &1.name)
 
-      {:ok,
-       struct!(
-         %Applied{chart: chart, sources: sources, frame: frame, frames: frames},
-         described
-       )}
+      # A mapping by a field covers its declared values (spec/14 §7.4, D-194), checked where
+      # each frame's theme is known.
+      case Coverage.faults(to_map(chart), described.schemas, frames) do
+        [] ->
+          {:ok,
+           struct!(
+             %Applied{chart: chart, sources: sources, frame: frame, frames: frames},
+             described
+           )}
+
+        faults ->
+          {:error, Enum.sort_by(faults, &elem(&1, 0))}
+      end
     end
   end
 

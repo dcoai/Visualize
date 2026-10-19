@@ -89,6 +89,15 @@ defmodule Visualize.Chart.Validator.Held do
   def held(:mark, %{type: type, tiles: _}, path, _ctx) when is_atom(type),
     do: [{path ++ [:tiles], {:invalid_for, type}}]
 
+  # `on`, `cases` and `else` are a `:choose` mark's alone (spec/14 §5.2, D-194).
+  def held(:mark, %{type: type} = mark, path, _ctx)
+      when is_atom(type) and type != :choose and
+             (is_map_key(mark, :on) or is_map_key(mark, :cases) or is_map_key(mark, :else)) do
+    for key <- [:on, :cases, :else],
+        Map.has_key?(mark, key),
+        do: {path ++ [key], {:invalid_for, type}}
+  end
+
   def held(:tiles, map, path, ctx) do
     attribution =
       case Map.get(map, :attribution) do
