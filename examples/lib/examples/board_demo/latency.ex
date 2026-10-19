@@ -10,15 +10,17 @@ defmodule Examples.BoardDemo.Latency do
   """
   @behaviour Visualize.Feed
 
+  alias Examples.BoardDemo.Clock
   alias Visualize.Data.{Delivery, Schema}
 
   @every 10
   @most 400
   @target 250
 
-  defstruct [:schema]
+  defstruct [:schema, clock: &DateTime.utc_now/0]
 
-  def new do
+  @doc "The feed; `clock:` is the now it reads (`Examples.BoardDemo.Clock.clock/1`)."
+  def new(opts \\ []) do
     percentile = fn label ->
       %{type: :number, label: label, unit: "ms", quantity: :duration, continuity: 3 * @every}
     end
@@ -28,6 +30,7 @@ defmodule Examples.BoardDemo.Latency do
       |> Map.merge(%{target: @target, polarity: :lower_is_better, bounds: [0, nil]})
 
     %__MODULE__{
+      clock: Clock.clock(opts),
       schema:
         Schema.new!(%{
           t: %{type: :time, label: "Time"},
@@ -61,17 +64,15 @@ defmodule Examples.BoardDemo.Latency do
   def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
 
   @impl true
-  def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    now = DateTime.utc_now()
-    [from, to] = window || [DateTime.add(now, -300), now]
-    to = if DateTime.compare(to, now) == :gt, do: now, else: to
-    first = div(DateTime.to_unix(from) + @every - 1, @every)
-    last = div(DateTime.to_unix(to), @every)
+  def fetch(%__MODULE__{schema: schema} = feed, window, _budget) do
+    with {:ok, from, to} <- Clock.window(window, feed.clock.()) do
+      {ticks, served, capped} = Clock.ticks(from, to, @every, @most)
 
-    rows =
-      for tick <- max(first, last - @most + 1)..last//1,
-          do: reading(DateTime.from_unix!(tick * @every))
+      rows =
+        for tick <- ticks,
+            do: reading(DateTime.from_unix!(tick * @every))
 
-    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
+      {:ok, Delivery.new(rows, window: served, capped: capped, schema: Schema.version(schema))}
+    end
   end
 end

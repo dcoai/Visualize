@@ -22,14 +22,15 @@ defmodule ExamplesWeb.BoardLive do
   use Phoenix.LiveView
 
   alias Examples.BoardDemo
-  alias Examples.BoardDemo.Weather
+  alias ExamplesWeb.BoardLive.Station
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Board.Server
   alias Visualize.{Event, Quantity, Unit}
 
   @windows [{"1 min", 60}, {"5 min", 300}, {"15 min", 900}]
-  # The station reads every ten seconds; the page rewrites its newest readings as often.
-  @station_every 10_000
+  # The page's own loop over the station turns this often (spec/08 §11.4).
+  @station_every 2000
+  @firmware [{"°C", "°C"}, {"°F", "°F"}, {"K", "K"}]
 
   @impl true
   def mount(params, _session, socket) do
@@ -43,28 +44,24 @@ defmodule ExamplesWeb.BoardLive do
        value: BoardDemo.value(),
        windows: @windows,
        system: system,
-       station: station(system)
+       firmware: @firmware,
+       memory_compatibility: BoardDemo.memory_compatibility(),
+       station: system |> Station.new() |> Station.tick()
      )}
   end
 
   # The station's newest readings, written in the viewer's system (D-156): what a host's
-  # header writes beside a board, read from the same feed the Weather cell draws. A reading
+  # header writes beside a board, read from the page's own loop over the station. A reading
   # shown in another unit than the station posts says how it was converted, exactly
   # (`Visualize.Unit.conversion/2`, D-155).
-  defp station(system) do
-    feed = Weather.new()
-    reading = Weather.latest(DateTime.utc_now())
-
-    for field <- [:temperature, :wind, :pressure] do
-      %{label: label, unit: posted} = described = Weather.field(feed, field)
-      measure = Map.take(described, [:unit, :quantity])
-      value = reading[field]
+  defp readings(station, system) do
+    for %{label: label, value: value, measure: measure} <- Station.readings(station) do
       shown = Quantity.display_unit([value, value], measure, system: system)
 
       %{
         label: label,
         value: Quantity.format(value, measure, system: system, precision: 1),
-        conversion: conversion(posted, shown)
+        conversion: conversion(measure.unit, shown)
       }
     end
   end
@@ -85,7 +82,7 @@ defmodule ExamplesWeb.BoardLive do
 
   @impl true
   def handle_info(:station, socket),
-    do: {:noreply, assign(socket, station: station(socket.assigns.system))}
+    do: {:noreply, update(socket, :station, &Station.tick/1)}
 
   @impl true
   def handle_info({:visualize_board, _board, _message} = message, socket) do
@@ -107,6 +104,12 @@ defmodule ExamplesWeb.BoardLive do
   def handle_info({:visualize_event, "demo-board", %Event{}}, socket), do: {:noreply, socket}
 
   @impl true
+  # New firmware for the station: what it posts changes, and the page's loop sees it.
+  def handle_event("firmware", %{"symbol" => symbol}, socket) do
+    symbol = if List.keymember?(@firmware, symbol, 1), do: symbol, else: "°C"
+    {:noreply, update(socket, :station, &(&1 |> Station.firmware(symbol) |> Station.tick()))}
+  end
+
   def handle_event("window", %{"last" => last}, socket) do
     :ok = Server.window(socket.assigns.board, %{last: String.to_integer(last)})
     {:noreply, socket}
@@ -135,6 +138,16 @@ defmodule ExamplesWeb.BoardLive do
             the station's <code>°C</code> and <code>km/h</code> — and draw them in the unit
             system chosen below. The station goes quiet for forty seconds every four minutes;
             its readings' <code>continuity</code> makes that a gap, not a bridge.
+          </p>
+          <p class="panel-note">
+            <em>Memory</em>
+            is one <code>Visualize.Feed.Combine</code>: the live <code>:telemetry</code>
+            feed, holding what it has seen since the node started, with
+            a store's history behind it, which says <code>"t"</code>
+            and kilobytes where the live
+            feed says <code>:t</code>
+            and megabytes. Widen the window past the node's uptime and
+            the store fills the rest, converted. Their schemas' compatibility: <code class="board-memory-compatibility">{inspect(@memory_compatibility)}</code>.
           </p>
           <p class="panel-note">
             Overlays are marks of the designs, read from the feeds' facts: the dashed rule is
@@ -179,7 +192,7 @@ defmodule ExamplesWeb.BoardLive do
           </p>
           <p class="board-station">
             Weather station now:
-            <span :for={reading <- @station} class="board-reading">
+            <span :for={reading <- readings(@station, @system)} class="board-reading">
               {reading.label} <strong>{reading.value}</strong>
               <small :if={reading.conversion} class="board-conversion">({reading.conversion})</small>
             </span>
@@ -201,6 +214,56 @@ defmodule ExamplesWeb.BoardLive do
             server={@board}
             board={@value}
           />
+        </Panel.panel>
+
+        <Panel.panel id="panel-station">
+          <:title>The station, on the page's own loop</:title>
+          <p class="panel-note">
+            Outside a board a page runs its own loop: it holds a <code>Visualize.Feed.Monitor</code>
+            over the station, ticks it every two seconds and
+            draws the chart it compiled over the deliveries. The readings above come from it.
+            New firmware changes what the station posts: the next delivery names another schema
+            version, <code>Compiled.stale?/2</code>
+            says the chart no longer holds, and the
+            page compiles it again and says whether the two schemas are compatible.
+          </p>
+          <p class="board-firmware">
+            Firmware posts the temperature in:
+            <button
+              :for={{name, symbol} <- @firmware}
+              type="button"
+              phx-click="firmware"
+              phx-value-symbol={symbol}
+              aria-pressed={to_string(Station.posts?(@station, symbol))}
+            >
+              {name}
+            </button>
+            — feed <strong class="board-station-status">{inspect(Station.status(@station))}</strong>,
+            schema <code>{@station.schema && String.slice(@station.schema.version, 0, 8)}</code>
+          </p>
+          <svg
+            :if={@station.svg}
+            class="board-station-chart"
+            viewBox={"0 0 #{elem(Station.size(), 0)} #{elem(Station.size(), 1)}"}
+            width={elem(Station.size(), 0)}
+            height={elem(Station.size(), 1)}
+            role="img"
+            aria-label="The station's temperature"
+          >
+            {Phoenix.HTML.raw(@station.svg)}
+          </svg>
+          <p :if={@station.change} class="board-station-change">
+            Schema changed <code>{@station.change.from}</code>
+            → <code>{@station.change.to}</code>:
+            the temperature was <code>{elem(@station.change.unit, 0)}</code>
+            and is <code>{elem(@station.change.unit, 1)}</code>. The chart was stale and is compiled
+            again. <code>Schema.compatibility/2</code>:
+            <strong>{inspect(@station.change.compatibility)}</strong>
+            — {if @station.change.compatibility == :ok,
+              do:
+                "the old rows read as the new, so a Feed.Combine could keep the old history behind the new.",
+              else: "the old rows do not read as the new."}
+          </p>
         </Panel.panel>
 
         <Panel.panel id="panel-code">
@@ -239,6 +302,15 @@ defmodule ExamplesWeb.BoardLive do
     {:ok, board} =
       Visualize.Board.Server.start(MyApp.Boards,
         board: board, store: store, binding: binding, feeds: feeds, system: :us)
+
+    # Live data with its history behind it: one slot, the store's rows read as the live ones.
+    memory = Visualize.Feed.Combine.new([live_telemetry, history_store])
+
+    # Outside a board, the page's own loop: a monitor in its assigns, ticked by its timer,
+    # and a chart compiled again when a delivery names a schema it was not compiled with.
+    monitor = Visualize.Feed.Monitor.new(%{station: feed}) |> Visualize.Feed.Monitor.tick()
+    sources = Visualize.Feed.Monitor.deliveries(monitor)
+    if Visualize.Chart.Compiled.stale?(compiled, sources), do: compile_again(sources)
 
     # An axis says what its values are from the feed's own facts, and is drawn in the system.
     axis(:y, :left, measure: %{unit: fact(:weather, :temperature, :unit)})

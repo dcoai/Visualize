@@ -44,12 +44,13 @@ defmodule Examples.BoardDemo do
   import Visualize.Chart, only: [fact: 3]
 
   alias Examples.BoardDemo.{Fixed, Hosts, Latency, Latest, Services, Status, Unreachable, Wave}
-  alias Examples.BoardDemo.Weather
+  alias Examples.BoardDemo.{MemoryHistory, Weather}
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
 
   @board Examples.BoardDemo.Board
+  @memory "examples.vm.memory"
   @collector Examples.BoardDemo.Telemetry
 
   @doc "The demo's feeds' processes: the telemetry collector and the probe that feeds it."
@@ -439,11 +440,17 @@ defmodule Examples.BoardDemo do
     })
   end
 
-  @doc "The feeds by the names the binding uses."
+  @doc """
+  The feeds by the names the binding uses. The memory metric is the live `:telemetry` feed
+  with the store's history behind it, one `Visualize.Feed.Combine` (D-159), so a window
+  wider than the node's uptime is filled from the store.
+  """
   def feeds do
     telemetry = Visualize.Feed.Telemetry.feeds(@collector)
 
-    Map.merge(telemetry, %{
+    telemetry
+    |> Map.update!(@memory, &Visualize.Feed.Combine.new([&1, MemoryHistory.new()]))
+    |> Map.merge(%{
       load: Wave.new(Visualize.Signals.new(:sine, [:t, :v], period: 90, min: 0.4, max: 3.2)),
       wave: Wave.new(Visualize.Signals.new(:sine, [:x, :y], period: 40, min: 10, max: 90)),
       dial: Fixed.new([%{at: 0}], %{at: %{type: :number}}),
@@ -456,6 +463,18 @@ defmodule Examples.BoardDemo do
       latency: Latency.new(),
       status: Status.new()
     })
+  end
+
+  @doc """
+  Whether the memory store's rows read as the live feed's (D-159): what a connector asks
+  before it puts the two in one `Visualize.Feed.Combine`, `:ok` or the reasons they do not.
+  """
+  @spec memory_compatibility() :: :ok | {:error, list()}
+  def memory_compatibility do
+    %Visualize.Feed.Combine{feeds: [live, history]} = Map.fetch!(feeds(), @memory)
+    {_version, live, _supports} = Visualize.Feed.describe(live)
+    {_version, history, _supports} = Visualize.Feed.describe(history)
+    Visualize.Data.Schema.compatibility(live, history)
   end
 
   @doc """
@@ -541,323 +560,5 @@ defmodule Examples.BoardDemo do
         }
       }
     ])
-  end
-end
-
-defmodule Examples.BoardDemo.Probe do
-  @moduledoc """
-  Emits the demo's `:telemetry` event, `[:examples, :vm]`, every half second: the memory
-  in use in megabytes and the run queue's length, which the collector turns into two
-  feeds (spec/08 §11.6).
-  """
-  use GenServer
-
-  @every 500
-
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-
-  @impl true
-  def init(_opts) do
-    send(self(), :probe)
-    {:ok, nil}
-  end
-
-  @impl true
-  def handle_info(:probe, state) do
-    :telemetry.execute(
-      [:examples, :vm],
-      %{
-        memory: Float.round(:erlang.memory(:total) / 1_048_576, 2),
-        run_queue: :erlang.statistics(:total_run_queue_lengths_all)
-      },
-      %{}
-    )
-
-    Process.send_after(self(), :probe, @every)
-    {:noreply, state}
-  end
-end
-
-defmodule Examples.BoardDemo.Wave do
-  @moduledoc """
-  A `Visualize.Signals` signal on the wall clock (spec/08 §8, §11.6): the library's
-  `Visualize.Feed.Signals` provider ticking once a second from an origin fifteen minutes
-  before the feed was made, its tick read as that instant in UTC. A board's window is in
-  UTC (spec/15 §1.5), and a signal counts ticks, so this is the one conversion between
-  them: a window of instants asked as ticks, and the rows' ticks answered as instants.
-  """
-  @behaviour Visualize.Feed
-
-  alias Visualize.Data.{Delivery, Schema}
-
-  @enforce_keys [:inner, :origin, :every, :schema]
-  defstruct [:inner, :origin, :every, :schema]
-
-  @doc "A signal ticking every `every:` milliseconds (`1000`), with fifteen minutes behind it."
-  def new(%{fields: [time | values]} = signal, opts \\ []) do
-    every = Keyword.get(opts, :every, 1000)
-    origin = System.os_time(:millisecond) - 15 * 60 * 1000
-    clock = fn -> System.os_time(:millisecond) end
-    inner = Visualize.Feed.Signals.new(signal, every: every, clock: clock, origin: origin)
-
-    # A reading is one tick apart; three missed in a row is a gap (spec/08 §10.1).
-    fields =
-      values
-      |> Map.new(&{&1, %{type: :number, continuity: every * 3 / 1000}})
-      |> Map.put(time, %{type: :time, label: "Time"})
-
-    %__MODULE__{inner: inner, origin: origin, every: every, schema: Schema.new!(fields)}
-  end
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
-
-  @impl true
-  def fetch(%__MODULE__{} = feed, window, budget) do
-    with {:ok, %Delivery{} = delivery} <-
-           Visualize.Feed.fetch(feed.inner, ticks(feed, window), budget) do
-      [time | _values] = feed.inner.signal.fields
-      rows = Enum.map(delivery.rows, &Map.update!(&1, time, fn tick -> instant(feed, tick) end))
-      window = delivery.window && Enum.map(delivery.window, &(&1 && instant(feed, &1)))
-
-      {:ok, %{delivery | rows: rows, window: window, schema: Schema.version(feed.schema)}}
-    end
-  end
-
-  defp ticks(_feed, nil), do: nil
-
-  defp ticks(feed, [from, to]) do
-    [from && ceil(ms(from, feed) / feed.every), to && floor(ms(to, feed) / feed.every)]
-  end
-
-  defp ms(%DateTime{} = t, feed), do: DateTime.to_unix(t, :millisecond) - feed.origin
-
-  defp instant(feed, tick),
-    do: DateTime.from_unix!(feed.origin + tick * feed.every, :millisecond)
-end
-
-defmodule Examples.BoardDemo.Fixed do
-  @moduledoc "A feed that always answers the same rows: a design's constant slot, such as a dial's track."
-  @behaviour Visualize.Feed
-
-  alias Visualize.Data.{Delivery, Schema}
-
-  defstruct [:rows, :schema]
-
-  def new(rows, fields), do: %__MODULE__{rows: rows, schema: Schema.new!(fields)}
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, []}
-
-  @impl true
-  def fetch(%__MODULE__{rows: rows, schema: schema}, _window, _budget),
-    do: {:ok, Delivery.new(rows, schema: Schema.version(schema))}
-end
-
-defmodule Examples.BoardDemo.Unreachable do
-  @moduledoc """
-  A feed whose source cannot be reached: it describes itself, and every fetch answers
-  `{:error, :unreachable}`, which a cell draws as its "feed down" state (spec/15 §8.4).
-  """
-  @behaviour Visualize.Feed
-
-  alias Visualize.Data.Schema
-
-  defstruct [:schema]
-
-  def new(fields), do: %__MODULE__{schema: Schema.new!(fields)}
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
-
-  @impl true
-  def fetch(_feed, _window, _budget), do: {:error, :unreachable}
-end
-
-defmodule Examples.BoardDemo.Services do
-  @moduledoc """
-  A synthetic feed of three services' rates over time (spec/08 §11): a reading every ten
-  seconds for each of `api`, `web` and `db`, each its own slow wave, scaled by the feed's
-  `scale` — so one module is the board's requests and, scaled down, its errors. The rows
-  are a function of the instant, so every window asked is answered at once, and a brushed
-  window is answered with exactly its readings (spec/15 §13.1).
-  """
-  @behaviour Visualize.Feed
-
-  alias Visualize.Data.{Delivery, Schema}
-
-  @services ["api", "web", "db"]
-  @every 10
-  # At most this many readings per service, however wide the window.
-  @most 400
-
-  defstruct [:scale, :schema]
-
-  @doc "The services, in the order every design colors them."
-  def services, do: @services
-
-  @doc "A feed whose readings are the waves times `scale`."
-  def new(scale) do
-    schema =
-      Schema.new!(%{
-        t: %{type: :time, label: "Time"},
-        service: %{type: :category, label: "Service", identity: true},
-        value: %{type: :number, label: "Rate", continuity: 3 * @every}
-      })
-
-    %__MODULE__{scale: scale, schema: schema}
-  end
-
-  @doc "One service's reading at an instant, at a scale."
-  def value(scale, service, %DateTime{} = t) do
-    i = Enum.find_index(@services, &(&1 == service))
-    s = DateTime.to_unix(t)
-    base = Enum.at([40, 25, 12], i)
-    wave = :math.sin(2 * :math.pi() * s / Enum.at([180, 240, 300], i) + i)
-    Float.round(scale * (base + base * 0.5 * wave), 2)
-  end
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
-
-  @impl true
-  def fetch(%__MODULE__{} = feed, window, _budget) do
-    now = DateTime.utc_now()
-    [from, to] = window || [DateTime.add(now, -300), now]
-    first = div(DateTime.to_unix(from) + @every - 1, @every)
-    last = div(DateTime.to_unix(min_time(to, now)), @every)
-
-    rows =
-      for tick <- max(first, last - @most + 1)..last//1,
-          t = DateTime.from_unix!(tick * @every),
-          service <- @services,
-          do: %{t: t, service: service, value: value(feed.scale, service, t)}
-
-    {:ok, Delivery.new(rows, schema: Schema.version(feed.schema))}
-  end
-
-  defp min_time(a, b), do: if(DateTime.compare(a, b) == :gt, do: b, else: a)
-end
-
-defmodule Examples.BoardDemo.Latest do
-  @moduledoc """
-  Each service's newest request rate, a row per service, under the field `name`: a feed
-  that names the services differently from `Examples.BoardDemo.Services`, which the board's
-  `links: %{name: :service}` reconciles (spec/15 §13.2).
-  """
-  @behaviour Visualize.Feed
-
-  alias Examples.BoardDemo.Services
-  alias Visualize.Data.{Delivery, Schema}
-
-  defstruct [:schema]
-
-  def new do
-    %__MODULE__{
-      schema:
-        Schema.new!(%{
-          name: %{type: :category, label: "Service", identity: true},
-          value: %{type: :number}
-        })
-    }
-  end
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, []}
-
-  @impl true
-  def fetch(%__MODULE__{schema: schema}, _window, _budget) do
-    now = DateTime.utc_now()
-
-    rows =
-      for service <- Services.services(),
-          do: %{name: service, value: Services.value(1, service, now)}
-
-    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
-  end
-end
-
-defmodule Examples.BoardDemo.Hosts do
-  @moduledoc """
-  A synthetic feed of four hosts' CPU readings (spec/08 §11): a reading every ten seconds
-  for each of `h1`…`h4`, each its own wave, so their health (`Examples.BoardDemo`'s
-  virtual sources) moves between good, warning and bad. `host` is the declared identity
-  (D-167) the virtual sources run per.
-  """
-  @behaviour Visualize.Feed
-
-  alias Visualize.Data.{Delivery, Schema}
-
-  @hosts ["h1", "h2", "h3", "h4"]
-  @every 10
-  @most 200
-
-  defstruct [:schema]
-
-  def new do
-    %__MODULE__{
-      schema:
-        Schema.new!(%{
-          t: %{type: :time, label: "Time"},
-          host: %{type: :category, label: "Host", identity: true},
-          cpu: %{type: :number, label: "CPU", unit: "%", continuity: 3 * @every}
-        })
-    }
-  end
-
-  @doc "A host's reading at an instant: a slow wave around its own level."
-  def cpu(host, %DateTime{} = t) do
-    i = Enum.find_index(@hosts, &(&1 == host))
-    s = DateTime.to_unix(t)
-    base = Enum.at([35, 55, 70, 50], i)
-
-    Float.round(
-      base + 30 * :math.sin(2 * :math.pi() * s / Enum.at([120, 200, 260, 90], i) + i),
-      1
-    )
-  end
-
-  @impl true
-  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
-
-  @impl true
-  def fetch(%__MODULE__{schema: schema}, window, _budget) do
-    now = DateTime.utc_now()
-    [from, to] = window || [DateTime.add(now, -300), now]
-    to = if DateTime.compare(to, now) == :gt, do: now, else: to
-    first = div(DateTime.to_unix(from) + @every - 1, @every)
-    last = div(DateTime.to_unix(to), @every)
-
-    rows =
-      for tick <- max(first, last - @most + 1)..last//1,
-          t = DateTime.from_unix!(tick * @every),
-          host <- @hosts,
-          do: %{t: t, host: host, cpu: cpu(host, t)}
-
-    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
-  end
-end
-
-defmodule Examples.BoardDemo.Sources do
-  @moduledoc """
-  The host's own virtual-source function (spec/08 §10.5.8, D-194): trusted Elixir, tested
-  as any function, captured with its source when this module compiles and run by the board
-  through the same bounded runner as a stored one.
-  """
-  use Visualize.VirtualSources
-
-  @doc "A host's direction over its readings: the newest against the oldest, 5 points either way."
-  defsource trend(rows) do
-    cpu = Enum.map(rows, & &1.cpu)
-    delta = List.last(cpu) - List.first(cpu)
-
-    trend =
-      cond do
-        delta > 5 -> :increasing
-        delta < -5 -> :decreasing
-        true -> :neutral
-      end
-
-    %{trend: trend}
   end
 end
