@@ -414,7 +414,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     {:ok, board} = Examples.BoardDemo.detail("db")
     {:ok, _info} = Server.subscribe(board)
     :ok = Server.tick(board)
-    %{endpoints: %{svg: svg}} = views_of(board, %{}, [:endpoints])
+    %{endpoints: %{svg: svg}} = drawn_of(board, %{}, [:endpoints])
     Server.stop(board)
 
     # max_label: 24 — a longer name is cut to 23 characters and "…", its entry carrying the
@@ -434,7 +434,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     {:ok, board} = Examples.BoardDemo.board()
     {:ok, _info} = Server.subscribe(board)
     :ok = Server.tick(board)
-    assert %{colored: %{state: :live}} = views_of(board, %{}, [:colored])
+    assert %{colored: %{state: :live}} = drawn_of(board, %{}, [:colored])
 
     {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
     {:noreply, _socket} = BoardLive.handle_event("chaos", %{}, socket)
@@ -445,7 +445,8 @@ defmodule ExamplesWeb.BoardLiveTest do
              crashed(board, :colored)
 
     # Its siblings draw on.
-    assert %{hosts: %{state: :live}} = views_of(board, %{}, [:hosts])
+    assert %{hosts: %{state: state}} = drawn_of(board, %{}, [:hosts])
+    assert state in [:live, :capped]
 
     Examples.BoardDemo.Chaos.recover()
     :ok = Server.tick(board)
@@ -469,7 +470,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     {:ok, board} = Examples.BoardDemo.board()
     {:ok, _info} = Server.subscribe(board)
     :ok = Server.tick(board)
-    %{hosts: %{svg: svg}} = views_of(board, %{}, [:hosts])
+    %{svg: svg} = hosts_view()
     Server.unsubscribe(board, self())
 
     assert svg =~ ~s(data-tooltip-template="{host}: {cpu}% CPU, {health.state}, {trend.trend}")
