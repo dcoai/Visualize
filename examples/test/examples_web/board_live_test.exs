@@ -229,15 +229,22 @@ defmodule ExamplesWeb.BoardLiveTest do
 
     memory = Map.fetch!(Examples.BoardDemo.feeds(), "examples.vm.memory")
     assert %Visualize.Feed.Combine{} = memory
+    # An hour ago, long before this test node started, the live feed holds nothing: the
+    # store serves the window, its rows read in the live names and converted from its
+    # kilobytes into the live feed's megabytes.
     now = DateTime.utc_now()
-    {:ok, delivery} = Visualize.Feed.fetch(memory, [DateTime.add(now, -900), now], nil)
+    window = [DateTime.add(now, -3600), DateTime.add(now, -3000)]
+    {:ok, delivery} = Visualize.Feed.fetch(memory, window, nil)
 
-    # A window wider than the node's uptime is filled from the store, in the live names
-    # and the live unit: megabytes, not the store's kilobytes.
-    [oldest | _] = delivery.rows
-    assert DateTime.diff(now, oldest.t) > 600
-    assert Enum.all?(delivery.rows, &(Map.keys(&1) |> Enum.sort() == [:t, :value]))
-    assert oldest.value < 1000
+    assert [_ | _] = delivery.rows
+
+    for row <- delivery.rows do
+      assert Map.keys(row) |> Enum.sort() == [:t, :value]
+
+      assert_in_delta row.value,
+                      Examples.BoardDemo.MemoryHistory.reading(row.t)["value"] / 1000,
+                      1.0e-9
+    end
   end
 
   test "the page forwards the board's messages and its buttons set the board's window" do
