@@ -23,7 +23,8 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ ~s(phx-hook="BoardHook")
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
+    for cell <-
+          ~w(load memory queue wave offline requests errors services hosts weather latency status) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -143,6 +144,37 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert svg =~ " °F<"
   end
 
+  test "overlays are marks read from the feeds' facts: targets, status colors, a timeline" do
+    {:ok, board} = Examples.BoardDemo.board()
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    views = views_of(board, %{}, ~w(memory queue latency status)a)
+    Server.unsubscribe(board, self())
+
+    # The telemetry definitions carry the facts (D-160) the metric design reads.
+    %{"examples.vm.memory" => memory} =
+      Visualize.Feed.Telemetry.feeds(Examples.BoardDemo.Telemetry)
+
+    {_version, schema, _supports} = Visualize.Feed.describe(memory)
+    assert %{target: 200, polarity: :lower_is_better, bounds: [0, nil]} = schema.fields.value
+
+    # A rule at the target, the newest reading a dot in its status, the brush the design's.
+    for cell <- ~w(memory queue latency)a do
+      svg = views[cell].svg
+      assert svg =~ ~s(class="mark mark-rule"), "#{cell}"
+      assert svg =~ ~r/<circle[^>]*fill="var\(--vis-(good|bad)/, "#{cell}"
+      assert svg =~ ~s(data-vis-brush="x"), "#{cell}"
+    end
+
+    assert views.latency.svg =~ ~s(class="mark mark-percentile_band")
+    assert views.latency.svg =~ " ms<"
+
+    # The timeline's stretches are colored by the feed's own meaning of each state.
+    assert views.status.svg =~ ~s(class="mark mark-band")
+    assert views.status.svg =~ ~r/fill="var\(--vis-good/
+    for state <- ~w(ok degraded down), do: assert(views.status.svg =~ ">#{state}<")
+  end
+
   test "the station's readings are rewritten in the page's system" do
     {:ok, socket} = BoardLive.mount(%{"units" => "uk"}, %{}, %Phoenix.LiveView.Socket{})
     assert socket.assigns.system == :uk
@@ -193,7 +225,8 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert Plug.Conn.get_resp_header(svg, "content-type") |> hd() =~ "image/svg+xml"
     assert Plug.Conn.get_resp_header(svg, "content-disposition") |> hd() =~ "board.svg"
 
-    for cell <- ~w(load memory queue wave offline requests errors services hosts weather) do
+    for cell <-
+          ~w(load memory queue wave offline requests errors services hosts weather latency status) do
       assert svg.resp_body =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
@@ -201,7 +234,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(errors hosts load memory offline queue requests services wave weather)a
+             ~w(errors hosts latency load memory offline queue requests services status wave weather)a
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 

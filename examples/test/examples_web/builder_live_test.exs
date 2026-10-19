@@ -231,14 +231,16 @@ defmodule ExamplesWeb.BuilderLiveTest do
                  :errors,
                  :latest,
                  :hosts,
-                 :weather
+                 :weather,
+                 :latency,
+                 :status
                ])
 
       assert s.assigns.binding == Examples.BoardDemo.slots()
 
       mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
       assert mode.catalog?
-      assert map_size(mode.board.cells) == 10
+      assert map_size(mode.board.cells) == 12
       assert mode.faults == []
 
       # Every cell previews over rows shaped like its feed's, the hosts cell over the
@@ -265,7 +267,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         BuilderLive.handle_info({:board_bound, "builder", board_id, binding}, page)
 
       assert page.assigns.bindings[board_id] == binding
-      assert page.assigns.saved =~ "bound: 10 slot(s)"
+      assert page.assigns.saved =~ "bound: 12 slot(s)"
     end
 
     # A wrong binding is a fault panel, never a crash (spec/14 §18.4, §22.6, D-153): every

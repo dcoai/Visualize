@@ -1,6 +1,6 @@
 defmodule Examples.BoardDemo do
   @moduledoc """
-  The demo board of `/board` (spec/15 §8–§10, #576, D-146): ten cells over live feeds,
+  The demo board of `/board` (spec/15 §8–§10, #576, D-146): twelve cells over live feeds,
   run by the library's board runtime under `Examples.Boards`, the
   `Visualize.Board.Supervisor` in the examples' tree.
 
@@ -23,6 +23,13 @@ defmodule Examples.BoardDemo do
   - **memory** and **queue**'s axes, and **weather**'s two, take their `measure` from the
     feed's own facts (D-138, D-155..D-157): the telemetry unit `MBy` and the station's `Cel`
     and `km/h`, shown in the viewer's unit system.
+  - **latency** is a percentile band over a feed of request latency percentiles
+    (`Examples.BoardDemo.Latency`), and **status** a state timeline of each service's
+    stretches in one state (`Examples.BoardDemo.Status`). With **memory** and **queue** they
+    draw their overlays as marks read from the feeds' facts (#565, D-143): a rule at the
+    `target`, readings colored by a threshold scale at it placed by the `polarity` (which
+    the telemetry definitions carry in `reporter_options`, D-160), and states colored by the
+    feed's own `status` map. Every time design brushes with its own `brush: :x`.
 
   The board shares one window, the last five minutes by default, in UTC and shown in the
   board's zone; one sync group joins the time charts' hover and brush. The board is
@@ -34,8 +41,10 @@ defmodule Examples.BoardDemo do
   use Supervisor
 
   import Visualize.Chart.Build
+  import Visualize.Chart, only: [fact: 3]
 
-  alias Examples.BoardDemo.{Fixed, Hosts, Latest, Services, Unreachable, Wave, Weather}
+  alias Examples.BoardDemo.{Fixed, Hosts, Latency, Latest, Services, Status, Unreachable, Wave}
+  alias Examples.BoardDemo.Weather
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
@@ -56,14 +65,22 @@ defmodule Examples.BoardDemo do
     Supervisor.init(children, strategy: :rest_for_one)
   end
 
-  @doc "The two metrics the probe emits, as `Telemetry.Metrics` definitions."
+  @doc """
+  The two metrics the probe emits, as `Telemetry.Metrics` definitions, each carrying the
+  facts of its feed's `value` in `reporter_options[:visualize]` (D-160): which way is
+  better, where values lie and the target a design draws its rule at.
+  """
   def metrics do
     [
       Telemetry.Metrics.last_value("examples.vm.memory",
         unit: :megabyte,
-        description: "Memory in use"
+        description: "Memory in use",
+        reporter_options: [visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 200]]
       ),
-      Telemetry.Metrics.last_value("examples.vm.run_queue", description: "Run queue")
+      Telemetry.Metrics.last_value("examples.vm.run_queue",
+        description: "Run queue",
+        reporter_options: [visualize: [polarity: :lower_is_better, bounds: [0, nil], target: 2]]
+      )
     ]
   end
 
@@ -163,7 +180,9 @@ defmodule Examples.BoardDemo do
           h: 3,
           ref: {:composite, 8},
           title: "Weather station: temperature and wind"
-        }
+        },
+        latency: %{x: 0, y: 16, w: 6, h: 3, ref: {:composite, 9}, title: "Latency against target"},
+        status: %{x: 6, y: 16, w: 6, h: 3, ref: {:composite, 10}, title: "Service status"}
       },
       virtual_sources: virtual_sources()
     })
@@ -216,7 +235,9 @@ defmodule Examples.BoardDemo do
       {:composite, 5} => latest(),
       {:composite, 6} => by_service(Visualize.Chart.var(:service)),
       {:composite, 7} => hosts(),
-      {:composite, 8} => weather()
+      {:composite, 8} => weather(),
+      {:composite, 9} => latency(),
+      {:composite, 10} => status()
     }
   end
 
@@ -239,6 +260,7 @@ defmodule Examples.BoardDemo do
       chart(meta: %{name: "By service"}),
       source(:requests, [:t, :service, :value], types: %{t: :time, value: :number}),
       if(only, do: var(:service, "api"), else: %{}),
+      interaction(brush: :x),
       style(:trace, stroke_width: 2),
       cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 40}),
       time_scale(:x),
@@ -268,17 +290,33 @@ defmodule Examples.BoardDemo do
   # One metric over time: the shape every telemetry feed has (`t`, `value`). The axis says
   # what the value is from the feed's own facts (D-138, D-156), so the telemetry unit — `MBy`
   # for memory, `1` of `:count` for the run queue — reaches it, shown in the viewer's system.
+  #
+  # Its overlays are marks of the design, read from the same facts (#565, D-143): a rule at
+  # the feed's `target`, and the newest reading as a dot whose color is a `:threshold` scale
+  # over the status ramp at that target, placed by the feed's `polarity` — good on the
+  # better side of the target, bad beyond it, whichever way the feed says is better.
   defp metric do
+    newest = take(from(:metric), 1)
+
     Design.fold([
       chart(meta: %{name: "Metric"}),
       source(:metric, [:t, :value], types: %{t: :time, value: :number}),
-      style(:trace, stroke: :series_2, stroke_width: 2),
+      interaction(brush: :x),
+      style(:trace, stroke: %{color: :series_2, width: 2}),
+      style(:reading, fill: %{color: {:field, :value}}, stroke: %{color: :background, width: 1}),
       cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 48}),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
+      threshold_scale(:color,
+        domain: [fact(:metric, :value, :target)],
+        range: {:ramp, :status},
+        polarity: fact(:metric, :value, :polarity)
+      ),
       axis(:x, :bottom, ticks: 4, format: "%H:%M"),
       axis(:y, :left, ticks: 3, grid: true, measure: measure(:metric, :value)),
-      line(:metric, %{x: :t, y: :value}, style: :trace)
+      line(:metric, %{x: :t, y: :value}, style: :trace),
+      rule(newest, %{y: fact(:metric, :value, :target)}, style: [:bad, :dashed]),
+      circle(newest, %{x: :t, y: :value}, style: :reading, options: %{radius: 4})
     ])
   end
 
@@ -292,6 +330,7 @@ defmodule Examples.BoardDemo do
       source(:weather, [:t, :temperature, :wind],
         types: %{t: :time, temperature: :number, wind: :number}
       ),
+      interaction(brush: :x),
       style(:temperature, stroke: %{color: :series_3, width: 2}),
       style(:wind, stroke: %{color: :series_1, width: 1.5, dash: [4, 3]}),
       cartesian(margin: %{top: 10, right: 56, bottom: 26, left: 56}),
@@ -308,11 +347,72 @@ defmodule Examples.BoardDemo do
     ])
   end
 
+  # The latency percentiles as one band (the 5th to the 95th, the 25th to the 75th, the
+  # median), the median's target a rule and each median reading a dot in its status by the
+  # target and the feed's polarity: every overlay a mark, every number a fact (D-143).
+  defp latency do
+    Design.fold([
+      chart(meta: %{name: "Latency"}),
+      source(:latency, [:t, :p5, :p25, :p50, :p75, :p95],
+        types: %{t: :time, p5: :number, p25: :number, p50: :number, p75: :number, p95: :number}
+      ),
+      interaction(brush: :x),
+      style(:reading, fill: %{color: {:field, :p50}}),
+      cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 56}),
+      time_scale(:x),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      threshold_scale(:color,
+        domain: [fact(:latency, :p50, :target)],
+        range: {:ramp, :status},
+        polarity: fact(:latency, :p50, :polarity)
+      ),
+      axis(:x, :bottom, format: "%H:%M"),
+      axis(:y, :left, ticks: 4, grid: true, measure: measure(:latency, :p50)),
+      percentile_band(:latency, %{
+        x: :t,
+        median: :p50,
+        inner_lo: :p25,
+        inner_hi: :p75,
+        outer_lo: :p5,
+        outer_hi: :p95
+      }),
+      rule(take(from(:latency), 1), %{y: fact(:latency, :p50, :target)}, style: [:bad, :dashed]),
+      circle(:latency, %{x: :t, y: :p50}, style: :reading, options: %{radius: 2.5})
+    ])
+  end
+
+  # Each service's state over time as a state timeline: a `:band` per stretch, at its
+  # service's row, filled by its state through an ordinal color scale whose domain is the
+  # feed's declared states and whose range is its own meaning of each — a map from state to
+  # role — both read as facts (D-143), so the legend lists every state, present or not.
+  defp status do
+    Design.fold([
+      chart(meta: %{name: "Service status"}),
+      source(:status, [:service, :since, :until, :state], types: %{since: :time, until: :time}),
+      interaction(brush: :x),
+      style(:stretch, fill: %{color: {:field, :state}}),
+      cartesian(margin: %{top: 8, right: 16, bottom: 26, left: 40}),
+      time_scale(:x),
+      band_scale(:y, domain: Services.services(), padding: 0.25),
+      ordinal_scale(:color,
+        domain: fact(:status, :state, :values),
+        range: fact(:status, :state, :status)
+      ),
+      axis(:x, :bottom, format: "%H:%M"),
+      axis(:y, :left),
+      band(:status, %{x0: :since, x1: :until, y: :service},
+        style: :stretch,
+        options: %{height: 14}
+      ),
+      legend(:color, title: "State", position: :bottom, inside: false)
+    ])
+  end
+
   # An axis's measure as the feed's schema states it: its unit and its quantity.
   defp measure(slot, field) do
     %{
-      unit: Visualize.Chart.fact(slot, field, :unit),
-      quantity: Visualize.Chart.fact(slot, field, :quantity)
+      unit: fact(slot, field, :unit),
+      quantity: fact(slot, field, :quantity)
     }
   end
 
@@ -329,7 +429,9 @@ defmodule Examples.BoardDemo do
       {:errors, :requests} => :errors,
       {:services, :latest} => :latest,
       {:hosts, :hosts} => :hosts,
-      {:weather, :weather} => :weather
+      {:weather, :weather} => :weather,
+      {:latency, :latency} => :latency,
+      {:status, :status} => :status
     })
   end
 
@@ -346,7 +448,9 @@ defmodule Examples.BoardDemo do
       errors: Services.new(0.08),
       latest: Latest.new(),
       hosts: Hosts.new(),
-      weather: Weather.new()
+      weather: Weather.new(),
+      latency: Latency.new(),
+      status: Status.new()
     })
   end
 
@@ -424,7 +528,7 @@ defmodule Examples.BoardDemo do
         frames: %{
           main: %{
             legend: %{
-              values: Visualize.Chart.fact(:hosts, state, :values),
+              values: fact(:hosts, state, :values),
               title: "Health",
               position: :right,
               inside: false
