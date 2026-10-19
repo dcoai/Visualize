@@ -30,7 +30,7 @@ defmodule Examples.BoardDemo do
 
   import Visualize.Chart.Build
 
-  alias Examples.BoardDemo.{Fixed, Latest, Services, Unreachable, Wave}
+  alias Examples.BoardDemo.{Fixed, Hosts, Latest, Services, Unreachable, Wave}
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
@@ -82,6 +82,7 @@ defmodule Examples.BoardDemo do
       binding: slots(),
       feeds: feeds(),
       boards: %{detail: detail_value("api")},
+      virtual_sources: [Examples.BoardDemo.Sources],
       tick: 1000
     ]
 
@@ -118,8 +119,18 @@ defmodule Examples.BoardDemo do
           title: "Services: click to drill down",
           sync: false,
           drill: %{board: :detail, vars: %{service: {:datum, :name}}}
+        },
+        hosts: %{
+          x: 0,
+          y: 10,
+          w: 12,
+          h: 3,
+          ref: {:composite, 7},
+          title: "Hosts: health and trend",
+          sync: false
         }
-      }
+      },
+      virtual_sources: virtual_sources()
     })
   end
 
@@ -168,7 +179,8 @@ defmodule Examples.BoardDemo do
       {:composite, 3} => metric(),
       {:composite, 4} => by_service(nil),
       {:composite, 5} => latest(),
-      {:composite, 6} => by_service(Visualize.Chart.var(:service))
+      {:composite, 6} => by_service(Visualize.Chart.var(:service)),
+      {:composite, 7} => hosts()
     }
   end
 
@@ -243,7 +255,8 @@ defmodule Examples.BoardDemo do
       {:offline, :points} => :offline,
       {:requests, :requests} => :requests,
       {:errors, :requests} => :errors,
-      {:services, :latest} => :latest
+      {:services, :latest} => :latest,
+      {:hosts, :hosts} => :hosts
     })
   end
 
@@ -258,8 +271,97 @@ defmodule Examples.BoardDemo do
       offline: Unreachable.new(%{x: %{type: :time}, y: %{type: :number}}),
       requests: Services.new(1),
       errors: Services.new(0.08),
-      latest: Latest.new()
+      latest: Latest.new(),
+      hosts: Hosts.new()
     })
+  end
+
+  @doc """
+  The board's virtual sources (spec/15 §14, D-194), one of each kind: `health`, a stored
+  function the board carries — each host's state by its newest reading — and `trend`, the
+  host's own function `Examples.BoardDemo.Sources.trend/1`, named here and registered with
+  the board's `virtual_sources:` option.
+  """
+  def virtual_sources do
+    %{
+      health: %{
+        from: [{:hosts, %{last: 6}}],
+        per: :identity,
+        schema: %{
+          host: %{type: :category, identity: true},
+          state: %{
+            type: :category,
+            label: "Health",
+            values: [:good, :warning, :bad],
+            status: %{good: :good, warning: :warning, bad: :bad}
+          }
+        },
+        elixir: """
+        fn rows ->
+          latest = Enum.at(rows, -1).cpu
+
+          state =
+            cond do
+              latest > 80 -> :bad
+              latest > 60 -> :warning
+              true -> :good
+            end
+
+          %{state: state}
+        end
+        """
+      },
+      trend: %{
+        from: [{:hosts, %{last: 6}}],
+        per: :identity,
+        schema: %{
+          host: %{type: :category, identity: true},
+          trend: %{type: :category, label: "Trend", values: [:increasing, :decreasing, :neutral]}
+        },
+        function: :trend
+      }
+    }
+  end
+
+  # Each host's newest reading as a bar in its health's style, an icon chosen by the same
+  # field beneath it, and a legend of the field's declared values (spec/15 §10, D-194).
+  defp hosts do
+    newest = %{source: :hosts, transforms: [%{op: :window, field: :t, latest: true}]}
+    state = :"health.state"
+
+    Design.fold([
+      chart(meta: %{name: "Hosts"}),
+      source(:hosts, [:t, :host, :cpu, state, :"trend.trend"], types: %{t: :time, cpu: :number}),
+      cartesian(margin: %{top: 10, right: 110, bottom: 26, left: 40}),
+      band_scale(:x, padding: 0.3),
+      linear_scale(:y, domain: [-12, 100]),
+      axis(:x, :bottom),
+      axis(:y, :left, ticks: 3, grid: true),
+      rect(newest, %{x0: :host, x1: :host, y0: 0, y1: :cpu}, style: {:field, state}),
+      choose(newest, %{x: :host, y: -6},
+        on: state,
+        cases: %{
+          good: %{type: :circle, style: :good, options: %{radius: 4}},
+          warning: %{type: :symbol, style: :warning},
+          bad: %{type: :symbol, style: :bad}
+        }
+      ),
+      %{
+        frames: %{
+          main: %{
+            legend: %{
+              # The health source's declared values, written out: a binding check that
+              # reads the hosts feed's own schema (the builder's) does not see the joined
+              # field, so a fact of it would be a fault there (spec/15 §14.7).
+              values: [:good, :warning, :bad],
+              title: "Health",
+              position: :right,
+              inside: false
+            }
+          }
+        }
+      }
+    ])
   end
 end
 
@@ -493,5 +595,90 @@ defmodule Examples.BoardDemo.Latest do
           do: %{name: service, value: Services.value(1, service, now)}
 
     {:ok, Delivery.new(rows, schema: Schema.version(schema))}
+  end
+end
+
+defmodule Examples.BoardDemo.Hosts do
+  @moduledoc """
+  A synthetic feed of four hosts' CPU readings (spec/08 §11): a reading every ten seconds
+  for each of `h1`…`h4`, each its own wave, so their health (`Examples.BoardDemo`'s
+  virtual sources) moves between good, warning and bad. `host` is the declared identity
+  (D-167) the virtual sources run per.
+  """
+  @behaviour Visualize.Feed
+
+  alias Visualize.Data.{Delivery, Schema}
+
+  @hosts ["h1", "h2", "h3", "h4"]
+  @every 10
+  @most 200
+
+  defstruct [:schema]
+
+  def new do
+    %__MODULE__{
+      schema:
+        Schema.new!(%{
+          t: %{type: :time, label: "Time"},
+          host: %{type: :category, label: "Host", identity: true},
+          cpu: %{type: :number, label: "CPU", unit: "%", continuity: 3 * @every}
+        })
+    }
+  end
+
+  @doc "A host's reading at an instant: a slow wave around its own level."
+  def cpu(host, %DateTime{} = t) do
+    i = Enum.find_index(@hosts, &(&1 == host))
+    s = DateTime.to_unix(t)
+    base = Enum.at([35, 55, 70, 50], i)
+
+    Float.round(
+      base + 30 * :math.sin(2 * :math.pi() * s / Enum.at([120, 200, 260, 90], i) + i),
+      1
+    )
+  end
+
+  @impl true
+  def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
+
+  @impl true
+  def fetch(%__MODULE__{schema: schema}, window, _budget) do
+    now = DateTime.utc_now()
+    [from, to] = window || [DateTime.add(now, -300), now]
+    to = if DateTime.compare(to, now) == :gt, do: now, else: to
+    first = div(DateTime.to_unix(from) + @every - 1, @every)
+    last = div(DateTime.to_unix(to), @every)
+
+    rows =
+      for tick <- max(first, last - @most + 1)..last//1,
+          t = DateTime.from_unix!(tick * @every),
+          host <- @hosts,
+          do: %{t: t, host: host, cpu: cpu(host, t)}
+
+    {:ok, Delivery.new(rows, schema: Schema.version(schema))}
+  end
+end
+
+defmodule Examples.BoardDemo.Sources do
+  @moduledoc """
+  The host's own virtual-source function (spec/08 §10.5.8, D-194): trusted Elixir, tested
+  as any function, captured with its source when this module compiles and run by the board
+  through the same bounded runner as a stored one.
+  """
+  use Visualize.VirtualSources
+
+  @doc "A host's direction over its readings: the newest against the oldest, 5 points either way."
+  defsource trend(rows) do
+    cpu = Enum.map(rows, & &1.cpu)
+    delta = List.last(cpu) - List.first(cpu)
+
+    trend =
+      cond do
+        delta > 5 -> :increasing
+        delta < -5 -> :decreasing
+        true -> :neutral
+      end
+
+    %{trend: trend}
   end
 end

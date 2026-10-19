@@ -228,18 +228,21 @@ defmodule ExamplesWeb.BuilderLiveTest do
                  :wave,
                  :requests,
                  :errors,
-                 :latest
+                 :latest,
+                 :hosts
                ])
 
       assert s.assigns.binding == Examples.BoardDemo.slots()
 
       mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
       assert mode.catalog?
-      assert map_size(mode.board.cells) == 8
+      assert map_size(mode.board.cells) == 9
       assert mode.faults == []
 
-      # Every cell previews over rows shaped like its feed's.
-      for cell <- mode.cells do
+      # Every cell previews over rows shaped like its feed's. The hosts cell reads fields
+      # the board's virtual sources join (spec/15 §14.7), which the builder's sample rows
+      # do not carry until the builder runs the board's sources (#753).
+      for cell <- mode.cells, to_string(cell.name) != "hosts" do
         assert {:ok, "<svg" <> _} = cell.preview, "#{cell.name}: #{inspect(cell.preview)}"
       end
     end
@@ -261,7 +264,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         BuilderLive.handle_info({:board_bound, "builder", board_id, binding}, page)
 
       assert page.assigns.bindings[board_id] == binding
-      assert page.assigns.saved =~ "bound: 8 slot(s)"
+      assert page.assigns.saved =~ "bound: 9 slot(s)"
     end
 
     # A wrong binding is a fault panel, never a crash (spec/14 §18.4, §22.6, D-153): every

@@ -164,6 +164,47 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
     assert delivery.schema == Schema.version(schema)
   end
 
+  test "a cell whose mark keeps each identity's latest row draws, its hooks realized with the schema" do
+    hosts =
+      Schema.new!(%{
+        t: %{type: :time},
+        v: %{type: :number},
+        host: %{type: :category, identity: true}
+      })
+
+    rows =
+      for {host, i} <- Enum.with_index(["a", "b", "a"]),
+          do: %{t: DateTime.add(@t0, i * 60), v: i, host: host}
+
+    {feed, agent} = Feeds.scripted(schema: hosts, rows: rows)
+    Process.unlink(agent)
+    on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+
+    latest = %{
+      @line
+      | sources: %{primary: %{fields: [:t, :v, :host]}},
+        marks: [
+          %{
+            type: :line,
+            data: %{source: :primary, transforms: [%{op: :window, field: :t, latest: true}]},
+            channels: %{x: :t, y: :v}
+          }
+        ]
+    }
+
+    {{:ok, board}, _agent} =
+      start(
+        board: board(%{}),
+        store: %{{:composite, 1} => latest},
+        binding: Binding.new(%{{:a, :primary} => :raw}),
+        feeds: %{raw: feed}
+      )
+
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    assert view_until(:a, &(&1.state == :live)).svg =~ ~s(class="mark mark-line")
+  end
+
   test "a binding to a name that is neither a feed nor a source is still a missing feed" do
     {answer, _agent} = start(binding: Binding.new(%{{:a, :primary} => :absent}))
     assert answer == {:error, {:feeds, [:absent]}}
