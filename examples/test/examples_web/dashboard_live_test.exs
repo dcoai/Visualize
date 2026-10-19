@@ -90,6 +90,13 @@ defmodule ExamplesWeb.DashboardLiveTest do
     assert html(cleared) =~ "No window brushed."
   end
 
+  test "the requests panel's note: two lines in italic, a line height of its own" do
+    [requests | _] = mounted().assigns.panels
+
+    assert requests.svg =~
+             ~r/<text class="label"[^>]*font-style="italic"[^>]*><tspan x="4">Summed over every region,<\/tspan><tspan dy="1.4em" x="4">sampled every ten minutes<\/tspan><\/text>/
+  end
+
   test "a zone picked: the axes tick on its hours and read its clock, and so does the window" do
     html = build_conn() |> get("/dashboard?zone=Asia/Tokyo") |> html_response(200)
     assert html =~ ~r/aria-current="true"[^>]*>\s*Tokyo\s*</

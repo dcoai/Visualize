@@ -42,9 +42,10 @@ defmodule Examples.BoardDemo do
 
   import Visualize.Chart.Build
   import Visualize.Chart, only: [fact: 3]
+  import Visualize.Generators, only: [generate: 2]
 
   alias Examples.BoardDemo.{Fixed, Hosts, Latency, Latest, Services, Status, Unreachable, Wave}
-  alias Examples.BoardDemo.{MemoryHistory, Weather}
+  alias Examples.BoardDemo.{Endpoints, MemoryHistory, Weather}
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
@@ -187,7 +188,16 @@ defmodule Examples.BoardDemo do
           title: "Weather station: temperature and wind"
         },
         latency: %{x: 0, y: 16, w: 6, h: 3, ref: {:composite, 9}, title: "Latency against target"},
-        status: %{x: 6, y: 16, w: 6, h: 3, ref: {:composite, 10}, title: "Service status"}
+        status: %{x: 6, y: 16, w: 6, h: 3, ref: {:composite, 10}, title: "Service status"},
+        colored: %{
+          x: 0,
+          y: 19,
+          w: 6,
+          h: 3,
+          ref: {:composite, 12},
+          title: "Services, colored by a host function",
+          sync: false
+        }
       },
       virtual_sources: virtual_sources()
     })
@@ -200,13 +210,25 @@ defmodule Examples.BoardDemo do
   @spec detail_value(String.t()) :: Board.t()
   def detail_value(service) do
     Board.from_map!(%{
-      meta: %{name: "Service detail", description: "One service's requests and errors"},
+      meta: %{
+        name: "Service detail",
+        description: "One service's requests, errors and endpoints"
+      },
       window: %{last: 300},
       sync: "detail",
       vars: %{service: service},
       cells: %{
         requests: %{x: 0, y: 0, w: 6, h: 4, ref: {:composite, 6}, title: "Requests"},
-        errors: %{x: 6, y: 0, w: 6, h: 4, ref: {:composite, 6}, title: "Errors"}
+        errors: %{x: 6, y: 0, w: 6, h: 4, ref: {:composite, 6}, title: "Errors"},
+        endpoints: %{
+          x: 3,
+          y: 4,
+          w: 6,
+          h: 3,
+          ref: {:composite, 11},
+          title: "Requests by endpoint, the last minute",
+          sync: false
+        }
       }
     })
   end
@@ -221,8 +243,12 @@ defmodule Examples.BoardDemo do
       board: detail_value(service),
       store: store(),
       binding:
-        Binding.new(%{{:requests, :requests} => :requests, {:errors, :requests} => :errors}),
-      feeds: %{requests: Services.new(1), errors: Services.new(0.08)},
+        Binding.new(%{
+          {:requests, :requests} => :requests,
+          {:errors, :requests} => :errors,
+          {:endpoints, :endpoints} => :endpoints
+        }),
+      feeds: %{requests: Services.new(1), errors: Services.new(0.08), endpoints: Endpoints.new()},
       tick: 1000
     )
   end
@@ -242,7 +268,9 @@ defmodule Examples.BoardDemo do
       {:composite, 7} => hosts(),
       {:composite, 8} => weather(),
       {:composite, 9} => latency(),
-      {:composite, 10} => status()
+      {:composite, 10} => status(),
+      {:composite, 11} => endpoints(),
+      {:composite, 12} => colored()
     }
   end
 
@@ -309,6 +337,11 @@ defmodule Examples.BoardDemo do
       interaction(brush: :x),
       style(:trace, stroke: %{color: :series_2, width: 2}),
       style(:reading, fill: %{color: {:field, :value}}, stroke: %{color: :background, width: 1}),
+      # A glow under the newest reading: its status color, blurred (an effect, spec/14 §3.1).
+      style(:glow,
+        fill: %{color: {:field, :value}, opacity: 0.45},
+        effect: %{type: :blur, radius: 3}
+      ),
       cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 48}),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
@@ -321,6 +354,7 @@ defmodule Examples.BoardDemo do
       axis(:y, :left, ticks: 3, grid: true, measure: measure(:metric, :value)),
       line(:metric, %{x: :t, y: :value}, style: :trace),
       rule(newest, %{y: fact(:metric, :value, :target)}, style: [:bad, :dashed]),
+      circle(newest, %{x: :t, y: :value}, style: :glow, options: %{radius: 8}),
       circle(newest, %{x: :t, y: :value}, style: :reading, options: %{radius: 4})
     ])
   end
@@ -363,6 +397,8 @@ defmodule Examples.BoardDemo do
       ),
       interaction(brush: :x),
       style(:reading, fill: %{color: {:field, :p50}}),
+      # The note in the corner, in italic, its number a fact of the feed (spec/14 §3.1, §7.4).
+      style(:note, extends: :label, font: %{style: :italic, size: 11}),
       cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 56}),
       time_scale(:x),
       linear_scale(:y, domain: [0, :auto], nice: true),
@@ -382,7 +418,12 @@ defmodule Examples.BoardDemo do
         outer_hi: :p95
       }),
       rule(take(from(:latency), 1), %{y: fact(:latency, :p50, :target)}, style: [:bad, :dashed]),
-      circle(:latency, %{x: :t, y: :p50}, style: :reading, options: %{radius: 2.5})
+      circle(:latency, %{x: :t, y: :p50}, style: :reading, options: %{radius: 2.5}),
+      label(
+        {:frame, :top_right},
+        "The median against its \#{fact(:latency, :p50, :target)} ms target: lower is better",
+        style: :note
+      )
     ])
   end
 
@@ -413,6 +454,51 @@ defmodule Examples.BoardDemo do
     ])
   end
 
+  # Each service's newest rate, a bar in the color the host's own function gives it
+  # (`Examples.BoardDemo.Generators`, spec/14 §3.13), called as the cell draws: when that
+  # function raises, only this cell is down, shown crashed and restarted (spec/15 §8.3).
+  defp colored do
+    Design.fold([
+      chart(meta: %{name: "Services by host color"}),
+      source(:latest, [:name, :value], types: %{value: :number}),
+      cartesian(margin: %{top: 10, right: 12, bottom: 26, left: 40}),
+      band_scale(:x, padding: 0.3),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      axis(:x, :bottom),
+      axis(:y, :left, ticks: 3, grid: true),
+      rect(:latest, %{x0: :name, x1: :name, y0: 0, y1: :value},
+        style: %{fill: %{color: generate(:service_color, [{:field, :name}])}}
+      )
+    ])
+  end
+
+  # One service's share of requests by endpoint, a slice each, the legend at the right
+  # naming them. Endpoints are named as routes are, too long for a side legend, so the
+  # legend cuts each label to 24 characters and keeps the whole name in its title for a
+  # hover and a screen reader (`max_label`, spec/14 §4.5, D-169).
+  defp endpoints do
+    only = %{
+      source: :endpoints,
+      transforms: [
+        %{op: :filter, field: :service, test: :eq, value: Visualize.Chart.var(:service)}
+      ]
+    }
+
+    Design.fold([
+      chart(meta: %{name: "Endpoints"}),
+      source(:endpoints, [:service, :endpoint, :requests], types: %{requests: :number}),
+      var(:service, "api"),
+      style(:slice, fill: %{color: {:field, :endpoint}}, stroke: %{color: :background, width: 1}),
+      polar(margin: %{top: 8, right: 240, bottom: 8, left: 8}),
+      ordinal_scale(:color),
+      legend(:color, position: :right, inside: false, max_label: 24, title: "Endpoint"),
+      arc(only, %{value: :requests},
+        style: :slice,
+        options: %{inner_radius: 30, outer_radius: 80, pad_angle: 0.02}
+      )
+    ])
+  end
+
   # An axis's measure as the feed's schema states it: its unit and its quantity.
   defp measure(slot, field) do
     %{
@@ -436,7 +522,8 @@ defmodule Examples.BoardDemo do
       {:hosts, :hosts} => :hosts,
       {:weather, :weather} => :weather,
       {:latency, :latency} => :latency,
-      {:status, :status} => :status
+      {:status, :status} => :status,
+      {:colored, :latest} => :latest
     })
   end
 
@@ -538,7 +625,17 @@ defmodule Examples.BoardDemo do
       linear_scale(:y, domain: [-12, 100]),
       axis(:x, :bottom),
       axis(:y, :left, ticks: 3, grid: true),
-      rect(newest, %{x0: :host, x1: :host, y0: 0, y1: :cpu}, style: {:field, state}),
+      # Hovering a bar shows the host's reading, health and trend; a click on one is the
+      # declared event `host_picked`, which the page receives with the row (spec/14 §5.7,
+      # D-170).
+      rect(newest, %{x0: :host, x1: :host, y0: 0, y1: :cpu},
+        style: {:field, state},
+        tooltip: %{
+          fields: [:host, :cpu, state, :"trend.trend"],
+          template: "{host}: {cpu}% CPU, {health.state}, {trend.trend}",
+          event: :host_picked
+        }
+      ),
       choose(newest, %{x: :host, y: -6},
         on: state,
         cases: %{

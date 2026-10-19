@@ -6,7 +6,8 @@ defmodule ExamplesWeb.BoardDetailLive do
 
   The page starts its own detail board, linked to its process (`Examples.BoardDemo.detail/1`),
   so each visitor's detail board shows their service and stops when they leave. A service
-  the demo does not have reads as `api`.
+  the demo does not have reads as `api`. Its *Requests by endpoint* cell's legend cuts the
+  endpoints' long names (`max_label`, D-169).
   """
   use Phoenix.LiveView
 
@@ -52,6 +53,11 @@ defmodule ExamplesWeb.BoardDetailLive do
             >
               {other}
             </a>
+          </p>
+          <p class="panel-note">
+            <em>Requests by endpoint</em> names endpoints as routes are, too long for a side
+            legend: its <code>max_label: 24</code> cuts each label, and the entry keeps the whole
+            name for a hover and a screen reader.
           </p>
 
           <.live_component

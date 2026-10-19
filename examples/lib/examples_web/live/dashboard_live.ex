@@ -92,8 +92,22 @@ defmodule ExamplesWeb.DashboardLive do
       axis(:x, :bottom, ticks: 6),
       axis(:y, :left, ticks: 4, grid: true),
       line(:metric, %{x: :t, y: :v}, style: :trace)
+      | note(id)
     ])
   end
+
+  # The requests panel's note: two lines in italic at a line height of their own
+  # (spec/14 §3.1, §7.1), a newline in the text breaking it.
+  defp note(:requests) do
+    [
+      style(:note, extends: :label, font: %{style: :italic, size: 11, line_height: 1.4}),
+      label({:frame, :top_left}, "Summed over every region,\nsampled every ten minutes",
+        style: :note
+      )
+    ]
+  end
+
+  defp note(_id), do: []
 
   @doc """
   Every panel rendered once: its SVG and the crosshair's arrays (with the group's

@@ -4,7 +4,8 @@ defmodule Examples.ColorPalettes do
 
   Each palette provides a cohesive set of colors that work well together for data
   visualization. The `:default` and `:dark` palettes are `Visualize.Theme.default/0` and
-  `Visualize.Theme.dark/0`, and `:color_safe` is `Visualize.Theme.color_safe/0`; every
+  `Visualize.Theme.dark/0`, `:color_safe` is `Visualize.Theme.color_safe/0` and `:print`
+  is `Visualize.Theme.print/0`, the theme a board prints in (spec/08 §7.6, D-150); every
   palette is available as a `Visualize.Theme` through `theme/1`, which is what the charts
   hand their axes.
   """
@@ -14,6 +15,7 @@ defmodule Examples.ColorPalettes do
   @light Theme.default()
   @dark Theme.dark()
   @safe Theme.color_safe()
+  @print Theme.print()
 
   # A UI font stack, ending in the generic family: the gallery's text is set in the first
   # face the viewer has, where the library's default theme names only `sans-serif` (#486).
@@ -43,6 +45,18 @@ defmodule Examples.ColorPalettes do
       axis: @safe.axis,
       grid: @safe.grid,
       surface: @safe.surface
+    },
+    print: %{
+      name: "Print",
+      description:
+        "The library's print theme: white paper, dark ink, the color-safe status ramp, role fills hatched",
+      colors: @print.series,
+      gradient: ["#3b6fa8", "#5f8abb", "#83a5cd", "#a7c0e0", "#cbdbf2"],
+      background: @print.background,
+      text: @print.text,
+      axis: @print.axis,
+      grid: @print.grid,
+      surface: @print.surface
     },
     dark: %{
       name: "Dark",
