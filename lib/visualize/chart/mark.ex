@@ -55,7 +55,7 @@ defmodule Visualize.Chart.Mark do
     Tiles
   }
 
-  alias Visualize.Chart.{Style, Var}
+  alias Visualize.Chart.{Placements, Style, Var}
   alias Visualize.Chart.Style.Defaults
   alias Visualize.Data.Table
   alias Visualize.IR.{Element, Transform}
@@ -75,7 +75,8 @@ defmodule Visualize.Chart.Mark do
   keys a mark with an event writes on its elements (§5.7, D-170), its one-based position
   among the marks, and the styles a stack's `{:field, f}` entries name by data (§3.6,
   #644) and its generators compute (§3.13, #654), `nil` for a stack that names none and
-  reaches none, with the memo of the generators the mark's rows call.
+  reaches none, with the memo of the generators the mark's rows call, and the update's
+  placement of its rows when the caller made one (#811).
   """
   @type context :: %{
           frame: Frame.t(),
@@ -96,7 +97,8 @@ defmodule Visualize.Chart.Mark do
             | nil,
           index: pos_integer(),
           by_data: %{entries: [{:field, atom()}], names: map(), reach: map(), table: map()} | nil,
-          generated: %{memo: map(), path: list()}
+          generated: %{memo: map(), path: list()},
+          placed: %{mark: map(), rows: [map()], pixels: [map()]} | nil
         }
 
   @doc "As `generate/3` with `[]` options: no source bound, an empty mark group."
@@ -155,7 +157,13 @@ defmodule Visualize.Chart.Mark do
     sources = opts |> Keyword.get(:sources, %{}) |> Visualize.Chart.Names.keys()
     mode = Keyword.get(opts, :resolve, :css)
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
-    realized = rows(frame, mark, sources)
+    # The update's placement of this mark, when the caller made one (#811): its rows and
+    # their pixels, read rather than computed again. A panel's rows are its own.
+    placed =
+      if not Keyword.has_key?(opts, :panel),
+        do: Placements.fetch(Keyword.get(opts, :placements), frame, mark, index - 1)
+
+    realized = if placed, do: placed.rows, else: rows(frame, mark, sources)
     rows = panel(realized, frame, Keyword.fetch(opts, :panel))
     # The defaults the mark's containers lay under its style (spec/14 §3.8, D-174).
     base = Defaults.at(frame, Map.get(mark, :defaults), type)
@@ -172,7 +180,8 @@ defmodule Visualize.Chart.Mark do
         index: index,
         options: options(mark),
         label: label(mark),
-        tooltip: node(mark, :tooltip)
+        tooltip: node(mark, :tooltip),
+        placed: placed
       }
       |> Map.merge(Styled.parts(style_node, type, index, frame.theme, mode))
       |> Styled.prepare()
@@ -268,7 +277,10 @@ defmodule Visualize.Chart.Mark do
   # within the mark that scale stands under `color`: its series' paint, its style's color
   # bindings and its labels' ink all read the one scale, and an overlay that renames it
   # leaves the series' colors to the marks that keep `color`.
-  defp colored(frame, mark) do
+  @doc false
+  # The frame a mark draws in: its color scale, when it names another, as `"color"`.
+  @spec colored(Frame.t(), map()) :: Frame.t()
+  def colored(frame, mark) do
     case Scales.color_scale(mark) do
       "color" ->
         frame

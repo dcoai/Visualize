@@ -87,14 +87,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp draw(%{assigns: %{drawing: drawing}} = socket, drawing), do: socket
 
     defp draw(socket, {chart, render_opts, backend} = drawing) do
+      # The items placed once, for the drawing and the keyboard (#811).
+      placements = Chart.placements(chart)
+
       assign(socket,
         drawing: drawing,
         drawn: Integer.to_string(System.unique_integer([:positive, :monotonic])),
         hover: Tooltip.attrs(chart.frame),
         # Every point and every keyed item reached from the keyboard (spec/10 §17, D-198).
-        keyboard: Keyboard.attrs(chart)
+        keyboard: Keyboard.attrs(chart, placements: placements)
       )
-      |> assign(drawn_as(backend, chart, render_opts))
+      |> assign(drawn_as(backend, chart, [placements: placements] ++ render_opts))
     end
 
     defp drawn_as(:svg, chart, render_opts) do
@@ -106,7 +109,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # On a canvas (spec/10 §19.3, D-197): the stream, the hit index and the size from one
     # generated tree in literal colors, and on the binary stream the text it cannot carry.
     defp drawn_as({:canvas, format}, chart, render_opts) do
-      tree = Chart.generate(chart, resolve: :literal)
+      tree = Chart.generate(chart, resolve: :literal, placements: render_opts[:placements])
       %{width: width, height: height} = chart.frame.size
       summary = Summary.new(chart)
       title = Keyword.get(render_opts, :title, summary.name)

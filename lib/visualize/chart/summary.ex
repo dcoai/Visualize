@@ -200,14 +200,17 @@ defmodule Visualize.Chart.Summary do
   # `@reachable` points is sampled to that many, evenly, its first and last kept, and each
   # readout counts the series' own rows. `Visualize.Hooks.Keyboard` writes them; each point
   # also carries the `row` behind it and the `mark` that drew it, which a board's cell
-  # reads to answer a pick (spec/15 §13.2).
-  @spec points(Applied.t()) :: [%{name: String.t(), points: [map()]}]
-  def points(%Applied{sources: sources} = applied) do
+  # reads to answer a pick (spec/15 §13.2). With the update's `placements`
+  # (`Visualize.Chart.placements/1`, #811) the positions are read, not placed again.
+  @spec points(Applied.t(), Visualize.Chart.placements() | nil) :: [
+          %{name: String.t(), points: [map()]}
+        ]
+  def points(%Applied{sources: sources} = applied, placements \\ nil) do
     all =
       applied
       |> realized()
       |> Enum.sort_by(&{&1.z, to_string(&1.name)})
-      |> Enum.flat_map(&frame_points(&1, sources, applied.schemas))
+      |> Enum.flat_map(&frame_points(&1, sources, applied.schemas, placements))
 
     grouped = Enum.group_by(all, &elem(&1, 0), &elem(&1, 1))
 
@@ -278,17 +281,19 @@ defmodule Visualize.Chart.Summary do
   # Every data mark's points: the rows whose value is a number, or — for a mark that draws
   # none — the rows with an identity (D-198). Each carries its key when its mark declares
   # an event: what a click on it would send (spec/10 §17.3).
-  defp frame_points(frame, sources, schemas) do
+  defp frame_points(frame, sources, schemas, placements) do
     frame.marks
     |> Enum.with_index()
     |> Enum.reject(fn {mark, _position} -> Map.get(mark, :type) in @auxiliary end)
     |> Enum.flat_map(fn {mark, position} ->
-      rows = Mark.rows(frame, mark, sources)
+      placed = Visualize.Chart.Placements.fetch(placements, frame, mark, position)
+      rows = if placed, do: placed.rows, else: Mark.rows(frame, mark, sources)
       key = key(frame, mark, position)
+      ctx = %{frame: frame, mark: mark, placed: placed}
 
       entries =
-        case value_points(%{frame: frame, mark: mark}, rows) do
-          [] -> Identities.entries(frame, mark, rows, schemas)
+        case value_points(ctx, rows) do
+          [] -> Identities.entries(ctx, rows, schemas)
           valued -> valued
         end
 
@@ -304,8 +309,7 @@ defmodule Visualize.Chart.Summary do
         []
 
       value ->
-        for {{row, position}, ordinal} <-
-              Enum.with_index(Enum.zip(rows, positions(ctx.frame, ctx.mark, rows))),
+        for {{row, position}, ordinal} <- Enum.with_index(Enum.zip(rows, positions(ctx, rows))),
             reading = value.read.(row),
             is_number(reading) do
           name =
@@ -347,15 +351,16 @@ defmodule Visualize.Chart.Summary do
   # Where each row is drawn, in the chart's pixels (§21.5): the middle of its `x` — of `x0`
   # and `x1` for a rectangle — and its `y`, or `y1`, moved by the frame's margin and box; no
   # position in a frame whose marks bend or project.
-  defp positions(%Frame{kind: kind}, _mark, rows) when kind != :cartesian,
+  defp positions(%{frame: %Frame{kind: kind}}, rows) when kind != :cartesian,
     do: Enum.map(rows, fn _row -> nil end)
 
-  defp positions(frame, mark, rows) do
+  defp positions(%{frame: frame} = ctx, rows) do
     [bx, by, _w, _h] = frame.box
     left = bx * frame.size.width + frame.margin.left
     top = by * frame.size.height + frame.margin.top
 
-    %{frame: frame, mark: mark, rows: rows}
+    ctx
+    |> Map.put(:rows, rows)
     |> Channels.pixels()
     |> Enum.map(fn pixel ->
       with x when is_number(x) <- center(pixel, :x, :x0, :x1),

@@ -361,6 +361,9 @@ defmodule Visualize.Chart.Frame do
       `marks[0]`, `frames.main.axes[0]`, `frames.main.legend`, `labels[0]` — for a caller that must
       name what it drew, as the builder's graph does (spec/14 §4.7, D-105); `false`
       (default) leaves the markup as it is
+    * `:placements` - the placement of the chart this frame is one of, as
+      `Visualize.Chart.placements/1` returns it: a cartesian frame's marks read their
+      rows and pixels from it rather than placing them again (#811)
 
   ## Examples
 
@@ -380,7 +383,7 @@ defmodule Visualize.Chart.Frame do
 
     children =
       background(frame, mode) ++
-        furniture(frame, mode, sources, paths?) ++
+        furniture(frame, mode, sources, paths?, Keyword.take(opts, [:placements])) ++
         Legend.generate(frame, mode, paths?) ++ Labels.generate(frame, mode, paths?)
 
     group =
@@ -838,15 +841,17 @@ defmodule Visualize.Chart.Frame do
 
   # -- furniture by kind ----------------------------------------------------------------
 
-  defp furniture(%{kind: :polar} = frame, mode, sources, paths?) do
+  # `placed` is the caller's placement of the update (`:placements`, #811), which a
+  # cartesian frame's marks read; a polar frame and a facet's panels place their own.
+  defp furniture(%{kind: :polar} = frame, mode, sources, paths?, _placed) do
     Furniture.polar(frame, mode, marks(frame, mode, sources, paths?, []), paths?)
   end
 
-  defp furniture(%{kind: :facet} = frame, mode, sources, paths?),
+  defp furniture(%{kind: :facet} = frame, mode, sources, paths?, _placed),
     do: panels(frame, mode, sources, paths?)
 
-  defp furniture(frame, mode, sources, paths?) do
-    Furniture.cartesian(frame, mode, marks(frame, mode, sources, paths?, []), paths?)
+  defp furniture(frame, mode, sources, paths?, placed) do
+    Furniture.cartesian(frame, mode, marks(frame, mode, sources, paths?, placed), paths?)
   end
 
   @doc false

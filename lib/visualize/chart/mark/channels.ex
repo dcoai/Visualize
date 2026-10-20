@@ -20,9 +20,15 @@ defmodule Visualize.Chart.Mark.Channels do
   @type pixel_row :: %{required(:datum) => map(), optional(atom()) => term()}
 
   @doc false
-  # One pixel row per datum, in order; a channel the row cannot place is `nil`.
+  # One pixel row per datum, in order; a channel the row cannot place is `nil`. A context
+  # that carries the update's placement of these same rows (`Visualize.Chart.Placements`,
+  # #811) reads it rather than placing them again.
   @spec pixels(map(), [atom()]) :: [pixel_row()]
-  def pixels(ctx, raw \\ []) do
+  def pixels(ctx, raw \\ [])
+
+  def pixels(%{rows: rows, placed: %{rows: rows, pixels: pixels}}, []), do: pixels
+
+  def pixels(ctx, raw) do
     channels = Map.get(ctx.mark, :channels, %{})
     frame = ctx.frame
 

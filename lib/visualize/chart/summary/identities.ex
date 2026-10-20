@@ -16,15 +16,15 @@ defmodule Visualize.Chart.Summary.Identities do
   # The mark's rows as `{series, point}`: the point's `said` (identity, then the
   # tooltip's text), its `position` (`nil` when unplaced), its `row` and `ordinal` in the
   # mark's rows, and its grid `cell` axis readings (`{x, y}`) when the mark is a grid.
-  # `[]` for a row that names nothing.
-  @spec entries(Frame.t(), map(), [map()], map() | nil) :: [{String.t(), map()}]
-  def entries(%Frame{} = frame, mark, rows, schemas) do
+  # `[]` for a row that names nothing. `ctx` is the frame and the mark, with the update's
+  # placement of them when there is one (#811).
+  @spec entries(%{frame: Frame.t(), mark: map()}, [map()], map() | nil) :: [{String.t(), map()}]
+  def entries(%{frame: %Frame{} = frame, mark: mark} = ctx, rows, schemas) do
     schema = Event.schema_of(schemas, mark)
     name = series_name(mark)
     grid? = grid?(frame, mark)
 
-    for {{row, position}, ordinal} <-
-          Enum.with_index(Enum.zip(rows, positions(frame, mark, rows))),
+    for {{row, position}, ordinal} <- Enum.with_index(Enum.zip(rows, positions(ctx, rows))),
         identity = Event.identity(mark, row, schema),
         identity != nil do
       said =
@@ -66,15 +66,16 @@ defmodule Visualize.Chart.Summary.Identities do
   # The center of what each row draws, in the chart's pixels: the middle of `x0` and `x1`
   # and of `y0` and `y1` for a rectangle, its `x` and `y` otherwise; none outside a
   # cartesian frame.
-  defp positions(%Frame{kind: kind}, _mark, rows) when kind != :cartesian,
+  defp positions(%{frame: %Frame{kind: kind}}, rows) when kind != :cartesian,
     do: Enum.map(rows, fn _row -> nil end)
 
-  defp positions(frame, mark, rows) do
+  defp positions(%{frame: frame} = ctx, rows) do
     [bx, by, _w, _h] = frame.box
     left = bx * frame.size.width + frame.margin.left
     top = by * frame.size.height + frame.margin.top
 
-    %{frame: frame, mark: mark, rows: rows}
+    ctx
+    |> Map.put(:rows, rows)
     |> Channels.pixels()
     |> Enum.map(fn pixel ->
       with x when is_number(x) <- center(pixel, :x, :x0, :x1),
