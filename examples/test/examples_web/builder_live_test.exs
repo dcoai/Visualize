@@ -234,20 +234,36 @@ defmodule ExamplesWeb.BuilderLiveTest do
                  :hosts,
                  :weather,
                  :latency,
-                 :status
+                 :status,
+                 :links,
+                 :stale,
+                 :no_data,
+                 :capped,
+                 :invalid
                ])
 
       assert s.assigns.binding == Examples.BoardDemo.slots()
 
       mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
       assert mode.catalog?
-      assert map_size(mode.board.cells) == 13
-      assert mode.faults == []
+      assert map_size(mode.board.cells) == 18
+      # The one fault is the cell that is wrong on purpose: its feed sends text where the
+      # design reads a number (#821), which the builder names as the board does.
+      assert [_ | _] = mode.faults
+
+      assert Enum.all?(
+               mode.faults,
+               &String.starts_with?(&1, "cells.invalid.marks[0].channels.y: ")
+             )
 
       # Every cell previews over rows shaped like its feed's, the hosts cell over the
-      # fields the board's virtual sources join, which the builder runs (spec/14 §22.9).
+      # fields the board's virtual sources join, which the builder runs (spec/14 §22.9);
+      # the invalid cell previews as its fault panel, the wrong binding named.
       for cell <- mode.cells do
-        assert {:ok, "<svg" <> _} = cell.preview, "#{cell.name}: #{inspect(cell.preview)}"
+        if cell.name == "invalid",
+          do: assert({:fault, "<svg" <> _, [_ | _]} = cell.preview),
+          else:
+            assert({:ok, "<svg" <> _} = cell.preview, "#{cell.name}: #{inspect(cell.preview)}")
       end
     end
 
@@ -268,7 +284,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         BuilderLive.handle_info({:board_bound, "builder", board_id, binding}, page)
 
       assert page.assigns.bindings[board_id] == binding
-      assert page.assigns.saved =~ "bound: 13 slot(s)"
+      assert page.assigns.saved =~ "bound: 18 slot(s)"
     end
 
     # A wrong binding is a fault panel, never a crash (spec/14 §18.4, §22.6, D-153): every

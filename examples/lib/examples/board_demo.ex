@@ -30,6 +30,11 @@ defmodule Examples.BoardDemo do
     `target`, readings colored by a threshold scale at it placed by the `polarity` (which
     the telemetry definitions carry in `reporter_options`, D-160), and states colored by the
     feed's own `status` map. Every time design brushes with its own `brush: :x`.
+  - **links** is a bar per network link over a feed that names a link by two fields,
+    `host` and `iface` (`Examples.BoardDemo.Links`, D-167), so a pick is a composite
+    selection; **stale**, **no_data**, **capped** and **invalid** are the *Line Chart* over
+    feeds made to be in that state (`Examples.BoardDemo.States`), so every cell state of
+    spec/15 §8.4 is on the page (#781, work item #821).
 
   The board shares one window, the last five minutes by default, in UTC and shown in the
   board's zone; one sync group joins the time charts' hover and brush. The board is
@@ -45,7 +50,7 @@ defmodule Examples.BoardDemo do
   import Visualize.Generators, only: [generate: 2]
 
   alias Examples.BoardDemo.{Fixed, Hosts, Latency, Latest, Services, Status, Unreachable, Wave}
-  alias Examples.BoardDemo.{Endpoints, MemoryHistory, Weather}
+  alias Examples.BoardDemo.{Endpoints, Links, MemoryHistory, States, Weather}
   alias Examples.Charts.{Design, LineChart, LoadChart}
   alias Visualize.Board
   alias Visualize.Board.{Binding, Server}
@@ -197,7 +202,20 @@ defmodule Examples.BoardDemo do
           ref: {:composite, 12},
           title: "Services, colored by a host function",
           sync: false
-        }
+        },
+        links: %{
+          x: 6,
+          y: 19,
+          w: 6,
+          h: 3,
+          ref: {:composite, 13},
+          title: "Links: host and interface",
+          sync: false
+        },
+        stale: %{x: 0, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Stale"},
+        no_data: %{x: 3, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "No data"},
+        capped: %{x: 6, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Capped"},
+        invalid: %{x: 9, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Invalid binding"}
       },
       virtual_sources: virtual_sources()
     })
@@ -270,7 +288,8 @@ defmodule Examples.BoardDemo do
       {:composite, 9} => latency(),
       {:composite, 10} => status(),
       {:composite, 11} => endpoints(),
-      {:composite, 12} => colored()
+      {:composite, 12} => colored(),
+      {:composite, 13} => links()
     }
   end
 
@@ -472,6 +491,26 @@ defmodule Examples.BoardDemo do
     ])
   end
 
+  # Each link's throughput, a bar per host and interface. The feed names a link by both
+  # fields (D-167), so a click on a bar picks the composite identity `%{host, iface}`, which
+  # the board selects: that bar `:selected`, every other `:muted` (spec/15 §13.2).
+  defp links do
+    Design.fold([
+      chart(meta: %{name: "Links"}),
+      source(:links, [:host, :iface, :link, :mbps], types: %{mbps: :number}),
+      cartesian(margin: %{top: 10, right: 12, bottom: 26, left: 48}),
+      band_scale(:x, padding: 0.25),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      ordinal_scale(:color, domain: Links.ifaces()),
+      axis(:x, :bottom),
+      axis(:y, :left, ticks: 3, grid: true, measure: %{unit: fact(:links, :mbps, :unit)}),
+      rect(:links, %{x0: :link, x1: :link, y0: 0, y1: :mbps, value: :iface},
+        tooltip: %{fields: [:host, :iface, :mbps], template: "{host} {iface}: {mbps} Mbit/s"}
+      ),
+      legend(:color, title: "Interface", position: :top, inside: true)
+    ])
+  end
+
   # One service's share of requests by endpoint, a slice each, the legend at the right
   # naming them. Endpoints are named as routes are, too long for a side legend, so the
   # legend cuts each label to 24 characters and keeps the whole name in its title for a
@@ -523,7 +562,12 @@ defmodule Examples.BoardDemo do
       {:weather, :weather} => :weather,
       {:latency, :latency} => :latency,
       {:status, :status} => :status,
-      {:colored, :latest} => :latest
+      {:colored, :latest} => :latest,
+      {:links, :links} => :links,
+      {:stale, :points} => :stale,
+      {:no_data, :points} => :no_data,
+      {:capped, :points} => :capped,
+      {:invalid, :points} => :invalid
     })
   end
 
@@ -548,8 +592,10 @@ defmodule Examples.BoardDemo do
       hosts: Hosts.new(),
       weather: Weather.new(),
       latency: Latency.new(),
-      status: Status.new()
+      status: Status.new(),
+      links: Links.new()
     })
+    |> Map.merge(Map.new(States.modes(), &{&1, States.new(&1)}))
   end
 
   @doc """
