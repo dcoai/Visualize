@@ -31,6 +31,7 @@ defmodule ExamplesWeb.MinesweeperLive do
   import Visualize.Color, only: [color: 1]
 
   alias Examples.Minesweeper
+  alias Examples.Minesweeper.Move
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Chart
   alias Visualize.Data.{Delivery, Schema}
@@ -153,16 +154,19 @@ defmodule ExamplesWeb.MinesweeperLive do
     })
   end
 
-  @doc "The grid of `game` drawn: the design applied to the game's rows."
-  @spec applied(Minesweeper.t()) :: Chart.Applied.t()
-  def applied(game) do
+  @doc """
+  The grid of `game` drawn: the design applied to the game's rows, at `size` — the page's
+  own unless given, as the interaction page's panel gives its own (#800).
+  """
+  @spec applied(Minesweeper.t(), {pos_integer(), pos_integer()}) :: Chart.Applied.t()
+  def applied(game, size \\ @size) do
     schema = schema()
 
     {:ok, applied} =
       Chart.apply(@design,
         sources: %{cells: Delivery.new(Minesweeper.rows(game), schema: Schema.version(schema))},
         schemas: Schema.Cache.new([{:cells, schema}]),
-        size: @size
+        size: size
       )
 
     applied
@@ -202,35 +206,12 @@ defmodule ExamplesWeb.MinesweeperLive do
     assign(socket, game: game, chart: applied(game), started: nil, elapsed: 0)
   end
 
-  # A right-click, a long-press or the Menu key on a cell (D-199): it flags, in either mode.
+  # A click on a cell, resolved by the chart's component to the cell drawn (D-170), or a
+  # right-click, a long-press or the Menu key on one (D-199): the step to the next game is
+  # the one the interaction page's panel takes too (`Move.play/3`).
   @impl true
-  def handle_info(
-        {:visualize_event, "mines-chart",
-         %Event{event: "flag", item: {_mark, %{"row" => r, "col" => c}}}},
-        socket
-      ) do
-    game = Minesweeper.toggle_flag(socket.assigns.game, {r, c})
-    {:noreply, socket |> clock(game) |> assign(game: game, chart: applied(game))}
-  end
-
-  # A click on a cell, resolved by the chart's component to the cell drawn (D-170): its
-  # identity is the event's item. Flag mode, or Shift held, flags; any other click reveals.
-  def handle_info(
-        {:visualize_event, "mines-chart",
-         %Event{
-           event: "cell_click",
-           item: {_mark, %{"row" => r, "col" => c}},
-           modifiers: modifiers
-         }},
-        socket
-      ) do
-    %{game: game, mode: mode} = socket.assigns
-
-    game =
-      if mode == :flag or :shift in modifiers,
-        do: Minesweeper.toggle_flag(game, {r, c}),
-        else: Minesweeper.reveal(game, {r, c})
-
+  def handle_info({:visualize_event, "mines-chart", %Event{} = event}, socket) do
+    game = Move.play(socket.assigns.game, event, socket.assigns.mode)
     {:noreply, socket |> clock(game) |> assign(game: game, chart: applied(game))}
   end
 
@@ -353,11 +334,7 @@ defmodule ExamplesWeb.MinesweeperLive do
     <style>
       .mines-bar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
       .mines-mode button[aria-pressed="true"], .mines-backend-switch button[aria-pressed="true"] { font-weight: bold; }
-      .mines-status { margin: 0.5rem 0; color: #444; }
-      .mines-won { color: #2e7d32; }
-      .mines-lost { color: #c23238; }
-      .mines-board .mark-rect rect { cursor: pointer; }
-      .mines-board .mark-text, .mines-board .mark-symbol { pointer-events: none; }
+      <%= Phoenix.HTML.raw(board_css()) %>
     </style>
     """
   end
@@ -365,15 +342,33 @@ defmodule ExamplesWeb.MinesweeperLive do
   # The component's options for the backend chosen.
   defp component_backend(name), do: @backends |> Map.fetch!(name) |> elem(1)
 
-  @doc "The status line: the mines left, the time and how the game stands."
+  @doc """
+  The stylesheet a page drawing the grid includes: the status line's colors, a pointer
+  over the cells, and the counts and glyphs drawn over a cell letting its click through.
+  """
+  @spec board_css() :: String.t()
+  def board_css do
+    """
+    .mines-status { margin: 0.5rem 0; color: #444; }
+    .mines-won { color: #2e7d32; }
+    .mines-lost { color: #c23238; }
+    .mines-board .mark-rect rect { cursor: pointer; }
+    .mines-board .mark-text, .mines-board .mark-symbol { pointer-events: none; }
+    """
+  end
+
+  @doc """
+  The status line: the mines left, the time when the page keeps a clock, and how the game
+  stands.
+  """
   attr(:game, Minesweeper, required: true)
-  attr(:elapsed, :integer, required: true, doc: "the game's time in seconds")
+  attr(:elapsed, :integer, default: nil, doc: "the game's time in seconds; `nil` shows none")
 
   def status(assigns) do
     ~H"""
     <p class="mines-status" aria-live="polite">
       <span class="mines-left">{Minesweeper.mines_left(@game)} mines left</span>
-      · <span class="mines-time">{clock_text(@elapsed)}</span>
+      <span :if={@elapsed}>· <span class="mines-time">{clock_text(@elapsed)}</span></span>
       · <strong class={"mines-outcome mines-#{@game.status}"}>{outcome(@game.status)}</strong>
     </p>
     """
