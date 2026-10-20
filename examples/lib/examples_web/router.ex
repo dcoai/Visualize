@@ -26,6 +26,7 @@ defmodule ExamplesWeb.Router do
     live "/", GalleryLive, :index
     live "/chart/:chart", ChartLive, :show
     live "/theme-lab", ThemeLabLive, :index
+    live "/sources", SourcesLive, :index
     live "/performance", PerformanceLive, :index
     live "/hybrid", HybridLive, :index
     # The High-Performance page is the Scrolling series chart's drawer now (#327)

@@ -31,6 +31,8 @@ defmodule Examples.MixProject do
       # telemetry provider reads.
       {:telemetry_metrics, "~> 1.0"},
       {:nx, "~> 0.9"},
+      # An Explorer data frame as a chart's source, on /sources (D-52, #781).
+      {:explorer, "~> 0.12"},
       # The host's time zone database (D-115): the library reads whatever the host configures,
       # and the synced dashboard shows its time axes in a zone the viewer picks.
       {:tz, "~> 0.28"},
