@@ -72,6 +72,9 @@ defmodule ExamplesWeb.ChartLiveBackdropTest do
     backdrop = Enum.join(backdrops)
     dynamic = Enum.join(dynamics)
     assert length(Regex.scan(@tile, backdrop)) > 0
+    # Each frame's tiles are clipped to its own plot, so neither basemap covers the
+    # frames beside it (#826, D-209).
+    assert Enum.all?(backdrops, &(&1 =~ ~r{class="mark mark-tiles" clip-path="url\(#vis-clip-}))
     refute backdrop =~ @attribution
     refute static =~ "<image"
     refute dynamic =~ "<image"

@@ -402,4 +402,99 @@ defmodule Visualize.Chart.TilesTest do
                %{marks: [%{type: :tiles, channels: %{}, tiles: tiles}]}
     end
   end
+
+  describe "clipped to the plot area (#826, D-209)" do
+    test "the group is clipped to the plot's rectangle, past which its edge tiles reach" do
+      group = group(design(), :tiles)
+      plot = frame(design()).plot
+
+      assert %{keep: :inside, shape: %{type: :rect, attrs: rect}} = group.clip
+      assert rect == %{x: 0, y: 0, width: plot.width, height: plot.height}
+
+      # Whole tiles cover the plot, so some reach past it: the clip is what keeps them in.
+      images = Enum.filter(group.children, &(&1.type == :image))
+
+      assert Enum.any?(images, fn %{attrs: a} ->
+               a.x < 0 or a.y < 0 or a.x + a.width > plot.width or a.y + a.height > plot.height
+             end)
+    end
+
+    # Two frames side by side, each a basemap under the track, with plots of different sizes.
+    defp two_frames do
+      geo = fn margin ->
+        %{
+          kind: :geo,
+          margin: margin,
+          projection: %{type: :mercator, fit: %{data: :track, fields: [:lon, :lat]}}
+        }
+      end
+
+      %{
+        version: 3,
+        sources: %{track: %{fields: [:lon, :lat]}},
+        frames: %{
+          west: Map.put(geo.(%{top: 0, right: 0, bottom: 0, left: 0}), :box, [0, 0, 0.5, 1]),
+          east: Map.put(geo.(%{top: 30, right: 10, bottom: 20, left: 10}), :box, [0.5, 0, 0.5, 1])
+        },
+        marks:
+          for frame <- [:west, :east] do
+            Map.put(tiles_mark(), :frame, frame)
+          end
+      }
+    end
+
+    # Each `<clipPath>`'s rectangle, `{width, height}`, by its id.
+    defp clips(svg) do
+      clip = ~r{<clipPath id="([^"]+)"><rect height="([\d.]+)" width="([\d.]+)" x="0" y="0"/>}
+
+      for [id, h, w] <- Regex.scan(clip, svg, capture: :all_but_first),
+          into: %{},
+          do: {id, {number(w), number(h)}}
+    end
+
+    defp number(text), do: text |> Float.parse() |> elem(0)
+
+    defp clipped_groups(svg),
+      do:
+        for(
+          [id] <-
+            Regex.scan(~r{<g class="mark mark-tiles" clip-path="url\(#([^)]+)\)"}, svg,
+              capture: :all_but_first
+            ),
+          do: id
+        )
+
+    test "on SVG each frame's tiles are clipped to its own plot, not its neighbor's" do
+      {:ok, applied} = Chart.apply(two_frames(), sources: %{track: @track}, size: @size)
+      svg = Chart.render(applied)
+
+      # In drawing order: by `z`, ties by name (spec/14 §4.2).
+      plots =
+        for name <- ["east", "west"] do
+          %{width: w, height: h} = applied.frames[name].plot
+          {w / 1, h / 1}
+        end
+
+      ids = clipped_groups(svg)
+      assert length(ids) == 2
+
+      assert Enum.map(ids, &Map.fetch!(clips(svg), &1)) == plots
+    end
+
+    test "in the hybrid backdrop each plot's document clips its tiles to that plot" do
+      {:ok, compiled} = Chart.compile(two_frames(), sources: %{track: @track}, size: @size)
+
+      for {_name, one} <- compiled do
+        {payload, _} = Compiled.tick(one, %{track: @track})
+        assert images(payload.backdrop) > 0
+        [id] = clipped_groups(payload.backdrop)
+
+        assert Map.fetch!(clips(payload.backdrop), id) ==
+                 {one.plot.width / 1, one.plot.height / 1}
+
+        # The attribution in the SVG layer keeps the same clip.
+        assert clipped_groups(payload.svg) == [id]
+      end
+    end
+  end
 end

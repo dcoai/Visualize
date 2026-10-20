@@ -86,6 +86,20 @@ release it merely follows.
   `placements:` — and each item is placed once. The output is the same byte for byte.
   `Visualize.Components.Chart` does this on every update.
 
+### Fixed
+
+- **A basemap stays inside its own frame** (#826, #827, D-209). A `:tiles` mark covers
+  its plot with whole tiles, so the tiles at the edges reach up to one tile past it. A
+  chart of one frame hid this at the document's edge. In a design of several frames, one
+  frame's basemap painted over the frames beside it, on SVG and in a hybrid page's
+  backdrop. The tiles group is now clipped to its frame's plot area. *Affects* code that
+  reads or tests a basemap's markup: the group carries a `clip-path` and is preceded by
+  its `<clipPath>`. *Before:* `<g class="mark mark-tiles"><image …>`. *After:*
+  `<clipPath id="vis-clip-…"><rect height="…" width="…" x="0" y="0"/></clipPath><g
+  class="mark mark-tiles" clip-path="url(#vis-clip-…)"><image …>`. A chart of one frame
+  draws exactly what it drew. The SVG backend now also keeps a clip on any group it
+  draws whole, as it already did for a group it cut into segments.
+
 ### Changed
 
 - **The examples app's GPS view is now Grandma's Marathon** (#783, #819). *GPS Track*

@@ -1,9 +1,9 @@
 defmodule Visualize.Chart.Mark.Tiles do
   @moduledoc false
   # The `:tiles` mark (spec/14 §5.2, #475): a Web-Mercator basemap under a `:geo` frame —
-  # one `:image` per tile of `Visualize.Geo.Tiles.cover/3` over the plot area, and the
-  # attribution as text in the plot's bottom-right corner. It reads no rows and never
-  # fetches anything: the browser loads each `href`.
+  # one `:image` per tile of `Visualize.Geo.Tiles.cover/3` over the plot area, clipped to it
+  # (D-209), and the attribution as text in the plot's bottom-right corner. It reads no
+  # rows and never fetches anything: the browser loads each `href`.
 
   alias Visualize.Chart.{Frame, Schema, Style, Var}
   alias Visualize.Chart.Style.Defaults
@@ -33,9 +33,13 @@ defmodule Visualize.Chart.Mark.Tiles do
         )
       end
 
+    # Whole tiles reach past the plot's edges; the group is clipped to the plot so a
+    # basemap paints inside its own frame alone (#826, D-209). The clip is on the group,
+    # so it travels with both halves of a hybrid page's split (§12.4).
     Element.group(images ++ [attribution(frame, mark, node, mode)],
       style: %{class: class(frame, mark)}
     )
+    |> Element.clip(Element.rect(0, 0, plot.width, plot.height), :inside)
   end
 
   # The attribution, always drawn (§5.2): the mark's style over the built-in `:label`,
