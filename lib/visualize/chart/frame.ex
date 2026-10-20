@@ -41,7 +41,7 @@ defmodule Visualize.Chart.Frame do
   import Visualize.Chart.Names, only: [is_name: 1]
 
   alias Visualize.{Chart, Theme}
-  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Motion, Scales}
+  alias Visualize.Chart.Frame.{Cull, Defs, Furniture, Labels, Legend, Lines, Motion, Scales}
   alias Visualize.Chart.{Mark, Names, Schema, Style, Validator, Var}
   alias Visualize.Chart.Style.{Defaults, Parts}
   alias Visualize.Chart.Transform.Force
@@ -573,6 +573,9 @@ defmodule Visualize.Chart.Frame do
 
     plot_area =
       Element.clip(Element.group([]), Element.rect(x, y, plot.width, plot.height), :inside)
+
+    # What lies wholly past the plot is left out first; the clip shows the rest (#839).
+    element = Cull.cull(element, {x, y, plot.width, plot.height})
 
     case element do
       %Element{clip: same} when same == plot_area.clip -> element
