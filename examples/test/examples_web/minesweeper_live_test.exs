@@ -112,6 +112,33 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
     assert html =~ ~s(phx-hook="MotionHook")
   end
 
+  # #806: the buttons are the site's segmented control, its style in the layout's
+  # stylesheet, and each toggle group marks its current option for the eye and for a
+  # screen reader.
+  test "the buttons are the site's, and each toggle marks its current option" do
+    html = build_conn() |> get("/minesweeper?seed=#{@seed}") |> html_response(200)
+
+    buttons = Regex.scan(~r/<button [^>]*>/, html) |> List.flatten()
+    assert buttons != []
+    assert Enum.all?(buttons, &(&1 =~ ~s(class="backend-btn))), inspect(buttons)
+
+    pressed = fn value ->
+      [tag] = Enum.filter(buttons, &(&1 =~ ~s(="#{value}")))
+      {tag =~ "backend-btn active", Regex.run(~r/aria-pressed="(\w+)"/, tag) |> List.last()}
+    end
+
+    assert pressed.("reveal") == {true, "true"}
+    assert pressed.("flag") == {false, "false"}
+    assert pressed.("svg") == {true, "true"}
+    assert pressed.("binary") == {false, "false"}
+    assert html =~ ~s(<button type="button" class="backend-btn" phx-click="new">New game</button>)
+
+    # The style is the layout's, shared with the chart page, with a hover and a focus ring.
+    assert html =~ ".backend-btn.active {"
+    assert html =~ ".backend-btn:hover {"
+    assert html =~ ".backend-btn:focus-visible {"
+  end
+
   # #803: nothing follows the pointer over the grid. The page's chart, drawn by its
   # component on each backend, runs under the library's hook harness (spec/12 §6): a
   # pointer over a cell shows no tooltip and no outline (D-200), the markup holds no

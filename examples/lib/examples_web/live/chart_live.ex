@@ -1136,53 +1136,6 @@ defmodule ExamplesWeb.ChartLive do
         margin-right: 0.5rem;
       }
 
-      .backend-buttons {
-        display: flex;
-        gap: 0.25rem;
-      }
-
-      .backend-btn {
-        padding: 0.5rem 1rem;
-        border: 2px solid #ddd;
-        background: white;
-        cursor: pointer;
-        font-weight: 500;
-        font-size: 13px;
-        transition: all 0.2s ease;
-      }
-
-      .backend-btn:first-child {
-        border-radius: 6px 0 0 6px;
-      }
-
-      .backend-btn:last-child {
-        border-radius: 0 6px 6px 0;
-      }
-
-      .backend-btn:not(:first-child):not(:last-child) {
-        border-radius: 0;
-      }
-
-      .backend-btn:not(:first-child) {
-        border-left: 1px solid #ddd;
-      }
-
-      .backend-btn:hover {
-        background: #f5f5f5;
-        border-color: #999;
-      }
-
-      .backend-btn.active {
-        background: #4e79a7;
-        border-color: #4e79a7;
-        color: white;
-      }
-
-      .backend-btn.active:hover {
-        background: #3d6089;
-        border-color: #3d6089;
-      }
-
       .animation-control {
         display: flex;
         align-items: center;

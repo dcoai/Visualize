@@ -415,7 +415,9 @@ defmodule ExamplesWeb.InteractionLive do
           </div>
 
           <p class="picked">
-            <button phx-click="mines_new">New game</button>
+            <span class="backend-buttons">
+              <button type="button" class="backend-btn" phx-click="mines_new">New game</button>
+            </span>
             <a href="/minesweeper">The full page</a>, with a Flag mode, a clock and every backend.
           </p>
         </Panel.panel>

@@ -329,7 +329,10 @@ defmodule ExamplesWeb.InteractionLiveTest do
     assert body =~ "10 mines left"
     assert body =~ "Click any cell to start"
     refute body =~ "mines-time"
-    assert body =~ ~s(phx-click="mines_new")
+
+    assert body =~
+             ~s(<button type="button" class="backend-btn" phx-click="mines_new">New game</button>)
+
     assert body =~ ~s(<a href="/minesweeper">)
     assert body =~ "<code>context_event</code>"
     assert body =~ "<code>KeyboardHook</code>"

@@ -94,6 +94,31 @@ defmodule ExamplesWeb.Layouts do
             font-weight: 500;
           }
           .back-link:hover { text-decoration: underline; }
+          /* The site's buttons: the chart page's segmented control, here so every page draws
+             the same one (#806). A group's current option is .active (and aria-pressed); a
+             group of one is a lone button. */
+          .backend-buttons { display: inline-flex; gap: 0.25rem; }
+          .backend-btn {
+            padding: 0.5rem 1rem;
+            border: 2px solid #ddd;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            font: inherit;
+            font-weight: 500;
+            font-size: 13px;
+            line-height: 1.2;
+            transition: all 0.2s ease;
+          }
+          .backend-btn:first-child { border-radius: 6px 0 0 6px; }
+          .backend-btn:last-child { border-radius: 0 6px 6px 0; }
+          .backend-btn:not(:first-child):not(:last-child) { border-radius: 0; }
+          .backend-btn:only-child { border-radius: 6px; }
+          .backend-btn:not(:first-child) { border-left: 1px solid #ddd; }
+          .backend-btn:hover { background: #f5f5f5; border-color: #999; }
+          .backend-btn.active { background: #4e79a7; border-color: #4e79a7; color: white; }
+          .backend-btn.active:hover { background: #3d6089; border-color: #3d6089; }
+          .backend-btn:focus-visible { outline: 3px solid #667eea; outline-offset: 2px; position: relative; z-index: 1; }
           .chart-detail { background: white; border-radius: 12px; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
           .chart-detail h2 { margin-bottom: 1rem; color: #333; }
           .chart-detail .chart-container { margin: 1rem 0; display: flex; justify-content: center; }
