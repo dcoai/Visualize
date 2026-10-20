@@ -18,14 +18,14 @@ defmodule Visualize.Chart.Mark.Identity do
   @spec stamp([Element.t()], [map()], map()) :: [Element.t()]
   def stamp(elements, children, ctx) do
     if moves?(ctx) do
-      schema = Event.schema_of(ctx.frame.schemas, ctx.mark)
+      identify = Event.identifier(ctx.mark, Event.schema_of(ctx.frame.schemas, ctx.mark))
       prefix = "#{ctx.frame.name}.#{ctx.index}."
 
       elements
       |> Enum.zip(children)
       |> Enum.with_index()
       |> Enum.map(fn {{element, child}, i} ->
-        text = text(Event.identity(ctx.mark, Map.get(child, :datum) || %{}, schema), i)
+        text = text(identify.(Map.get(child, :datum) || %{}), i)
 
         element
         |> Element.put_attr("data-vis-id", prefix <> text)
@@ -59,17 +59,18 @@ defmodule Visualize.Chart.Mark.Identity do
 
   defp text({field, value}, _i), do: pair(field, value)
 
-  defp text(%{} = fields, _i) when map_size(fields) > 0 do
-    fields
-    |> Enum.sort_by(fn {field, _} -> to_string(field) end)
-    |> Enum.map_join("&", fn {field, value} -> pair(field, value) end)
-  end
+  # A composite's fields are named by strings, which sort as their text.
+  defp text(%{} = fields, _i) when map_size(fields) > 0,
+    do: fields |> Enum.sort() |> Enum.map_join("&", fn {field, value} -> pair(field, value) end)
 
   defp text(_none, i), do: "##{i}"
 
   defp pair(field, value), do: "#{field}=#{string(value)}"
 
   # A value as its text; one with no text of its own as Elixir writes it.
+  defp string(value) when is_binary(value), do: value
+  defp string(value) when is_integer(value), do: Integer.to_string(value)
+
   defp string(value) do
     if String.Chars.impl_for(value), do: to_string(value), else: inspect(value)
   end

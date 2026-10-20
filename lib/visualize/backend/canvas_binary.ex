@@ -195,6 +195,57 @@ defmodule Visualize.Backend.CanvasBinary do
     Base.encode64(binary)
   end
 
+  @doc false
+  # What `Visualize.Render.Segments` needs of a tree to encode it a segment at a time
+  # (spec/09 §1.4, #813, D-203): the stream's head — the version and paint records
+  # `encode_element/2` writes before the body, empty for a version 1 stream — and the
+  # context every record of the body is encoded in.
+  @spec segment_head(Element.t(), keyword()) :: {binary(), map()}
+  def segment_head(%Element{} = tree, opts \\ []) do
+    precision = precision!(opts)
+    paints = tree |> paints() |> Enum.uniq() |> Enum.with_index()
+
+    head =
+      case version(tree, paints) do
+        1 ->
+          <<>>
+
+        version ->
+          IO.iodata_to_binary([
+            <<Opcodes.version()::8, version::8>>,
+            Enum.map(paints, &paint_record/1)
+          ])
+      end
+
+    {head, %{precision: precision, paints: Map.new(paints)}}
+  end
+
+  @doc false
+  # One step of `Visualize.Render.Segments` in `ctx` and the style its ancestors give it: a
+  # group as its save, transform and style records and its restore around its children,
+  # which inherit its style; the root as its children; any other element as its records.
+  @spec segment(Element.t(), map(), map()) ::
+          {:leaf, binary()} | {:node, binary(), binary(), [Element.t()], map()}
+  def segment(%Element{attrs: %{"data-vis-id" => _}} = element, ctx, inherited),
+    do: {:leaf, do_encode_element(element, ctx, inherited)}
+
+  def segment(%Element{type: :group, children: children, style: style} = group, ctx, inherited) do
+    transform =
+      if group.transform && group.transform.operations != [],
+        do: [encode_transform(group.transform)],
+        else: []
+
+    style_record = if map_size(style) > 0, do: [encode_style(style, ctx.paints)], else: []
+    open = IO.iodata_to_binary([<<Opcodes.save()::8>>, transform, style_record])
+    {:node, open, <<Opcodes.restore()::8>>, children, Map.merge(inherited, style)}
+  end
+
+  def segment(%Element{type: :root, children: children}, _ctx, inherited),
+    do: {:node, <<>>, <<>>, children, inherited}
+
+  def segment(%Element{} = element, ctx, inherited),
+    do: {:leaf, do_encode_element(element, ctx, inherited)}
+
   # ============================================================
   # Internal Encoding Functions
   # ============================================================
@@ -566,16 +617,7 @@ defmodule Visualize.Backend.CanvasBinary do
     ctx = %{precision: precision, paints: Map.new(paints)}
     body = do_encode_element(element, ctx, %{})
 
-    # The least version whose records the stream uses (spec/09 §4.2): 3 with a paint's
-    # state (D-180), 2 with a paint, an effect or a motion span (D-175), else 1.
-    version =
-      cond do
-        paint_state?(element) -> 3
-        paints != [] or effects?(element) or spans?(element) -> 2
-        true -> 1
-      end
-
-    case version do
+    case version(element, paints) do
       1 ->
         body
 
@@ -585,6 +627,16 @@ defmodule Visualize.Backend.CanvasBinary do
           Enum.map(paints, &paint_record/1),
           body
         ])
+    end
+  end
+
+  # The least version whose records the stream uses (spec/09 §4.2): 3 with a paint's
+  # state (D-180), 2 with a paint, an effect or a motion span (D-175), else 1.
+  defp version(element, paints) do
+    cond do
+      paint_state?(element) -> 3
+      paints != [] or effects?(element) or spans?(element) -> 2
+      true -> 1
     end
   end
 

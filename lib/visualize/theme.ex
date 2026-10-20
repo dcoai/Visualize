@@ -1180,10 +1180,18 @@ defmodule Visualize.Theme do
 
   # A value never ends its declaration or its rule, nor a `<style>` around the sheet
   # (spec/14 §10.3, #660): those characters are written as CSS escapes.
+  # A value with nothing to escape, every color a theme names, is written as it is (#813):
+  # every element's color passes through here.
   defp css_escape(value) do
-    String.replace(value, ["<", ">", ";", "{", "}", "\\"], fn char ->
-      "\\" <> (char |> :binary.first() |> Integer.to_string(16)) <> " "
-    end)
+    case :binary.match(value, ["<", ">", ";", "{", "}", "\\"]) do
+      :nomatch ->
+        value
+
+      _found ->
+        String.replace(value, ["<", ">", ";", "{", "}", "\\"], fn char ->
+          "\\" <> (char |> :binary.first() |> Integer.to_string(16)) <> " "
+        end)
+    end
   end
 
   @doc false
@@ -1205,5 +1213,5 @@ defmodule Visualize.Theme do
     end
   end
 
-  defp hyphenated(slot), do: slot |> to_string() |> String.replace("_", "-")
+  defp hyphenated(slot), do: slot |> to_string() |> :binary.replace("_", "-", [:global])
 end

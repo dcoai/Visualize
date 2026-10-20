@@ -33,6 +33,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `render` - options for `Visualize.Chart.render/2` — `title:`, `description:`,
         `responsive:` … — the SVG always a root (default `[]`)
       * `tooltip_class` - the hook's `data-tooltip-class` (default `"vis-tooltip"`)
+
+    ## What a move sends
+
+    The drawing travels as keyed segments (`Visualize.Render.Segments`, spec/10 §19.3,
+    D-203): one per item — a mark's element, a label — and one for each start and end of a
+    group, each keyed by the item's identity (D-167) or its place in the drawing, sent as a
+    LiveView comprehension. An update that changes three cells of a grid sends those three
+    segments and none of the others, on SVG and on either canvas, where the canvas's hook
+    puts the stream together from its segments. The keyboard's points travel one element
+    each the same way (`Visualize.Hooks.Keyboard.listed/2`, D-204), and every other part —
+    the hit index, the canvas's text layer, the summary — is its own assign, sent only when
+    it changed (D-205). A segment whose element did not change is not written again.
     """
 
     use Phoenix.LiveComponent
@@ -42,6 +54,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Event
     alias Visualize.Hooks.{Keyboard, Tooltip}
     alias Visualize.IR.Element
+    alias Visualize.Render.Segments
+
+    # A binary heap no drawing reaches, in words: binaries never trigger a collection.
+    @bin_vheap 1_000_000_000
 
     @impl true
     def mount(socket) do
@@ -49,11 +65,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
        assign(socket,
          drawing: nil,
          drawn: nil,
-         svg: nil,
+         backend: :svg,
+         segments: [],
+         cache: %{},
          canvas: nil,
+         items: nil,
+         text: [],
+         text_cache: %{},
+         summary: nil,
          hover: %{},
          keyboard: %{},
-         motion: false
+         points: [],
+         points_cache: %{},
+         motion: false,
+         heap: nil
        )}
     end
 
@@ -87,62 +112,132 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp draw(%{assigns: %{drawing: drawing}} = socket, drawing), do: socket
 
     defp draw(socket, {chart, render_opts, backend} = drawing) do
-      # The items placed once, for the drawing and the keyboard (#811).
-      placements = Chart.placements(chart)
+      # What the last drawing wrote, kept only for the same backend.
+      last =
+        if socket.assigns.backend == backend,
+          do: Map.take(socket.assigns, [:cache, :text_cache, :points_cache]),
+          else: %{cache: %{}, text_cache: %{}, points_cache: %{}}
 
-      assign(socket,
+      {drawn, heap} =
+        apart(fn -> drawn(chart, render_opts, backend, last) end, socket.assigns.heap)
+
+      socket
+      |> assign(
         drawing: drawing,
-        drawn: Integer.to_string(System.unique_integer([:positive, :monotonic])),
-        hover: Tooltip.attrs(chart.frame),
-        # Every point and every keyed item reached from the keyboard (spec/10 §17, D-198).
-        keyboard: Keyboard.attrs(chart, placements: placements)
+        backend: backend,
+        heap: heap,
+        drawn: Integer.to_string(System.unique_integer([:positive, :monotonic]))
       )
-      |> assign(drawn_as(backend, chart, [placements: placements] ++ render_opts))
+      |> assign(drawn)
     end
 
-    defp drawn_as(:svg, chart, render_opts) do
-      svg = Chart.render(chart, [root: true] ++ render_opts)
+    # The drawing is made in a process of its own, sized to the heap the last one used
+    # (spec/10 §19.3, D-206): a large chart allocates tens of megabytes it drops at once,
+    # and collecting them in the LiveView's process, around its state, tripled the time of
+    # a move. Sized by the last drawing, with a margin, the process collects nothing — its
+    # binaries do not trigger a collection either — and its heap is freed whole when it
+    # ends; only what it returns is copied back. The first drawing is sized by the BEAM, as
+    # any process is, and a drawing that still collected doubles the next one's heap, so
+    # the size settles within a few moves. It is linked, so a fault in it is the
+    # LiveView's, as it was in place.
+    defp apart(fun, heap) do
+      parent = self()
+      ref = make_ref()
+      sized = if heap, do: [min_heap_size: heap, min_bin_vheap_size: @bin_vheap], else: []
+
+      :erlang.spawn_opt(
+        fn ->
+          result = fun.()
+          {:garbage_collection_info, info} = Process.info(self(), :garbage_collection_info)
+          {:garbage_collection, gc} = Process.info(self(), :garbage_collection)
+          used = info[:heap_size] + info[:old_heap_size]
+          next = if gc[:minor_gcs] > 0, do: 2 * max(heap || 0, used), else: used + div(used, 4)
+          send(parent, {ref, result, next})
+        end,
+        [:link | sized]
+      )
+
+      receive do
+        {^ref, result, size} -> {result, size}
+      end
+    end
+
+    @doc false
+    # Everything an update draws (spec/10 §19.3): the placements made once, the keyboard's
+    # points (D-204), and the drawing as segments on its backend (D-203), each part an
+    # assign of its own (D-205). `last` is what the last drawing on this backend kept.
+    # The cost test counts this (spec/12 §6, D-202).
+    @spec drawn(Applied.t(), keyword(), term(), map()) :: map()
+    def drawn(chart, render_opts, backend, last) do
+      # The items placed once, for the drawing and the keyboard (#811).
+      placements = Chart.placements(chart)
+      # Every point and every keyed item reached from the keyboard (spec/10 §17, D-198), one
+      # element each (D-204).
+      {keyboard, points, points_cache} =
+        Keyboard.listed(chart, placements: placements, cache: last.points_cache)
+
+      %{
+        hover: Tooltip.attrs(chart.frame),
+        keyboard: keyboard,
+        points: points,
+        points_cache: points_cache
+      }
+      |> Map.merge(drawn_as(backend, chart, [placements: placements] ++ render_opts, last))
+    end
+
+    # As SVG: the root `Visualize.Chart.render/2` writes, in segments.
+    defp drawn_as(:svg, chart, render_opts, %{cache: cache}) do
+      generate = [root: true, resolve: Keyword.get(render_opts, :resolve, :css)]
+      tree = Chart.generate(chart, generate ++ Keyword.drop(render_opts, [:resolve, :backend]))
+      {segments, cache} = Segments.svg(tree, cache)
+
       # A drawing that names identities plays its exits and enters (spec/10 §19.3, §20).
-      %{svg: svg, canvas: nil, motion: String.contains?(svg, "data-vis-id")}
+      motion = Enum.any?(segments, fn {key, _text} -> String.starts_with?(key, "id:") end)
+      %{segments: segments, cache: cache, canvas: nil, motion: motion}
     end
 
     # On a canvas (spec/10 §19.3, D-197): the stream, the hit index and the size from one
     # generated tree in literal colors, and on the binary stream the text it cannot carry.
-    defp drawn_as({:canvas, format}, chart, render_opts) do
+    # Each is an assign of its own, so one that did not change is not sent (D-205).
+    defp drawn_as({:canvas, format}, chart, render_opts, last) do
+      %{cache: cache, text_cache: text_cache} = last
       tree = Chart.generate(chart, resolve: :literal, placements: render_opts[:placements])
       %{width: width, height: height} = chart.frame.size
       summary = Summary.new(chart)
       title = Keyword.get(render_opts, :title, summary.name)
+      {segments, cache} = pieces(tree, format, cache)
 
-      canvas = %{
-        format: format,
-        width: width,
-        height: height,
-        stream: stream(tree, format),
-        text: if(format == :binary, do: text_layer(tree, width, height)),
+      {text, text_cache} =
+        if format == :binary,
+          do: text_layer(tree, width, height, text_cache),
+          else: {[], %{}}
+
+      %{
+        canvas: %{format: format, width: width, height: height},
+        segments: segments,
+        cache: cache,
+        text: text,
+        text_cache: text_cache,
         items: Tooltip.items(tree),
-        summary: %{summary | name: title}
+        summary: %{summary | name: title},
+        motion: false
       }
-
-      %{svg: nil, canvas: canvas, motion: false}
     end
 
-    defp stream(tree, :binary),
-      do: Visualize.Render.to_string(tree, backend: :canvas, format: :binary_base64)
+    defp pieces(tree, :binary, cache), do: Segments.binary(tree, cache)
+    defp pieces(tree, :json, cache), do: Segments.json(tree, cache)
 
-    defp stream(tree, :json),
-      do: Visualize.Render.to_string(tree, backend: :canvas, format: :json)
-
-    # The chart's text as an SVG over the canvas, `aria-hidden` and taking no pointer: one
-    # picture with the canvas, which names it. `nil` for a chart that draws no text.
-    defp text_layer(tree, width, height) do
+    # The chart's text as an SVG over the canvas, `aria-hidden` and taking no pointer, in
+    # segments: one picture with the canvas, which names it. None for a chart that draws
+    # no text.
+    defp text_layer(tree, width, height, cache) do
       case only_text(tree) do
         nil ->
-          nil
+          {[], %{}}
 
         text ->
           Element.root(width, height, hidden: true, children: [text])
-          |> Visualize.Render.to_string(backend: :svg)
+          |> Segments.svg(cache)
       end
     end
 
@@ -171,10 +266,30 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def handle_event(_event, _params, socket), do: {:noreply, socket}
 
+    # A segment of markup, written as it is.
+    defp segment(assigns), do: ~H"{Phoenix.HTML.raw(@text)}"
+
+    # The drawing's segments, keyed (D-203).
+    defp segments(assigns) do
+      ~H"""
+      <.segment :for={{key, text} <- @segments} :key={key} text={text} />
+      """
+    end
+
+    # The keyboard's points, one element each, keyed (D-204).
+    defp points(assigns) do
+      ~H"""
+      <div hidden data-keyboard-list="">
+        <i :for={{key, point} <- @points} :key={key} data-p={point}></i>
+      </div>
+      """
+    end
+
     @impl true
     def render(%{canvas: nil} = assigns) do
       ~H"""
-      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" {@keyboard}>
+      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" data-keyboard-drawn={@drawn} {@keyboard}>
+        <.points points={@points} />
         <div
           id={@id}
           phx-hook="TooltipHook"
@@ -183,8 +298,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
           data-tooltip-class={@tooltip_class}
           {@hover}
         >
-          <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">{Phoenix.HTML.raw(@svg)}</div>
-          {if @motion, do: nil, else: Phoenix.HTML.raw(@svg)}
+          <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">
+            <.segments segments={@segments} />
+          </div>
+          <.segments :if={!@motion} segments={@segments} />
         </div>
       </div>
       """
@@ -192,29 +309,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def render(assigns) do
       ~H"""
-      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" {@keyboard}>
+      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" data-keyboard-drawn={@drawn} {@keyboard}>
+      <.points points={@points} />
       <div
         id={@id}
         phx-hook="TooltipHook"
         data-tooltip-target={@myself}
         data-tooltip-drawn={@drawn}
         data-tooltip-class={@tooltip_class}
-        data-vis-items={@canvas.items}
+        data-vis-items={@items}
         data-size={"#{@canvas.width},#{@canvas.height}"}
         {@hover}
       >
         <div
           class="vis-chart-layers"
           style={"position: relative; width: #{@canvas.width}px; height: #{@canvas.height}px;"}
-          {Summary.attrs(@canvas.summary, "#{@id}-access")}
+          {Summary.attrs(@summary, "#{@id}-access")}
         >
-          {Phoenix.HTML.raw(Summary.description(@canvas.summary, "#{@id}-access"))}
+          {Phoenix.HTML.raw(Summary.description(@summary, "#{@id}-access"))}
+          <div hidden data-vis-stream="">
+            <i :for={{key, piece} <- @segments} :key={key} data-c={piece}></i>
+          </div>
           <div
             :if={@canvas.format == :binary}
             id={"#{@id}-canvas"}
             phx-hook="CanvasBinaryChart"
             phx-update="ignore"
-            data-binary={@canvas.stream}
+            data-stream=""
+            data-drawn={@drawn}
             data-width={@canvas.width}
             data-height={@canvas.height}
           >
@@ -225,18 +347,19 @@ if Code.ensure_loaded?(Phoenix.Component) do
             id={"#{@id}-canvas"}
             phx-hook="CanvasChart"
             phx-update="ignore"
-            data-commands={@canvas.stream}
+            data-stream=""
+            data-drawn={@drawn}
             data-width={@canvas.width}
             data-height={@canvas.height}
           >
             <canvas width={@canvas.width} height={@canvas.height} style="display: block;"></canvas>
           </div>
           <div
-            :if={@canvas.text}
+            :if={@text != []}
             class="vis-chart-text"
             style="position: absolute; top: 0; left: 0; pointer-events: none;"
           >
-            {Phoenix.HTML.raw(@canvas.text)}
+            <.segments segments={@text} />
           </div>
         </div>
       </div>

@@ -17,6 +17,29 @@ release it merely follows.
 
 ### Breaking
 
+- **`Visualize.Components.Chart` sends what a move changed, not the whole drawing**
+  (#809, #813, D-203–D-206). A move on a 2,500-cell grid sent 1.3–2.8 MB and took
+  0.46–0.75 s on the server; it now sends 1–3 KB and takes under 100 ms. *Affects* code
+  that reads or tests the component's markup, or styles what is inside it:
+  - **On a canvas** the stream is no longer in `data-binary` or `data-commands` on the
+    hook's element. That element carries `data-stream` and `data-drawn`, and the stream's
+    pieces are the `data-c` of the `<i>` children of a hidden `<div data-vis-stream>`
+    beside it. *Before:* `<div phx-hook="CanvasBinaryChart" … data-binary="…">`.
+    *After:* `<div hidden data-vis-stream=""><i data-c="…"></i>…</div><div
+    phx-hook="CanvasBinaryChart" … data-stream="" data-drawn="…">`.
+  - **The keyboard's points** are no longer in `data-keyboard-points` on the
+    `<id>-keys` element. It carries `data-keyboard-series` and `data-keyboard-drawn`,
+    and each point is the `data-p` of an `<i>` in a hidden `<div data-keyboard-list>`,
+    its first child.
+  - The SVG markup is unchanged, byte for byte.
+
+  `CanvasChart`, `CanvasBinaryChart` and `KeyboardHook` read both forms, so a page that
+  writes `data-binary`, `data-commands` or `Visualize.Hooks.Keyboard.attrs/1` itself
+  works as before. Each drawing is now made in a short-lived process linked to your
+  LiveView, which the component sizes from the last drawing so it never collects
+  garbage around your LiveView's state. A crash in it still crashes your LiveView, as
+  it did before.
+
 - **A chart's name is its `aria-label`, not a `<title>`** (#803, #805, D-201). Browsers
   show an SVG's `<title>` as a tooltip when the pointer rests on it, so every chart the
   library drew showed its name under the cursor. *Affects* code that reads, styles or
@@ -32,6 +55,20 @@ release it merely follows.
   `Visualize.IR.Element.title/1` yourself.
 
 ### Added
+
+- **A drawing in keyed segments: `Visualize.Render.Segments`** (#813, D-203). `svg/2`,
+  `json/2` and `binary/2` cut a backend's output into one segment per item and one per
+  group start and end. Each segment is keyed by the item's identity, or by what it draws,
+  so that a page can send a drawing as a keyed LiveView comprehension and a change sends
+  only the items it touched. Read in order, the segments are the backend's output byte for
+  byte (`text/2`). Each call takes the cache the last one returned, so an unchanged item
+  is not serialized again.
+- **The keyboard's points one element each: `Visualize.Hooks.Keyboard.listed/2`** (#813,
+  D-204). It returns the attributes, the points as `{key, json}` for a keyed
+  comprehension, and a cache for the next call. `KeyboardHook` reads the points from a
+  `data-keyboard-list` element when the hook's element carries `data-keyboard-series`.
+- **Socket compression** is described as a host option in spec/10 §19.3. The component
+  does not need it to send a move in a few kilobytes.
 
 - **A mark's events with nothing under the pointer: `tooltip.show: false`** (#803, #804,
   D-200). A mark that only wants clicks writes `tooltip: %{show: false, event: :pick}`:

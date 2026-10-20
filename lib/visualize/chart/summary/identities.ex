@@ -20,13 +20,13 @@ defmodule Visualize.Chart.Summary.Identities do
   # placement of them when there is one (#811).
   @spec entries(%{frame: Frame.t(), mark: map()}, [map()], map() | nil) :: [{String.t(), map()}]
   def entries(%{frame: %Frame{} = frame, mark: mark} = ctx, rows, schemas) do
-    schema = Event.schema_of(schemas, mark)
+    identify = Event.identifier(mark, Event.schema_of(schemas, mark))
     name = series_name(mark)
     grid? = grid?(frame, mark)
     template = template(mark)
 
     for {{row, position}, ordinal} <- Enum.with_index(Enum.zip(rows, positions(ctx, rows))),
-        identity = Event.identity(mark, row, schema),
+        identity = identify.(row),
         identity != nil do
       said =
         Enum.join(

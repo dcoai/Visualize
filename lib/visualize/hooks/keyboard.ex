@@ -26,6 +26,9 @@ defmodule Visualize.Hooks.Keyboard do
   Data attributes on the container, from `attrs/1` (spec/10 §17.2):
   - `data-keyboard-name` - the chart's name
   - `data-keyboard-points` - per series, `{"name", "points": [[x, y, readout], …]}`
+  - or, from `listed/2`, `data-keyboard-series` - per series, `{"name", "count"}` - with
+    each point the `data-p` of one child of the element inside carrying
+    `data-keyboard-list` (D-204)
   - `data-size` - `width,height` of the chart
   - `data-vis-focused` - the palette's `:focused`, resolved for the chart's frame: a JSON
     object of SVG attributes laid over the focus marker's own (spec/10 §4.4); absent, the
@@ -67,9 +70,63 @@ defmodule Visualize.Hooks.Keyboard do
           Enum.map_join(points, ",", &point/1) <> "]}"
       end)
 
+    applied
+    |> common(frame)
+    |> Map.put("data-keyboard-points", "[" <> series <> "]")
+  end
+
+  @doc """
+  The attributes of `attrs/2` with the points one element each, keyed, for a page that
+  sends them as a LiveView comprehension, so a change sends the points it changed and
+  no other (spec/10 §17.2, D-204): `{attrs, points, cache}`. The attributes carry
+  `data-keyboard-series`, each series' name, `grid` and how many points it has, in place
+  of `data-keyboard-points`; `points` is every point in series order as `{key, json}`,
+  `json` the point as `data-keyboard-points` writes it and `key` its series' position and
+  its own, `"0.17"`. The page writes each point as the `data-p` of one child of an element
+  carrying `data-keyboard-list` inside the hook's element, in order:
+
+      <div hidden data-keyboard-list>
+        <i :for={{key, point} <- @points} :key={key} data-p={point}></i>
+      </div>
+
+  ## Options
+
+    * `:placements` - as `attrs/2`
+    * `:cache` - the `cache` the last call returned: a point the same as last time is
+      not written again (default `%{}`)
+  """
+  @spec listed(Applied.t(), keyword()) ::
+          {%{String.t() => String.t()}, [{String.t(), String.t()}], map()}
+  def listed(%Applied{frame: frame} = applied, opts \\ []) do
+    all = Summary.points(applied, Keyword.get(opts, :placements))
+    cache = Keyword.get(opts, :cache, %{})
+
+    series =
+      Enum.map_join(all, ",", fn %{name: name, points: points} = series ->
+        grid = if Map.get(series, :grid, false), do: ~s(,"grid":true), else: ""
+        ~s({"name":#{string(name)}#{grid},"count":#{length(points)}})
+      end)
+
+    # A point is what its JSON says of it, written again only when that changed.
+    written =
+      for {%{points: points}, s} <- Enum.with_index(all),
+          {point, i} <- Enum.with_index(points) do
+        key = "#{s}.#{i}"
+        said = {point.x, point.y, point.text, Map.get(point, :key), Map.get(point, :cell)}
+
+        case cache do
+          %{^key => {^said, _json} = entry} -> {key, entry}
+          _other -> {key, {said, point(point)}}
+        end
+      end
+
+    {applied |> common(frame) |> Map.put("data-keyboard-series", "[" <> series <> "]"),
+     for({key, {_said, json}} <- written, do: {key, json}), Map.new(written)}
+  end
+
+  defp common(applied, frame) do
     %{
       "data-keyboard-name" => Summary.new(applied).name,
-      "data-keyboard-points" => "[" <> series <> "]",
       "data-size" => "#{number(frame.size.width)},#{number(frame.size.height)}"
     }
     |> Map.merge(States.attrs(frame, :focused))
@@ -186,7 +243,7 @@ defmodule Visualize.Hooks.Keyboard do
       read() {
         const ds = this.el.dataset;
         this.name = ds.keyboardName || 'Chart';
-        this.series = JSON.parse(ds.keyboardPoints || '[]');
+        this.series = ds.keyboardSeries ? this.listed(ds.keyboardSeries) : JSON.parse(ds.keyboardPoints || '[]');
         // A grid's points by their cell, `column,row` (spec/10 §17.3, D-198).
         this.series.forEach((s) => {
           if (!s.grid) return;
@@ -207,6 +264,21 @@ defmodule Visualize.Hooks.Keyboard do
         this.own.forEach((name) => this.el.setAttribute(name, own[name]));
         this.focusStyle(ds.visFocused);
         if (this.at) this.at = this.clamp(this.at.series, this.at.index);
+      },
+
+      // The points one element each (spec/10 §17.2, D-204): the series' names and counts
+      // from data-keyboard-series, each point the data-p of one child of the element that
+      // carries data-keyboard-list, in series order.
+      listed(meta) {
+        const list = this.el.querySelector('[data-keyboard-list]');
+        const all = list ? JSON.parse('[' + Array.from(list.children, (n) => n.dataset.p).join(',') + ']') : [];
+        let at = 0;
+        return JSON.parse(meta).map((s) => {
+          const series = {name: s.name, points: all.slice(at, at + s.count)};
+          if (s.grid) series.grid = true;
+          at += s.count;
+          return series;
+        });
       },
 
       // The marker's look: a 2-pixel ring in currentColor, with the server's :focused laid

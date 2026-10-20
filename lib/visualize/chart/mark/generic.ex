@@ -72,6 +72,8 @@ defmodule Visualize.Chart.Mark.Generic do
   # read from the datum, else `value` as a string; anchored as the label says about the
   # position, in the label's style — the label's whole job done by the mark itself.
   defp text(ctx) do
+    ctx = Label.prepare(ctx)
+
     ctx
     |> Channels.pixels([:value])
     |> Channels.placed([:x, :y])

@@ -170,17 +170,17 @@ defmodule Visualize.Hooks.CanvasClickTest do
   end
 
   test "a canvas drawing carries the hit index and the size beside its stream" do
-    for {format, hook, attr} <-
-          [
-            binary: ["CanvasBinaryChart", "data-binary"],
-            json: ["CanvasChart", "data-commands"]
-          ]
-          |> Enum.map(fn {f, [h, a]} -> {f, h, a} end) do
+    for {format, hook} <- [binary: "CanvasBinaryChart", json: "CanvasChart"] do
       html = html(backend: :canvas, canvas_format: format)
       assert html =~ ~s(data-size="120,120")
       assert html =~ ~s(data-vis-items="[{&quot;event&quot;:&quot;cell_click&quot;)
       assert html =~ ~s(phx-hook="#{hook}")
-      assert html =~ attr <> "="
+      # The stream in its segments beside the hook's element (D-203).
+      assert html =~ "data-stream"
+      assert html =~ ~s(<div hidden data-vis-stream="">)
+      assert html =~ ~s(<i data-c=")
+      refute html =~ "data-binary="
+      refute html =~ "data-commands="
       refute html =~ "<rect"
     end
 

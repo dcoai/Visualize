@@ -256,6 +256,16 @@ defmodule Visualize.Backend.Canvas.Output do
   defp js_args(args), do: args |> Enum.map(&format_num/1) |> Enum.intersperse(", ")
 
   @doc false
+  # The `:json` output's commands without the brackets around them: what a segment of the
+  # stream carries (spec/09 §1.4, #813), `[]` for none.
+  @spec json_items([tuple()]) :: iolist()
+  def json_items(commands),
+    do:
+      commands
+      |> Enum.map(fn {cmd, args} -> %{cmd: Atom.to_string(cmd), args: args} end)
+      |> encode_json_array()
+
+  @doc false
   @spec commands_to_json([tuple()]) :: iolist()
   def commands_to_json(commands) do
     encoded =

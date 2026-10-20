@@ -16,6 +16,12 @@ defmodule Visualize.Hooks.CanvasBinary do
       # Push a new frame
       push_event(socket, "canvas_update", %{binary: Visualize.Backend.CanvasBinary.to_base64(bin)})
 
+  An element carrying `data-stream` reads its stream in segments instead (spec/10 §8.2,
+  D-203): the base64 `data-c` of each child of the element beside it that carries
+  `data-vis-stream`, as `Visualize.Render.Segments.binary/2` writes them, decoded and
+  concatenated, and drawn again when `data-drawn` names another drawing.
+  `Visualize.Components.Chart` draws this way.
+
   The decoder (`js_decoder/0`) is shared with `Visualize.Hooks.CanvasIncremental` and is
   written against `Visualize.Backend.CanvasBinary.Opcodes`: every opcode and every
   command-stream sub-opcode has a case — the f64 and the f32 path records (D-73) share one
@@ -715,10 +721,25 @@ defmodule Visualize.Hooks.CanvasBinary do
       render() {
         // A resize cleared the canvas, so the same data is drawn again.
         if (this.sizeToElement()) this.lastData = null;
+        if (this.el.dataset.stream !== undefined) return this.renderSegments();
         const base64Data = this.el.dataset.binary;
         if (!base64Data || base64Data === this.lastData) return;
         this.lastData = base64Data;
         this.bytes = decodeBase64(base64Data);
+        this.draw();
+      },
+      // The stream in segments (spec/10 §8.2, D-203): each a piece of it in base64, the
+      // data-c of one child of the element beside this one carrying data-vis-stream, in
+      // order; data-drawn names the drawing, so the same drawing is not decoded again.
+      renderSegments() {
+        const list = this.el.parentNode && this.el.parentNode.querySelector('[data-vis-stream]');
+        const drawn = this.el.dataset.drawn;
+        if (!list || drawn === this.lastData) return;
+        this.lastData = drawn;
+        const pieces = Array.from(list.children, (n) => decodeBase64(n.dataset.c));
+        this.bytes = new Uint8Array(pieces.reduce((n, p) => n + p.length, 0));
+        let at = 0;
+        pieces.forEach((p) => { this.bytes.set(p, at); at += p.length; });
         this.draw();
       },
       // One replay of the last stream; while a motion runs, one per animation frame

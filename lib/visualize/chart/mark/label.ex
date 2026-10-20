@@ -43,10 +43,34 @@ defmodule Visualize.Chart.Mark.Label do
     do: ctx |> node(label || %{}, datum) |> resolved(ctx, datum)
 
   # A label's style node resolved and bound to its datum.
-  defp resolved(node, %{frame: frame, mode: mode}, datum) do
-    node
-    |> Style.resolve(frame.theme, mode)
-    |> Style.bind(datum || %{}, frame, mode)
+  defp resolved(node, %{frame: frame, mode: mode}, datum),
+    do: node |> Style.resolve(frame.theme, mode) |> Style.bind(datum || %{}, frame, mode)
+
+  @doc false
+  # The context with its labels' style node, and the node resolved, made once for the
+  # mark when its stack names no style by data and reaches no generator (#813): such a
+  # node is the same for every datum, and only its bindings read the datum. A stack that
+  # is resolved per datum is resolved per label, as before.
+  @spec prepare(map()) :: map()
+  def prepare(%{frame: frame, mode: mode} = ctx) do
+    label = ctx.label || %{}
+    stack = Map.get(label, :style, Schema.default(:mark_label, :style))
+
+    if Styled.per_datum?(ctx, stack) do
+      ctx
+    else
+      node = node(ctx, label, nil)
+      Map.put(ctx, :label_node, {node, Style.resolve(node, frame.theme, mode)})
+    end
+  end
+
+  # The label's node and its style for the datum: the mark's, when made once.
+  defp node_and_style(%{label_node: {node, resolved}, frame: frame, mode: mode}, _label, datum),
+    do: {node, Style.bind(resolved, datum || %{}, frame, mode)}
+
+  defp node_and_style(ctx, label, datum) do
+    node = node(ctx, label, datum)
+    {node, resolved(node, ctx, datum)}
   end
 
   # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum,
@@ -65,6 +89,8 @@ defmodule Visualize.Chart.Mark.Label do
   def elements(_children, %{type: type}) when type in @own_label, do: []
 
   def elements(children, %{label: label} = ctx) do
+    ctx = prepare(ctx)
+
     for %{anchor: point, datum: datum} = child <- children,
         element =
           element(
@@ -109,8 +135,7 @@ defmodule Visualize.Chart.Mark.Label do
     label = ctx.label || %{}
     datum = Map.get(shape, :datum)
     # The node once, for the style and for what it says of the text's fit (#812).
-    style_node = node(ctx, label, datum)
-    style = resolved(style_node, ctx, datum)
+    {style_node, style} = node_and_style(ctx, label, datum)
 
     anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)

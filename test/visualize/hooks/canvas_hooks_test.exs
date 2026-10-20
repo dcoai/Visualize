@@ -204,9 +204,13 @@ defmodule Visualize.Hooks.CanvasHooksTest do
       sizes_to_element(hook)
       # Every draw goes through render() — mounted, updated and canvas_update — and render
       # sizes first: a size change forgets the last data, so the skip cannot suppress the
-      # redraw of the canvas the resize cleared.
+      # redraw of the canvas the resize cleared — the stream from data-binary, or from its
+      # segments (D-203), whose skip reads the same lastData.
       assert hook =~
-               ~r/render\(\) \{\s+(\/\/[^\n]*\n\s+)*if \(this\.sizeToElement\(\)\) this\.lastData = null;\s+const base64Data = this\.el\.dataset\.binary;\s+if \(!base64Data \|\| base64Data === this\.lastData\) return;/
+               ~r/render\(\) \{\s+(\/\/[^\n]*\n\s+)*if \(this\.sizeToElement\(\)\) this\.lastData = null;\s+if \(this\.el\.dataset\.stream !== undefined\) return this\.renderSegments\(\);\s+const base64Data = this\.el\.dataset\.binary;\s+if \(!base64Data \|\| base64Data === this\.lastData\) return;/
+
+      assert hook =~
+               ~r/renderSegments\(\) \{[^}]*if \(!list \|\| drawn === this\.lastData\) return;/
 
       assert hook =~ ~r/updated\(\) \{\s+this\.render\(\);/
       assert hook =~ ~r/this\.el\.dataset\.binary = payload\.binary;\s+this\.render\(\);/

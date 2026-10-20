@@ -29,31 +29,53 @@ defmodule Visualize.Chart.Mark.Channels do
   def pixels(%{rows: rows, placed: %{rows: rows, pixels: pixels}}, []), do: pixels
 
   def pixels(ctx, raw) do
-    channels = Map.get(ctx.mark, :channels, %{})
     frame = ctx.frame
+    mark = ctx.mark
+    offsets = Map.get(mark, :offset, %{})
 
-    offsets = Map.get(ctx.mark, :offset, %{})
-
-    Enum.map(ctx.rows, fn row ->
-      Enum.reduce(channels, %{datum: row}, fn {channel, spec}, acc ->
-        value = read(spec, row, frame, ctx.mark, channel)
-
-        pixel =
+    # How each channel is placed, decided once for the mark rather than per row (#813):
+    # read raw, as a band within a band, or through the scale its kind's table names.
+    plan =
+      for {channel, spec} <- Map.get(mark, :channels, %{}) do
+        how =
           cond do
-            channel in @raw_always or channel in raw ->
-              value
-
-            Map.has_key?(offsets, family(channel)) ->
-              offset(frame, ctx.mark, channel, value, row, offsets)
-
-            true ->
-              map(frame, ctx.mark, channel, value)
+            channel in @raw_always or channel in raw -> :raw
+            Map.has_key?(offsets, family(channel)) -> :offset
+            true -> scaled(frame, mark, channel)
           end
 
-        Map.put(acc, channel, pixel)
+        {channel, spec, how}
+      end
+
+    Enum.map(ctx.rows, fn row ->
+      Enum.reduce(plan, %{datum: row}, fn {channel, spec, how}, acc ->
+        value = read(spec, row, frame, mark, channel)
+        Map.put(acc, channel, pixel(how, value, frame, mark, channel, row, offsets))
       end)
     end)
   end
+
+  # A channel through a scale: none named, the reading as it is; one named, the frame's
+  # scale of that name, which may be absent.
+  defp scaled(frame, mark, channel) do
+    case Scales.scale_for(frame.kind, mark, channel) do
+      nil -> :unscaled
+      name -> {:scale, Map.get(frame.scales, name)}
+    end
+  end
+
+  defp pixel(:raw, value, _frame, _mark, _channel, _row, _offsets), do: value
+
+  defp pixel(:offset, value, frame, mark, channel, row, offsets),
+    do: offset(frame, mark, channel, value, row, offsets)
+
+  defp pixel(_how, nil, _frame, _mark, _channel, _row, _offsets), do: nil
+  defp pixel(:unscaled, value, _frame, _mark, _channel, _row, _offsets), do: value
+
+  # A category is matched by its spelling (spec/14 §9.4, D-195): a row's atom and a
+  # domain's string are one value.
+  defp pixel({:scale, scale}, value, _frame, _mark, channel, _row, _offsets),
+    do: place(scale, channel, Visualize.Chart.Names.category(value))
 
   # A channel's family: the position scale its edges and position read (spec/14 §4.3).
   defp family(channel) when channel in [:x, :x0, :x1], do: :x
@@ -169,17 +191,6 @@ defmodule Visualize.Chart.Mark.Channels do
       if which == :min, do: lo, else: hi
     else
       if which == :min, do: List.first(domain), else: List.last(domain)
-    end
-  end
-
-  defp map(_frame, _mark, _channel, nil), do: nil
-
-  defp map(frame, mark, channel, value) do
-    case Scales.scale_for(frame.kind, mark, channel) do
-      nil -> value
-      # A category is matched by its spelling (spec/14 §9.4, D-195): a row's atom and a
-      # domain's string are one value.
-      name -> place(Map.get(frame.scales, name), channel, Visualize.Chart.Names.category(value))
     end
   end
 
