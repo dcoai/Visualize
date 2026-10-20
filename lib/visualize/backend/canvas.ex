@@ -222,7 +222,8 @@ defmodule Visualize.Backend.Canvas do
 
   # A clipped element (spec/02 §2.1, spec/09 §3.3): the shape's geometry as the clip —
   # alone for inside, under a rectangle of everything with the even-odd rule for
-  # outside — around the element's own commands, inside a save/restore pair.
+  # outside — around the element's own commands, inside a save/restore pair, after the
+  # element's transform: SVG resolves a clip in the clipped element's user space (D-211).
   defp element_to_commands(%Element{clip: %{shape: shape, keep: keep}} = element, inherited) do
     region =
       case keep do
@@ -234,8 +235,11 @@ defmodule Visualize.Backend.Canvas do
             geometry(shape) ++ [{:clip, ["evenodd"]}]
       end
 
-    [{:save, []}, {:beginPath, []}] ++
-      region ++ element_to_commands(%{element | clip: nil}, inherited) ++ [{:restore, []}]
+    [{:save, []}] ++
+      transform_commands(element.transform) ++
+      [{:beginPath, []}] ++
+      region ++
+      element_to_commands(%{element | clip: nil, transform: nil}, inherited) ++ [{:restore, []}]
   end
 
   defp element_to_commands(

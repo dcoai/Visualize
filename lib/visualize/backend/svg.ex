@@ -108,32 +108,12 @@ defmodule Visualize.Backend.SVG do
   # the shape, or a mask of everything but it — then the element referring to it. It is
   # matched before every other clause, so a clipped group keeps its clip (D-209).
   defp do_render_element(%Element{clip: %{shape: shape, keep: keep}} = element) do
-    id =
-      "vis-#{if(keep == :inside, do: "clip", else: "mask")}-#{Integer.to_string(:erlang.phash2(shape), 36) |> String.downcase()}"
+    {tag, attrs, children, reference} = clip_definition(shape, keep)
 
-    bare = %{element | clip: nil}
-
-    case keep do
-      :inside ->
-        [
-          render_svg_tag(:clipPath, %{id: id}, [do_render_element(shape)], nil),
-          do_render_element(Element.set_attrs(bare, %{clip_path: "url(##{id})"}))
-        ]
-
-      :outside ->
-        extent = %{x: -100_000, y: -100_000, width: 200_000, height: 200_000}
-        white = Element.rect(extent.x, extent.y, extent.width, extent.height, %{fill: "white"})
-
-        [
-          render_svg_tag(
-            :mask,
-            Map.merge(%{id: id, mask_units: "userSpaceOnUse"}, extent),
-            [do_render_element(white), do_render_element(%{shape | style: %{fill: "black"}})],
-            nil
-          ),
-          do_render_element(Element.set_attrs(bare, %{mask: "url(##{id})"}))
-        ]
-    end
+    [
+      render_svg_tag(tag, attrs, Enum.map(children, &do_render_element/1), nil),
+      do_render_element(Element.set_attrs(%{element | clip: nil}, reference))
+    ]
   end
 
   defp do_render_element(%Element{
@@ -399,6 +379,17 @@ defmodule Visualize.Backend.SVG do
     :effect_color
   ]
 
+  @doc false
+  # Whether a style key is the frame's or `effects/2`'s, never an attribute of its own; and
+  # the attributes a blend and an effect write. Shared with `Visualize.SVG.Element.from_ir/1`
+  # (spec/02 §5.1, D-211).
+  @spec not_attribute?(atom()) :: boolean()
+  def not_attribute?(key), do: key in @not_attributes
+
+  @doc false
+  @spec effect_attrs(map()) :: map()
+  def effect_attrs(style), do: effects(%{}, style)
+
   defp style_to_attrs(style) when map_size(style) == 0, do: %{}
 
   # One pass over the style (#812): each key an attribute, a `nil` left out, and the
@@ -454,6 +445,32 @@ defmodule Visualize.Backend.SVG do
           )
       )
     )
+  end
+
+  @doc false
+  # A clip's definition, as its tag, its attributes and the IR elements it holds, and the
+  # attribute that refers to it (spec/09 §2.3): for `:inside` a clipPath holding the shape,
+  # for `:outside` a mask of everything — a white square of ±100000 — but the shape, in
+  # black. The shape is in the referring element's user space (D-211). Shared with
+  # `Visualize.SVG.Element.from_ir/1`, so the two bridges write one definition.
+  @spec clip_definition(Element.t(), :inside | :outside) ::
+          {atom(), map(), [Element.t()], %{atom() => String.t()}}
+  def clip_definition(shape, keep) do
+    h = shape |> :erlang.phash2() |> Integer.to_string(36) |> String.downcase()
+
+    case keep do
+      :inside ->
+        id = "vis-clip-#{h}"
+        {:clipPath, %{id: id}, [shape], %{clip_path: "url(##{id})"}}
+
+      :outside ->
+        id = "vis-mask-#{h}"
+        extent = %{x: -100_000, y: -100_000, width: 200_000, height: 200_000}
+        white = Element.rect(extent.x, extent.y, extent.width, extent.height, %{fill: "white"})
+
+        {:mask, Map.merge(%{id: id, mask_units: "userSpaceOnUse"}, extent),
+         [white, %{shape | style: %{fill: "black"}}], %{mask: "url(##{id})"}}
+    end
   end
 
   @doc false

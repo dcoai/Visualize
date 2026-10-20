@@ -330,13 +330,17 @@ defmodule Visualize.Backend.CanvasBinary do
 
   # A clipped element (spec/02 §2.1, spec/09 §4.3.18, D-208): its clip shape's geometry made
   # the clip — kept inside it, or outside it — around the element's own records, inside a
-  # save/restore pair, as the `:json` commands draw it.
+  # save/restore pair after the element's transform, as the `:json` commands draw it: SVG
+  # resolves a clip in the clipped element's user space (D-211).
   defp do_encode_element(%Element{clip: %{shape: shape, keep: keep}} = element, ctx, inherited) do
+    transform = element.transform
+
     IO.iodata_to_binary([
       <<Opcodes.save()::8>>,
+      if(transform && transform.operations != [], do: encode_transform(transform), else: <<>>),
       clip_geometry(shape, ctx.precision),
       <<Opcodes.clip()::8, Map.fetch!(%{inside: 0x01, outside: 0x02}, keep)::8>>,
-      do_encode_element(%{element | clip: nil}, ctx, inherited),
+      do_encode_element(%{element | clip: nil, transform: nil}, ctx, inherited),
       <<Opcodes.restore()::8>>
     ])
   end
@@ -448,7 +452,15 @@ defmodule Visualize.Backend.CanvasBinary do
   defp as_path(%Element{type: :polygon, attrs: %{points: points}}),
     do: points |> polyline() |> Path.close()
 
-  defp as_path(%Element{type: :ellipse, attrs: %{cx: cx, cy: cy, rx: rx, ry: ry}}) do
+  defp as_path(%Element{type: :ellipse, attrs: %{cx: cx, cy: cy, rx: rx, ry: ry}}),
+    do: ellipse_path(cx, cy, rx, ry)
+
+  defp as_path(_element), do: Path.new()
+
+  @doc false
+  # An ellipse as the path it is (spec/09 §4.4), for the IR encoder and the SVG-element one.
+  @spec ellipse_path(number(), number(), number(), number()) :: Path.t()
+  def ellipse_path(cx, cy, rx, ry) do
     kx = rx * @kappa
     ky = ry * @kappa
 
@@ -460,8 +472,6 @@ defmodule Visualize.Backend.CanvasBinary do
     |> Path.curve_to(cx + kx, cy - ry, cx + rx, cy - ky, cx + rx, cy)
     |> Path.close()
   end
-
-  defp as_path(_element), do: Path.new()
 
   defp polyline([]), do: Path.new()
 
@@ -598,6 +608,17 @@ defmodule Visualize.Backend.CanvasBinary do
       mode -> <<Opcodes.blend()::8, mode::8>>
     end
   end
+
+  @blend_words Map.new(@blends, fn {blend, mode} -> {Canvas.blend_word(blend), mode} end)
+
+  @doc false
+  # The `blend` record's byte for a `mix-blend-mode` word as SVG writes it (`color-dodge`),
+  # or nil for `normal` and any other word (spec/09 §4.3.19, §4.7, D-211).
+  @spec blend_mode(term()) :: 1..15 | nil
+  def blend_mode(word) when is_binary(word),
+    do: Map.get(@blend_words, String.downcase(String.trim(word)))
+
+  def blend_mode(_word), do: nil
 
   @caps %{butt: 0, round: 1, square: 2}
   @joins %{miter: 0, round: 1, bevel: 2}

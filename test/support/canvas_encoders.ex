@@ -29,7 +29,7 @@ defmodule Visualize.CanvasEncoders do
   @doc """
   The modules under `Visualize.Backend.Canvas*` that encode no element: a geometry helper,
   the commands' serializer (the canvas commands' `:json` is it), the decoder, the opcode
-  table and the path record writer.
+  table, the path record writer and the SVG-element encoder's reference resolver.
   """
   @spec not_encoders() :: [module()]
   def not_encoders do
@@ -38,7 +38,8 @@ defmodule Visualize.CanvasEncoders do
       Canvas.Output,
       CanvasBinary.Decoder,
       CanvasBinary.Opcodes,
-      CanvasBinary.PathEncoder
+      CanvasBinary.PathEncoder,
+      CanvasBinary.SVG.Defs
     ]
   end
 

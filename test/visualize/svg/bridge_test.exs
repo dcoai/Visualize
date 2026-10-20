@@ -71,6 +71,88 @@ defmodule Visualize.SVG.BridgeTest do
     assert Render.to_svg_string(element) == element |> SVG.Element.from_ir() |> SVG.to_string()
   end
 
+  # What the frame writes beyond plain shapes (spec/02 §5.1, #825, D-211): a clip inside and
+  # outside, a blend, an effect and its filter, a vector effect on a group, a paint, and the
+  # style keys that are no attribute.
+  defp effects_scene do
+    moved = Element.rect(10, 10, 40, 20, %{fill: "#336699", stroke: "#cc0000", stroke_width: 6})
+    moved = Element.set_transform(moved, Transform.translate(50, 40))
+
+    paint = %Visualize.IR.Paint{
+      id: "vis-paint-p",
+      type: :linear,
+      geometry: %{x1: 0, y1: 0, x2: 1, y2: 0},
+      stops: [{0.0, "#fff", 1}, {1.0, "#000", 1}]
+    }
+
+    Element.root(300, 200,
+      children: [
+        Element.defs([
+          Element.filter("vis-effect-shadow-4", [Element.drop_shadow(2.0, 2.0, 4)]),
+          Element.filter("vis-effect-blur-2", [Element.gaussian_blur(2)])
+        ]),
+        Element.group(
+          [
+            Element.clip(moved, moved, :inside),
+            Element.clip(
+              Element.circle(5, 6, 7, %{fill: "red"}),
+              Element.circle(5, 6, 4, %{}),
+              :outside
+            ),
+            Element.rect(0, 0, 5, 5, %{fill: "red", blend: :color_dodge, line_height: 2}),
+            Element.rect(0, 0, 5, 5, %{fill: paint, effect: :shadow, effect_radius: 4}),
+            Element.circle(1, 1, 1, %{
+              fill: "red",
+              effect: :blur,
+              effect_radius: 2,
+              transition: [:fill]
+            }),
+            Element.group([Element.line(0, 0, 9, 9, %{stroke: "#000"})],
+              style: %{vector_effect: :non_scaling_stroke, stroke_width: 2}
+            )
+          ],
+          style: %{blend: :multiply}
+        )
+      ]
+    )
+  end
+
+  test "the bridge writes the backend's clips, blends, effects and vector effects (D-211)" do
+    element = effects_scene()
+    markup = Render.to_svg_string(element)
+    assert markup == element |> SVG.Element.from_ir() |> SVG.to_string()
+
+    for written <- [
+          "<clipPath",
+          "<mask",
+          ~s(mix-blend-mode: color-dodge),
+          ~s{filter="url(#vis-effect-shadow-4)"},
+          "<feDropShadow",
+          "<feGaussianBlur",
+          ~s(vector-effect="non-scaling-stroke"),
+          ~s{fill="url(#vis-paint-p)"}
+        ] do
+      assert markup =~ written
+    end
+
+    refute markup =~ "line-height"
+    refute markup =~ ~r/ (blend|effect|transition)=/
+
+    # A clipped element converted alone is its definition and itself, in a group.
+    clipped =
+      Element.clip(
+        Element.rect(0, 0, 4, 4, %{fill: "red"}),
+        Element.circle(2, 2, 2, %{}),
+        :inside
+      )
+
+    assert %SVG.Element{tag: :g, children: [%{tag: :clipPath}, %{tag: :rect}]} =
+             SVG.Element.from_ir(clipped)
+
+    assert SVG.to_string(SVG.Element.from_ir(clipped)) ==
+             "<g>" <> Render.to_svg_string(clipped) <> "</g>"
+  end
+
   test "a root renders xmlns and viewBox on both paths, never view-box" do
     root = Element.root(10, 20, view_box: "0 0 5 10")
     backend = Render.to_svg_string(root)
