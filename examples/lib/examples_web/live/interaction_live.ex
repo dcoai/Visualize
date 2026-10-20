@@ -18,7 +18,9 @@ defmodule ExamplesWeb.InteractionLive do
 
   *A simulation, live* (#836) is a `Visualize.Layout.Force.Simulation` the page starts once
   it connects, subscribed from its first tick (`ExamplesWeb.ForceDemo`): each tick it sends
-  redraws the graph.
+  redraws the graph. A square-wave heat input (#848) drives its `alpha_target`, sampled on
+  the page's own clock, and two charts beside the graph draw the input and the heat over
+  the last 30 s.
   """
   use Phoenix.LiveView
 
@@ -111,13 +113,17 @@ defmodule ExamplesWeb.InteractionLive do
      |> assign(animations_chart: AnimationsDemo.applied(size), animations_run: 0)
      |> motion(MotionDemo.rows(), 0)
      |> mines(mines_game(session))
-     |> force(connected?(socket))}
+     |> force(connected?(socket), session)}
   end
 
   # The live force simulation (#836): started, linked to the page, only once it connects.
-  defp force(socket, connected?) do
+  # The heat input's clock (#848) runs on a connected page unless the session turns it off,
+  # as a test does to send the page its `:force_sample` messages itself.
+  defp force(socket, connected?, session) do
     {nodes, links} = ForceDemo.graph()
     sim = if connected?, do: elem(ForceDemo.start(), 1)
+    clock? = connected? and Map.get(session, "force_clock", true)
+    if clock?, do: schedule_force_sample()
 
     assign(socket,
       force_sim: sim,
@@ -125,9 +131,35 @@ defmodule ExamplesWeb.InteractionLive do
       force_links: links,
       force_alpha: nil,
       force_ticks: 0,
-      force_pinned: false
+      force_pinned: false,
+      force_clock: clock?,
+      force_heat_on: true,
+      force_sample: 0,
+      force_target: 0.0,
+      force_samples: [],
+      force_charts: ForceDemo.charts([])
     )
   end
+
+  defp schedule_force_sample,
+    do: Process.send_after(self(), :force_sample, ForceDemo.sample_ms())
+
+  # One sample of the heat input: the wave's value at this sample becomes the target, and
+  # the window records it with the simulation's alpha (#848).
+  defp force_sample(%{assigns: %{force_sim: sim}} = socket) when is_pid(sim) do
+    %{force_sample: n, force_heat_on: on?, force_target: from} = socket.assigns
+    target = ForceDemo.drive(sim, from, ForceDemo.input(n, on?))
+    samples = ForceDemo.record(socket.assigns.force_samples, n, target, Simulation.alpha(sim))
+
+    assign(socket,
+      force_sample: n + 1,
+      force_target: target,
+      force_samples: samples,
+      force_charts: ForceDemo.charts(samples)
+    )
+  end
+
+  defp force_sample(socket), do: socket
 
   defp mines_game(%{"mines_seed" => seed}) when is_integer(seed), do: Minesweeper.new(seed: seed)
   defp mines_game(_session), do: Minesweeper.new()
@@ -178,6 +210,25 @@ defmodule ExamplesWeb.InteractionLive do
      )}
   end
 
+  # The heat input's clock: the next sample is armed before this one is taken.
+  def handle_info(:force_sample, socket) do
+    if socket.assigns.force_clock, do: schedule_force_sample()
+    {:noreply, force_sample(socket)}
+  end
+
+  # The heat input off sets the target to 0 at once; on, the next sample sets the wave's.
+  def handle_event("force_heat", _params, %{assigns: %{force_sim: sim}} = socket)
+      when is_pid(sim) do
+    on? = not socket.assigns.force_heat_on
+
+    target =
+      if on?,
+        do: socket.assigns.force_target,
+        else: ForceDemo.drive(sim, socket.assigns.force_target, 0.0)
+
+    {:noreply, assign(socket, force_heat_on: on?, force_target: target)}
+  end
+
   def handle_event("force_reheat", _params, %{assigns: %{force_sim: sim}} = socket)
       when is_pid(sim) do
     :ok = ForceDemo.reheat(sim)
@@ -191,8 +242,9 @@ defmodule ExamplesWeb.InteractionLive do
     {:noreply, assign(socket, force_pinned: pinned)}
   end
 
-  def handle_event(event, _params, socket) when event in ["force_reheat", "force_pin"],
-    do: {:noreply, socket}
+  def handle_event(event, _params, socket)
+      when event in ["force_reheat", "force_pin", "force_heat"],
+      do: {:noreply, socket}
 
   def handle_event("mines_new", _params, socket),
     do: {:noreply, mines(socket, Minesweeper.new())}
@@ -455,12 +507,25 @@ defmodule ExamplesWeb.InteractionLive do
             for <code>ticks: 3</code>
             each frame (the gallery's <a href="/chart/force">Force-Directed Graph</a>).
           </p>
+          <p class="panel-note">
+            <strong>A heat input.</strong>
+            A square wave sets <code>set_alpha_target/2</code>: 0.3 for 4 s, then 0 for 4 s.
+            Each tick moves alpha toward its target by <code>alpha_decay</code>
+            of the gap, so the heat lags its input and rises and falls exponentially. A rising
+            edge also calls <code>start/1</code>, because a new target alone does not wake a
+            simulation that cooled and stopped. The charts draw the input and the heat on
+            one 30 s time axis, sampled every 250 ms. With the input off, the target stays 0
+            and the simulation cools and stops as before.
+          </p>
           <ForceDemo.panel
             nodes={@force_nodes}
             links={@force_links}
             alpha={@force_alpha}
             ticks={@force_ticks}
             pinned={@force_pinned}
+            heat_on={@force_heat_on}
+            target={@force_target}
+            charts={@force_charts}
           />
         </Panel.panel>
 
@@ -521,6 +586,8 @@ defmodule ExamplesWeb.InteractionLive do
       <%= Phoenix.HTML.raw(AnimationsDemo.keyframes()) %>
       <%= Phoenix.HTML.raw(MinesweeperLive.board_css()) %>
       #crosshair-svg, #crosshair-canvas { display: inline-block; }
+      .force-row { display: flex; flex-wrap: wrap; align-items: flex-start; }
+      .force-row svg { max-width: 100%; height: auto; }
       #crosshair-canvas canvas { max-width: 100%; height: auto; }
     </style>
     """
