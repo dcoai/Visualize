@@ -149,6 +149,19 @@ verify:atoms:
   script:
     - mix vis.atoms
 
+# Neither lock carries a dependency advisory or a retired package outside the reasoned
+# allowlist audit/advisories_allowlist.exs (spec/12 §3, #782, D-207). The check is Hex's own
+# `mix hex.audit`, run in both projects; it needs the examples app's dependencies fetched,
+# not compiled, so a bare deps.get there is enough.
+verify:advisories:
+  extends: .elixir
+  stage: verify
+  variables:
+    MIX_ENV: dev
+  script:
+    - (cd examples && mix deps.get)
+    - mix vis.advisories
+
 verify:models:
   extends: .elixir
   stage: verify
