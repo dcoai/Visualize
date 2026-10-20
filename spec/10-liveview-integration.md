@@ -871,6 +871,7 @@ Both pushes go through `pushEventTo(target, …)` when `data-builder-target` is 
 | Function | Contract |
 |---|---|
 | `Visualize.Hooks.Keyboard.js_hook/0` | Returns the source of `export const KeyboardHook = {…}` (17.3). |
+| `Visualize.Hooks.Keyboard.attrs/2` | `attrs(applied, opts)`: as `attrs/1`; with `placements:`, `Visualize.Chart.placements/1` of the same chart, the points' positions are read from it rather than placed again (spec/14 §21.5, #811). |
 | `Visualize.Hooks.Keyboard.attrs/1` | `attrs(applied)`: the attributes of 17.2 for an applied chart, `data-vis-focused` (4.4) among them, as a map from attribute name (string) to value (string), computed once on the server. |
 
 ### 17.2 The attributes
@@ -978,7 +979,7 @@ A `Phoenix.LiveComponent`, compiled when `Phoenix.Component` is loaded:
 
 It renders the chart's SVG, `Visualize.Chart.render(chart, [root: true] ++ render)`, inside a `<div phx-hook="TooltipHook">` carrying `data-tooltip-target` naming the component, `data-tooltip-drawn`, its token for the drawing, and `Visualize.Hooks.Tooltip.attrs/1` of the chart's frame, so the datum under the pointer is outlined as the palette's `:hover` (12.3, 4.4). A new `chart` or `render` is a new drawing with a new token; an update with the same ones keeps both. It handles one event, `visualize_event`: `decode/1`, then `resolve/3` with its drawing and token, then `send(self(), {:visualize_event, id, event})` to the page's process, whose one clause takes it:
 
-**Reached from the keyboard** (#765, D-198). On every backend the component's `TooltipHook` element sits inside a `<div id="<id>-keys" phx-hook="KeyboardHook">` carrying `Visualize.Hooks.Keyboard.attrs/1` of the chart (17.2), so the chart is one tab stop whose points — every mark with an identity, a band grid's cells in two dimensions — the arrows reach, and Enter on a point a mark's event keys sends the page that event (17.3). The component sets no `data-keyboard-pick-event`.
+**Reached from the keyboard** (#765, D-198). On every backend the component's `TooltipHook` element sits inside a `<div id="<id>-keys" phx-hook="KeyboardHook">` carrying `Visualize.Hooks.Keyboard.attrs/2` of the chart (17.2) — placed by the same pass as the drawing, `Visualize.Chart.placements/1` handed to both (spec/14 §21.5, #811) — so the chart is one tab stop whose points — every mark with an identity, a band grid's cells in two dimensions — the arrows reach, and Enter on a point a mark's event keys sends the page that event (17.3). The component sets no `data-keyboard-pick-event`.
 
 ```elixir
 def handle_info({:visualize_event, "sales", %Visualize.Event{event: "point_click", row: row}}, socket) do
