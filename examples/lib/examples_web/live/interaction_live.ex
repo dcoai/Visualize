@@ -15,12 +15,17 @@ defmodule ExamplesWeb.InteractionLive do
   The Minesweeper panel (#800) plays the game of `/minesweeper` in place: the same design
   (`ExamplesWeb.MinesweeperLive.applied/2`), the game in this page's process, and each
   click made the next game by the step that page takes (`Examples.Minesweeper.Move`).
+
+  *A simulation, live* (#836) is a `Visualize.Layout.Force.Simulation` the page starts once
+  it connects, subscribed from its first tick (`ExamplesWeb.ForceDemo`): each tick it sends
+  redraws the graph.
   """
   use Phoenix.LiveView
 
   alias Examples.Minesweeper
   alias Examples.Minesweeper.Move
-  alias ExamplesWeb.{AnimationsDemo, Highlight, MinesweeperLive, MotionDemo, Panel}
+  alias ExamplesWeb.{AnimationsDemo, ForceDemo, Highlight, MinesweeperLive, MotionDemo, Panel}
+  alias Visualize.Layout.Force.Simulation
   alias Visualize.Chart
   alias Visualize.Event
   alias Visualize.Hooks.Crosshair
@@ -105,7 +110,23 @@ defmodule ExamplesWeb.InteractionLive do
      |> assign(picked: nil, hovered: nil, hidden: %{}, size: size)
      |> assign(animations_chart: AnimationsDemo.applied(size), animations_run: 0)
      |> motion(MotionDemo.rows(), 0)
-     |> mines(mines_game(session))}
+     |> mines(mines_game(session))
+     |> force(connected?(socket))}
+  end
+
+  # The live force simulation (#836): started, linked to the page, only once it connects.
+  defp force(socket, connected?) do
+    {nodes, links} = ForceDemo.graph()
+    sim = if connected?, do: elem(ForceDemo.start(), 1)
+
+    assign(socket,
+      force_sim: sim,
+      force_nodes: nodes,
+      force_links: links,
+      force_alpha: nil,
+      force_ticks: 0,
+      force_pinned: false
+    )
   end
 
   defp mines_game(%{"mines_seed" => seed}) when is_integer(seed), do: Minesweeper.new(seed: seed)
@@ -146,6 +167,32 @@ defmodule ExamplesWeb.InteractionLive do
   def handle_info({:visualize_event, "mines-panel-chart", %Event{} = event}, socket) do
     {:noreply, mines(socket, Move.play(socket.assigns.mines_game, event, :reveal))}
   end
+
+  # Each tick of the simulation, sent because the page subscribed at its start (#483).
+  def handle_info({:force_tick, %{nodes: nodes}}, socket) do
+    {:noreply,
+     assign(socket,
+       force_nodes: nodes,
+       force_alpha: Simulation.alpha(socket.assigns.force_sim),
+       force_ticks: socket.assigns.force_ticks + 1
+     )}
+  end
+
+  def handle_event("force_reheat", _params, %{assigns: %{force_sim: sim}} = socket)
+      when is_pid(sim) do
+    :ok = ForceDemo.reheat(sim)
+    {:noreply, socket}
+  end
+
+  def handle_event("force_pin", _params, %{assigns: %{force_sim: sim}} = socket)
+      when is_pid(sim) do
+    pinned = not socket.assigns.force_pinned
+    :ok = ForceDemo.pin(sim, pinned)
+    {:noreply, assign(socket, force_pinned: pinned)}
+  end
+
+  def handle_event(event, _params, socket) when event in ["force_reheat", "force_pin"],
+    do: {:noreply, socket}
 
   def handle_event("mines_new", _params, socket),
     do: {:noreply, mines(socket, Minesweeper.new())}
@@ -390,6 +437,31 @@ defmodule ExamplesWeb.InteractionLive do
             starts them again.
           </p>
           <Highlight.code code={AnimationsDemo.code()} />
+        </Panel.panel>
+
+        <Panel.panel id="panel-force">
+          <:title>A simulation, live</:title>
+          <p class="panel-note">
+            <code>Visualize.Layout.Force.Simulation</code>
+            is a process: the page starts one when it connects, linked to itself and
+            subscribed from its first tick with <code>subscribers: [self()]</code>, and each
+            <code>&#123;:force_tick, %&#123;nodes: nodes&#125;&#125;</code>
+            it sends redraws the graph. Alpha falls each tick until it is below <code>alpha_min</code>
+            and the simulation stops; <em>Reheat</em>
+            is <code>restart/1</code>
+            and <code>start/1</code>, and <em>Pin the hub</em>
+            fixes it at the center with <code>fix_node/4</code>. A chart's <code>:force</code>
+            step runs the same forces purely, warm at <code>alpha: 0.3</code>
+            for <code>ticks: 3</code>
+            each frame (the gallery's <a href="/chart/force">Force-Directed Graph</a>).
+          </p>
+          <ForceDemo.panel
+            nodes={@force_nodes}
+            links={@force_links}
+            alpha={@force_alpha}
+            ticks={@force_ticks}
+            pinned={@force_pinned}
+          />
         </Panel.panel>
 
         <Panel.panel id="panel-minesweeper">
