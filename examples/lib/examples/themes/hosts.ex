@@ -106,46 +106,54 @@ defmodule Examples.Themes.Hosts do
       title: "#5d4037",
       grid: %{width: 1}
     },
+    # Spring and Summer run apart (#797): Spring from a medium green to a dark yellow on a
+    # warm page, Summer from a dark green to a medium blue on a cool one. Each series is two
+    # sweeps of that run in OKLCH, the first four colors the whole run — so a chart of four
+    # series reads green to yellow, or green to blue — and the next four the hues between,
+    # at the other lightness. Every series color holds 3:1 on its page, which leaves a light
+    # page's theme a narrow band of lightness; within it the lightness alternates, so any two
+    # colors of a theme stay 0.06 or more apart in OKLab.
     spring: %{
       name: "Spring",
-      description: "Bright green to yellow to white, the grid dotted",
-      series: ~w(#00a86b #2ec866 #5cd85c #8ae65c #b8f260 #d4f88d #e8fcb4 #f8ffe0),
+      description:
+        "Medium green through yellow-greens to dark yellow, on a warm page, the grid dotted",
+      series: ~w(#06a141 #608706 #716d04 #97730e #307505 #869606 #685702 #af880b),
       page: [
-        background: "#f0fff0",
-        text: "#2d5a3d",
-        axis: "#4a7c59",
-        grid: "#cfeccf",
-        surface: "#e2f8e2"
+        background: "#fbfbec",
+        text: "#34481f",
+        axis: "#5a6b2e",
+        grid: "#e6e8c8",
+        surface: "#f3f4dc"
       ],
       hues: %{
         green: "#3f9545",
         amber: "#977000",
         red: "#bc304d",
         blue: "#2071a8",
-        gray: "#6a786d"
+        gray: "#74726a"
       },
-      title: "#1f6b3a",
+      title: "#4a6a12",
       grid: %{width: 1, dash: [1, 3]}
     },
     summer: %{
       name: "Summer",
-      description: "Deep greens to light mint, on a mint page",
-      series: ~w(#0d5c3d #0f7a4e #15946a #22a87a #34c78e #5dd9a4 #8eeabc #c5f5dc),
+      description: "Dark green through teals to medium blue, on a cool page",
+      series: ~w(#045e17 #118e7d #066278 #377ee3 #0b764d #025050 #028cbc #015e9d),
       page: [
-        background: "#f0fdf6",
-        text: "#0d4a2d",
-        axis: "#1a6b45",
-        grid: "#c6ebd6",
-        surface: "#e2f9ed"
+        background: "#f0f6fa",
+        text: "#0f3d3e",
+        axis: "#2a5e66",
+        grid: "#d2e3ea",
+        surface: "#e3eff5"
       ],
       hues: %{
         green: "#2f9657",
         amber: "#9e6c0d",
         red: "#ba3730",
         blue: "#1370a0",
-        gray: "#64766c"
+        gray: "#62727a"
       },
-      title: "#0d5c3d",
+      title: "#045e17",
       grid: %{width: 1}
     }
   ]
