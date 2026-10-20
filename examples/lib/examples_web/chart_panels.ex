@@ -37,10 +37,31 @@ defmodule ExamplesWeb.ChartPanels do
     named ++ [:explain]
   end
 
-  @doc "Every panel's state for `module`, by name, in its order."
-  @spec init(module()) :: [{atom(), map()}]
-  def init(module),
-    do: for(name <- of(module), do: {name, Map.fetch!(@panels, name).init(module)})
+  @doc """
+  Every panel's state for `module`, by name, in its order; *Why it looks as it does*
+  explains the chart under the picker's theme `theme` (#792), Default when `nil`.
+  """
+  @spec init(module(), String.t() | nil) :: [{atom(), map()}]
+  def init(module, theme \\ nil) do
+    for name <- of(module) do
+      case name do
+        :explain -> {name, Explain.themed(module, theme)}
+        name -> {name, Map.fetch!(@panels, name).init(module)}
+      end
+    end
+  end
+
+  @doc """
+  The panels after the page picked the theme `theme` (#792): *Why it looks as it does*
+  explains `module` under it from now on; every other panel's state is kept.
+  """
+  @spec retheme([{atom(), map()}], module(), String.t()) :: [{atom(), map()}]
+  def retheme(panels, module, theme) do
+    Enum.map(panels, fn
+      {:explain, state} -> {:explain, Explain.retheme(state, Explain.applier(module, theme))}
+      panel -> panel
+    end)
+  end
 
   @doc """
   The panels after a `chart_panel` event: the panel `params["panel"]` names takes it; a name

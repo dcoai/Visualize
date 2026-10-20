@@ -261,4 +261,47 @@ defmodule Examples.ThemeLab do
     {^id, _title, theme} = List.keyfind(cases(), id, 0)
     "theme: " <> inspect(theme, pretty: true, width: 80)
   end
+
+  @doc """
+  A chart page's theme in the lab (#792, work item #795): the theme of the listed `key`
+  (`Examples.Themes`) beside Default — the code that builds it, the names of its color
+  table whose color differs from Default's or that Default lacks (`{name, literal,
+  default_literal | nil}`), red's steps under each, the palette entries it changes
+  (`{name, default, own}`), the role chart under each, and its contract faults (none for a
+  theme the list holds). `nil` for a key the list lacks, which the lab shows as its house.
+  """
+  @spec picked(term()) :: map() | nil
+  def picked(key) do
+    case Examples.Themes.entry(key) do
+      nil -> nil
+      entry -> picked_entry(entry)
+    end
+  end
+
+  defp picked_entry(%{key: key, theme: theme} = entry) do
+    default = Examples.Themes.default()
+
+    Map.merge(entry, %{
+      code: Examples.Themes.code(key),
+      table: compare_table(theme, default),
+      steps: for(n <- steps(), do: {n, step(theme, n), step(default, n)}),
+      palette:
+        for(
+          name <- Theme.style_names(theme),
+          Theme.style(theme, name) != Theme.style(default, name),
+          do: {name, Theme.style(default, name), Theme.style(theme, name)}
+        ),
+      default_svg: roles_svg(default, "theme-lab-picked-default"),
+      svg: roles_svg(theme, "theme-lab-picked"),
+      violations: Theme.violations(theme)
+    })
+  end
+
+  defp compare_table(theme, default) do
+    defaults = Map.new(table(default), fn {name, literal, _added} -> {name, literal} end)
+
+    for {name, literal, _added} <- table(theme),
+        Map.get(defaults, name) != literal,
+        do: {name, literal, Map.get(defaults, name)}
+  end
 end

@@ -119,7 +119,7 @@ defmodule ExamplesWeb.ChartLive do
       animatable: chart_slug in @animatable_charts,
       hex_radius: 20,
       # The chart's own panels (spec/14 §12.6, #705), each with its state, made afresh.
-      panels: ExamplesWeb.ChartPanels.init(module),
+      panels: ExamplesWeb.ChartPanels.init(module, socket.assigns.theme),
       # The still chart (#362): the last frame rendered outside a run — on mount and on
       # a theme, backend or hex-size change — in a task, with the design as data.
       still_frame: nil,
@@ -159,6 +159,7 @@ defmodule ExamplesWeb.ChartLive do
     )
     |> then(&assign(&1, run_scroll: fresh_scroll(&1.assigns)))
     |> still()
+    |> ThemePicker.measure()
   end
 
   @doc """
@@ -251,10 +252,13 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event(gesture, _params, socket) when gesture in ["move", "menu"],
     do: {:noreply, socket}
 
-  # A theme picked (#792): the key looked up in the picker's own list, never an atom.
-  def handle_event("theme", %{"theme" => word}, socket),
-    do:
-      {:noreply, socket |> assign(theme: ThemePicker.pick(socket.assigns.theme, word)) |> still()}
+  # A theme picked (#792): the key looked up in the picker's own list, never an atom; the
+  # explain panel follows it, and what the chart draws of it is measured (#795).
+  def handle_event("theme", %{"theme" => word}, %{assigns: %{module: module}} = socket) do
+    key = ThemePicker.pick(socket.assigns.theme, word)
+    panels = ExamplesWeb.ChartPanels.retheme(socket.assigns.panels, module, key)
+    {:noreply, socket |> assign(theme: key, panels: panels) |> still() |> ThemePicker.measure()}
+  end
 
   # Animate is the drawer's run on the page's backend (#362): one frame loop.
   def handle_event("toggle_animation", _params, %{assigns: %{run: %Run{running: true}}} = socket),
@@ -403,6 +407,10 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event("frame_drawn", %{"seq" => seq, "drawn" => drawn}, socket) do
     {:noreply, update(socket, :run, &Run.acked(&1, seq, drawn, now(socket, :millisecond)))}
   end
+
+  # What the chart draws of the picked theme, measured off the page's process (#795).
+  def handle_async(:theme_drawn, result, socket),
+    do: {:noreply, ThemePicker.measured(socket, result)}
 
   def handle_info(:run_tick, %{assigns: %{run: %Run{running: false}}} = socket),
     do: {:noreply, socket}
@@ -946,6 +954,8 @@ defmodule ExamplesWeb.ChartLive do
             </form>
           <% end %>
         </div>
+
+        <ThemePicker.changes current={@theme} slug={@slug} drawn={@theme_drawn} />
 
         <%!-- The page measures itself (spec/10 §10, #434): the container's width is what
               the chart is drawn at, so what a person sees is what a host's container

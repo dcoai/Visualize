@@ -4,8 +4,8 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   and see `Visualize.Chart.explain/2` at it — each part of its style, whether its kind
   draws it, and the layers that set it.
 
-  Closed until opened, since opening draws the chart: its design with the default palette
-  as SVG with `paths: true`, so every node the frame draws carries its path, under
+  Closed until opened, since opening draws the chart: its design under the theme the page
+  picked (#792) as SVG with `paths: true`, so every node the frame draws carries its path, under
   `BuilderHook` in scope `graph` — the builder's own gesture — whose click pushes `pick`
   with the node's path. The answer is drawn by the builder inspector's own component,
   `Visualize.Chart.Builder.Inspector.look/1`.
@@ -17,9 +17,45 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   alias Visualize.Chart
   alias Visualize.Chart.Builder.Inspector
 
-  @doc "The panel's state for the gallery chart `module`: closed, nothing picked."
+  @doc "The panel's state for the gallery chart `module` under Default: closed, nothing picked."
   @spec init(module()) :: map()
-  def init(module), do: init(module.title(), fn -> Design.applied(module, []) end)
+  def init(module), do: themed(module, nil)
+
+  @doc """
+  The panel's state for the gallery chart `module` under the picker's theme `key`
+  (`Examples.Themes`, #792): closed, nothing picked.
+  """
+  @spec themed(module(), String.t() | nil) :: map()
+  def themed(module, key), do: init(module.title(), applier(module, key))
+
+  @doc """
+  The state with the chart applied by `applied` from now on — the page picked another
+  theme (#792): an open panel draws the chart again, and the element it explains is
+  explained again, for the same datum, so its style stack shows the new theme's layer.
+  """
+  @spec retheme(map(), (-> Chart.Applied.t())) :: map()
+  def retheme(state, applied) when is_function(applied, 0) do
+    state = %{state | applied: applied}
+
+    if state.open do
+      %{state | open: false}
+      |> event(%{"action" => "open"})
+      |> reexplain(state.node, state.datum)
+    else
+      state
+    end
+  end
+
+  @doc "The function that applies `module` under the picker's theme `key`, for `retheme/2`."
+  @spec applier(module(), String.t() | nil) :: (-> Chart.Applied.t())
+  def applier(module, key), do: fn -> Design.applied(module, theme: key) end
+
+  defp reexplain(state, nil, _datum), do: state
+
+  defp reexplain(state, node, datum) do
+    state = event(state, %{"node" => node})
+    if datum in [nil, 0], do: state, else: event(state, %{"datum" => Integer.to_string(datum)})
+  end
 
   @doc """
   The panel's state for any applied chart: `title` names it, and `applied` makes it — a
