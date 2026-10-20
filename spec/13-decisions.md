@@ -2616,3 +2616,32 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A design whose axis, legend or frame label named a style that binds a value, which raised at render, is now refused when it is read. The design generator now keeps the `:axis` style it writes free of bindings and names only an unbound style from a frame label.
 - **Rejected:** binding a datum-less site against no row, which renders but hides the author's mistake as an invisible key; and refusing the stack entry there as well, which would contradict §3.6 and break stacks shared between marks and furniture.
+
+## 197. D-197 — A click on a canvas resolves through a hit index sent beside the stream, not by replaying the stream with `isPointInPath`
+
+**Context.** #764, found by the minesweeper demo (#758, #762). `Visualize.Components.Chart` delivered a click as a `Visualize.Event` (D-170) by reading the key — frame, mark position, row ordinal — from the SVG element the click landed on (spec/10 §12.3). A canvas draws no element per datum, so a clickable chart (the minesweeper grid, a status grid, a drill-down) worked on SVG only, and the component drew SVG only. The evaluation of #764 leaned toward a per-frame index of the drawn items, and asked the work item to measure it against replaying the stream with `isPointInPath`.
+
+**The two candidates.**
+- **A hit index.** The server writes, beside the stream, every keyed element of a mark with an event as its shape in the chart's units — a box, a disc, or a path with its matrix — under its key. The hook hit-tests that list on a click, topmost first.
+- **Replay.** The stream gains a record that marks where each keyed element begins, and the hook keeps the stream and, on a click, replays it into a path per element, asking the context `isPointInPath` of each.
+
+**Measured** (2026-10-20, at the work item's branch; examples' charts at their page sizes; server times the median of 51 to 201 runs on this host; click latency in node 22 over 2,000 random points, the replay's path test emulated geometrically because node has no canvas, so its figure is a **lower bound** of a browser's, which also builds a `Path2D` per element):
+
+| Chart | Keyed items | Index bytes | Index build per frame | Generate per frame (for scale) | Replay markers, JSON stream | Replay markers, binary stream | Click, index | Click, replay |
+|---|---|---|---|---|---|---|---|---|
+| Minesweeper grid, 368 × 368 | 81 rects | 1,839 | 0.51 ms | 3.9 ms | +2,906 on 48,834 (+6.0%) | +324 on 19,258 (+1.7%) | 5.9 µs (parse 92 µs once per patch) | ≥ 135 µs (parse 995 µs, kept) |
+| Interaction tooltip chart, 600 × 360 | 72 circles | 1,908 | 0.33 ms | 2.5 ms | +2,582 on 33,931 (+7.6%) | +288 on 6,194 (+4.6%) | 5.5 µs (parse 72 µs) | ≥ 210 µs (parse 760 µs) |
+| Motion demo bars, 600 × 360 | 8 rects | 342 | 0.06 ms | 0.7 ms | +280 on 14,712 (+1.9%) | +32 on 5,796 (+0.6%) | 2.1 µs (parse 8 µs) | ≥ 71 µs (parse 291 µs) |
+
+**Decision: the hit index.**
+- **It is cheaper where it matters.** A click is a scan of the keyed items, 20 to 40 times faster than even the emulated replay, and its parse is paid once per patch rather than kept as the whole parsed stream. Its build is 10 to 15% of generating the tree the frame is drawn from. Its bytes are more than the binary stream's markers would be, but they are only sent with a drawing that has events, and they are within the JSON stream's own growth.
+- **It changes no stream.** Replay would need a new record in the binary format (spec/09 §4), its encoder, both decoders and the JSON command list, and the hook would have to keep and replay a stream it today draws and drops. The index is a data attribute beside an unchanged stream, the same shape for both canvas formats.
+- **It is the SVG's key by construction.** The index is built from the generated tree the SVG and the canvases are drawn from, out of the very attributes the SVG keys its elements by (`data-tooltip-event`, `data-frame`, `data-mark`, `data-row`). A click at one point pushes the same payload on every backend, and `Event.resolve/3` is unchanged.
+- **Precision where it is cheap.** Rectangles and discs are tested exactly, grown by half their stroke as SVG's hit area is. A path is tested by its box first and then, where the browser has `Path2D`, by `isPointInPath` or `isPointInStroke` under its own matrix: replay's precision, for the one item under the pointer rather than for every item.
+- **It serves the keyboard too.** The index is a list of every keyed item with a position, which is what a grid's focus order needs (#765).
+
+**Consequences.**
+- `Visualize.Hooks.Tooltip.items/1` writes the index; `VisualizeItems` reads it; `TooltipHook` resolves a click with no datum element through it (spec/10 §12.5).
+- `Visualize.Components.Chart` draws on a canvas with `backend: :canvas` and `canvas_format: :binary | :json`, and on the binary stream lays the chart's text over the canvas as an `aria-hidden` SVG, since that stream has no text record by design (spec/10 §19.3).
+- A non-event element drawn over a keyed one stops an SVG click (it is the target) but not a canvas click, which sees only keyed items. A page that wants the SVG's behavior gives such marks `pointer-events: none`, as the minesweeper page already does.
+- **Rejected:** `isPointInPath` replay, for the reasons above; and an index of boxes only, which would make a line's whole extent clickable.

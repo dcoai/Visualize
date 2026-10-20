@@ -73,8 +73,7 @@ defmodule Visualize.Hooks.TooltipTest do
   test "a click pushes one wire event, visualize_event, and never the datum's strings (D-170)" do
     js = Tooltip.js_hook()
     assert js =~ "this.nearest(el, 'data-tooltip-event')"
-    assert js =~ "if (!event) return;"
-    assert js =~ "if (mark === null || row === null) return;"
+    assert js =~ "if (!event || mark === null || row === null) return null;"
     assert js =~ "else this.pushEvent('visualize_event', payload);"
     assert js =~ "if (target) this.pushEventTo(target, 'visualize_event', payload);"
     assert length(String.split(js, "pushEvent(")) == 2
@@ -87,7 +86,9 @@ defmodule Visualize.Hooks.TooltipTest do
     assert js =~ "mark: parseInt(mark, 10),"
     assert js =~ "row: parseInt(row, 10),"
     assert js =~ "drawn: this.el.dataset.tooltipDrawn || null,"
-    assert js =~ "['shift', 'alt', 'ctrl', 'meta'].filter((key) => e[key + 'Key'])"
+    assert js =~ "['shift', 'alt', 'ctrl', 'meta'].filter((name) => e && e[name + 'Key'])"
+    # On a canvas the key is the hit index's (spec/10 §12.5, D-197).
+    assert js =~ "const hit = at && VisualizeItems.hit(items, at.x, at.y);"
     assert js =~ "pt.matrixTransform(svg.getScreenCTM().inverse())"
   end
 

@@ -190,6 +190,8 @@ defmodule Visualize.Hooks do
 
     #{Resize.js_hook()}
 
+    #{Tooltip.js_items()}
+
     #{Tooltip.js_hook()}
 
     #{Crosshair.js_hook()}

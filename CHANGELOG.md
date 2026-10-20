@@ -17,6 +17,14 @@ release it merely follows.
 
 ### Added
 
+- **A chart's clicks on a canvas** (#764, D-197). `Visualize.Components.Chart` takes
+  `backend: :canvas` (and `canvas_format: :binary`, the default, or `:json`) and draws the
+  chart on a canvas, its text laid over the binary stream as an SVG layer. A click on it
+  reaches the page as the same `Visualize.Event` a click at that point of the SVG sends:
+  the drawing carries a hit index, `Visualize.Hooks.Tooltip.items/1`, as `data-vis-items`,
+  and `TooltipHook` resolves a click that lands on no element through it, the topmost
+  item first. Regenerate your hooks file (`Visualize.Hooks.install!/0`) to pick this up.
+
 - **String interpolation and `Visualize.Data` in stored functions** (#769, D-194). A
   virtual source's stored function may now build a label with interpolation,
   `"#{row.host}: #{row.load}"`, and call `to_string/1`; an atom written with interpolation

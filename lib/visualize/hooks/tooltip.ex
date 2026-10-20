@@ -52,6 +52,8 @@ defmodule Visualize.Hooks.Tooltip do
 
   alias Visualize.Chart.Frame
   alias Visualize.Hooks.States
+  alias Visualize.Hooks.Tooltip.Items
+  alias Visualize.IR.Element
 
   @doc """
   The hook element's `data-vis-hover` for a realized frame (spec/10 §12.1, §4.4): the
@@ -68,6 +70,104 @@ defmodule Visualize.Hooks.Tooltip do
   """
   @spec attrs(Frame.t()) :: %{String.t() => String.t()}
   def attrs(%Frame{} = frame), do: States.attrs(frame, :hover)
+
+  @doc """
+  The hit index of a drawing (spec/10 §12.5, D-197): the hook element's `data-vis-items`
+  for a chart's generated element (`Visualize.Chart.generate/2`), as JSON. Every keyed
+  datum element of a mark with an event — the elements a click on the SVG lands on — is
+  its shape in the chart's user units, in drawing order, under its mark's event, frame and
+  position, so a click on a canvas, which draws no element, sends the key the SVG would.
+  `Visualize.Components.Chart` writes it on a canvas, with `data-size`.
+
+  ## Examples
+
+      iex> design = %{version: 3, sources: %{s: %{fields: [:x, :y]}},
+      ...>   frames: %{main: %{kind: :cartesian, margin: %{top: 0, right: 0, bottom: 0, left: 0},
+      ...>     scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}}},
+      ...>   marks: [%{type: :circle, data: :s, channels: %{x: :x, y: :y},
+      ...>             options: %{radius: 4}, tooltip: %{event: :pick}}]}
+      iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{s: [%{x: 5, y: 5}]}, size: {100, 100})
+      iex> Visualize.Hooks.Tooltip.items(Visualize.Chart.generate(applied))
+      ~s([{"event":"pick","frame":"main","mark":0,"items":[[0,"c",50,50,4]]}])
+
+  """
+  @spec items(Element.t()) :: String.t()
+  def items(%Element{} = tree), do: Items.json(tree)
+
+  @doc """
+  Returns the JavaScript source of `VisualizeItems`, the hit index's reader (spec/10
+  §12.5), which the bundle defines before `TooltipHook` and does not export.
+  """
+  def js_items do
+    ~S"""
+    const VisualizeItems = {
+      // The index on a hook element, parsed once per value it holds; [] without one.
+      read(hook) {
+        const raw = hook.el.dataset.visItems || null;
+        if (raw !== hook.itemsRaw) {
+          hook.itemsRaw = raw;
+          hook.items = raw ? JSON.parse(raw) : [];
+        }
+        return hook.items;
+      },
+
+      // A client point in the chart's units, through the chart's canvas (or SVG) and the
+      // hook element's data-size; null outside the chart's rectangle.
+      point(el, clientX, clientY) {
+        if (typeof clientX !== 'number' || typeof clientY !== 'number') return null;
+        const chart = el.querySelector('canvas') || el.querySelector('svg') || el;
+        const rect = chart.getBoundingClientRect();
+        if (!(rect.width > 0) || !(rect.height > 0)) return null;
+        const size = el.dataset.size ? el.dataset.size.split(',').map(parseFloat) : [rect.width, rect.height];
+        const x = (clientX - rect.left) * size[0] / rect.width;
+        const y = (clientY - rect.top) * size[1] / rect.height;
+        if (x < 0 || y < 0 || x > size[0] || y > size[1]) return null;
+        return { x, y };
+      },
+
+      // The topmost item under a point: the last drawn whose shape holds it, as `{event,
+      // frame, mark, row}`; null for none.
+      hit(items, x, y) {
+        for (let e = items.length - 1; e >= 0; e--) {
+          const entry = items[e];
+          for (let i = entry.items.length - 1; i >= 0; i--) {
+            if (this.holds(entry.items[i], x, y)) {
+              return { event: entry.event, frame: entry.frame, mark: entry.mark, row: entry.items[i][0] };
+            }
+          }
+        }
+        return null;
+      },
+
+      holds(item, x, y) {
+        switch (item[1]) {
+          case 'r': return x >= item[2] && x <= item[2] + item[4] && y >= item[3] && y <= item[3] + item[5];
+          case 'c': return (x - item[2]) ** 2 + (y - item[3]) ** 2 <= item[4] ** 2;
+          case 'p': {
+            if (x < item[2] || x > item[2] + item[4] || y < item[3] || y > item[3] + item[5]) return false;
+            return this.inPath(item, x, y);
+          }
+          default: return false;
+        }
+      },
+
+      // A path's own test where the browser has one: its fill and its stroke, through a
+      // context of its own with the path's matrix; its box where it has none.
+      inPath(item, x, y) {
+        if (typeof Path2D !== 'function') return true;
+        if (!this.ctx) this.ctx = document.createElement('canvas').getContext('2d');
+        const ctx = this.ctx;
+        const path = new Path2D(item[6]);
+        ctx.setTransform(...item[7]);
+        ctx.lineWidth = item[9] || 0;
+        const hit = (item[8] === 1 && ctx.isPointInPath(path, x, y)) ||
+          (item[9] > 0 && ctx.isPointInStroke(path, x, y));
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        return hit;
+      }
+    };
+    """
+  end
 
   @doc """
   Returns the JavaScript source of `TooltipHook`.
@@ -293,23 +393,43 @@ defmodule Visualize.Hooks.Tooltip do
       // event with the element's key, the drawing's token, the pointer and the modifiers,
       // never the datum's strings; the server resolves the row.
       handleClick(e) {
+        const key = this.keyAt(e);
+        if (key) this.send(key, e);
+      },
+
+      // The key under a pointer event: the datum element's on an SVG; on a canvas, which
+      // draws none, the topmost item of the hit index (spec/10 §12.5, D-197). null for a
+      // pointer over nothing keyed, or over a datum of a mark without an event.
+      keyAt(e) {
         const el = this.datumElement(e.target);
-        if (!el) return;
-        const event = this.nearest(el, 'data-tooltip-event');
-        if (!event) return;
-        const mark = this.nearest(el, 'data-mark');
-        const row = el.getAttribute('data-row');
-        if (mark === null || row === null) return;
+        if (el) {
+          const event = this.nearest(el, 'data-tooltip-event');
+          const mark = this.nearest(el, 'data-mark');
+          const row = el.getAttribute('data-row');
+          if (!event || mark === null || row === null) return null;
+          return { event, frame: this.nearest(el, 'data-frame'), mark: parseInt(mark, 10),
+                   row: parseInt(row, 10), at: this.at(el, e) };
+        }
+        const items = VisualizeItems.read(this);
+        if (items.length === 0) return null;
+        const at = VisualizeItems.point(this.el, e.clientX, e.clientY);
+        const hit = at && VisualizeItems.hit(items, at.x, at.y);
+        return hit ? Object.assign(hit, { at }) : null;
+      },
+
+      // One wire event for a key: its event name (a click's, or another the key names), the
+      // drawing's token and the keys held; to the component data-tooltip-target names,
+      // else to the LiveView (D-161).
+      send(key, e) {
         const payload = {
-          event: event,
-          frame: this.nearest(el, 'data-frame'),
-          mark: parseInt(mark, 10),
-          row: parseInt(row, 10),
+          event: key.event,
+          frame: key.frame,
+          mark: key.mark,
+          row: key.row,
           drawn: this.el.dataset.tooltipDrawn || null,
-          at: this.at(el, e),
-          modifiers: ['shift', 'alt', 'ctrl', 'meta'].filter((key) => e[key + 'Key'])
+          at: key.at,
+          modifiers: ['shift', 'alt', 'ctrl', 'meta'].filter((name) => e && e[name + 'Key'])
         };
-        // To the component data-tooltip-target names, else to the LiveView (D-161).
         const target = this.el.dataset.tooltipTarget;
         if (target) this.pushEventTo(target, 'visualize_event', payload);
         else this.pushEvent('visualize_event', payload);
