@@ -68,6 +68,65 @@ defmodule ExamplesWeb.TenantsLiveTest do
     Server.stop(socket.assigns.board)
   end
 
+  # Why it looks as it does (#787, spec/14 §3.13, §17.3): explain/2 over a cell as the
+  # viewer's board draws it lists every generator call, its arguments read from the datum.
+  test "the explain panel lists the generators a message and a bar called" do
+    {:ok, socket} = TenantsLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    assert socket.assigns.cell == "transcript"
+
+    {:noreply, socket} =
+      TenantsLive.handle_event("chart_panel", %{"panel" => "explain", "action" => "open"}, socket)
+
+    assert socket.assigns.explain.svg =~ ~s(data-node="marks[0]")
+
+    {:noreply, socket} = TenantsLive.handle_event("pick", %{"node" => "marks[0]"}, socket)
+    explain = socket.assigns.explain
+    # A message is explained for one tenant at a time: one datum per tenant.
+    assert Enum.map(explain.data, &elem(&1, 0)) == ["tenant = acme", "tenant = globex"]
+
+    assert [%{name: "tenant_style", args: [first], result: %{stroke: _}}] =
+             explain.look.generators
+
+    html = render_panel(socket)
+    assert html =~ "generate tenant_style(&quot;#{first}&quot;)"
+
+    # The other tenant's message, by its position among the data.
+    {:noreply, socket} =
+      TenantsLive.handle_event("chart_panel", %{"panel" => "explain", "datum" => "1"}, socket)
+
+    assert [%{args: [second]}] = socket.assigns.explain.look.generators
+    assert second != first
+
+    # The bars' fill is a generator's result too.
+    {:noreply, socket} = TenantsLive.handle_event("explain_cell", %{"cell" => "counts"}, socket)
+
+    {:noreply, socket} =
+      TenantsLive.handle_event("chart_panel", %{"panel" => "explain", "action" => "open"}, socket)
+
+    {:noreply, socket} = TenantsLive.handle_event("pick", %{"node" => "marks[0]"}, socket)
+
+    assert [%{name: "brand_color", at: [:fill, :color], result: {:color, _}}] =
+             socket.assigns.explain.look.generators
+
+    # A word no switch knows changes nothing and makes no atom.
+    word = "no_such_cell_#{System.unique_integer([:positive])}"
+
+    assert {:noreply, ^socket} =
+             TenantsLive.handle_event("explain_cell", %{"cell" => word}, socket)
+
+    assert_raise ArgumentError, fn -> String.to_existing_atom(word) end
+    Server.stop(socket.assigns.board)
+  end
+
+  defp render_panel(socket) do
+    assigns = %{state: socket.assigns.explain, id: "t"}
+
+    assigns
+    |> ExamplesWeb.ChartPanels.Explain.panel()
+    |> Phoenix.HTML.Safe.to_iodata()
+    |> IO.iodata_to_binary()
+  end
+
   # A brand color as a cell's SVG writes it.
   defp brand(name),
     do: Visualize.Color.resolve(Visualize.Color.color(name), Visualize.Theme.default(), :css)

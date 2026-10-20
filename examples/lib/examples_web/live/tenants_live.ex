@@ -10,7 +10,10 @@ defmodule ExamplesWeb.TenantsLive do
   """
   use Phoenix.LiveView
 
+  @cells ~w(transcript counts)
+
   alias ExamplesWeb.{Highlight, Panel}
+  alias ExamplesWeb.ChartPanels.Explain
   alias Visualize.Board.Server
 
   @impl true
@@ -21,7 +24,11 @@ defmodule ExamplesWeb.TenantsLive do
         else: "acme"
 
     {:ok, board} = Examples.Tenants.start(viewer)
-    {:ok, assign(socket, board: board, viewer: viewer, value: Examples.Tenants.value())}
+
+    {:ok,
+     socket
+     |> assign(board: board, viewer: viewer, value: Examples.Tenants.value())
+     |> explain("transcript")}
   end
 
   @impl true
@@ -39,10 +46,35 @@ defmodule ExamplesWeb.TenantsLive do
     if tenant in Map.keys(Examples.Tenants.tenants()) and tenant != socket.assigns.viewer do
       :ok = Server.stop(socket.assigns.board)
       {:ok, board} = Examples.Tenants.start(tenant)
-      {:noreply, assign(socket, board: board, viewer: tenant)}
+      {:noreply, socket |> assign(board: board, viewer: tenant) |> explain(socket.assigns.cell)}
     else
       {:noreply, socket}
     end
+  end
+
+  # The explain panel (spec/14 §17.3): which cell it explains, and its own events.
+  def handle_event("explain_cell", %{"cell" => cell}, socket) when cell in @cells,
+    do: {:noreply, explain(socket, cell)}
+
+  def handle_event("chart_panel", params, socket),
+    do: {:noreply, update(socket, :explain, &Explain.event(&1, params))}
+
+  # The graph is `BuilderHook`'s: a click picks the node to explain; a drag or a context
+  # menu moves nothing here.
+  def handle_event("pick", %{"node" => node}, socket) when is_binary(node),
+    do: {:noreply, update(socket, :explain, &Explain.event(&1, %{"node" => node}))}
+
+  def handle_event(_event, _params, socket), do: {:noreply, socket}
+
+  # A fresh panel over `cell`'s chart as this viewer's board draws it.
+  defp explain(socket, cell) do
+    viewer = socket.assigns.viewer
+    title = if cell == "transcript", do: "Transcript", else: "Messages"
+
+    assign(socket,
+      cell: cell,
+      explain: Explain.init(title, fn -> Examples.Tenants.applied(cell, viewer) end)
+    )
   end
 
   @impl true
@@ -82,6 +114,29 @@ defmodule ExamplesWeb.TenantsLive do
             server={@board}
             board={@value}
           />
+        </Panel.panel>
+
+        <Panel.panel id="panel-explain">
+          <:title>Why it looks as it does</:title>
+          <p class="panel-note">
+            <code>Visualize.Chart.explain/2</code>
+            lists every generator a mark called — its name, its arguments read from the datum
+            and its result — at the layer of the style it stands in. Pick a cell, open it, and
+            click a message or a bar; a message is explained for one tenant at a time.
+          </p>
+          <p class="tenant-viewer" role="group" aria-label="Cell to explain">
+            Explain:
+            <button
+              :for={{cell, name} <- [{"transcript", "Transcript"}, {"counts", "Messages"}]}
+              type="button"
+              phx-click="explain_cell"
+              phx-value-cell={cell}
+              aria-pressed={to_string(cell == @cell)}
+            >
+              {name}
+            </button>
+          </p>
+          <Explain.panel id={"tenant-explain-" <> @cell} state={@explain} />
         </Panel.panel>
 
         <Panel.panel id="panel-code">

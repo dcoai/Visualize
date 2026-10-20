@@ -137,7 +137,31 @@ defmodule Examples.Tenants do
     }
   end
 
+  @doc """
+  A cell's design applied as the board applies it for `viewer` — its rows, the examples'
+  generators (from the configuration) and the viewer in `assigns:` — so the page's
+  *Why it looks as it does* panel explains each element with the generator calls that drew
+  it (spec/14 §3.13, §17.3). `cell` is `"transcript"` or `"counts"`.
+  """
+  @spec applied(String.t(), String.t()) :: Visualize.Chart.Applied.t()
+  def applied("transcript", viewer),
+    do: apply_cell(transcript(), %{messages: Enum.reverse(messages())}, viewer)
+
+  def applied("counts", viewer), do: apply_cell(per_tenant(), %{counts: counts()}, viewer)
+
+  defp apply_cell(design, sources, viewer) do
+    {:ok, applied} =
+      Visualize.Chart.apply(design,
+        sources: sources,
+        assigns: %{viewer: viewer},
+        size: {640, 300}
+      )
+
+    applied
+  end
+
   @doc "The board as a value (spec/15 §1)."
+
   @spec value() :: Board.t()
   def value do
     Board.from_map!(%{
