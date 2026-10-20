@@ -124,6 +124,13 @@ defmodule Visualize.Chart.Schema do
                 |> Enum.flat_map(&Visualize.Chart.Schema.Spec.enum_members(&1.type))
                 |> Enum.uniq()
 
+  # Every key whose type is the style stack, in `kinds/0` order (spec/14 §3.6, D-196).
+  @style_stack Spec.style_stack()
+  @style_sites for kind <- @design_kinds ++ @frame_kinds ++ @mark_kinds,
+                   spec <- Map.fetch!(@tables, kind),
+                   spec.type == @style_stack,
+                   do: {kind, spec.key}
+
   @doc "Every node kind of spec/14 §1.2, the design first."
   @spec kinds() :: [kind(), ...]
   def kinds, do: @design_kinds ++ @frame_kinds ++ @mark_kinds
@@ -227,6 +234,16 @@ defmodule Visualize.Chart.Schema do
   # right. A field entry is a site's, so a named style's list holds none.
   @spec style_entry() :: type()
   defdelegate style_entry(), to: Spec
+
+  @doc """
+  Every style site: each `{kind, key}` whose type is the style stack (spec/14 §3.6), in
+  `kinds/0` order, derived from the tables (D-196).
+
+      iex> Visualize.Chart.Schema.style_sites()
+      [label: :style, axis: :style, legend: :style, mark: :style, mark_label: :style, choice: :style]
+  """
+  @spec style_sites() :: [{kind(), atom()}, ...]
+  def style_sites, do: @style_sites
 
   @doc "The style names every design declares (spec/14 §3.3)."
   @spec builtin_styles() :: [atom(), ...]

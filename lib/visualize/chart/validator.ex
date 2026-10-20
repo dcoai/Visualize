@@ -21,6 +21,7 @@ defmodule Visualize.Chart.Validator do
   alias Visualize.Chart.{Migration, Schema, Urls, Var}
 
   alias Visualize.Chart.Validator.{
+    Bindings,
     Context,
     Cycles,
     Defaults,
@@ -94,6 +95,8 @@ defmodule Visualize.Chart.Validator do
 
   # A style and its parts, any of whose values may be a channel binding (spec/14 §3.2).
   @style_kinds ~w(style defaults kind_defaults paint stroke font text_layout effect marker curve)a
+  # The style sites that draw from no row, and so read no field binding (D-196).
+  @datumless Bindings.datumless()
 
   @doc """
   `:ok`, or every fault of the design ordered by path; URLs under the application's policy,
@@ -492,6 +495,13 @@ defmodule Visualize.Chart.Validator do
       {name, _other} ->
         [{path ++ [name], {:type, {:node, :style}}}]
     end)
+  end
+
+  # A style site with no datum reads no field binding (spec/14 §3.2, D-196): its stack is
+  # checked as every site's, and each binding it reaches is a fault of its kind.
+  defp check_key(kind, %{key: :style} = spec, stack, path, ctx) when kind in @datumless do
+    Types.check(spec.type, stack, path, ctx) ++
+      Bindings.faults(kind, stack, path, ctx.style_nodes)
   end
 
   defp check_key(kind, spec, v, path, ctx),

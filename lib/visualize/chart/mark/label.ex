@@ -35,10 +35,15 @@ defmodule Visualize.Chart.Mark.Label do
   end
 
   @doc false
-  # The label's resolved style, for the datum it labels when there is one.
+  # The label's resolved style, for the datum it labels when there is one, every
+  # `{:field, f}` value read from that datum as the mark's elements read theirs (spec/14
+  # §3.2, §5.5, D-196); with no datum a binding reads nothing.
   @spec style(map(), map() | nil) :: map()
   def style(%{label: label, frame: frame, mode: mode} = ctx, datum \\ nil) do
-    Style.resolve(node(ctx, label || %{}, datum), frame.theme, mode)
+    ctx
+    |> node(label || %{}, datum)
+    |> Style.resolve(frame.theme, mode)
+    |> Style.bind(datum || %{}, frame, mode)
   end
 
   # The label's style node: its stack, a `{:field, f}` entry naming a style by the datum,

@@ -642,6 +642,15 @@ release it merely follows.
 
 ### Fixed
 
+- **A field binding in a mark label's style draws** (#766, D-196). `label: %{style: %{fill:
+  {:field, :v}}}` validated and then raised `Protocol.UndefinedError` at render; each label
+  now reads it from the row it labels, through the frame's `color` scale, as the mark's
+  own style does. A frame label, an axis and a legend draw from no row, so a
+  `{:field, f}` value in their style — inline, or in a design style they name — is now
+  refused when the design is read, as `{:invalid_for, :label | :axis | :legend}`, instead
+  of raising at render. A stack entry `{:field, f}` there still lays nothing.
+  `Visualize.Chart.Schema.style_sites/0` lists every style site.
+
 - **A document no longer makes atoms from its unknown keys or from the library's
   vocabularies** (#779, #778, D-195). Atoms are never collected, and a node that runs out
   of them stops. Reading a JSON design turned every key into an atom before validating it,
