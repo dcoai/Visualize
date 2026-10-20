@@ -132,8 +132,8 @@ defmodule Visualize.Chart.StatusCueTest do
       frame = applied.frame
       cx = frame.margin.left + frame.plot.width / 2
       cy = frame.margin.top + frame.plot.height / 2
-      angle = Map.fetch!(frame.scales, :angle)
-      r = Map.fetch!(frame.scales, :r)
+      angle = Map.fetch!(frame.scales, "angle")
+      r = Map.fetch!(frame.scales, "r")
 
       for %{mid: mid} <- @zones do
         {x, y} =

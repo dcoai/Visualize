@@ -335,8 +335,10 @@ defmodule Visualize.Board.Cell do
   defp compiled_frame(_compiled, _name), do: nil
 
   defp schema_of(state, mark) do
-    with slot when is_atom(slot) <- slot_of(mark),
-         %{schema: %Schema{} = schema} <- Map.get(state.slots || %{}, slot) do
+    # A slot is named by its string (D-195), as the board holds its pools.
+    with slot when is_binary(slot) or is_atom(slot) <- slot_of(mark),
+         %{schema: %Schema{} = schema} <-
+           Map.get(state.slots || %{}, Visualize.Chart.Names.name(slot)) do
       schema
     else
       _none -> nil

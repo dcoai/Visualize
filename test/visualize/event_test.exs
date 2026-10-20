@@ -130,9 +130,9 @@ defmodule Visualize.EventTest do
               %Event{
                 event: "car_click",
                 cell: nil,
-                frame: :main,
-                item: {:dot, car},
-                path: [{:dot, car}],
+                frame: "main",
+                item: {"dot", car},
+                path: [{"dot", car}],
                 row: %{t: ^t5, v: 50, car: car},
                 at: %{x: 100, y: 50},
                 value: %{},
@@ -161,11 +161,11 @@ defmodule Visualize.EventTest do
     end
 
     test "a composite identity is the item's map; with none declared it is inferred, else nil" do
-      assert {:ok, %Event{item: {:dot, %{host: "mx1", iface: "eth5"}}}} =
+      assert {:ok, %Event{item: {"dot", %{"host" => "mx1", "iface" => "eth5"}}}} =
                Event.resolve(click(), apply!(design(), @links))
 
       anonymous = Schema.new!(%{t: %{type: :time}, car: %{type: :category}, v: %{type: :number}})
-      assert {:ok, %Event{item: {:dot, _}}} = Event.resolve(click(), apply!(design(), anonymous))
+      assert {:ok, %Event{item: {"dot", _}}} = Event.resolve(click(), apply!(design(), anonymous))
 
       # A mark with a series names its field's value; a source of no category names nothing,
       # and the row is still given.
@@ -241,12 +241,12 @@ defmodule Visualize.EventTest do
       svg = Chart.render(applied)
       assert svg =~ ~s(data-frame="right" data-mark="0" data-tooltip-event="right_click")
 
-      right = applied.frames.right
+      right = applied.frames["right"]
       [bx, by | _] = right.box
       ox = bx * 400 + 20
       oy = by * 200 + 5
 
-      assert {:ok, %Event{frame: :right, row: %{v: 0}, at: at}} =
+      assert {:ok, %Event{frame: "right", row: %{v: 0}, at: at}} =
                Event.resolve(
                  click(%{
                    event: "right_click",
@@ -264,7 +264,7 @@ defmodule Visualize.EventTest do
   describe "Compiled.rows/3" do
     test "is the mark's realized rows as a tick draws them, [] past the frame's marks" do
       applied = apply!(design())
-      {:ok, %{main: compiled}} = Chart.compile(applied)
+      {:ok, %{"main" => compiled}} = Chart.compile(applied)
       sources = applied.sources
 
       assert Compiled.rows(compiled, sources, 1) ==

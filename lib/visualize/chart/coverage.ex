@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Coverage do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Coverage of declared values (spec/14 §7.4, D-194): a mapping by a field — a style
   # stack's `{:field, f}` entry at a mark's `style`, a `:choose` mark's `on` — must have,
   # for every value the field declares (spec/08 §10.1), a style the value names or a case
@@ -28,15 +30,15 @@ defmodule Visualize.Chart.Coverage do
     slot = slot(data)
 
     styled =
-      for {:field, f} <- List.wrap(Map.get(mark, :style)), is_atom(f), do: {i, slot, :style, f}
+      for {:field, f} <- List.wrap(Map.get(mark, :style)), is_name(f), do: {i, slot, :style, f}
 
     chosen =
       case mark do
-        %{type: :choose, on: f} when is_atom(f) -> [{i, slot, :choose, f}]
+        %{type: :choose, on: f} when is_name(f) -> [{i, slot, :choose, f}]
         _other -> []
       end
 
-    if is_atom(slot), do: styled ++ chosen, else: []
+    if is_name(slot), do: styled ++ chosen, else: []
   end
 
   defp mappings(_mark, _i), do: []
@@ -79,10 +81,9 @@ defmodule Visualize.Chart.Coverage do
       else: Enum.reject(values, &named?(Map.keys(Map.get(mark, :cases) || %{}), &1))
   end
 
-  defp named?(names, value) when is_atom(value), do: value in names
-
-  defp named?(names, value) when is_binary(value),
-    do: Enum.any?(names, &(Atom.to_string(&1) == value))
+  # A value names a style or a case by its spelling, whichever each is (D-195).
+  defp named?(names, value) when is_atom(value) or is_binary(value),
+    do: Enum.any?(names, &Visualize.Chart.Names.same?(&1, value))
 
   defp named?(_names, _value), do: false
 end

@@ -30,7 +30,7 @@ defmodule Examples.StreamgraphTest do
   test "the layer order is the same on every one of 200 ticks of a run" do
     orders = Enum.map(0..199, &layers/1)
 
-    assert Enum.uniq(orders) == [Streamgraph.order()]
+    assert Enum.uniq(orders) == [Enum.map(Streamgraph.order(), &to_string/1)]
     assert Enum.sort(Streamgraph.order()) == Enum.sort(@keys)
   end
 
@@ -46,7 +46,7 @@ defmodule Examples.StreamgraphTest do
       |> Enum.sort()
       |> Enum.map(&elem(&1, 1))
 
-    assert still == Streamgraph.order()
+    assert still == Enum.map(Streamgraph.order(), &to_string/1)
   end
 
   test "the fixed order is inside-out by each series' total over one turn of the run" do

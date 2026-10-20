@@ -192,11 +192,9 @@ defmodule Visualize.Chart.Frame.Legend do
     end)
   end
 
-  defp named(names, value) when is_atom(value) and value != nil,
-    do: if(value in names, do: value)
-
-  defp named(names, value) when is_binary(value),
-    do: Enum.find(names, &(Atom.to_string(&1) == value))
+  # A value names a style by its spelling, whichever each is (D-195).
+  defp named(names, value) when (is_atom(value) and value != nil) or is_binary(value),
+    do: Enum.find(names, &Visualize.Chart.Names.same?(&1, value))
 
   defp named(_names, _value), do: nil
 

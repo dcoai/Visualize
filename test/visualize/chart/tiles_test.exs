@@ -127,16 +127,18 @@ defmodule Visualize.Chart.TilesTest do
     end
 
     test "a fit reads fields or field, not neither nor both" do
-      path = [:frames, :main, :projection, :fit]
+      # The design is written with atoms; its faults name the frame by its string (D-195).
+      at = [:frames, :main, :projection, :fit]
+      path = [:frames, "main", :projection, :fit]
 
-      neither = put_in(design(), path, %{data: :track})
+      neither = put_in(design(), at, %{data: :track})
       assert errors(neither) == [{path ++ [:fields], :required}]
 
-      both = put_in(design(), path, %{data: :track, fields: [:lon, :lat], field: :lon})
+      both = put_in(design(), at, %{data: :track, fields: [:lon, :lat], field: :lon})
       assert errors(both) == [{path ++ [:field], {:invalid_for, :fit}}]
 
-      assert errors(put_in(design(), path ++ [:data], :nope)) ==
-               [{path ++ [:data], {:undeclared, :source, :nope}}]
+      assert errors(put_in(design(), at ++ [:data], :nope)) ==
+               [{path ++ [:data], {:undeclared, :source, "nope"}}]
     end
   end
 
@@ -259,7 +261,7 @@ defmodule Visualize.Chart.TilesTest do
   describe "a compiled chart" do
     test "a basemap is :svg with no points, and static unless its view is fitted" do
       fixed = design(nil, %{type: :mercator, scale: 50_000, center: [-0.115, 0]})
-      {:ok, %{main: compiled}} = Chart.compile(fixed, sources: %{track: @track}, size: @size)
+      {:ok, %{"main" => compiled}} = Chart.compile(fixed, sources: %{track: @track}, size: @size)
 
       assert Compiled.targets(compiled) |> Enum.at(1) == {:svg, 0}
 
@@ -272,7 +274,7 @@ defmodule Visualize.Chart.TilesTest do
       assert Compiled.static(compiled) =~ "mark-tiles"
       assert Compiled.static(compiled) =~ @attribution
 
-      {:ok, %{main: fitted}} = Chart.compile(design(), sources: %{track: @track}, size: @size)
+      {:ok, %{"main" => fitted}} = Chart.compile(design(), sources: %{track: @track}, size: @size)
 
       assert Compiled.regions(fitted) ==
                [{{:mark, 1}, {:dynamic, :data}}, {{:mark, 0}, {:dynamic, :data}}]
@@ -293,7 +295,7 @@ defmodule Visualize.Chart.TilesTest do
     test "a static basemap's images are the static backdrop, its attribution the static SVG" do
       fixed = design(nil, %{type: :mercator, scale: 50_000, center: [-0.115, 0]})
 
-      {:ok, %{main: compiled}} =
+      {:ok, %{"main" => compiled}} =
         Chart.compile(fixed, sources: %{track: @track}, size: @size, ceiling: 1)
 
       backdrop = Compiled.backdrop(compiled)
@@ -332,7 +334,7 @@ defmodule Visualize.Chart.TilesTest do
     end
 
     test "a fitted basemap's images travel in the tick's backdrop, its attribution in its SVG" do
-      {:ok, %{main: compiled}} =
+      {:ok, %{"main" => compiled}} =
         Chart.compile(design(), sources: %{track: @track}, size: @size, ceiling: 1)
 
       assert Compiled.backdrop(compiled) == ""
@@ -356,14 +358,14 @@ defmodule Visualize.Chart.TilesTest do
 
     test "the one-string form keeps the basemap whole, first in the frame" do
       applied = applied(design())
-      {:ok, %{main: compiled}} = Chart.compile(applied, ceiling: 1_000_000)
+      {:ok, %{"main" => compiled}} = Chart.compile(applied, ceiling: 1_000_000)
       svg = Compiled.svg(compiled, applied.sources)
       assert images(svg) == tile_count(compiled)
       assert svg =~ @attribution
     end
 
     test "a design without tiles has an empty backdrop" do
-      {:ok, %{main: compiled}} =
+      {:ok, %{"main" => compiled}} =
         Chart.compile(design([track_mark()]), sources: %{track: @track}, size: @size)
 
       assert Compiled.backdrop(compiled) == ""
@@ -380,14 +382,14 @@ defmodule Visualize.Chart.TilesTest do
     test "the one-string form is the frame's render, tiles first" do
       for design <- [design(), design(nil, %{type: :mercator, scale: 50_000})] do
         applied = applied(design)
-        {:ok, %{main: compiled}} = Chart.compile(applied)
+        {:ok, %{"main" => compiled}} = Chart.compile(applied)
         assert Compiled.svg(compiled, applied.sources) == Chart.render(applied)
       end
     end
 
     test "a tiles mark marked for the canvas stays on SVG" do
       design = design([track_mark(), tiles_mark(%{render: :canvas})])
-      {:ok, %{main: compiled}} = Chart.compile(design, sources: %{track: @track}, size: @size)
+      {:ok, %{"main" => compiled}} = Chart.compile(design, sources: %{track: @track}, size: @size)
       assert Enum.at(Compiled.targets(compiled), 1) == {:svg, 0}
     end
   end

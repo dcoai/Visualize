@@ -35,7 +35,7 @@ defmodule Visualize.VirtualSource.Join do
 
     for {field, _description} <- source.schema.fields,
         to_string(field) not in identity,
-        do: {field, String.to_atom("#{source.id}.#{field}")}
+        do: {field, "#{source.id}.#{field}"}
   end
 
   @doc false

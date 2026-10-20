@@ -43,6 +43,8 @@ defmodule Visualize.Chart.Summary do
 
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.Chart.{Applied, Frame, Mark, Text, Var}
   alias Visualize.Chart.Frame.{Furniture, Scales}
   alias Visualize.Chart.Mark.Channels
@@ -588,7 +590,7 @@ defmodule Visualize.Chart.Summary do
       cond do
         field(spec) == nil -> nil
         Scales.scale_for(frame.kind, mark, channel) != scale -> nil
-        stack(mark) && field(spec) in [:y0, :y1] -> "value"
+        stack(mark) && Visualize.Chart.Names.name(field(spec)) in ["y0", "y1"] -> "value"
         true -> humanize(field(spec))
       end
     end)
@@ -691,6 +693,8 @@ defmodule Visualize.Chart.Summary do
   # and symbol — inside its `prefix` and `unit`; anything else as plain text.
   @spec formatter(Frame.t(), atom() | nil) :: (term() -> String.t())
   def formatter(frame, scale_name) do
+    # A scale is named by its string (D-195), whichever spelling the caller gives.
+    scale_name = Visualize.Chart.Names.name(scale_name)
     node = scale_name && Enum.find(frame.axes, &(&1.scale == scale_name))
     scale = scale_name && Map.get(frame.scales, scale_name)
 
@@ -753,8 +757,8 @@ defmodule Visualize.Chart.Summary do
   def plain(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
   def plain(value), do: inspect(value)
 
-  defp field(field) when is_atom(field) and field not in [nil, true, false], do: field
-  defp field({:field, field}) when is_atom(field), do: field
+  defp field(field) when is_name(field) and field not in [nil, true, false], do: field
+  defp field({:field, field}) when is_name(field), do: field
   defp field(_spec), do: nil
 
   defp field_name(mark, channel) do
@@ -764,7 +768,7 @@ defmodule Visualize.Chart.Summary do
     end
   end
 
-  defp humanize(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
+  defp humanize(name), do: name |> to_string() |> String.replace("_", " ")
 
   defp orderable?(value),
     do:
@@ -841,8 +845,9 @@ defmodule Visualize.Chart.Summary do
     end
   end
 
-  defp axis_name(_side, :angle), do: "Angle axis"
-  defp axis_name(_side, :r), do: "Radius axis"
+  # A scale is named by its string (D-195).
+  defp axis_name(_side, "angle"), do: "Angle axis"
+  defp axis_name(_side, "r"), do: "Radius axis"
   defp axis_name(side, _scale), do: capitalize(Atom.to_string(side)) <> " axis"
 
   defp extreme_sentence(%{field: field, rows: 1, high: {value, at}}),

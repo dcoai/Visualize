@@ -29,20 +29,23 @@ defmodule Visualize.Board.Binding do
       iex> Binding.check(binding, required, %{api_latency: schema})
       {:error,
        [
-         {[:cells, :errors, :sources, :primary], {:unbound, :binding, :primary}},
-         {[:cells, :latency, :sources, :primary, :requires, :v],
-          {:missing_attribute, :primary, :v, :unit}}
+         {[:cells, "errors", :sources, "primary"], {:unbound, :binding, "primary"}},
+         {[:cells, "latency", :sources, "primary", :requires, "v"],
+          {:missing_attribute, "primary", "v", :unit}}
        ]}
 
   """
 
-  alias Visualize.Chart.Types
+  alias Visualize.Chart.{Names, Types}
   alias Visualize.Data.Schema
 
   defstruct slots: %{}
 
-  @typedoc "A cell's slot: the cell's name and the slot's own (spec/15 §4.1)."
-  @type key :: {atom(), atom()}
+  @typedoc """
+  A cell's slot: the cell's name and the slot's own (spec/15 §4.1), held as their strings
+  (D-195); a host may give either as an atom.
+  """
+  @type key :: {atom() | String.t(), atom() | String.t()}
 
   @typedoc "Anything that names a feed or a pool entry."
   @type feed :: term()
@@ -66,7 +69,7 @@ defmodule Visualize.Board.Binding do
 
   @doc """
   A binding of a map, or a list, of `{{cell, slot}, feed}` pairs. Raises `ArgumentError`
-  for a key that is not a pair of atoms.
+  for a key that is not a pair of names, atoms or strings.
   """
   @spec new(map() | [{key(), feed()}]) :: t()
   def new(pairs) when is_map(pairs) or is_list(pairs) do
@@ -81,17 +84,38 @@ defmodule Visualize.Board.Binding do
   def put(%__MODULE__{slots: slots} = binding, cell, slot, feed) do
     unless name?(cell) and name?(slot) do
       raise ArgumentError,
-            "a binding's key is {cell, slot}, two atoms; got: #{inspect({cell, slot})}"
+            "a binding's key is {cell, slot}, two names; got: #{inspect({cell, slot})}"
     end
 
-    %{binding | slots: Map.put(slots, {cell, slot}, feed)}
+    # A cell and a slot are named by their strings (D-195); the feed is the host's.
+    %{binding | slots: Map.put(slots, {Names.name(cell), Names.name(slot)}, feed)}
   end
 
-  defp name?(name), do: is_atom(name) and not is_boolean(name) and not is_nil(name)
+  defp name?(name), do: Names.name?(name)
+
+  # The required sources keyed by their cells' and slots' strings, and each need's fields by
+  # theirs (D-195): a host may give them as atoms, as `Visualize.Board.required_sources/3`
+  # gives them as strings.
+  defp spelled(required),
+    do:
+      Map.new(required, fn {{cell, slot}, need} ->
+        {{Names.name(cell), Names.name(slot)}, spelled_need(need)}
+      end)
+
+  defp spelled_need(need) do
+    need
+    |> Map.update(:fields, [], &Enum.map(&1, fn field -> Names.name(field) end))
+    |> Map.update(:types, %{}, &Names.keys/1)
+    |> Map.update(:requires, %{}, &Names.keys/1)
+    |> Map.update(:reads, [], fn reads ->
+      Enum.map(reads, fn {path, field, scale} -> {path, Names.name(field), scale} end)
+    end)
+  end
 
   @doc "The feed a cell's slot is bound to, or `:error`."
   @spec fetch(t(), atom(), atom()) :: {:ok, feed()} | :error
-  def fetch(%__MODULE__{slots: slots}, cell, slot), do: Map.fetch(slots, {cell, slot})
+  def fetch(%__MODULE__{slots: slots}, cell, slot),
+    do: Map.fetch(slots, {Names.name(cell), Names.name(slot)})
 
   @doc """
   `:ok`, or every fault of the binding against a board's required sources and the feeds'
@@ -116,6 +140,8 @@ defmodule Visualize.Board.Binding do
   """
   @spec check(t(), %{key() => need()}, schemas()) :: :ok | {:error, [{list(), term()}, ...]}
   def check(%__MODULE__{slots: slots}, required, schemas) when is_map(required) do
+    required = spelled(required)
+
     {errors, _seen} =
       required
       |> Enum.sort()
@@ -233,14 +259,14 @@ defmodule Visualize.Board.Binding do
       ...> }
       iex> Binding.check_types(binding, required, %{clock: %{t: :time, v: :number}})
       {:error,
-       [{[:cells, :wave, :marks, 0, :channels, :x], {:type_mismatch, :points, :t, :number, :time}}]}
+       [{[:cells, "wave", :marks, 0, :channels, :x], {:type_mismatch, "points", "t", :number, :time}}]}
   """
   @spec check_types(t(), %{key() => need()}, %{feed() => Visualize.Chart.field_types()}) ::
           :ok | {:error, [{list(), term()}, ...]}
   def check_types(%__MODULE__{slots: slots}, required, types)
       when is_map(required) and is_map(types) do
     faults =
-      for {{cell, slot} = key, need} <- required,
+      for {{cell, slot} = key, need} <- spelled(required),
           {:ok, feed} <- [Map.fetch(slots, key)],
           {:ok, known} <- [Map.fetch(types, feed)],
           fault <- mismatches(cell, slot, Map.get(need, :reads, []), known),
@@ -259,9 +285,10 @@ defmodule Visualize.Board.Binding do
 
       iex> binding = Visualize.Board.Binding.new(%{{:a, :primary} => :cpu, {:b, :primary} => :mem})
       iex> Visualize.Board.Binding.pools(binding, %{cpu: [%{t: 1, v: 2}]})
-      %{a: %{primary: [%{t: 1, v: 2}]}}
+      %{"a" => %{"primary" => [%{t: 1, v: 2}]}}
   """
-  @spec pools(t(), %{feed() => term()}) :: %{atom() => %{atom() => term()}}
+  @spec pools(t(), %{feed() => term()}) ::
+          %{String.t() => %{String.t() => term()}}
   def pools(%__MODULE__{slots: slots}, sources) when is_map(sources) do
     for {{cell, slot}, feed} <- slots, is_map_key(sources, feed), reduce: %{} do
       pools ->

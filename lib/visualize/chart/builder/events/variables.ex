@@ -149,7 +149,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case located do
         %{path: at} when value != nil ->
           # Named for the key, or for a part's key by its path: `stroke_width` (D-178).
-          key = at |> Enum.map_join("_", &to_string/1) |> String.to_atom()
+          key = Enum.map_join(at, "_", &to_string/1)
           name = fresh_name(key, Variables.list(layers, design))
           var = %Visualize.Chart.Var{name: name}
 
@@ -300,12 +300,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     defp fresh_name(key, vars) do
-      taken = Enum.map(vars, & &1.name)
+      taken = Enum.map(vars, &to_string(&1.name))
 
       Stream.iterate(1, &(&1 + 1))
       |> Enum.find_value(fn
         1 -> if key in taken, do: nil, else: key
-        n -> if :"#{key}_#{n}" in taken, do: nil, else: :"#{key}_#{n}"
+        n -> if "#{key}_#{n}" in taken, do: nil, else: "#{key}_#{n}"
       end)
     end
 

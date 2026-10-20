@@ -1,6 +1,8 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Fields do
     @moduledoc false
+
+    import Visualize.Chart.Names, only: [is_name: 1]
     # The fields of a form (spec/14 §18.6, §18.7): one key's control — its name, the widget
     # `Visualize.Chart.Builder.Editor.widget/1` chose, what it shows, its chip or its errors
     # — and the views a form builds its fields from. A node's form (`Editor.form_body/1`)
@@ -642,7 +644,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       case name && Map.get(Map.get(assigns, :columns) || %{}, name) do
         columns when is_list(columns) and columns != [] ->
-          declared = for item <- List.wrap(value), is_atom(item), do: to_string(item)
+          declared = for item <- List.wrap(value), is_name(item), do: to_string(item)
 
           for column <- Enum.sort(Enum.uniq(columns ++ declared)) do
             %{name: column, on?: column in declared, missing?: column not in columns}
@@ -675,8 +677,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # its literal (#371).
     defp as_text(%{type: :extent}, {:ok, value}), do: {:ok, extent_text(value)}
 
-    defp as_text(%{type: :channel}, {:ok, value}) when not (is_atom(value) or is_number(value)),
-      do: {:ok, inspect(value)}
+    # A field is its string (D-195): a name shows as itself.
+    defp as_text(%{type: :channel}, {:ok, value})
+         when not (is_atom(value) or is_binary(value) or is_number(value)),
+         do: {:ok, inspect(value)}
 
     # A size or a length written in a unit, `{12, :pt}`: the box shows the number, the unit
     # select the unit (§18.6, #684).

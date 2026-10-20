@@ -55,7 +55,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert html =~ ~s(class="vis-builder-theme-open")
       assert html =~ "In development:"
 
-      assert {:ok, %Visualize.Theme{name: :house}} =
+      assert {:ok, %Visualize.Theme{name: "house"}} =
                Visualize.Chart.Builder.Store.theme(Library, :house)
     end
 
@@ -73,7 +73,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         )
 
       theme = Themes.effective(node, Library)
-      assert theme.name == :night and theme.axis == "#c0c4cc"
+      assert theme.name == "night" and theme.axis == "#c0c4cc"
       pool = Templates.pool()
 
       for template <- Templates.all() do
@@ -257,7 +257,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         Visualize.Chart.Builder.handle_event(
           "board_bind",
           %{"_target" => ["slot.points"], "slot.points" => ""},
-          Phoenix.Component.assign(s, :board_cell, :wave)
+          Phoenix.Component.assign(s, :board_cell, "wave")
         )
 
       assert_received {:board_bound, "builder", board_id, binding}
@@ -281,8 +281,8 @@ defmodule ExamplesWeb.BuilderLiveTest do
       event = fn s, name, params -> elem(Builder.handle_event(name, params, s), 1) end
 
       s =
-        Enum.reduce(Map.keys(s.assigns.board.cells) -- [:wave], s, fn cell, s ->
-          event.(s, "board_remove", %{"cell" => Atom.to_string(cell)})
+        Enum.reduce(Map.keys(s.assigns.board.cells) -- ["wave"], s, fn cell, s ->
+          event.(s, "board_remove", %{"cell" => to_string(cell)})
         end)
 
       s = event.(s, "board_select", %{"cell" => "wave"})
@@ -300,7 +300,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
       shown =
         for %{kind: :composite, id: id} <- Library.list(nil),
             s = event.(s, "board_cell", %{"_target" => ["ref"], "ref" => Store.encode_id(id)}),
-            s.assigns.board.cells.wave.ref == id,
+            s.assigns.board.cells["wave"].ref == id,
             reduce: [] do
           shown ->
             {s, previews} =

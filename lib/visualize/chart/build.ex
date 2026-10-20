@@ -43,12 +43,14 @@ defmodule Visualize.Chart.Build do
       ...>     title(["Uptime"])
       ...>   ])
       iex> design.marks
-      [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
-      iex> design.frames.main.scales
-      %{x: %{kind: :time}, y: %{kind: :linear, domain: [0, :auto]}}
+      [%{type: :line, data: "primary", channels: %{x: "t", y: "v"}}]
+      iex> design.frames["main"].scales
+      %{"x" => %{kind: :time}, "y" => %{kind: :linear, domain: [0, :auto]}}
       iex> {:ok, _chart} = Visualize.Chart.from_map(design)
 
   """
+
+  import Visualize.Chart.Names, only: [is_name: 1]
 
   alias Visualize.Chart.{Migration, Schema, Var}
   alias Visualize.Chart.Style.Parts
@@ -162,7 +164,7 @@ defmodule Visualize.Chart.Build do
       {:paint, :area}
   """
   @spec paint(atom()) :: {:paint, atom()}
-  def paint(name) when is_atom(name), do: {:paint, name}
+  def paint(name) when is_name(name), do: {:paint, name}
 
   @doc """
   The grid the design's frames are placed on (spec/14 §2.8, #384): `columns` and `rows`
@@ -212,7 +214,7 @@ defmodule Visualize.Chart.Build do
   (`scale/3`, `axis/3`, `legend/2`). A frame carries no size — the render gives it (§4.2).
   """
   @spec cartesian(atom() | opts()) :: fragment()
-  def cartesian(name) when is_atom(name), do: cartesian(name, [])
+  def cartesian(name) when is_name(name), do: cartesian(name, [])
   def cartesian(opts), do: cartesian(:main, opts)
 
   @doc """
@@ -228,7 +230,7 @@ defmodule Visualize.Chart.Build do
 
   @doc "A `:polar` frame (spec/14 §4.6): `angle` and `r` are its scales."
   @spec polar(atom() | opts()) :: fragment()
-  def polar(name) when is_atom(name), do: polar(name, [])
+  def polar(name) when is_name(name), do: polar(name, [])
   def polar(opts), do: polar(:main, opts)
 
   @doc "A named `:polar` frame (spec/14 §4.1)."
@@ -245,7 +247,7 @@ defmodule Visualize.Chart.Build do
   The projection is the frame's `projection:` key, a `:projection` node.
   """
   @spec geo(atom() | opts()) :: fragment()
-  def geo(name) when is_atom(name), do: geo(name, [])
+  def geo(name) when is_name(name), do: geo(name, [])
   def geo(opts), do: geo(:main, opts)
 
   @doc "A named `:geo` frame (spec/14 §4.1)."
@@ -263,7 +265,7 @@ defmodule Visualize.Chart.Build do
   key: a `:facet` frame and its `facet` node name the same thing.
   """
   @spec facet(atom() | opts()) :: fragment()
-  def facet(name) when is_atom(name), do: facet(name, [])
+  def facet(name) when is_name(name), do: facet(name, [])
   def facet(opts), do: facet(:main, opts)
 
   @doc "A named `:facet` frame (spec/14 §4.6)."
@@ -295,7 +297,7 @@ defmodule Visualize.Chart.Build do
   frame a thing belongs to, and a fragment already holding two has nothing to be told.
   """
   @spec in_frame(atom(), [fragment()]) :: [fragment()]
-  def in_frame(name, fragments) when is_atom(name) and is_list(fragments),
+  def in_frame(name, fragments) when is_name(name) and is_list(fragments),
     do: Enum.map(fragments, &framed(&1, name))
 
   defp framed(fragment, name) when is_map(fragment) and not is_struct(fragment) do
@@ -356,7 +358,7 @@ defmodule Visualize.Chart.Build do
       [%{frames: %{day: %{scales: %{y: {:frame, :year, :y}}}}}]
   """
   @spec adopt(atom(), atom(), atom()) :: fragment()
-  def adopt(name, frame, scale) when is_atom(name) and is_atom(frame) and is_atom(scale),
+  def adopt(name, frame, scale) when is_name(name) and is_name(frame) and is_name(scale),
     do: %{frames: %{main: %{scales: %{name => {:frame, frame, scale}}}}}
 
   @doc "As `axis/3` with no options."
@@ -427,13 +429,13 @@ defmodule Visualize.Chart.Build do
   by `from/1` alone are the same map; the generated appenders — one per transform op (spec/14 §16.6) — add the steps.
   """
   @spec from(atom()) :: map()
-  def from(source) when is_atom(source), do: %{source: source}
+  def from(source) when is_name(source), do: %{source: source}
 
   # -- the schema's word on every key -----------------------------------------------------
 
   defp frame(name, kind, opts), do: %{frames: %{name => node(:frame, %{kind: kind}, opts)}}
 
-  defp step(source, base, opts) when is_atom(source), do: step(from(source), base, opts)
+  defp step(source, base, opts) when is_name(source), do: step(from(source), base, opts)
 
   defp step(data, base, opts) when is_map(data) do
     transform = node(:transform, base, opts)

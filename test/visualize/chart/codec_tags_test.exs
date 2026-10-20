@@ -10,7 +10,7 @@ defmodule Visualize.Chart.CodecTagsTest do
   alias Visualize.Board
   alias Visualize.Board.Snapshot
   alias Visualize.Chart
-  alias Visualize.Chart.{Codec, Fact, Fragment, Use, Var}
+  alias Visualize.Chart.{Codec, Fact, Fragment, Migration, Use, Var}
   alias Visualize.Chart.Codec.Tags
   alias Visualize.Chart.Validator.Types
 
@@ -152,13 +152,14 @@ defmodule Visualize.Chart.CodecTagsTest do
       check all(map <- sample, max_runs: 20) do
         {json, back} = json_round_trip(map)
         assert json =~ ~s("#{tag}":)
-        assert back == map
+        # The design read back is the map with its names as strings (D-195).
+        assert back == Migration.names(map)
       end
     end
   end
 
   test "a use site and an id round-trip through a fragment document" do
-    use = %Use{id: {:use, 4}, ref: {:composite, 2}, vars: %{v: 1}, local: %{}}
+    use = %Use{id: {:use, 4}, ref: {:composite, 2}, vars: %{"v" => 1}, local: %{}}
     fragment = %{composite: %{id: {:composite, 1}, uses: [use]}}
     {:ok, json} = Fragment.to_json(fragment)
     assert json =~ ~s("$use":) and json =~ ~s("$id":) and json =~ ~s("$version":)
@@ -233,10 +234,10 @@ defmodule Visualize.Chart.CodecTagsTest do
       for data <- [%{"$atom": "x"}, %{"$field": "sha"}, %{"$price": 3}, %{"$$twice": 1, b: 2}] do
         {json, back} = json_round_trip(var_default(data))
         refute json =~ ~s({"$atom":"x"})
-        assert back == var_default(data)
+        assert back == Migration.names(var_default(data))
       end
 
-      assert Codec.decode_term(Codec.encode_term(%{"$atom": "x"})) == %{"$atom": "x"}
+      assert Codec.decode_term(Codec.encode_term(%{"$atom": "x"})) == %{"$atom" => "x"}
     end
 
     test "a board's and a snapshot's names that start with `$` are escaped too" do
@@ -252,7 +253,7 @@ defmodule Visualize.Chart.CodecTagsTest do
       doc = json |> Jason.decode!() |> Map.put("version", 2)
       doc = put_in(doc, ["vars"], %{"v" => %{"default" => data}})
       assert {:ok, chart} = Chart.from_json(Jason.encode!(doc))
-      assert chart.vars.v.default == %{"$price": 3}
+      assert chart.vars["v"].default == %{"$price" => 3}
     end
   end
 

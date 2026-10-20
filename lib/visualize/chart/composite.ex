@@ -24,6 +24,8 @@ defmodule Visualize.Chart.Composite do
   is not placed, and is reported as `keyless` beside `missing`.
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.Chart
   alias Visualize.Chart.{Fragment, Refs, Use}
   alias Visualize.Chart.Style.Defaults
@@ -362,7 +364,7 @@ defmodule Visualize.Chart.Composite do
         {:ok, %{styles: %{key => body}}}
 
       {:scale, body} ->
-        {:ok, %{frames: %{main: %{scales: %{key => body}}}}}
+        {:ok, %{frames: %{"main" => %{scales: %{key => body}}}}}
 
       {:source, body} ->
         {:ok, %{sources: %{key => body}}}
@@ -380,7 +382,7 @@ defmodule Visualize.Chart.Composite do
         {:ok, %{labels: [body]}}
 
       {:axis, body} ->
-        {:ok, %{frames: %{main: %{axes: [body]}}}}
+        {:ok, %{frames: %{"main" => %{axes: [body]}}}}
 
       _other ->
         {:ok, framed(contribution, key)}
@@ -393,7 +395,7 @@ defmodule Visualize.Chart.Composite do
   # retargeted to the names its frames landed under — a mark that said no frame in a
   # composite of one is given that one, since the frame it belonged to was implicit there
   # and is not here — and an adoption inside it follows the rename (§4.3).
-  defp framed(contribution, key) when is_atom(key) and not is_nil(key) do
+  defp framed(contribution, key) when is_name(key) and not is_nil(key) do
     case Map.get(contribution, :frames) do
       frames when is_map(frames) and map_size(frames) > 0 ->
         names = renames(frames, key)
@@ -415,7 +417,7 @@ defmodule Visualize.Chart.Composite do
     %{name => key}
   end
 
-  defp renames(frames, key), do: Map.new(frames, fn {name, _} -> {name, :"#{key}_#{name}"} end)
+  defp renames(frames, key), do: Map.new(frames, fn {name, _} -> {name, "#{key}_#{name}"} end)
 
   defp renamed_frame({name, node}, names) do
     {Map.fetch!(names, name), renamed_scales(node, names)}
@@ -470,7 +472,7 @@ defmodule Visualize.Chart.Composite do
   defp keyed_id(node, key) do
     case Map.get(node, :id) do
       nil -> node
-      id -> Map.put(node, :id, :"#{key}_#{id}")
+      id -> Map.put(node, :id, "#{key}_#{id}")
     end
   end
 

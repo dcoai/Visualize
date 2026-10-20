@@ -104,7 +104,7 @@ defmodule Visualize.Hooks.MotionHookTest do
   # nothing here reads the clock (spec/12 §6).
   defp next_view(board) do
     receive do
-      {:visualize_board, ^board, {:cell, :services, %View{} = view}} -> view
+      {:visualize_board, ^board, {:cell, "services", %View{} = view}} -> view
     end
   end
 

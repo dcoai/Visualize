@@ -1,6 +1,8 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Writes do
     @moduledoc false
+
+    import Visualize.Chart.Names, only: [is_name: 1]
     # The write path (spec/14 §18.15, §19.3). Every write of `Use.local` goes to the layer the
     # ownership rule names — the one that gives the key's value, else the node's owner, else
     # the selected layer — and a referenced site refuses it with the locked notice. With it,
@@ -69,7 +71,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       order = uses |> Stack.all() |> Map.new(&{&1.use.id, &1.index})
 
       carried =
-        if Enum.all?(path, &is_atom/1),
+        if Enum.all?(path, &is_name/1),
           do: for({id, fragment} <- placed, at(fragment, path) != nil, do: id),
           else: []
 
@@ -248,6 +250,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The pool a chart binds while designed (spec/14 §19.10): the host's under the chart's
     # signals at the tick.
     @doc false
+    # The host's sources as it keys them — a feed is the host's term — and the signals under
+    # the names the design declares; a reader finds an entry by spelling (D-195).
     def pool(%{sources: sources} = assigns) do
       Map.merge(
         sources,

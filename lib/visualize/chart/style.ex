@@ -33,8 +33,10 @@ defmodule Visualize.Chart.Style do
 
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
+  alias Visualize.Chart.{Names, Var}
   alias Visualize.Chart.Style.{Generated, Inherited, Motion, Parts, Sizes}
-  alias Visualize.Chart.Var
   alias Visualize.Data.Table
   alias Visualize.{Scale, Theme, Units}
 
@@ -122,9 +124,9 @@ defmodule Visualize.Chart.Style do
     do: Map.put(acc, key, paint)
 
   defp put_reading(acc, key, reading, frame, mode) when key in @color_keys do
-    case Map.get(frame.scales, :color) do
+    case Map.get(frame.scales, "color") do
       nil -> Map.put(acc, key, color(reading, frame.theme, mode))
-      scale -> put_color(acc, key, Scale.apply(scale, reading), frame.theme, mode)
+      scale -> put_color(acc, key, Scale.apply(scale, Names.category(reading)), frame.theme, mode)
     end
   end
 
@@ -150,9 +152,9 @@ defmodule Visualize.Chart.Style do
   @spec role(map(), term()) :: atom() | nil
   def role(frame, reading) do
     mapped =
-      case Map.get(frame.scales, :color) do
+      case Map.get(frame.scales, "color") do
         nil -> reading
-        scale -> Scale.apply(scale, reading)
+        scale -> Scale.apply(scale, Names.category(reading))
       end
 
     name = color_name(mapped)
@@ -176,11 +178,13 @@ defmodule Visualize.Chart.Style do
   # The declared styles over the theme's whole palette, the built-in four among it: a
   # declared name replaces a palette entry whole, so every palette name is a style
   # reference a design may override (spec/14 §3.3, #637, D-171).
-  @spec all(map(), Theme.t()) :: %{atom() => map()}
+  # A style is named by its string (spec/14 §1.4, D-195): the palette's names are spelled.
+  @spec all(map(), Theme.t()) :: %{String.t() => map()}
   def all(declared, theme \\ Theme.default()) do
     theme
     |> Theme.palette()
-    |> Map.merge(declared)
+    |> Names.keys()
+    |> Map.merge(Names.keys(declared))
     |> Map.new(fn {name, node} -> {name, Parts.normalize(node)} end)
   end
 
@@ -378,9 +382,19 @@ defmodule Visualize.Chart.Style do
   defp lay(styles, name, pick, seen), do: named(styles, name, pick, seen)
 
   # A named style's entry, laid with its name on the way: a node, a name or a list.
+  # A name is looked up by its spelling: the library's own callers name a built-in style by
+  # its atom, a datum's field by whatever its row holds (D-195).
   defp named(styles, name, pick, seen) do
+    name = Names.category(name)
     if name in seen, do: cycle!(name)
-    lay(styles, Map.get(styles, name, %{}), pick, [name | seen])
+
+    entry =
+      case Names.fetch(styles, name) do
+        {:ok, entry} -> entry
+        :error -> %{}
+      end
+
+    lay(styles, entry, pick, [name | seen])
   end
 
   defp cycle!(name) do
@@ -445,8 +459,8 @@ defmodule Visualize.Chart.Style do
   # The name a color reads from the theme's table, when it is one name: `:bad` for
   # `{:color, :bad}` and for a bare `:bad`; `nil` for anything else.
   @spec color_name(term()) :: atom() | nil
-  def color_name({:color, name}) when is_atom(name), do: name
-  def color_name(name) when is_atom(name) and name not in [nil, true, false, :none], do: name
+  def color_name({:color, name}) when is_name(name), do: name
+  def color_name(name) when is_name(name) and name not in [nil, true, false, :none], do: name
   def color_name(_other), do: nil
 
   defp slot_or(:none, _theme, _mode), do: :none

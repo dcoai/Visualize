@@ -30,8 +30,8 @@ defmodule Visualize.Chart.DesignsGoldenTest do
   end
 
   test "a slot with a default, a variable and a whole-node variable are what the designs use" do
-    assert Designs.chart(:line).sources.primary.default == :series
-    assert Designs.apply(:line).sources.primary == Designs.sources().series
+    assert Designs.chart(:line).sources["primary"].default == "series"
+    assert Designs.apply(:line).sources["primary"] == Designs.sources().series
     assert Enum.at(Designs.apply(:line, vars: %{unit: "lb"}).chart.labels, 1).text == "lb"
     assert hd(Designs.apply(:state_timeline).chart.marks).options == %{height: 50}
     assert Designs.render(:line, vars: %{title: "Mass"}) =~ "Mass"

@@ -81,7 +81,7 @@ defmodule Visualize.Chart.PresetsTest do
       design = Presets.design(name, Map.fetch!(source, name))
       assert {:ok, chart} = Chart.from_map(design), "#{name}: #{inspect(design)}"
       assert Chart.from_map(Chart.to_map(chart)) == {:ok, chart}, "#{name}"
-      assert chart.sources == %{data: %{fields: hd(Map.values(design.sources)).fields}}
+      assert chart.sources == %{"data" => %{fields: hd(Map.values(design.sources)).fields}}
       refute has_function?(design), "#{name} carries a function"
     end
   end
@@ -133,8 +133,8 @@ defmodule Visualize.Chart.PresetsTest do
     assert Presets.defaults(:pie_chart).colors == :category10
 
     design = Presets.bar_chart(%{data: [], x: & &1.name, y: & &1.value})
-    assert design.frames.main.margin == %{top: 20, right: 20, bottom: 30, left: 40}
-    assert design.frames.main.scales.x == %{kind: :band, padding: 0.1}
+    assert design.frames["main"].margin == %{top: 20, right: 20, bottom: 30, left: 40}
+    assert design.frames["main"].scales["x"] == %{kind: :band, padding: 0.1}
 
     for f <- [&Presets.defaults/1, &Presets.design(&1, %{}), &Presets.sources(&1, %{})] do
       assert_raise ArgumentError, ~r/not a preset/, fn -> f.(:no_such_chart) end
@@ -143,7 +143,7 @@ defmodule Visualize.Chart.PresetsTest do
 
   test "the x scale of a series chart follows the first datum (spec/10 §2.2)" do
     line = fn data ->
-      Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frames.main.scales.x
+      Presets.line_chart(%{data: data, x: & &1.x, y: & &1.y}).frames["main"].scales["x"]
     end
 
     assert line.([%{x: @t0, y: 1}]) == %{kind: :time}
@@ -156,27 +156,27 @@ defmodule Visualize.Chart.PresetsTest do
   test "the assigns reach the design: colors, options, labels, meta and the transform" do
     design = Presets.line_chart(Map.put(assigns().line_chart, :stroke, "tomato"))
 
-    assert Style.project(design.styles.line) == %{
+    assert Style.project(design.styles["line"]) == %{
              stroke: "tomato",
              stroke_width: 2,
              curve: :linear
            }
 
-    assert Style.project(design.styles.point) == %{fill: "tomato"}
+    assert Style.project(design.styles["point"]) == %{fill: "tomato"}
     assert [%{type: :line}, %{type: :circle, options: %{radius: 4}}] = design.marks
-    assert design.labels == [%{anchor: {:axis, :x}, text: ["t"]}]
+    assert design.labels == [%{anchor: {:axis, "x"}, text: ["t"]}]
 
     pie = Presets.pie_chart(assigns().pie_chart)
     assert pie.meta == %{name: "Pie"}
-    assert pie.frames.main.kind == :polar
+    assert pie.frames["main"].kind == :polar
 
     assert [%{options: %{outer_radius: 190.0, inner_radius: 0, pad_angle: 0.02}, label: label}] =
              pie.marks
 
-    assert label.text == [{:field, :label}]
+    assert label.text == [{:field, "label"}]
     # A label on a fill reads on it and fits it, as the gallery's pie's (D-123, #494).
     assert label.fit == :hide
-    assert Style.project(pie.styles.slice_label) == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(pie.styles["slice_label"]) == %{fill: :contrast, font_size: :label_size}
 
     refute Map.has_key?(
              hd(Presets.pie_chart(Map.put(assigns().pie_chart, :show_labels, false)).marks),
@@ -185,13 +185,13 @@ defmodule Visualize.Chart.PresetsTest do
 
     stacked = Presets.stacked_bar_chart(assigns().stacked_bar_chart)
 
-    assert stacked.frames.main.scales.color == %{
+    assert stacked.frames["main"].scales["color"] == %{
              kind: :ordinal,
-             domain: [:apples, :pears],
+             domain: ["apples", "pears"],
              range: :category10
            }
 
-    assert [%{data: %{source: :data, transforms: [%{op: :stack, fields: [:apples, :pears]}]}}] =
+    assert [%{data: %{source: "data", transforms: [%{op: :stack, fields: ["apples", "pears"]}]}}] =
              stacked.marks
 
     tree =
@@ -202,22 +202,22 @@ defmodule Visualize.Chart.PresetsTest do
 
     assert links == %{
              op: :tree,
-             id: :id,
-             by: :parent,
+             id: "id",
+             by: "parent",
              size: [160, 260],
              orientation: :vertical,
              output: :links
            }
 
-    assert channels == %{x: :x, y: :y}
-    assert Enum.at(tree.marks, 1).label == %{text: [{:field, :label}], anchor: :middle}
+    assert channels == %{x: "x", y: "y"}
+    assert Enum.at(tree.marks, 1).label == %{text: [{:field, "label"}], anchor: :middle}
 
     horizontal = Presets.tree_diagram(%{data: @hierarchy})
     assert hd(horizontal.marks).data.transforms |> hd() |> Map.fetch!(:orientation) == :horizontal
-    assert Enum.at(horizontal.marks, 1).channels == %{x: :y, y: :x}
+    assert Enum.at(horizontal.marks, 1).channels == %{x: "y", y: "x"}
 
     # The links are open cubics: stroked, never filled and closed by their chord (#345).
-    assert Style.project(tree.styles.link).fill == :none
+    assert Style.project(tree.styles["link"]).fill == :none
 
     {:ok, applied} =
       Chart.apply(tree, sources: Presets.sources(:tree_diagram, %{data: @hierarchy}))
@@ -230,38 +230,44 @@ defmodule Visualize.Chart.PresetsTest do
     assert [%{data: %{transforms: [%{op: :treemap}, leaves]}, label: cell_label}] =
              treemap.marks
 
-    assert leaves == %{op: :filter, field: :height, test: :eq, value: 0}
+    assert leaves == %{op: :filter, field: "height", test: :eq, value: 0}
     # A cell's label is its mark's, read and fitted as the gallery's treemap's (#497).
     assert cell_label == %{
-             text: [{:field, :label}],
+             text: [{:field, "label"}],
              anchor: :middle,
              fit: :truncate,
-             style: :cell_label
+             style: "cell_label"
            }
 
-    assert Style.project(treemap.styles.cell_label) == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(treemap.styles["cell_label"]) == %{
+             fill: :contrast,
+             font_size: :label_size
+           }
 
     sunburst = Presets.sunburst_chart(assigns().sunburst_chart)
     assert sunburst.meta == %{description: ["Rings"]}
-    assert sunburst.frames.main.scales.color.domain == [0, 1]
+    assert sunburst.frames["main"].scales["color"].domain == [0, 1]
 
     assert [%{channels: arc_channels, label: arc_label, data: %{transforms: steps}}] =
              sunburst.marks
 
     assert [%{op: :partition, size: [angle, 300.0]}, below_root, positive] = steps
     assert_in_delta angle, 2 * :math.pi(), 1.0e-9
-    assert below_root == %{op: :filter, field: :depth, test: :gt, value: 0}
-    assert positive == %{op: :filter, field: :value, test: :gt, value: 0}
-    assert arc_channels == %{start: :x0, end: :x1, inner: :y0, outer: :y1}
+    assert below_root == %{op: :filter, field: "depth", test: :gt, value: 0}
+    assert positive == %{op: :filter, field: "value", test: :gt, value: 0}
+    assert arc_channels == %{start: "x0", end: "x1", inner: "y0", outer: "y1"}
 
     assert arc_label == %{
-             text: [{:field, :label}],
+             text: [{:field, "label"}],
              anchor: :middle,
              fit: :truncate,
-             style: :arc_label
+             style: "arc_label"
            }
 
-    assert Style.project(sunburst.styles.arc_label) == %{fill: :contrast, font_size: :label_size}
+    assert Style.project(sunburst.styles["arc_label"]) == %{
+             fill: :contrast,
+             font_size: :label_size
+           }
   end
 
   test "a chart preset renders through the layer on its own, and binds to another source" do
@@ -315,7 +321,7 @@ defmodule Visualize.Chart.PresetsTest do
   test "an empty color list is an ArgumentError naming the scale" do
     a = Map.put(assigns().pie_chart, :colors, [])
 
-    assert_raise ArgumentError, ~r/scale :color: an empty range/, fn ->
+    assert_raise ArgumentError, ~r/scale "color": an empty range/, fn ->
       Frame.new(Chart.from_map!(Presets.pie_chart(a)), sources: Presets.sources(:pie_chart, a))
     end
   end
@@ -323,8 +329,8 @@ defmodule Visualize.Chart.PresetsTest do
   test "a preset design re-framed as a facet renders one panel per value (spec/14 §4.6)" do
     a = %{data: @categories, x: & &1.name, y: & &1.value}
     design = Presets.bar_chart(a)
-    fields = design.sources.data.fields ++ [:region]
-    facet = Map.merge(design.frames.main, %{kind: :facet, facet: %{by: :region, columns: 2}})
+    fields = design.sources["data"].fields ++ [:region]
+    facet = Map.merge(design.frames["main"], %{kind: :facet, facet: %{by: :region, columns: 2}})
     design = %{design | frames: %{main: facet}, sources: %{data: %{fields: fields}}}
     chart = Chart.from_map!(design)
 

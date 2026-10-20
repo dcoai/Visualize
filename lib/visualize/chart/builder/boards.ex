@@ -43,15 +43,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
         ...>   b: %{x: 6, y: 0, w: 6, h: 2, ref: {:composite, 1}}
         ...> }})
         iex> {:ok, moved} = Visualize.Chart.Builder.Boards.place(board, :b, %{x: 6, y: 2, w: 6, h: 3})
-        iex> Map.take(moved.cells.b, [:x, :y, :w, :h])
+        iex> Map.take(moved.cells["b"], [:x, :y, :w, :h])
         %{x: 6, y: 2, w: 6, h: 3}
         iex> Visualize.Chart.Builder.Boards.place(board, :b, %{x: 4, y: 0, w: 6, h: 2})
-        {:error, [{[:cells, :b], {:overlap, :a}}]}
+        {:error, [{[:cells, "b"], {:overlap, "a"}}]}
         iex> Visualize.Chart.Builder.Boards.place(board, :b, %{x: 8, y: 4, w: 6, h: 2})
-        {:error, [{[:cells, :b], {:off_grid, 12}}]}
+        {:error, [{[:cells, "b"], {:off_grid, 12}}]}
     """
-    @spec place(Board.t(), atom(), Board.rect()) :: {:ok, Board.t()} | {:error, [Board.error()]}
+    @spec place(Board.t(), atom() | String.t(), Board.rect()) ::
+            {:ok, Board.t()} | {:error, [Board.error()]}
     def place(%Board{cells: cells} = board, cell, %{x: _, y: _, w: _, h: _} = rect) do
+      # A cell is named by its string (D-195), whichever spelling the caller gives.
+      cell = Visualize.Chart.Names.name(cell)
       placed = Map.merge(Map.fetch!(cells, cell), Map.take(rect, [:x, :y, :w, :h]))
       checked(%{board | cells: Map.put(cells, cell, placed)})
     end
@@ -85,10 +88,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A new cell of a component at the first free place, named `cell_<n>` for the least `n`
     # no cell has: a cell's name is its identity, and no atom is made of a person's text.
     def added(%Board{cells: cells} = board, ref) do
-      taken = cells |> Map.keys() |> MapSet.new(&Atom.to_string/1)
+      taken = cells |> Map.keys() |> MapSet.new(&to_string/1)
       n = Enum.find(Stream.iterate(1, &(&1 + 1)), &("cell_#{&1}" not in taken))
-      # A name the board makes, one per cell it has, never one a client sent.
-      name = String.to_atom("cell_#{n}")
+      # A cell is named by its string (D-195).
+      name = "cell_#{n}"
       {x, y} = free(board, @new_w, @new_h)
       cell = %{x: x, y: y, w: @new_w, h: @new_h, ref: ref}
 
@@ -267,7 +270,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # A name from the page as one of the given atoms, or `nil`: no atom is made of it.
-    def named(names, text), do: Enum.find(names, &(Atom.to_string(&1) == text))
+    def named(names, text), do: Enum.find(names, &(to_string(&1) == text))
 
     # -- feeds and their samples (§22.6, §22.8) ------------------------------------------------
 
@@ -380,7 +383,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
              root: true,
              id: "#{stem}-#{name}",
              responsive: true,
-             title: Map.get(cell, :title) || Atom.to_string(name)
+             title: Map.get(cell, :title) || to_string(name)
            )}
 
         {:error, errors} ->
@@ -408,7 +411,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec sources(%{run: map(), drafts: map()}) :: [map()]
     def sources(%{run: %{sources: views}, drafts: drafts}) do
       for view <- views do
-        rows = for row <- view.rows, do: Enum.map(view.fields, &cell_text(Map.get(row, &1)))
+        rows =
+          for row <- view.rows,
+              do: Enum.map(view.fields, &cell_text(Visualize.Data.Table.get(row, &1)))
+
         fields = Enum.map(view.fields, &to_string/1)
 
         case Map.fetch(drafts, view.path) do

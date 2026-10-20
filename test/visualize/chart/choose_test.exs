@@ -6,7 +6,7 @@ defmodule Visualize.Chart.ChooseTest do
   alias Visualize.Chart
   alias Visualize.Data.{Delivery, Schema}
 
-  @state :"health.state"
+  @state "health.state"
 
   defp design(marks, frame \\ %{}) do
     %{
@@ -85,11 +85,11 @@ defmodule Visualize.Chart.ChooseTest do
         })
 
       assert {:error, errors} = Chart.from_map(design([bad]))
-      assert {[:marks, 0, :cases, :a, :channels, :x0], {:invalid_for, :circle}} in errors
+      assert {[:marks, 0, :cases, "a", :channels, :x0], {:invalid_for, :circle}} in errors
 
-      assert {[:marks, 0, :cases, :ok, :type], {:enum, [:circle, :symbol, :text, :rect]}} in errors
+      assert {[:marks, 0, :cases, "ok", :type], {:enum, [:circle, :symbol, :text, :rect]}} in errors
 
-      assert {[:marks, 0, :on], {:undeclared, :field, :nope}} in errors
+      assert {[:marks, 0, :on], {:undeclared, :field, "nope"}} in errors
     end
 
     test "the JSON form round-trips" do
@@ -125,7 +125,7 @@ defmodule Visualize.Chart.ChooseTest do
       refute Chart.render(print) =~ "{:paint"
 
       # A compiled chart's legend region is static: it reads no scale.
-      {:ok, %{main: compiled}} = Chart.compile(applied)
+      {:ok, %{"main" => compiled}} = Chart.compile(applied)
 
       assert Visualize.Chart.Compiled.svg(compiled, %{hosts: delivery()}) =~
                ~s(data-series="warning")

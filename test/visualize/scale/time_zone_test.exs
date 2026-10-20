@@ -298,7 +298,7 @@ defmodule Visualize.Scale.TimeZoneTest do
         Chart.compose([chart(), cartesian(), time_scale(:x, zone: "Mars/Olympus_Mons")])
 
       assert {:error, [{path, reason} = error]} = Validator.validate(design)
-      assert path == [:frames, :main, :scales, :x, :zone]
+      assert path == [:frames, "main", :scales, "x", :zone]
       assert reason == {:zone, "Mars/Olympus_Mons", :time_zone_not_found}
       assert Validator.format(error) =~ ~s("Mars/Olympus_Mons")
     end

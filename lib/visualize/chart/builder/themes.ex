@@ -14,6 +14,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     use Phoenix.Component
 
     alias Visualize.Chart.Builder.{Stack, Store, ThemeRamps}
@@ -145,7 +147,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     value of the theme a person was looking at; a map as it is; anything else an empty node.
     """
     @spec editable(term(), Store.store() | nil) :: map()
-    def editable(value, store) when is_atom(value) and value != nil do
+    def editable(value, store) when is_name(value) do
       value |> effective(store) |> Document.node()
     end
 
@@ -158,7 +160,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     so a theme that breaks a contract still draws. Anything else is the default theme.
     """
     @spec effective(term(), Store.store() | nil) :: Theme.t()
-    def effective(name, store) when is_atom(name) and name != nil do
+    def effective(name, store) when is_name(name) do
       with nil <- Theme.builtin(name),
            {:ok, theme} <- stored(store, name) do
         theme
@@ -196,7 +198,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def change(node, "name", value) do
       case String.trim(value) do
         "" -> :error
-        name -> {:ok, Map.put(node, :name, String.to_atom(name))}
+        # A built-in theme's name is its atom, any other the string typed (D-195).
+        name -> {:ok, Map.put(node, :name, theme_name(name))}
       end
     end
 
@@ -263,14 +266,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     def change(node, field, value) do
       cond do
-        slot = Enum.find(@chrome, &(Atom.to_string(&1) == field)) ->
+        slot = Enum.find(@chrome, &(to_string(&1) == field)) ->
           with {:ok, color} <- color(value), do: {:ok, Map.put(node, slot, color)}
 
-        key = Enum.find(@sizes, &(Atom.to_string(&1) == field)) ->
+        key = Enum.find(@sizes, &(to_string(&1) == field)) ->
           with {:ok, size} <- size(value), do: {:ok, Map.put(node, key, size)}
 
         true ->
           :error
+      end
+    end
+
+    defp theme_name(name) do
+      case Enum.find(Theme.builtins(), &(to_string(&1) == name)) do
+        nil -> name
+        builtin -> builtin
       end
     end
 
@@ -347,7 +357,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     # The ramp a client's string names, of the four; no atom is made from the string.
     @spec ramp_named(String.t()) :: Theme.ramp_name() | nil
-    def ramp_named(name), do: Enum.find(Theme.ramp_names(), &(Atom.to_string(&1) == name))
+    def ramp_named(name), do: Enum.find(Theme.ramp_names(), &(to_string(&1) == name))
 
     # A ramp's anchors as the node holds them, else the default theme's — what it draws as.
     defp anchors(node, ramp) do
@@ -448,7 +458,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec derive_source(String.t(), Store.store() | nil) ::
             {:ok, Theme.t()} | {:error, String.t()}
     def derive_source("builtin:" <> name, _store) do
-      case Enum.find(Theme.builtins(), &(Atom.to_string(&1) == name)) do
+      case Enum.find(Theme.builtins(), &(to_string(&1) == name)) do
         nil -> {:error, "#{name} is not a built-in theme"}
         builtin -> {:ok, Theme.builtin(builtin)}
       end

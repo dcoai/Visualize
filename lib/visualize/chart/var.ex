@@ -9,12 +9,12 @@ defmodule Visualize.Chart.Var do
   ## Examples
 
       iex> Visualize.Chart.var(:unit)
-      %Visualize.Chart.Var{name: :unit}
+      %Visualize.Chart.Var{name: "unit"}
 
   """
 
   @enforce_keys [:name]
   defstruct [:name]
 
-  @type t :: %__MODULE__{name: atom()}
+  @type t :: %__MODULE__{name: String.t()}
 end

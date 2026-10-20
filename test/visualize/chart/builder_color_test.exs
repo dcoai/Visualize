@@ -22,7 +22,7 @@ defmodule Visualize.Chart.Builder.ColorTest do
     %{socket: s}
   end
 
-  defp stroke(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color])
+  defp stroke(s), do: get_in(hd(s.assigns.uses).local, [:styles, "series", :stroke, :color])
 
   defp chain(s, params), do: elem(Builder.handle_event("color_chain", params, s), 1)
 
@@ -72,7 +72,7 @@ defmodule Visualize.Chart.Builder.ColorTest do
           s
         )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) ==
+      assert get_in(hd(s.assigns.uses).local, [:styles, "series", :stroke, :color]) ==
                color(:warning)
     end
   end

@@ -82,6 +82,8 @@ defmodule Visualize.Components.BoardTest do
   end
 
   defp live_view(cell) do
+    cell = to_string(cell)
+
     view =
       receive do
         {:visualize_board, _, {:cell, ^cell, %View{state: :live} = view}} -> view
@@ -108,6 +110,8 @@ defmodule Visualize.Components.BoardTest do
   end
 
   defp drain(cell, view) do
+    cell = to_string(cell)
+
     receive do
       {:visualize_board, _, {:cell, ^cell, %View{state: :live} = newer}} -> drain(cell, newer)
     after
@@ -156,7 +160,7 @@ defmodule Visualize.Components.BoardTest do
       html =
         render_component(Cell,
           id: "ops-latency",
-          cell: :latency,
+          cell: "latency",
           rect: %{x: 0, y: 0, w: 8, h: 3},
           title: "Latency",
           theme: Visualize.Theme.default(),
@@ -188,7 +192,7 @@ defmodule Visualize.Components.BoardTest do
       html =
         render_component(Cell,
           id: "ops-latency",
-          cell: :latency,
+          cell: "latency",
           rect: %{x: 0, y: 0, w: 8, h: 3},
           title: "Latency",
           theme: Visualize.Theme.default(),
@@ -224,7 +228,7 @@ defmodule Visualize.Components.BoardTest do
         assigns: %{
           __changed__: %{},
           id: "ops-latency",
-          cell: :latency,
+          cell: "latency",
           board_id: "ops",
           server: board
         }
@@ -255,8 +259,8 @@ defmodule Visualize.Components.BoardTest do
       assert_received {:visualize_event, "ops",
                        %Event{
                          event: "event_open",
-                         cell: :latency,
-                         frame: :main,
+                         cell: "latency",
+                         frame: "main",
                          row: %{t: ^t2, v: 2},
                          item: nil,
                          path: [],

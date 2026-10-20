@@ -141,10 +141,10 @@ compile it. `Visualize.Chart.compile/2` validates the design once and draws ever
 that does not depend on the data once. Then each update draws only the parts that move.
 
 The result is one compiled chart per frame, by name. A design with one frame gives a map
-with one entry, `:main`:
+with one entry, `"main"`:
 
 ```elixir
-{:ok, %{main: compiled}} = Visualize.Chart.compile(applied)
+{:ok, %{"main" => compiled}} = Visualize.Chart.compile(applied)
 
 static = Visualize.Chart.Compiled.static(compiled)
 {tick, compiled} = Visualize.Chart.Compiled.tick(compiled, %{points: rows})
@@ -163,7 +163,7 @@ option of `compile/2`, 1,000 by default, it stays SVG. Above it, it goes to the 
 canvas. A mark's `render:` option (`:svg`, `:canvas` or `:binary`) overrides the count:
 
 ```elixir
-{:ok, %{main: compiled}} = Visualize.Chart.compile(applied, ceiling: 10)
+{:ok, %{"main" => compiled}} = Visualize.Chart.compile(applied, ceiling: 10)
 Visualize.Chart.Compiled.targets(compiled)
 #=> [binary: 100]
 ```
@@ -198,7 +198,7 @@ defmodule MyAppWeb.LiveChart do
   def mount(_params, _session, socket) do
     rows = []
     {:ok, applied} = Visualize.Chart.apply(design(), sources: %{points: rows}, size: @size)
-    {:ok, %{main: compiled}} = Visualize.Chart.compile(applied)
+    {:ok, %{"main" => compiled}} = Visualize.Chart.compile(applied)
     {tick, compiled} = Visualize.Chart.Compiled.tick(compiled, %{points: rows})
 
     if connected?(socket), do: :timer.send_interval(100, :tick)
@@ -280,7 +280,7 @@ payload instead of a whole `canvas`:
 
 samples = for t <- 0..400, do: %{t: t, v: :math.sin(t / 20)}
 
-{:ok, %{main: window}} =
+{:ok, %{"main" => window}} =
   Visualize.Chart.compile(streaming, sources: %{samples: samples}, size: {600, 300})
 
 {first, window} = Visualize.Chart.Compiled.tick(window, %{samples: samples})
@@ -338,7 +338,7 @@ milliseconds, and defaults to the system's monotonic clock:
     line(:points, %{x: :t, y: :v})
   ])
 
-{:ok, %{main: easing}} = Visualize.Chart.compile(eased, sources: %{points: rows})
+{:ok, %{"main" => easing}} = Visualize.Chart.compile(eased, sources: %{points: rows})
 
 {_group, easing} = Visualize.Chart.Compiled.step(easing, %{points: rows}, at: 0)
 taller = Enum.map(rows, &%{&1 | v: &1.v * 2})

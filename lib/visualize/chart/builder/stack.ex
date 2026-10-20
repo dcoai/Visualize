@@ -20,9 +20,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     alias Visualize.Chart
     alias Visualize.Chart.Builder.Store
-    alias Visualize.Chart.{Composite, Fragment, Use}
+    alias Visualize.Chart.{Composite, Fragment, Migration, Use}
 
     @typedoc "A use's id to the name a person sees for it."
     @type labels :: %{Use.id() => String.t()}
@@ -68,7 +70,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp site({kind, n}) when is_atom(kind) and is_integer(n), do: %{ref: {kind, n}}
     defp site(%Chart{} = chart), do: %{ref: nil, local: Chart.to_map(chart)}
-    defp site(map) when is_map(map), do: %{ref: nil, local: map}
+    # A layer's names are strings (D-195), as a document's are, so an edit merges into them.
+    defp site(map) when is_map(map), do: %{ref: nil, local: Visualize.Chart.Migration.names(map)}
 
     @doc """
     An entry as the inline sites a copy of it is (spec/14 §18.17): a composite's sites,
@@ -93,8 +96,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
         for %Use{} = use <- uses do
           body =
             case use.ref do
+              # A stored site's names are strings (D-195), as a document's are.
               nil ->
-                use.local
+                Migration.names(use.local)
 
               ref ->
                 case resolve.(ref) do
@@ -111,7 +115,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def copies(%{kind: kind, name: name, fragment: fragment}, _fetch, _name_of) do
-      {[{%Use{id: nil, ref: nil, local: fragment}, name || "new #{kind}"}], %{}, %{}}
+      {[{%Use{id: nil, ref: nil, local: Migration.names(fragment)}, name || "new #{kind}"}], %{},
+       %{}}
     end
 
     @doc """
@@ -156,6 +161,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
                                                                             String.t() | nil)) ::
             {[Use.t()], labels(), map(), map()}
     def open(%{fragment: %{composite: %{uses: uses} = composite}}, name_of) when is_list(uses) do
+      # A stored site's names are strings (D-195), as a document's are.
+      uses = Enum.map(uses, &Migration.Named.value(:term, &1))
+
       labels =
         Map.new(uses, fn
           %Use{id: id, ref: nil} -> {id, "local"}
@@ -166,7 +174,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def open(%{kind: kind, name: name, fragment: fragment}, _name_of) do
-      use = %Use{id: {:use, 1}, ref: nil, local: fragment}
+      use = %Use{id: {:use, 1}, ref: nil, local: Migration.names(fragment)}
       {[use], %{use.id => name || "new #{kind}"}, %{}, %{}}
     end
 
@@ -373,12 +381,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     leaves it out.
 
         iex> uses = [
-        ...>   %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}},
-        ...>   %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :primary, local: %{source: %{fields: [:t]}}},
+        ...>   %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{"main" => %{kind: :cartesian}}}},
+        ...>   %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: "primary", local: %{source: %{fields: ["t"]}}},
         ...>   %Visualize.Chart.Use{id: {:use, 3}, ref: nil, mask: :all, local: %{theme: :dark}}
         ...> ]
         iex> Visualize.Chart.Builder.Stack.placed(uses, fn _id -> :error end)
-        [{{:use, 1}, %{frames: %{main: %{kind: :cartesian}}}}, {{:use, 2}, %{sources: %{primary: %{fields: [:t]}}}}]
+        [{{:use, 1}, %{frames: %{"main" => %{kind: :cartesian}}}}, {{:use, 2}, %{sources: %{"primary" => %{fields: ["t"]}}}}]
     """
     @spec placed([Use.t()], (Fragment.id() -> {:ok, map()} | :error)) :: [{Use.id(), map()}]
     def placed(uses, fetch) do
@@ -421,9 +429,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     composite is what the composite flattens to; its mask ignored, since a disabled layer
     still declares what it declares; a missing entry its local alone; a keyless site `%{}`.
 
-        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, mask: :all, local: %{axis: %{scale: :x, side: :bottom}}}
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, mask: :all, local: %{axis: %{scale: "x", side: :bottom}}}
         iex> Visualize.Chart.Builder.Stack.contribution(use, fn _id -> :error end)
-        %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}}
+        %{frames: %{"main" => %{axes: [%{scale: "x", side: :bottom}]}}}
     """
     @spec contribution(Use.t(), (Fragment.id() -> {:ok, map()} | :error)) :: map()
     def contribution(%Use{} = use, fetch) do
@@ -443,13 +451,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     no `id` — lifts the owner's whole list and masks it at the finest path the owner's
     contribution has for it.
 
-        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{main: %{kind: :cartesian, axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]}}}}
-        iex> node = %{kind: :axis, path: [:frames, :main, :axes, 1], label: "frames.main.axes[1]", body: %{scale: :y, side: :left}}
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, local: %{frames: %{"main" => %{kind: :cartesian, axes: [%{scale: "x", side: :bottom}, %{scale: "y", side: :left}]}}}}
+        iex> node = %{kind: :axis, path: [:frames, "main", :axes, 1], label: "frames.main.axes[1]", body: %{scale: "y", side: :left}}
         iex> Visualize.Chart.Builder.Stack.lifted(:copy, use, fn _ -> :error end, node, [])
-        %{local: %{axis: %{scale: :y, side: :left}}, key: nil, mask: nil, lifted: 1}
-        iex> style = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: :series, local: %{style: %{stroke: "#111"}}}
-        iex> Visualize.Chart.Builder.Stack.lifted(:copy, style, fn _ -> :error end, %{kind: :style, path: [:styles, :series], label: "styles.series"}, [:series, :series_2])
-        %{local: %{style: %{stroke: "#111"}}, key: :series_3, mask: nil, lifted: 1}
+        %{local: %{axis: %{scale: "y", side: :left}}, key: nil, mask: nil, lifted: 1}
+        iex> style = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, key: "series", local: %{style: %{stroke: "#111"}}}
+        iex> Visualize.Chart.Builder.Stack.lifted(:copy, style, fn _ -> :error end, %{kind: :style, path: [:styles, "series"], label: "styles.series"}, ["series", "series_2"])
+        %{local: %{style: %{stroke: "#111"}}, key: "series_3", mask: nil, lifted: 1}
         iex> labels = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{labels: [%{anchor: :title, text: ["a"]}, %{anchor: :caption, text: ["b"]}]}}
         iex> Visualize.Chart.Builder.Stack.lifted(:override, labels, fn _ -> :error end, %{kind: :label, path: [:labels, 1], label: "labels[1]", body: %{anchor: :caption, text: ["b"]}}, [])
         %{local: %{labels: [%{anchor: :title, text: ["a"]}, %{anchor: :caption, text: ["b"]}]}, key: nil, mask: [:labels], lifted: 2}
@@ -488,7 +496,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                   %{local: %{site_kind => site_body}, key: key, mask: [site_kind], lifted: 1}
 
                 nil ->
-                  list_path = Enum.take_while(path, &is_atom/1)
+                  list_path = Enum.take_while(path, &is_name/1)
                   members = List.wrap(at(placed, list_path))
 
                   %{
@@ -508,7 +516,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # index in the design is not its index in the owner's list — the member equal to the
     # design's body, else the one with its identity.
     defp member(placed, path, body) do
-      case Enum.split_while(path, &is_atom/1) do
+      case Enum.split_while(path, &is_name/1) do
         {_all, []} ->
           at(placed, path)
 
@@ -533,10 +541,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp identity?(:label, _body), do: false
     defp identity?(_kind, _body), do: true
 
-    defp keyed_name([:styles, name]) when is_atom(name), do: name
-    defp keyed_name([:sources, name]) when is_atom(name), do: name
-    defp keyed_name([:vars, name]) when is_atom(name), do: name
-    defp keyed_name([:frames, _frame, :scales, name]) when is_atom(name), do: name
+    defp keyed_name([:styles, name]) when is_name(name), do: name
+    defp keyed_name([:sources, name]) when is_name(name), do: name
+    defp keyed_name([:vars, name]) when is_name(name), do: name
+    defp keyed_name([:frames, _frame, :scales, name]) when is_name(name), do: name
     defp keyed_name(_path), do: nil
 
     # The inline site's local for a node at a path: a site of the node's kind, a frame's
@@ -544,14 +552,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A site's fragment carries the path it came from: a frame's own node, a part of one
     # (`scales`, `axes`, …) under its name, or the kind's singular wrapper (spec/14 §19.2).
     defp wrap(:frame, [:frames, frame], body), do: %{frames: %{frame => body}}
-    defp wrap(:frame, [:frames], body), do: %{frames: %{main: body}}
+    defp wrap(:frame, [:frames], body), do: %{frames: %{"main" => body}}
 
     defp wrap(_kind, [:frames, frame, part], body) when is_atom(part),
       do: %{frames: %{frame => %{part => body}}}
 
     defp wrap(kind, _path, body), do: %{kind => body}
 
-    defp fresh_id(:mark, %{id: id} = body, taken) when is_atom(id),
+    defp fresh_id(:mark, %{id: id} = body, taken) when is_name(id),
       do: %{body | id: fresh(id, taken)}
 
     defp fresh_id(_kind, body, _taken), do: body
@@ -562,7 +570,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp fresh(name, taken) do
       2
       |> Stream.iterate(&(&1 + 1))
-      |> Stream.map(&:"#{name}_#{&1}")
+      |> Stream.map(&"#{name}_#{&1}")
       |> Enum.find(&(&1 not in taken))
     end
 
@@ -575,7 +583,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp mask_path(path), do: Enum.take(path, 2)
 
     defp at(map, []), do: map
-    defp at(map, [key | rest]) when is_map(map) and is_atom(key), do: at(Map.get(map, key), rest)
+    defp at(map, [key | rest]) when is_map(map) and is_name(key), do: at(Map.get(map, key), rest)
     defp at(list, [i | rest]) when is_list(list) and is_integer(i), do: at(Enum.at(list, i), rest)
     defp at(_other, _path), do: nil
 
@@ -584,21 +592,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     kind's key (spec/14 §19.3), so the design's `sources.primary` is a `source` site's
     `[:source]`, and a design-level site's path is its own (§18.15).
 
-        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, key: :primary, local: %{source: %{fields: [:t]}}}
-        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, :primary])
+        iex> use = %Visualize.Chart.Use{id: {:use, 1}, ref: nil, key: "primary", local: %{source: %{fields: ["t"]}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, "primary"])
         [:source]
-        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, :primary, :fields])
+        iex> Visualize.Chart.Builder.Stack.local_path(use, fn _id -> :error end, [:sources, "primary", :fields])
         [:source, :fields]
         iex> mark = %Visualize.Chart.Use{id: {:use, 2}, ref: nil, local: %{mark: %{type: :line}}}
         iex> Visualize.Chart.Builder.Stack.local_path(mark, fn _id -> :error end, [:marks, 3, :channels])
         [:mark, :channels]
-        iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
-        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frames, :main, :margin])
-        [:frames, :main, :margin]
+        iex> house = %Visualize.Chart.Use{id: {:use, 3}, ref: nil, local: %{frames: %{"main" => %{kind: :cartesian}}}}
+        iex> Visualize.Chart.Builder.Stack.local_path(house, fn _id -> :error end, [:frames, "main", :margin])
+        [:frames, "main", :margin]
     """
     @spec local_path(Use.t(), (Fragment.id() -> {:ok, map()} | :error), [term()]) :: [term()]
     def local_path(%Use{key: key} = use, fetch, [:frames, key | rest] = path)
-        when is_atom(key) and key != nil do
+        when is_name(key) do
       # A frame site placed under a key lands as `frames.<key>` (§19.6, #616), and its
       # fragment still calls its one frame by the entry's name.
       case shown_fragment(use, fetch) do
@@ -1075,7 +1083,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp update_node(nil, [], fun), do: fun.(%{})
     defp update_node(container, [], fun), do: fun.(container)
 
-    defp update_node(nil, [key | _rest] = path, fun) when is_atom(key),
+    defp update_node(nil, [key | _rest] = path, fun) when is_name(key),
       do: update_node(%{}, path, fun)
 
     defp update_node(list, [index | rest], fun) when is_list(list) and is_integer(index),
@@ -1151,7 +1159,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def empty(:theme), do: %{theme: %{}}
     # A board with no cells and every default (spec/14 §22.1, spec/15 §1.2).
     def empty(:board), do: %{board: Visualize.Board.to_map(%Visualize.Board{})}
-    def empty(:frame), do: %{frames: %{main: %{}}}
+    def empty(:frame), do: %{frames: %{"main" => %{}}}
 
     def empty(kind) when kind in [:style, :scale, :source, :axis, :mark, :label, :var],
       do: %{kind => %{}}

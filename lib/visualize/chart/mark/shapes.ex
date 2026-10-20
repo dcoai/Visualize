@@ -119,7 +119,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   defp closed?(%{frame: frame} = ctx) do
     case option(ctx, :closed, nil) do
       nil ->
-        frame.kind == :polar and match?(%Visualize.Scale.Band{}, Map.get(frame.scales, :angle)) and
+        frame.kind == :polar and match?(%Visualize.Scale.Band{}, Map.get(frame.scales, "angle")) and
           full_turn?(ctx)
 
       closed ->
@@ -441,7 +441,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   # -- rose ----------------------------------------------------------------------------
 
   defp rose(ctx) do
-    scale = Map.get(ctx.frame.scales, :angle)
+    scale = Map.get(ctx.frame.scales, "angle")
     width = option(ctx, :width, 1)
     inner = option(ctx, :inner_radius, 0)
     pad = option(ctx, :pad_angle, 0)
@@ -484,7 +484,7 @@ defmodule Visualize.Chart.Mark.Shapes do
   end
 
   defp angle(nil, value), do: value
-  defp angle(scale, value), do: Scale.apply(scale, value)
+  defp angle(scale, value), do: Scale.apply(scale, Visualize.Chart.Names.category(value))
 
   # -- symbol ----------------------------------------------------------------------------
 
@@ -606,7 +606,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # The r scale's range, the band a polar mark spans: `[0, R]` when the frame has none.
   defp radii(%{frame: frame} = ctx) do
-    case Map.get(frame.scales, :r) do
+    case Map.get(frame.scales, "r") do
       %{range: [r0, r1]} -> {min(r0, r1), max(r0, r1)}
       _none -> {0, outer_radius(ctx)}
     end
@@ -614,7 +614,7 @@ defmodule Visualize.Chart.Mark.Shapes do
 
   # The angle scale's range, the sweep: the full turn when the frame has none.
   defp sweep(%{frame: frame}) do
-    case Map.get(frame.scales, :angle) do
+    case Map.get(frame.scales, "angle") do
       %{range: [a0, a1]} -> {a0, a1}
       _none -> {0, 2 * :math.pi()}
     end

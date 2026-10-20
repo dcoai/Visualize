@@ -42,7 +42,8 @@ defmodule Visualize.Chart.ExampleTest do
 
   test "the Build pipeline beside the literal folds to the identical map" do
     assert {:ok, built} = pipeline()
-    assert built == example()
+    # The literal is written with atoms; the pipeline holds its names as strings (D-195).
+    assert built == Visualize.Chart.Migration.names(example())
   end
 
   test "validates and round-trips" do
@@ -67,9 +68,9 @@ defmodule Visualize.Chart.ExampleTest do
     assert {:ok, applied} = Chart.apply(example(), sources: sources(), vars: %{unit: "mg/hr"})
 
     # The histogram's bins line up with the line on `y`; its counts run along `count`.
-    assert Frame.scale(applied.frames.main, :count).domain == [0, 1]
-    assert Frame.scale(applied.frames.main, :count).range == [0, 120]
-    assert Frame.scale(applied.frames.main, :y).domain == [0.0, 100.0]
+    assert Frame.scale(applied.frames["main"], :count).domain == [0, 1]
+    assert Frame.scale(applied.frames["main"], :count).range == [0, 120]
+    assert Frame.scale(applied.frames["main"], :y).domain == [0.0, 100.0]
 
     svg = Chart.render(applied)
     assert svg =~ ~s(class="mark mark-line")
@@ -85,7 +86,7 @@ defmodule Visualize.Chart.ExampleTest do
     canvas = Chart.render(applied, backend: :canvas)
     assert canvas =~ "ctx." and not (canvas =~ "var(")
 
-    {:ok, %{main: compiled}} = Chart.compile(applied)
+    {:ok, %{"main" => compiled}} = Chart.compile(applied)
     assert Enum.all?(Compiled.targets(compiled), &match?({:svg, _}, &1))
     assert Compiled.svg(compiled, applied.sources) == Chart.render(applied)
   end

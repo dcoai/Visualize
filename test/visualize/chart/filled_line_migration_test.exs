@@ -38,8 +38,8 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
 
     assert area == %{
              type: :area,
-             data: :p,
-             channels: %{x: :t, y: :v, series: :k},
+             data: "p",
+             channels: %{x: "t", y: "v", series: "k"},
              style: %{
                fill: %{type: :solid, color: "#cde", opacity: 0.4},
                curve: %{type: :step_after},
@@ -48,7 +48,7 @@ defmodule Visualize.Chart.FilledLineMigrationTest do
            }
 
     # The line was the frame's first mark and is now its second: it keeps series 1.
-    assert line.style == [:under, %{stroke: %{type: :solid, color: {:series, 1}}}]
+    assert line.style == ["under", %{stroke: %{type: :solid, color: {:series, 1}}}]
     assert other.style == [%{stroke: %{type: :solid, color: {:series, 2}}}]
   end
 

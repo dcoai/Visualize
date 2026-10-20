@@ -90,7 +90,7 @@ defmodule Visualize.Chart.StyleTest do
   test "a field reference survives resolve/3 and a variable raises" do
     assert Style.resolve(%{fill: {:field, :k}}, @theme, :css) == %{fill: {:field, :k}}
 
-    assert_raise ArgumentError, ~r/variable :accent is unresolved/, fn ->
+    assert_raise ArgumentError, ~r/variable "accent" is unresolved/, fn ->
       Style.resolve(%{stroke: Chart.var(:accent)}, @theme, :css)
     end
   end
@@ -150,7 +150,7 @@ defmodule Visualize.Chart.StyleTest do
 
     test "only the color scale takes the default: another ordinal keeps nil" do
       frame = frame(%{shade: %{kind: :ordinal, domain: ["a"], range: ["#000"]}})
-      assert Visualize.Scale.apply(Frame.scales(frame).shade, "z") == nil
+      assert Visualize.Scale.apply(Frame.scales(frame)["shade"], "z") == nil
     end
 
     test "a missing color reading is :none; any other key's nil is dropped" do
@@ -218,7 +218,7 @@ defmodule Visualize.Chart.StyleTest do
     test "a cycle raises at resolution, having been reported by the validator" do
       styles = styles(%{a: %{extends: :b}, b: %{extends: :a}})
 
-      assert_raise ArgumentError, ~r/style :a reaches itself/, fn -> Style.node(styles, :a) end
+      assert_raise ArgumentError, ~r/style "a" reaches itself/, fn -> Style.node(styles, :a) end
     end
   end
 
@@ -283,7 +283,7 @@ defmodule Visualize.Chart.StyleTest do
     test "a cycle through extends still raises, from inside a stack" do
       styles = %{a: %{extends: :b}, b: %{extends: :a}}
 
-      assert_raise ArgumentError, ~r/style :a reaches itself/, fn ->
+      assert_raise ArgumentError, ~r/style "a" reaches itself/, fn ->
         Style.node(styles, [:a])
       end
     end

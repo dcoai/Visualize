@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Validator.Domain do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The color-domain check of the validator (spec/14 §10.1, #487, D-122): a value a mark
   # sends to its frame's color scale that the scale's *declared* ordinal domain can be seen
   # not to hold. Every element it reaches would draw the scale's `unknown`, so the design
@@ -59,7 +61,7 @@ defmodule Visualize.Chart.Validator.Domain do
   defp frame(_name, _frames), do: %{}
 
   # The column types of the mark's source, when its rows are the source's own.
-  defp columns(name, sources) when is_atom(name) and is_map_key(sources, name) do
+  defp columns(name, sources) when is_name(name) and is_map_key(sources, name) do
     case sources[name] do
       %{types: types} when is_map(types) and not is_struct(types) -> types
       _ -> %{}
@@ -95,10 +97,10 @@ defmodule Visualize.Chart.Validator.Domain do
     end
   end
 
-  defp color_scale(%{color: name}) when is_atom(name) and name not in [nil, true, false],
+  defp color_scale(%{color: name}) when is_name(name) and name not in [nil, true, false],
     do: name
 
-  defp color_scale(_scales), do: :color
+  defp color_scale(_scales), do: "color"
 
   defp color_channels(:rect, _kind), do: [:series, :value]
   defp color_channels(_type, :geo), do: [:series, :value]
@@ -210,7 +212,7 @@ defmodule Visualize.Chart.Validator.Domain do
     Parts.merge(parent, Map.delete(inline, :extends))
   end
 
-  defp entry(name, styles, seen) when is_atom(name) and is_map_key(styles, name) do
+  defp entry(name, styles, seen) when is_name(name) and is_map_key(styles, name) do
     if name in seen, do: %{}, else: entry(styles[name], styles, [name | seen])
   end
 
@@ -225,7 +227,7 @@ defmodule Visualize.Chart.Validator.Domain do
 
   defp domain(_node), do: nil
 
-  defp column(field, name, domain, columns) when is_atom(field) do
+  defp column(field, name, domain, columns) when is_name(field) do
     case Map.get(columns, field) do
       type when type in [:number, :text, :time] ->
         if Enum.any?(domain, &holds?(type, &1)),

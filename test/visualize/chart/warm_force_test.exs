@@ -67,7 +67,7 @@ defmodule Visualize.Chart.WarmForceTest do
   defp breathing(tick), do: 100 + 12 * :math.sin(tick * 0.1)
 
   defp compile(design, sources \\ @sources) do
-    {:ok, %{main: compiled}} = Chart.compile(design, sources: sources, size: {600, 400})
+    {:ok, %{"main" => compiled}} = Chart.compile(design, sources: sources, size: {600, 400})
     compiled
   end
 
@@ -361,7 +361,7 @@ defmodule Visualize.Chart.WarmForceRunsTest do
 
     sources = %{nodes: nodes, links: links}
 
-    {1, {:ok, %{main: compiled}}} = runs(fn -> Chart.compile(design, sources: sources) end)
+    {1, {:ok, %{"main" => compiled}}} = runs(fn -> Chart.compile(design, sources: sources) end)
 
     Enum.reduce(1..5, compiled, fn tick, compiled ->
       {n, {_group, compiled}} = runs(fn -> Compiled.step(compiled, sources, at: tick) end)

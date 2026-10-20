@@ -128,7 +128,7 @@ defmodule Visualize.Chart.Mark do
   # value names, each case's rows drawn by its child as a mark of the child's type over the
   # choose mark's channels, the cases in name order and then `else`.
   def generate(%Frame{} = frame, %{type: :choose} = mark, opts) do
-    sources = Keyword.get(opts, :sources, %{})
+    sources = opts |> Keyword.get(:sources, %{}) |> Visualize.Chart.Names.keys()
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
     rows = frame |> rows(mark, sources) |> panel(frame, Keyword.fetch(opts, :panel))
     cases = Map.get(mark, :cases, %{})
@@ -152,7 +152,7 @@ defmodule Visualize.Chart.Mark do
 
   def generate(%Frame{} = frame, %{type: type} = mark, opts) do
     frame = colored(frame, mark)
-    sources = Keyword.get(opts, :sources, %{})
+    sources = opts |> Keyword.get(:sources, %{}) |> Visualize.Chart.Names.keys()
     mode = Keyword.get(opts, :resolve, :css)
     index = Keyword.get_lazy(opts, :index, fn -> position(frame, mark) end)
     realized = rows(frame, mark, sources)
@@ -231,14 +231,10 @@ defmodule Visualize.Chart.Mark do
 
   # -- construction ---------------------------------------------------------------------
 
-  # The case a value names: an atom key of `cases`, or a string spelling one, never made
-  # into an atom (spec/14 §5.2); any other value is `else`'s.
-  defp chosen(cases, value) when is_atom(value) and value != nil do
-    if Map.has_key?(cases, value), do: {:case, value}, else: :else
-  end
-
-  defp chosen(cases, value) when is_binary(value) do
-    case Enum.find(Map.keys(cases), &(Atom.to_string(&1) == value)) do
+  # The case a value names: a key of `cases` of its spelling, a category value matched by
+  # spelling and never made into an atom (spec/14 §5.2, D-195); any other value is `else`'s.
+  defp chosen(cases, value) when (is_atom(value) and value != nil) or is_binary(value) do
+    case Enum.find(Map.keys(cases), &Visualize.Chart.Names.same?(&1, value)) do
       nil -> :else
       name -> {:case, name}
     end
@@ -274,13 +270,13 @@ defmodule Visualize.Chart.Mark do
   # leaves the series' colors to the marks that keep `color`.
   defp colored(frame, mark) do
     case Scales.color_scale(mark) do
-      :color ->
+      "color" ->
         frame
 
       name ->
         case Map.fetch(frame.scales, name) do
-          {:ok, scale} -> %{frame | scales: Map.put(frame.scales, :color, scale)}
-          :error -> %{frame | scales: Map.delete(frame.scales, :color)}
+          {:ok, scale} -> %{frame | scales: Map.put(frame.scales, "color", scale)}
+          :error -> %{frame | scales: Map.delete(frame.scales, "color")}
         end
     end
   end
@@ -470,7 +466,7 @@ defmodule Visualize.Chart.Mark do
 
   defp bent(children, %{frame: %{kind: :polar} = frame, type: type}) when type not in @unbent do
     # Over a categorical angle a straight segment is a chord (§5.2, #393).
-    opts = [chords: match?(%Visualize.Scale.Band{}, Map.get(frame.scales, :angle))]
+    opts = [chords: match?(%Visualize.Scale.Band{}, Map.get(frame.scales, "angle"))]
 
     Enum.map(children, fn child ->
       child

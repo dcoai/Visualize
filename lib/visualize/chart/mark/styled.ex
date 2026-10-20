@@ -193,7 +193,7 @@ defmodule Visualize.Chart.Mark.Styled do
   # feed's `"warning"` names `:warning` without the value being made into an atom.
   defp names(styles) do
     Enum.reduce(Map.keys(styles), %{}, fn name, names ->
-      names |> Map.put(name, name) |> Map.put(Atom.to_string(name), name)
+      names |> Map.put(name, name) |> Map.put(to_string(name), name)
     end)
   end
 
@@ -202,7 +202,8 @@ defmodule Visualize.Chart.Mark.Styled do
 
   # The style the datum's value names, or `nil` to lay nothing: a missing value, and one
   # that names no declared style and no palette entry (spec/14 §3.6).
-  defp pick({:field, field}, datum, names), do: Map.get(names, Table.get(datum, field))
+  defp pick({:field, field}, datum, names),
+    do: Map.get(names, Visualize.Chart.Names.category(Table.get(datum, field)))
 
   # `pick/3` for a stack that may hold generators: a field entry as there, with no datum
   # nothing; a generator's checked result (spec/14 §3.13).

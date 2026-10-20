@@ -1,6 +1,8 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Editing do
     @moduledoc false
+
+    import Visualize.Chart.Names, only: [is_name: 1]
     # What is being edited (spec/14 §18.13, §18.15, §19.10). `editing/1` derives, from the
     # builder's assigns, everything the render reads: the resolved layers, the composed
     # design, the open node and its page, the strip, the context panels, the tree's rows and
@@ -297,7 +299,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp preview_theme(%{theme: %Theme{} = theme}, _design), do: theme
 
     defp preview_theme(%{store: store}, %{theme: name})
-         when store != nil and is_atom(name) and name != nil do
+         when store != nil and is_name(name) do
       with nil <- Theme.builtin(name),
            {:ok, theme} <- Store.theme(store, name) do
         theme
@@ -694,7 +696,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       read =
         for {:marks, mark, _i} <- drawn, scale <- Scales.position_scales(design, mark), do: scale
 
-      scales = Enum.filter([:x, :y, :angle, :r], &(&1 in declared or &1 in read))
+      scales = Enum.filter(["x", "y", "angle", "r"], &(&1 in declared or &1 in read))
 
       %{
         axes: if(scales == [], do: [], else: Axes.rows(design, scales, frame)),
@@ -742,7 +744,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: Axes.rows(design, Scales.position_scales(design, mark), Fragment.frame_of(design, mark))
 
     defp axes_rows(design, %{kind: :scale, path: [:frames, frame, :scales, name]}, _node)
-         when name in [:x, :y, :angle, :r],
+         when name in ["x", "y", "angle", "r"],
          do: Axes.rows(design, [name], frame)
 
     defp axes_rows(_design, _entry, _node), do: []

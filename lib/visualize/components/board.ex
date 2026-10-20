@@ -345,7 +345,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       defp picked({:ok, target}, point, assigns) do
         event = %Event{
           event: :drill,
-          cell: assigns.cell,
+          cell: Visualize.Chart.Names.name(assigns.cell),
           frame: point.frame,
           item: point.item,
           path: List.wrap(point.item),

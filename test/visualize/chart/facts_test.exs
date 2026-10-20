@@ -101,7 +101,7 @@ defmodule Visualize.Chart.FactsTest do
       {:ok, applied} = apply_with(design(), schema())
 
       assert [%{text: "Request time (s)"}] = applied.chart.labels
-      assert Enum.at(applied.chart.frames.main.axes, 1).unit == "s"
+      assert Enum.at(applied.chart.frames["main"].axes, 1).unit == "s"
       assert Frame.scale(applied.frame, :color).domain == ["ok", "warn", "fail"]
       assert Chart.render(applied) =~ "Request time (s)"
     end
@@ -110,8 +110,8 @@ defmodule Visualize.Chart.FactsTest do
       s = schema()
       {:ok, applied} = apply_with(design(), s)
 
-      assert applied.schemas == %{primary: s}
-      assert applied.versions == %{primary: s.version}
+      assert applied.schemas == %{"primary" => s}
+      assert applied.versions == %{"primary" => s.version}
       assert Cache.fetch(applied.cache, :primary, s.version) == {:ok, s}
     end
 
@@ -127,7 +127,7 @@ defmodule Visualize.Chart.FactsTest do
 
       assert [%{text: "Request time (s)"}] = applied.chart.labels
 
-      assert {:error, [{[:sources, :primary], {:unknown_schema, :latency_feed, _}}]} =
+      assert {:error, [{[:sources, "primary"], {:unknown_schema, :latency_feed, _}}]} =
                Chart.apply(d,
                  sources: %{latency_feed: delivery(s)},
                  schemas: Cache.new([{:primary, s}])
@@ -143,7 +143,7 @@ defmodule Visualize.Chart.FactsTest do
         )
 
       assert {:error, [{path, {:type, :extent}}]} = apply_with(d, schema())
-      assert path == [:frames, :main, :scales, :color, :domain]
+      assert path == [:frames, "main", :scales, "color", :domain]
     end
   end
 
@@ -170,7 +170,7 @@ defmodule Visualize.Chart.FactsTest do
 
       assert_received {:described, :primary}
       refute_received {:described, _}
-      assert applied.schemas == %{primary: s, secondary: s}
+      assert applied.schemas == %{"primary" => s, "secondary" => s}
       assert Cache.fetch(applied.cache, :primary, s.version) == {:ok, s}
     end
 
@@ -190,7 +190,7 @@ defmodule Visualize.Chart.FactsTest do
 
       refute_received {:described, _}
       assert applied.schemas == %{}
-      assert applied.versions == %{spare: "abc"}
+      assert applied.versions == %{"spare" => "abc"}
     end
 
     # The type check (D-153) reads a schema nothing requires, and asks for it once: an
@@ -212,14 +212,14 @@ defmodule Visualize.Chart.FactsTest do
       assert_received {:described, :primary}
       refute_received {:described, _}
       assert applied.schemas == %{}
-      assert applied.versions == %{primary: "abc"}
+      assert applied.versions == %{"primary" => "abc"}
 
       s = schema()
 
       {:ok, applied} =
         Chart.apply(d, sources: %{primary: delivery(s)}, describe: counting({:ok, s}))
 
-      assert applied.schemas == %{primary: s}
+      assert applied.schemas == %{"primary" => s}
     end
   end
 
@@ -233,19 +233,19 @@ defmodule Visualize.Chart.FactsTest do
       assert apply_with(d, s) ==
                {:error,
                 [
-                  {[:sources, :primary, :requires, :latency],
-                   {:missing_attribute, :primary, :latency, :unit}}
+                  {[:sources, "primary", :requires, "latency"],
+                   {:missing_attribute, "primary", "latency", :unit}}
                 ]}
 
       line =
         Validator.format(
-          {[:sources, :primary, :requires, :latency],
-           {:missing_attribute, :primary, :latency, :unit}}
+          {[:sources, "primary", :requires, "latency"],
+           {:missing_attribute, "primary", "latency", :unit}}
         )
 
       assert line =~ "sources.primary.requires.latency"
-      assert line =~ ":primary"
-      assert line =~ ":latency"
+      assert line =~ ~s("primary")
+      assert line =~ ~s("latency")
       assert line =~ ":unit"
     end
 
@@ -259,8 +259,8 @@ defmodule Visualize.Chart.FactsTest do
         assert apply_with(d, schema(undeclared)) ==
                  {:error,
                   [
-                    {[:sources, :primary, :requires, :state],
-                     {:missing_attribute, :primary, :state, :identity}}
+                    {[:sources, "primary", :requires, "state"],
+                     {:missing_attribute, "primary", "state", :identity}}
                   ]}
       end
     end
@@ -272,8 +272,8 @@ defmodule Visualize.Chart.FactsTest do
       assert apply_with(d, s) ==
                {:error,
                 [
-                  {[:frames, :main, :scales, :color, :domain],
-                   {:missing_attribute, :primary, :state, :order}}
+                  {[:frames, "main", :scales, "color", :domain],
+                   {:missing_attribute, "primary", "state", :order}}
                 ]}
     end
 
@@ -281,10 +281,10 @@ defmodule Visualize.Chart.FactsTest do
       s = schema(Map.delete(@latency, :latency))
       {:error, errors} = apply_with(design(), s)
 
-      assert {[:labels, 0, :text], {:missing_attribute, :primary, :latency, :label}} in errors
+      assert {[:labels, 0, :text], {:missing_attribute, "primary", "latency", :label}} in errors
 
-      assert {[:sources, :primary, :requires, :latency],
-              {:missing_attribute, :primary, :latency, :unit}} in errors
+      assert {[:sources, "primary", :requires, "latency"],
+              {:missing_attribute, "primary", "latency", :unit}} in errors
     end
 
     test "a declared type the schema contradicts" do
@@ -298,13 +298,16 @@ defmodule Visualize.Chart.FactsTest do
 
       assert apply_with(d, s) ==
                {:error,
-                [{[:sources, :primary, :types, :state], {:schema_type, :state, :category, :text}}]}
+                [
+                  {[:sources, "primary", :types, "state"],
+                   {:schema_type, "state", :category, :text}}
+                ]}
     end
 
     test "a slot that needs a schema and is given rows, or a delivery naming none" do
       for source <- [@rows, Delivery.new(@rows)] do
         assert Chart.apply(design(), sources: %{primary: source}) ==
-                 {:error, [{[:sources, :primary], {:no_schema, :primary}}]}
+                 {:error, [{[:sources, "primary"], {:no_schema, "primary"}}]}
       end
     end
 
@@ -314,28 +317,28 @@ defmodule Visualize.Chart.FactsTest do
       pool = %{primary: delivery(s)}
 
       assert Chart.apply(design(), sources: pool) ==
-               {:error, [{[:sources, :primary], {:unknown_schema, :primary, s.version}}]}
+               {:error, [{[:sources, "primary"], {:unknown_schema, :primary, s.version}}]}
 
       assert Chart.apply(design(), sources: pool, describe: fn _ -> {:error, :timeout} end) ==
-               {:error, [{[:sources, :primary], {:describe, :primary, :timeout}}]}
+               {:error, [{[:sources, "primary"], {:describe, :primary, :timeout}}]}
 
       assert Chart.apply(design(), sources: pool, describe: fn _ -> {:ok, other} end) ==
                {:error,
-                [{[:sources, :primary], {:schema_version, :primary, s.version, other.version}}]}
+                [{[:sources, "primary"], {:schema_version, :primary, s.version, other.version}}]}
     end
 
     test "every contract fault has a line" do
       for reason <- [
-            {:missing_attribute, :primary, :latency, :unit},
-            {:schema_type, :state, :category, :text},
-            {:no_schema, :primary},
+            {:missing_attribute, "primary", "latency", :unit},
+            {:schema_type, "state", :category, :text},
+            {:no_schema, "primary"},
             {:unknown_schema, :primary, "abc"},
             {:describe, :primary, :timeout},
             {:schema_version, :primary, "abc", "def"},
-            {:undeclared_field, :primary, :x},
+            {:undeclared_field, "primary", "x"},
             {:type, :fact}
           ] do
-        line = Validator.format({[:sources, :primary], reason})
+        line = Validator.format({[:sources, "primary"], reason})
         assert line =~ "sources.primary: "
         refute line =~ "%{"
       end
@@ -345,7 +348,7 @@ defmodule Visualize.Chart.FactsTest do
   describe "the design states its contract" do
     test "contract/1 is requires with every fact read, attributes in order" do
       assert Chart.contract(design()) ==
-               %{primary: %{latency: [:unit, :label], state: [:order]}}
+               %{"primary" => %{"latency" => [:unit, :label], "state" => [:order]}}
 
       assert Chart.contract(%{version: 2, frames: %{main: %{kind: :cartesian}}}) == %{}
       assert Chart.contract(%{sources: Chart.var(:sources)}) == %{}
@@ -355,21 +358,21 @@ defmodule Visualize.Chart.FactsTest do
       d = put_in(design(), [:sources, :primary, :requires], %{latency: [:color], other: [:unit]})
       {:error, errors} = Chart.from_map(d)
 
-      assert {[:sources, :primary, :requires, :other], {:undeclared, :field, :other}} in errors
+      assert {[:sources, "primary", :requires, "other"], {:undeclared, :field, "other"}} in errors
 
-      assert {[:sources, :primary, :requires, :latency, 0], {:enum, Schema.attributes()}} in errors
+      assert {[:sources, "primary", :requires, "latency", 0], {:enum, Schema.attributes()}} in errors
     end
 
     test "a fact names a declared slot, one of its fields and an attribute" do
       bad = [
-        {fact(:nope, :latency, :unit), {:undeclared, :source, :nope}},
-        {fact(:primary, :nope, :unit), {:undeclared_field, :primary, :nope}},
+        {fact(:nope, :latency, :unit), {:undeclared, :source, "nope"}},
+        {fact(:primary, :nope, :unit), {:undeclared_field, "primary", "nope"}},
         {fact(:primary, :latency, :color), {:enum, Schema.attributes()}}
       ]
 
       for {f, reason} <- bad do
         d = put_in(design(), [:frames, :main, :axes, Access.at(1), :unit], f)
-        assert {:error, [{[:frames, :main, :axes, 1, :unit], ^reason}]} = Chart.from_map(d)
+        assert {:error, [{[:frames, "main", :axes, 1, :unit], ^reason}]} = Chart.from_map(d)
       end
     end
 
@@ -382,7 +385,7 @@ defmodule Visualize.Chart.FactsTest do
   describe "the text hole" do
     test "parses and unparses" do
       assert Text.parse("u: \#{fact(:primary, :latency, :unit)}") ==
-               {:ok, ["u: ", %Fact{source: :primary, field: :latency, key: :unit}]}
+               {:ok, ["u: ", %Fact{source: "primary", field: "latency", key: :unit}]}
 
       assert Text.unparse(["u: ", fact(:primary, :latency, :unit)]) ==
                "u: \#{fact(:primary, :latency, :unit)}"
@@ -420,7 +423,7 @@ defmodule Visualize.Chart.FactsTest do
       v2 = schema(put_in(@latency, [:latency, :label], "Latency"))
       cache = Cache.new([{:primary, v1}, {:primary, v2}])
 
-      {:ok, %{main: compiled}} =
+      {:ok, %{"main" => compiled}} =
         Chart.compile(design(), sources: %{primary: delivery(v1)}, schemas: cache)
 
       %{v1: v1, v2: v2, cache: cache, compiled: compiled}
@@ -443,7 +446,7 @@ defmodule Visualize.Chart.FactsTest do
             fn -> Compiled.svg(compiled, sources) end
           ] do
         error = assert_raise ArgumentError, draw
-        assert error.message =~ ":primary"
+        assert error.message =~ ~s("primary")
         assert error.message =~ "recompile"
       end
     end
@@ -452,7 +455,7 @@ defmodule Visualize.Chart.FactsTest do
          %{v1: v1, v2: v2, cache: cache, compiled: compiled} do
       assert Compiled.static(compiled) =~ "Request time (s)"
 
-      {:ok, %{main: fresh}} =
+      {:ok, %{"main" => fresh}} =
         Chart.compile(design(), sources: %{primary: delivery(v2)}, schemas: cache)
 
       fresh = Compiled.carry(compiled, fresh)

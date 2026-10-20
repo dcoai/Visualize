@@ -21,16 +21,17 @@ defmodule Visualize.VirtualSource do
       ...>     elixir: "fn rows -> %{state: :ok} end"
       ...>   )
       iex> health.from
-      [{:hosts, %{last: 20}}]
+      [{"hosts", %{last: 20}}]
       iex> Visualize.VirtualSource.conform(health, [%{host: "a", state: :ok}])
       {:ok, [%{host: "a", state: :ok}]}
       iex> Visualize.VirtualSource.conform(health, [%{host: "a", state: :unknown}])
-      {:error, {0, :state, :not_in_values}}
+      {:error, {0, "state", :not_in_values}}
       iex> Visualize.VirtualSource.resolve([[:health], [:ops, :health]], [:ops], :health)
-      {:ok, [:ops, :health]}
+      {:ok, ["ops", "health"]}
 
   """
 
+  alias Visualize.Chart.{Names, Words}
   alias Visualize.Chart.Validator, as: ChartValidator
   alias Visualize.Data.{Schema, Table}
   alias Visualize.Feed.Window
@@ -78,7 +79,7 @@ defmodule Visualize.VirtualSource do
   end
 
   def new(source) when is_map(source) and not is_struct(source) do
-    source = Map.update(source, :from, nil, &read_from/1)
+    source = source |> Map.update(:from, nil, &read_from/1) |> named()
 
     errors =
       for(key <- Map.keys(source), key not in @keys, do: {[key], :unknown_key}) ++
@@ -121,6 +122,75 @@ defmodule Visualize.VirtualSource do
     end
   end
 
+  # A source's names are strings (spec/08 §10.5.10, D-195): its id, its inputs' names and
+  # paths, its identity input, its function and its output's fields, whichever spelling the
+  # host gave; a field's category values are read by the library's words, as JSON's are.
+  @doc false
+  # Also a board's step for the sources it holds as maps (`Visualize.Board.Names`).
+  @spec named(map()) :: map()
+  def named(source) when is_map(source) and not is_struct(source) do
+    Enum.reduce(
+      [
+        id: &Names.name/1,
+        from: &named_inputs/1,
+        per: &named_per/1,
+        function: &Names.name/1,
+        schema: &named_schema/1
+      ],
+      source,
+      fn {key, fun}, source ->
+        if Map.has_key?(source, key), do: Map.update!(source, key, fun), else: source
+      end
+    )
+  end
+
+  def named(other), do: other
+
+  defp named_inputs(inputs) when is_list(inputs) do
+    Enum.map(inputs, fn
+      {name, window} -> {input(name), named_window(window)}
+      other -> other
+    end)
+  end
+
+  defp named_inputs(other), do: other
+
+  # A window's ranges are keyed by its input's fields, their strings.
+  defp named_window(%{ranges: ranges} = window) when is_map(ranges) and not is_struct(ranges),
+    do: %{window | ranges: Names.keys(ranges)}
+
+  defp named_window(window), do: window
+
+  # A short id — a virtual source's id or a feed's name — is a name's string, whichever
+  # spelling gave it; a feed's own name, which no virtual source may shadow, is
+  # `{:feed, name}`; a full path is a list of names (spec/08 §10.5.6, D-195).
+  defp input(path) when is_list(path), do: Enum.map(path, &Names.name/1)
+  defp input({:feed, name}), do: {:feed, Names.name(name)}
+  defp input(name), do: Names.name(name)
+
+  defp named_per({:identity, name}), do: {:identity, input(name)}
+  defp named_per(other), do: other
+
+  defp named_schema(fields) when is_map(fields) and not is_struct(fields) do
+    Map.new(fields, fn
+      {name, description} when is_map(description) and not is_struct(description) ->
+        {Names.name(name), Map.new(description, &named_attribute/1)}
+
+      {name, description} ->
+        {Names.name(name), description}
+    end)
+  end
+
+  defp named_schema(other), do: other
+
+  defp named_attribute({key, values}) when key in [:values, :order],
+    do: {key, Words.term(values)}
+
+  defp named_attribute({:status, status}) when is_map(status) and not is_struct(status),
+    do: {:status, Map.new(status, fn {k, v} -> {Words.term(k), v} end)}
+
+  defp named_attribute(attribute), do: attribute
+
   # The proposal's `{:window, opts}` is the map `opts` makes; anything else as it is.
   defp read_from(inputs) when is_list(inputs) do
     Enum.map(inputs, fn
@@ -131,6 +201,7 @@ defmodule Visualize.VirtualSource do
 
   defp read_from(other), do: other
 
+  defp id(%{id: id}) when is_binary(id) and id != "", do: []
   defp id(%{id: id}) when is_atom(id) and id not in @not_names, do: []
   defp id(%{id: _id}), do: [{[:id], {:type, :name}}]
   defp id(_source), do: [{[:id], :required}]
@@ -153,9 +224,10 @@ defmodule Visualize.VirtualSource do
 
   defp input_name(name, _i) when is_atom(name) and name not in @not_names, do: []
   defp input_name(name, _i) when is_binary(name) and name != "", do: []
+  defp input_name({:feed, name}, _i) when is_binary(name) and name != "", do: []
 
   defp input_name([_ | _] = path, i) do
-    if Enum.all?(path, &(is_atom(&1) and &1 not in @not_names)),
+    if Enum.all?(path, &Names.name?/1),
       do: [],
       else: [{[:from, i], {:type, :input_name}}]
   end
@@ -214,6 +286,7 @@ defmodule Visualize.VirtualSource do
     case {Map.get(source, :elixir), Map.get(source, :function)} do
       {nil, nil} -> [{[:elixir], :required}]
       {elixir, nil} -> elixir(elixir, nil)
+      {nil, name} when is_binary(name) and name != "" -> []
       {nil, name} when is_atom(name) and name not in @not_names -> []
       {nil, _name} -> [{[:function], {:type, :name}}]
       {_elixir, _name} -> [{[:function], {:exclusive, :elixir}}]
@@ -271,9 +344,11 @@ defmodule Visualize.VirtualSource do
   defp fields_check(%{elixir: nil}, _inputs), do: []
 
   defp fields_check(source, inputs) do
-    if Enum.all?(source.from, fn {name, _window} -> Map.has_key?(inputs, name) end) do
+    if Enum.all?(source.from, fn {name, _window} -> fetch_input(inputs, name) != :error end) do
       fields =
-        Enum.flat_map(source.from, fn {name, _window} -> Map.keys(inputs[name].fields) end) ++
+        Enum.flat_map(source.from, fn {name, _window} ->
+          Map.keys(fetch_input!(inputs, name).fields)
+        end) ++
           Map.keys(source.schema.fields)
 
       elixir(source.elixir, fields)
@@ -282,11 +357,28 @@ defmodule Visualize.VirtualSource do
     end
   end
 
+  # An input's schema by its name's spelling: a host keys `inputs:` by atom or string, a
+  # source names an input by its string, its path or `{:feed, name}` (D-195).
+  defp fetch_input(inputs, name) do
+    spelled = name |> key() |> to_string()
+
+    case Enum.find(inputs, fn {k, _v} -> to_string(key(k) || k) == spelled end) do
+      nil -> :error
+      {_k, schema} -> {:ok, schema}
+    end
+  end
+
+  defp fetch_input!(inputs, name) do
+    {:ok, schema} = fetch_input(inputs, name)
+    schema
+  end
+
   defp functions_check(%{function: nil}, _functions), do: []
   defp functions_check(_source, nil), do: []
 
   defp functions_check(%{function: name}, functions) do
-    if Map.has_key?(functions, name),
+    # A host function is found by its name's spelling (D-195).
+    if Visualize.Chart.Names.key(functions, name) != :error,
       do: [],
       else: [{[:function], {:undeclared, :function, name}}]
   end
@@ -296,7 +388,7 @@ defmodule Visualize.VirtualSource do
     |> Enum.with_index()
     |> Enum.flat_map(fn
       {{name, %{} = window}, i} when not is_map_key(window, :last) ->
-        case Map.fetch(inputs, name) do
+        case fetch_input(inputs, name) do
           {:ok, schema} -> box(window, schema, [:from, i, :window])
           :error -> []
         end
@@ -317,7 +409,7 @@ defmodule Visualize.VirtualSource do
   defp identity_check(%{per: nil}, _inputs), do: []
 
   defp identity_check(source, inputs) do
-    case Map.fetch(inputs, identity_input(source)) do
+    case fetch_input(inputs, identity_input(source)) do
       {:ok, input} -> same_identity(input, source.schema)
       :error -> []
     end
@@ -356,6 +448,7 @@ defmodule Visualize.VirtualSource do
   """
   @spec key(name()) :: atom() | String.t() | nil
   def key([_ | _] = path), do: List.last(path)
+  def key({:feed, name}), do: name
   def key(name) when is_atom(name) or is_binary(name), do: name
   def key(_other), do: nil
 
@@ -402,7 +495,7 @@ defmodule Visualize.VirtualSource do
     Enum.find_value(Map.keys(row), fn key ->
       if (is_atom(key) or is_binary(key)) and Schema.fetch(schema, key) != :error,
         do: nil,
-        else: {key, :undescribed}
+        else: {Names.name(key), :undescribed}
     end)
   end
 
@@ -438,7 +531,8 @@ defmodule Visualize.VirtualSource do
   defp typed?(:category, value),
     do: is_binary(value) or is_number(value) or (is_atom(value) and not is_boolean(value))
 
-  defp member?(%{values: values}, value), do: value in values
+  # A category value is one whichever spelling the function or the schema gives it (D-195).
+  defp member?(%{values: values}, value), do: Enum.any?(values, &Names.same?(&1, value))
   defp member?(_description, _value), do: true
 
   # -- paths (spec/08 §10.5.9) -------------------------------------------------------------
@@ -450,7 +544,7 @@ defmodule Visualize.VirtualSource do
       "ops.health"
   """
   @spec dotted([atom()]) :: String.t()
-  def dotted(path) when is_list(path), do: Enum.map_join(path, ".", &Atom.to_string/1)
+  def dotted(path) when is_list(path), do: Enum.map_join(path, ".", &to_string/1)
 
   @doc """
   What a reference names (spec/08 §10.5.9), given every definition's path (a list, or a
@@ -460,19 +554,23 @@ defmodule Visualize.VirtualSource do
 
       iex> paths = [[:health], [:ops, :health], [:ops, :box, :load]]
       iex> Visualize.VirtualSource.resolve(paths, [:ops, :box], :health)
-      {:ok, [:ops, :health]}
+      {:ok, ["ops", "health"]}
       iex> Visualize.VirtualSource.resolve(paths, [:other], :health)
-      {:ok, [:health]}
+      {:ok, ["health"]}
       iex> Visualize.VirtualSource.resolve(paths, [], [:ops, :box, :load])
-      {:ok, [:ops, :box, :load]}
-      iex> Visualize.VirtualSource.resolve(paths, [:ops], "health")
+      {:ok, ["ops", "box", "load"]}
+      iex> Visualize.VirtualSource.resolve(paths, [:ops], {:feed, "health"})
       :error
   """
   @spec resolve([[atom()]] | map(), [atom()], name()) :: {:ok, [atom()]} | :error
   def resolve(paths, scope, ref) when is_map(paths), do: resolve(Map.keys(paths), scope, ref)
 
-  def resolve(paths, scope, ref) when is_list(paths) and is_list(scope) and is_atom(ref) do
-    known = MapSet.new(paths)
+  def resolve(paths, scope, ref)
+      when is_list(paths) and is_list(scope) and (is_binary(ref) or (is_atom(ref) and ref != nil)) do
+    # Every name by its string (D-195): a host may give paths and a scope of atoms.
+    ref = Names.name(ref)
+    scope = Enum.map(scope, &Names.name/1)
+    known = MapSet.new(paths, &spelled_path/1)
 
     Enum.find_value(length(scope)..0//-1, :error, fn n ->
       path = Enum.take(scope, n) ++ [ref]
@@ -481,10 +579,14 @@ defmodule Visualize.VirtualSource do
   end
 
   def resolve(paths, _scope, [_ | _] = ref) when is_list(paths) do
-    if ref in paths, do: {:ok, ref}, else: :error
+    ref = spelled_path(ref)
+    if ref in Enum.map(paths, &spelled_path/1), do: {:ok, ref}, else: :error
   end
 
   def resolve(_paths, _scope, _ref), do: :error
+
+  defp spelled_path(path) when is_list(path), do: Enum.map(path, &Names.name/1)
+  defp spelled_path(other), do: other
 
   # -- forms (spec/08 §10.5.10) ------------------------------------------------------------
 

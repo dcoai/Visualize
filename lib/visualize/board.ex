@@ -28,11 +28,11 @@ defmodule Visualize.Board do
       ...>     vars: %{service: "api"}
       ...>   })
       iex> Visualize.Board.vars(board, :errors)
-      %{service: "api", unit: "%"}
+      %{"service" => "api", "unit" => "%"}
       iex> Visualize.Board.arrange(board, 400)
-      [latency: %{x: 0, y: 0, w: 12, h: 4}, errors: %{x: 0, y: 4, w: 12, h: 4}]
+      [{"latency", %{x: 0, y: 0, w: 12, h: 4}}, {"errors", %{x: 0, y: 4, w: 12, h: 4}}]
       iex> Visualize.Board.from_map(%{cells: %{a: %{x: 6, y: 0, w: 8, h: 2, ref: {:style, 3}}}})
-      {:error, [{[:cells, :a], {:off_grid, 12}}, {[:cells, :a, :ref], {:ref_kind, :composite, :style}}]}
+      {:error, [{[:cells, "a"], {:off_grid, 12}}, {[:cells, "a", :ref], {:ref_kind, :composite, :style}}]}
 
   """
 
@@ -43,7 +43,7 @@ defmodule Visualize.Board do
   alias Visualize.Board.{Codec, Validator}
   alias Visualize.Chart
   alias Visualize.Chart.Codec.Tags
-  alias Visualize.Chart.{Limits, Migration, Types}
+  alias Visualize.Chart.{Limits, Migration, Names, Types}
   alias Visualize.Chart.Validator, as: ChartValidator
   alias Visualize.Chart.Validator.Words
   alias Visualize.Data.Schema.Cache
@@ -71,10 +71,10 @@ defmodule Visualize.Board do
           required(:h) => pos_integer(),
           required(:ref) => {:composite, pos_integer()},
           optional(:title) => String.t() | nil,
-          optional(:vars) => %{atom() => term()},
+          optional(:vars) => %{String.t() => term()},
           optional(:sync) => boolean(),
           optional(:drill) => drill() | nil,
-          optional(:virtual_sources) => %{atom() => map()}
+          optional(:virtual_sources) => %{String.t() => map()}
         }
 
   @typedoc """
@@ -83,7 +83,7 @@ defmodule Visualize.Board do
   """
   @type drill :: %{
           required(:board) => atom() | String.t() | pos_integer(),
-          optional(:vars) => %{atom() => {:datum, atom()} | term()}
+          optional(:vars) => %{String.t() => {:datum, String.t()} | term()}
         }
 
   @typedoc "The time window (spec/15 §1.5)."
@@ -92,15 +92,15 @@ defmodule Visualize.Board do
   @type t :: %__MODULE__{
           version: pos_integer(),
           meta: map(),
-          cells: %{atom() => cell()},
+          cells: %{String.t() => cell()},
           window: window(),
           zone: String.t(),
-          vars: %{atom() => term()},
+          vars: %{String.t() => term()},
           sync: String.t() | nil,
           layout: map(),
           stale_after: number() | nil,
-          links: %{atom() => atom()},
-          virtual_sources: %{atom() => map()}
+          links: %{String.t() => String.t()},
+          virtual_sources: %{String.t() => map()}
         }
 
   @typedoc "A placement on the grid."
@@ -153,8 +153,9 @@ defmodule Visualize.Board do
 
   defp readable(_map), do: :ok
 
+  # A board's names are strings (spec/15 §2.2, D-195), whichever spelling it was written in.
   defp read(map) when is_map(map) and not is_struct(map) do
-    map = Map.put_new(map, :version, Migration.current())
+    map = map |> Map.put_new(:version, Migration.current()) |> Visualize.Board.Names.named()
 
     with :ok <- Validator.validate(map) do
       {:ok, struct(__MODULE__, map |> Map.take(Validator.board_keys()) |> canonical())}
@@ -196,7 +197,7 @@ defmodule Visualize.Board do
   §10.5.9): `[id]` for the board's own, `[cell, id]` for a cell's, each a
   `%Visualize.VirtualSource{}`.
   """
-  @spec virtual_sources(t()) :: %{[atom()] => VirtualSource.t()}
+  @spec virtual_sources(t()) :: %{[String.t()] => VirtualSource.t()}
   def virtual_sources(%__MODULE__{} = board) do
     own =
       for {id, source} <- board.virtual_sources, into: %{}, do: {[id], read_source(id, source)}
@@ -211,6 +212,13 @@ defmodule Visualize.Board do
   end
 
   defp read_source(id, source), do: source |> Map.put(:id, id) |> VirtualSource.new!()
+
+  @doc false
+  # A board with its names as strings (spec/15 §2.2, D-195): what `from_map/2` reads, for a
+  # struct a host built by hand.
+  @spec named(t()) :: t()
+  def named(%__MODULE__{} = board),
+    do: struct(__MODULE__, board |> Map.from_struct() |> Visualize.Board.Names.named())
 
   @doc "As `from_map/2`, raising `ArgumentError` with every fault formatted."
   @spec from_map!(term(), keyword()) :: t()
@@ -301,11 +309,11 @@ defmodule Visualize.Board do
       ...>   a: %{x: 0, y: 0, w: 6, h: 2, ref: {:composite, 1}},
       ...>   b: %{x: 4, y: 1, w: 6, h: 2, ref: {:composite, 2}}
       ...> }})
-      {:error, [{[:cells, :b], {:overlap, :a}}]}
+      {:error, [{[:cells, "b"], {:overlap, "a"}}]}
   """
   @spec validate(t() | map()) :: :ok | {:error, [error(), ...]}
   def validate(%__MODULE__{} = board), do: board |> to_map() |> Validator.validate()
-  def validate(map), do: Validator.validate(map)
+  def validate(map), do: map |> Visualize.Board.Names.named() |> Validator.validate()
 
   @doc "As `validate/3` with `[]` options."
   @spec validate(t() | map(), store()) :: :ok | {:error, [error(), ...]}
@@ -332,6 +340,7 @@ defmodule Visualize.Board do
   def validate(board, store, opts) do
     with :ok <- validate(board) do
       map = if is_struct(board, __MODULE__), do: to_map(board), else: board
+      map = Visualize.Board.Names.named(map)
       {_charts, errors} = resolved(map, store, opts)
       Validator.done(errors)
     end
@@ -381,7 +390,7 @@ defmodule Visualize.Board do
   narrower, the cells stack in that order, each across all 12 columns and keeping its
   height.
   """
-  @spec arrange(t(), number()) :: [{atom(), rect()}]
+  @spec arrange(t(), number()) :: [{String.t(), rect()}]
   def arrange(%__MODULE__{cells: cells} = board, width) when is_number(width) do
     ordered =
       cells
@@ -408,9 +417,9 @@ defmodule Visualize.Board do
 
       iex> board = Visualize.Board.from_map!(%{cells: %{a: %{x: 6, y: 1, w: 6, h: 2, ref: {:composite, 1}}}})
       iex> Visualize.Board.boxes(board, 1288)
-      %{a: {648.0, 88, 640.0, 168}}
+      %{"a" => {648.0, 88, 640.0, 168}}
   """
-  @spec boxes(t(), number()) :: %{atom() => {number(), number(), number(), number()}}
+  @spec boxes(t(), number()) :: %{String.t() => {number(), number(), number(), number()}}
   def boxes(%__MODULE__{} = board, width) when is_number(width) do
     %{row_height: row, gap: gap} = layout(board)
     column = (width - (columns() - 1) * gap) / columns()
@@ -474,9 +483,9 @@ defmodule Visualize.Board do
   board's, with the cell's over them. A component's declared default is the third layer,
   applied by `Visualize.Chart.apply/2`.
   """
-  @spec vars(t(), atom()) :: %{atom() => term()}
+  @spec vars(t(), atom() | String.t()) :: %{String.t() => term()}
   def vars(%__MODULE__{vars: vars, cells: cells}, cell) do
-    Map.merge(vars, cells |> Map.fetch!(cell) |> Map.get(:vars, %{}))
+    Map.merge(vars, cells |> Map.fetch!(Names.name(cell)) |> Map.get(:vars, %{}))
   end
 
   # -- interaction (spec/15 §13) ------------------------------------------------------------
@@ -487,10 +496,14 @@ defmodule Visualize.Board do
 
       iex> board = Visualize.Board.from_map!(%{links: %{name: :service}})
       iex> {Visualize.Board.link(board, :name), Visualize.Board.link(board, :host)}
-      {:service, :host}
+      {"service", "host"}
   """
-  @spec link(t(), atom()) :: atom()
-  def link(%__MODULE__{links: links}, field), do: Map.get(links, field, field)
+  @spec link(t(), atom() | String.t()) :: String.t()
+  def link(%__MODULE__{links: links}, field) do
+    # A field is named by its string (D-195), whichever spelling the caller gives.
+    field = Names.name(field)
+    Map.get(links, field, field)
+  end
 
   @doc """
   Every field that links to the same name as `field`, itself and that name included, in
@@ -498,10 +511,11 @@ defmodule Visualize.Board do
 
       iex> board = Visualize.Board.from_map!(%{links: %{name: :service, svc: :service}})
       iex> Visualize.Board.linked(board, :name)
-      [:name, :service, :svc]
+      ["name", "service", "svc"]
   """
-  @spec linked(t(), atom()) :: [atom()]
+  @spec linked(t(), atom() | String.t()) :: [String.t()]
   def linked(%__MODULE__{links: links} = board, field) do
+    field = Names.name(field)
     to = link(board, field)
 
     links
@@ -519,13 +533,15 @@ defmodule Visualize.Board do
       iex> board = Visualize.Board.from_map!(%{vars: %{service: "api"}, cells: %{a: %{x: 0, y: 0,
       ...>   w: 4, h: 2, ref: {:composite, 1}, drill: %{board: :self, vars: %{service: {:datum, :name}}}}}})
       iex> Visualize.Board.drill(board, :a, %{name: "db", v: 3})
-      {:ok, %{board: :self, vars: %{service: "db"}}}
+      {:ok, %{board: :self, vars: %{"service" => "db"}}}
       iex> Visualize.Board.drill(board, :a, %{v: 3})
-      {:error, [{[:cells, :a, :drill, :vars, :service], {:missing, :datum, :name}}]}
+      {:error, [{[:cells, "a", :drill, :vars, "service"], {:missing, :datum, "name"}}]}
   """
-  @spec drill(t(), atom(), map()) ::
+  @spec drill(t(), atom() | String.t(), map()) ::
           {:ok, %{board: term(), vars: map()}} | :none | {:error, [error(), ...]}
   def drill(%__MODULE__{cells: cells}, cell, row) when is_map(row) do
+    cell = Names.name(cell)
+
     case cells |> Map.fetch!(cell) |> Map.get(:drill) do
       nil -> :none
       %{board: ref} = drill -> drilled(cell, ref, Map.get(drill, :vars, %{}), row)
@@ -560,7 +576,8 @@ defmodule Visualize.Board do
 
   @doc "As `required_sources/3` with `[]` options."
   @spec required_sources(t(), store()) ::
-          {:ok, %{{atom(), atom()} => Visualize.Board.Binding.need()}} | {:error, [error(), ...]}
+          {:ok, %{{String.t(), String.t()} => Visualize.Board.Binding.need()}}
+          | {:error, [error(), ...]}
   def required_sources(board, store), do: required_sources(board, store, [])
 
   @doc """
@@ -574,7 +591,8 @@ defmodule Visualize.Board do
   `limits:` and `generators:`; the faults that keep one from being read are `{:error, errors}`.
   """
   @spec required_sources(t(), store(), keyword()) ::
-          {:ok, %{{atom(), atom()} => Visualize.Board.Binding.need()}} | {:error, [error(), ...]}
+          {:ok, %{{String.t(), String.t()} => Visualize.Board.Binding.need()}}
+          | {:error, [error(), ...]}
   def required_sources(%__MODULE__{cells: cells}, store, opts) do
     case Validator.components(cells, Validator.fetch(store), read_opts(opts)) do
       {charts, []} -> {:ok, Enum.reduce(charts, %{}, &slots/2)}
@@ -606,8 +624,8 @@ defmodule Visualize.Board do
   # -- realizing (spec/15 §6) --------------------------------------------------------------
 
   @doc "As `realize/4` with `[]` options."
-  @spec realize(t(), store(), %{atom() => map()}) ::
-          {:ok, %{atom() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
+  @spec realize(t(), store(), %{(atom() | String.t()) => map()}) ::
+          {:ok, %{String.t() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
   def realize(board, store, pools), do: realize(board, store, pools, [])
 
   @doc """
@@ -636,11 +654,12 @@ defmodule Visualize.Board do
       maps the cell's slot to its feed through its binding
     * `:limits` - the limits each component's design is read under
   """
-  @spec realize(t(), store(), %{atom() => map()}, keyword()) ::
-          {:ok, %{atom() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
+  @spec realize(t(), store(), %{(atom() | String.t()) => map()}, keyword()) ::
+          {:ok, %{String.t() => Chart.Applied.t()}, Cache.t()} | {:error, [error(), ...]}
   def realize(%__MODULE__{} = board, store, pools, opts) when is_map(pools) do
     with {:ok, components} <- components(board, store, opts) do
-      apply_cells(board, components, pools, opts)
+      # A host keys a cell's pool by the cell's name, an atom or a string (D-195).
+      apply_cells(board, components, Names.keys(pools), opts)
     end
   end
 
@@ -683,7 +702,7 @@ defmodule Visualize.Board do
 
   @doc "As `components/3` with `[]` options."
   @spec components(t(), store()) ::
-          {:ok, %{atom() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
+          {:ok, %{String.t() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
   def components(board, store), do: components(board, store, [])
 
   @doc """
@@ -698,7 +717,7 @@ defmodule Visualize.Board do
   its cell's process (spec/15 §8).
   """
   @spec components(t(), store(), keyword()) ::
-          {:ok, %{atom() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
+          {:ok, %{String.t() => %{chart: Chart.t(), vars: map()}}} | {:error, [error(), ...]}
   def components(%__MODULE__{} = board, store, opts) do
     with :ok <- validate(board),
          {charts, []} <- resolved(to_map(board), store, opts) do

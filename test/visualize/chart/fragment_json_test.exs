@@ -9,7 +9,7 @@ defmodule Visualize.Chart.FragmentJsonTest do
 
   import Visualize.Chart, only: [var: 1]
 
-  alias Visualize.Chart.{Composite, Fragment, Use}
+  alias Visualize.Chart.{Composite, Fragment, Migration, Use}
 
   defp round_trip(fragment) do
     assert {:ok, json} = Fragment.to_json(fragment)
@@ -28,7 +28,7 @@ defmodule Visualize.Chart.FragmentJsonTest do
           %{sources: %{series: %{fields: [:t, :v]}}},
           %{vars: %{color: %{default: :series_1}}}
         ] do
-      assert round_trip(fragment) == fragment, inspect(fragment)
+      assert round_trip(fragment) == Migration.names(fragment), inspect(fragment)
       assert Fragment.kind(round_trip(fragment)) == Fragment.kind(fragment)
     end
   end
@@ -53,7 +53,7 @@ defmodule Visualize.Chart.FragmentJsonTest do
       }
     }
 
-    assert round_trip(composite) == composite
+    assert round_trip(composite) == Migration.names(composite)
     assert Composite.composite?(round_trip(composite))
   end
 
@@ -77,12 +77,12 @@ defmodule Visualize.Chart.FragmentJsonTest do
     composite = %{composite: %{uses: uses, vars: %{}}}
 
     back = round_trip(composite)
-    assert back == composite
+    assert back == Migration.names(composite)
 
     assert {:ok, flat, %{missing: [], keyless: []}} =
              Composite.flatten(back, fn _id -> :error end)
 
-    assert Map.drop(flat, [:version]) == Map.drop(document, [:version])
+    assert Map.drop(flat, [:version]) == Map.drop(Migration.names(document), [:version])
   end
 
   test "an id whose kind no fragment has is left as it was read — no atom from a document" do
@@ -119,13 +119,13 @@ defmodule Visualize.Chart.FragmentJsonTest do
       assert json =~ ~s("$keys":["b","a"])
       assert {:ok, back} = Visualize.Chart.from_json(json)
       assert back == chart
-      assert hd(hd(back.marks).data.transforms).order == {:keys, [:b, :a]}
+      assert hd(hd(back.marks).data.transforms).order == {:keys, ["b", "a"]}
     end
 
     test "a named order still reads back as its atom" do
       fragment = %{marks: [%{data: %{transforms: [%{op: :stack, order: :inside_out}]}}]}
       assert {:ok, json} = Fragment.to_json(fragment)
-      assert Fragment.from_json(json) == {:ok, fragment}
+      assert Fragment.from_json(json) == {:ok, Migration.names(fragment)}
     end
   end
 
@@ -152,17 +152,17 @@ defmodule Visualize.Chart.FragmentJsonTest do
       assert {:ok, json} = Visualize.Chart.to_json(chart)
       assert json =~ ~s("$adopted":["main","x"])
       assert {:ok, back} = Visualize.Chart.from_json(json)
-      assert back.frames.right.scales.x == {:frame, :main, :x}
+      assert back.frames["right"].scales["x"] == {:frame, "main", "x"}
 
       sources = %{a: [%{t: 1, v: 1}, %{t: 2, v: 2}], b: [%{t: 5, v: 9}]}
       {:ok, applied} = Visualize.Chart.apply(back, sources: sources)
-      assert Visualize.Chart.Frame.scale(applied.frames.right, :x).domain == [1, 5]
+      assert Visualize.Chart.Frame.scale(applied.frames["right"], :x).domain == [1, 5]
     end
 
     test "a fragment carrying an adoption round-trips too" do
       fragment = %{frames: %{right: %{scales: %{x: {:frame, :main, :x}}}}}
       assert {:ok, json} = Fragment.to_json(fragment)
-      assert Fragment.from_json(json) == {:ok, fragment}
+      assert Fragment.from_json(json) == {:ok, Migration.names(fragment)}
     end
   end
 end

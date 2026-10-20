@@ -137,10 +137,10 @@ defmodule Visualize.Chart.ColorDomainTest do
           ]
         })
 
-      assert {:error, [{[:marks, 0, :channels, :value], {:outside_domain, :color, 7}} = e]} =
+      assert {:error, [{[:marks, 0, :channels, :value], {:outside_domain, "color", 7}} = e]} =
                Validator.validate(design)
 
-      assert Validator.format(e) =~ "7 is not in scale :color's declared domain"
+      assert Validator.format(e) =~ "7 is not in scale \"color\"'s declared domain"
 
       in_domain = put_in(design, [:frames, :main, :scales, :color, :domain], [7, 8])
       assert Validator.validate(in_domain) == :ok
@@ -150,10 +150,10 @@ defmodule Visualize.Chart.ColorDomainTest do
       design = put_in(design(), [:sources, :cells, :types], %{k: :number})
 
       assert {:error,
-              [{[:marks, 0, :style], {:outside_domain, :color, {:column, :k, :number}}} = e]} =
+              [{[:marks, 0, :style], {:outside_domain, "color", {:column, "k", :number}}} = e]} =
                Validator.validate(design)
 
-      assert Validator.format(e) =~ "field :k is a :number column"
+      assert Validator.format(e) =~ "field \"k\" is a :number column"
     end
 
     test "a typed column through a series channel, renamed by the mark's scales" do
@@ -172,7 +172,10 @@ defmodule Visualize.Chart.ColorDomainTest do
         |> put_in([:frames, :main, :scales, :shade], %{kind: :ordinal, domain: [1, 2]})
 
       assert {:error,
-              [{[:marks, 0, :channels, :series], {:outside_domain, :shade, {:column, :k, :text}}}]} =
+              [
+                {[:marks, 0, :channels, :series],
+                 {:outside_domain, "shade", {:column, "k", :text}}}
+              ]} =
                Validator.validate(design)
     end
 
@@ -205,14 +208,14 @@ defmodule Visualize.Chart.ColorDomainTest do
       assert :ok == Validator.validate(transformed)
     end
 
-    test "a time column holds strings and numbers, so only atoms are out" do
+    test "a time column holds strings and numbers, so no category domain is out" do
       typed = put_in(design(), [:sources, :cells, :types], %{k: :time})
       assert :ok == Validator.validate(typed)
 
-      atoms = put_in(typed, [:frames, :main, :scales, :color, :domain], [:a, :b])
-
-      assert {:error, [{_path, {:outside_domain, :color, {:column, :k, :time}}}]} =
-               Validator.validate(atoms)
+      # A category is a string (D-195), which a time column may hold: Elixir's `:a` is the
+      # document's "a", and an atom no longer stands outside the column.
+      categories = put_in(typed, [:frames, :main, :scales, :color, :domain], [:a, :b])
+      assert :ok == Validator.validate(categories)
     end
   end
 end

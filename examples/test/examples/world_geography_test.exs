@@ -180,7 +180,7 @@ defmodule Examples.WorldGeographyTest do
 
     scales =
       for tick <- [0, 40, 80] do
-        Design.applied(Globe, animation_tick: tick).frame.scales.color
+        Design.applied(Globe, animation_tick: tick).frame.scales["color"]
       end
 
     for scale <- scales, do: assert(scale.domain == names)

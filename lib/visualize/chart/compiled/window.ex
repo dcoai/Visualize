@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Compiled.Window do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The streaming window of a compiled chart (spec/14 §12.5): the viewport scale
   # windowed to `[hi − span, hi]`, the rows a mark draws restricted to it, and the
   # incremental canvas state carried between ticks.
@@ -81,7 +83,7 @@ defmodule Visualize.Chart.Compiled.Window do
   def sources(_window, _frame, _mark, sources, nil), do: sources
 
   def sources(%{scale: scale, span: span}, frame, %{data: name} = mark, sources, hi)
-      when is_atom(name) do
+      when is_name(name) do
     case {fields(frame.kind, mark, scale), Map.fetch(sources, name)} do
       {[field | _], {:ok, source}} ->
         lo = units(subtract(hi, span))
@@ -123,7 +125,7 @@ defmodule Visualize.Chart.Compiled.Window do
         hi,
         {rx, _ry, rw, _rh}
       )
-      when is_atom(name) do
+      when is_name(name) do
     case {fields(frame.kind, mark, scale), Map.fetch(sources, name)} do
       {[field | _], {:ok, source}} ->
         lo = units(subtract(hi, span))
@@ -321,7 +323,7 @@ defmodule Visualize.Chart.Compiled.Window do
   end
 
   defp field({:field, field}), do: field
-  defp field(field) when is_atom(field), do: field
+  defp field(field) when is_name(field), do: field
   defp field(_number), do: nil
 
   # A value in the window's units: a number as it is, a temporal value in seconds.

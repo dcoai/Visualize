@@ -60,11 +60,15 @@ defmodule Visualize.Chart.StyleMotionTest do
         })
 
       assert {:error, errors} = Validator.validate(bad)
-      assert {[:styles, :error, :transition, :x], :unknown_key} in errors
-      assert {[:styles, :error, :transition, :duration], :negative} in errors
-      assert {[:styles, :error, :transition, :stroke, :duration], :negative} in errors
+      assert {[:styles, "error", :transition, :x], :unknown_key} in errors
+      assert {[:styles, "error", :transition, :duration], :negative} in errors
+      assert {[:styles, "error", :transition, :stroke, :duration], :negative} in errors
 
-      assert Enum.any?(errors, &match?({[:styles, :error, :transition, :easing], {:enum, _}}, &1))
+      assert Enum.any?(
+               errors,
+               &match?({[:styles, "error", :transition, :easing], {:enum, _}}, &1)
+             )
+
       assert Validator.format({[:x], :negative}) =~ "must not be negative"
     end
 
@@ -246,7 +250,7 @@ defmodule Visualize.Chart.StyleMotionTest do
                  pulsing(%{name: "x;}</style>", delay: -1, iterations: -2, duration: -5})
                )
 
-      at = [:styles, :error, :animation]
+      at = [:styles, "error", :animation]
       assert {at ++ [:name], {:unsafe, :animation}} in errors
       assert {at ++ [:delay], :negative} in errors
       assert {at ++ [:iterations], :negative} in errors
@@ -358,9 +362,9 @@ defmodule Visualize.Chart.StyleMotionTest do
                  })
                )
 
-      assert Enum.any?(errors, &match?({[:styles, :error, :enter, :name], _}, &1))
-      assert {[:styles, :error, :exit, :name], {:unsafe, :animation}} in errors
-      assert {[:styles, :error, :exit, :duration], :negative} in errors
+      assert Enum.any?(errors, &match?({[:styles, "error", :enter, :name], _}, &1))
+      assert {[:styles, "error", :exit, :name], {:unsafe, :animation}} in errors
+      assert {[:styles, "error", :exit, :duration], :negative} in errors
     end
 
     test "resolve with their defaults; without a name, no key" do

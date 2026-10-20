@@ -150,8 +150,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A design's theme as a name: a variable read through the cell's cascade, then the
     # design's default for it.
+    # A variable is named by its string and a host's map read by spelling (D-195).
     defp named(%Var{name: var}, design, vars) do
-      case Map.fetch(vars, var) do
+      case Visualize.Chart.Names.fetch(vars, var) do
         {:ok, value} -> value
         :error -> design |> Map.get(:vars, %{}) |> Map.get(var, %{}) |> default()
       end

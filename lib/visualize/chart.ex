@@ -25,7 +25,7 @@ defmodule Visualize.Chart do
       ...>     marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...>   })
       iex> chart.marks
-      [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      [%{type: :line, data: "primary", channels: %{x: "t", y: "v"}}]
       iex> Visualize.Chart.from_map(%{version: 2, frames: %{main: %{kind: :cartesian}}, marks: [%{}]})
       {:error, [{[:marks, 0, :data], :required}, {[:marks, 0, :type], :required}]}
 
@@ -51,6 +51,7 @@ defmodule Visualize.Chart do
     Frame,
     Limits,
     Migration,
+    Names,
     Schema,
     Stack,
     Summary,
@@ -106,7 +107,7 @@ defmodule Visualize.Chart do
           vars: %{atom() => map()},
           theme: atom() | map(),
           styles: %{atom() => map()},
-          defs: %{atom() => map()},
+          defs: %{String.t() => map()},
           defaults: map() | nil,
           layout: map(),
           interaction: map(),
@@ -280,9 +281,18 @@ defmodule Visualize.Chart do
     end
   end
 
-  @doc "A variable term for the name (spec/14 §7.1)."
-  @spec var(atom()) :: Var.t()
-  def var(name) when is_atom(name), do: %Var{name: name}
+  @doc """
+  A variable term for the name (spec/14 §7.1): an atom or a string, held as the string
+  (§1.4, D-195).
+
+      iex> Visualize.Chart.var(:unit)
+      %Visualize.Chart.Var{name: "unit"}
+  """
+  @spec var(atom() | String.t()) :: Var.t()
+  def var(name) when is_binary(name), do: %Var{name: name}
+
+  def var(name) when is_atom(name) and name not in [nil, true, false],
+    do: %Var{name: Atom.to_string(name)}
 
   @doc """
   A fact of the feed's schema bound to slot `source`: the attribute `key` of `field`
@@ -290,9 +300,11 @@ defmodule Visualize.Chart do
   `\#{fact(:source, :field, :key)}`; `apply/2` replaces it by the attribute, and a
   schema that does not give it fails application.
   """
-  @spec fact(atom(), atom(), atom()) :: Fact.t()
-  def fact(source, field, key) when is_atom(source) and is_atom(field) and is_atom(key),
-    do: %Fact{source: source, field: field, key: key}
+  @spec fact(atom() | String.t(), atom() | String.t(), atom()) :: Fact.t()
+  def fact(source, field, key)
+      when (is_atom(source) or is_binary(source)) and (is_atom(field) or is_binary(field)) and
+             is_atom(key),
+      do: %Fact{source: Names.name(source), field: Names.name(field), key: key}
 
   @doc """
   Each slot's requirements of its feed's schema (spec/14 §7.4): its `requires` with every
@@ -305,11 +317,11 @@ defmodule Visualize.Chart do
       ...>   labels: [%{anchor: :title, text: [Visualize.Chart.fact(:s, :v, :unit)]}]
       ...> }
       iex> Visualize.Chart.contract(design)
-      %{s: %{v: [:unit, :label]}}
+      %{"s" => %{"v" => [:unit, :label]}}
   """
   @spec contract(t() | map()) :: %{atom() => %{atom() => [atom()]}}
   def contract(%__MODULE__{} = chart), do: chart |> to_map() |> Facts.contract()
-  def contract(design) when is_map(design), do: Facts.contract(design)
+  def contract(design) when is_map(design), do: design |> Migration.names() |> Facts.contract()
 
   @doc """
   `:ok`, or every field a mark reads through a scale whose known type the scale's kind
@@ -334,11 +346,11 @@ defmodule Visualize.Chart do
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
       iex> Visualize.Chart.check_types(design, %{primary: %{t: :time, v: :number}})
-      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :time}}]}
+      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, "primary", "t", :number, :time}}]}
       iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :category}})
       iex> Visualize.Chart.check_types(design, %{primary: schema})
-      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :time}},
-                {[:marks, 0, :channels, :y], {:type_mismatch, :primary, :v, :number, :category}}]}
+      {:error, [{[:marks, 0, :channels, :x], {:type_mismatch, "primary", "t", :number, :time}},
+                {[:marks, 0, :channels, :y], {:type_mismatch, "primary", "v", :number, :category}}]}
       iex> Visualize.Chart.check_types(design, %{primary: %{t: :number, v: :number}})
       :ok
   """
@@ -347,7 +359,11 @@ defmodule Visualize.Chart do
   def check_types(%__MODULE__{} = chart, types), do: chart |> to_map() |> check_types(types)
 
   def check_types(design, types) when is_map(design) and is_map(types) do
-    case design |> Types.reads() |> Types.faults(types) |> Enum.sort_by(&elem(&1, 0)) do
+    case design
+         |> Migration.names()
+         |> Types.reads()
+         |> Types.faults(types)
+         |> Enum.sort_by(&elem(&1, 0)) do
       [] -> :ok
       errors -> {:error, errors}
     end
@@ -370,7 +386,9 @@ defmodule Visualize.Chart do
     do: column_type(%{sources: sources}, source, field)
 
   def column_type(design, source, field) when is_map(design) do
-    case design do
+    {source, field} = {Names.name(source), Names.name(field)}
+
+    case Migration.names(design) do
       %{sources: %{^source => %{types: %{^field => type}}}} when is_atom(type) -> type
       _other -> nil
     end
@@ -459,19 +477,21 @@ defmodule Visualize.Chart do
       ...> }
       iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{uptime: %{t: [1, 2], v: [3, 9]}})
       iex> applied.chart.labels
-      [%{anchor: {:axis, :y}, text: "unit: %"}]
+      [%{anchor: {:axis, "y"}, text: "unit: %"}]
       iex> Visualize.Chart.Frame.scale(applied.frame, :y).domain
       [3, 9]
       iex> Visualize.Chart.apply(design, sources: %{primary: %{t: [1, 2]}}, vars: %{unit: "kg"})
-      {:error, [{[:sources, :primary], {:missing_field, :v}}]}
+      {:error, [{[:sources, "primary"], {:missing_field, "v"}}]}
 
   """
   @spec apply(t() | map(), keyword()) :: {:ok, Applied.t()} | {:error, [Validator.error(), ...]}
   def apply(design, opts \\ [])
 
   def apply(%__MODULE__{} = chart, opts) do
+    # A host names its variables by atom or string, the design by string (D-195); its
+    # sources keep the host's keys, each the feed a slot is bound to, found by spelling.
     pool = opts |> Keyword.get(:sources, %{}) |> Map.new()
-    vars = opts |> Keyword.get(:vars, %{}) |> Map.new()
+    vars = opts |> Keyword.get(:vars, %{}) |> Map.new() |> Names.keys()
 
     cache = Keyword.get_lazy(opts, :schemas, &Cache.new/0)
 
@@ -599,11 +619,11 @@ defmodule Visualize.Chart do
       iex> Enum.map(design.labels, & &1.anchor)
       [:caption, :title]
       iex> Visualize.Chart.compose(house, %{styles: %{series: %{stroke_width: 3}}})
-      {:error, [{[:styles, :series], :conflict}]}
+      {:error, [{[:styles, "series"], :conflict}]}
 
   """
   @spec compose(t() | map(), t() | map()) :: {:ok, map()} | {:error, [Validator.error(), ...]}
-  def compose(a, b), do: Compose.merge(fragment(a), fragment(b))
+  def compose(a, b), do: Compose.merge(layer(a), layer(b))
 
   @doc """
   The layers cascaded left to right, the later layer the higher (spec/14 §8.2).
@@ -617,7 +637,7 @@ defmodule Visualize.Chart do
       iex> house = %{theme: :dark, frames: %{main: %{margin: %{top: 800, bottom: 400}}}}
       iex> panel = %{frames: %{main: %{margin: %{top: 600, bottom: 300}}}}
       iex> design = Visualize.Chart.stack([theme, house, panel])
-      iex> {design.theme, design.frames.main.kind, design.frames.main.margin}
+      iex> {design.theme, design.frames["main"].kind, design.frames["main"].margin}
       {:dark, :cartesian, %{top: 600, bottom: 300}}
 
   """
@@ -646,12 +666,12 @@ defmodule Visualize.Chart do
       iex> house = %{theme: :dark, styles: %{series: %{stroke: :series_1, stroke_width: 2}}}
       iex> panel = %{styles: %{series: %{stroke_width: 3}}, labels: [%{anchor: :title, text: ["Uptime"]}]}
       iex> design = Visualize.Chart.stack(house, panel)
-      iex> design.styles.series
+      iex> design.styles["series"]
       %{stroke_width: 3}
       iex> {design.theme, length(design.labels)}
       {:dark, 1}
       iex> Visualize.Chart.compose(house, panel)
-      {:error, [{[:styles, :series], :conflict}]}
+      {:error, [{[:styles, "series"], :conflict}]}
 
   """
   @spec stack(layer(), layer()) :: map()
@@ -660,8 +680,9 @@ defmodule Visualize.Chart do
   defp fragment(%__MODULE__{} = chart), do: to_map(chart)
   defp fragment(map) when is_map(map), do: map
 
-  defp layer({_name, l}), do: fragment(l)
-  defp layer(l), do: fragment(l)
+  # A layer's names are strings (spec/14 §1.4, D-195), whichever spelling it was written in.
+  defp layer({_name, l}), do: l |> fragment() |> Migration.names()
+  defp layer(l), do: l |> fragment() |> Migration.names()
 
   @doc """
   Where every value of a stack came from (spec/14 §17.1).
@@ -683,8 +704,8 @@ defmodule Visualize.Chart do
       iex> panel = %{frames: %{main: %{margin: %{top: 600}}}}
       iex> Visualize.Chart.explain([{:house, house}, {:panel, panel}])
       [
-        %{path: [:frames, :main, :margin, :bottom], value: 400, layer: :house, overrode: []},
-        %{path: [:frames, :main, :margin, :top], value: 600, layer: :panel, overrode: [:house]},
+        %{path: [:frames, "main", :margin, :bottom], value: 400, layer: :house, overrode: []},
+        %{path: [:frames, "main", :margin, :top], value: 600, layer: :panel, overrode: [:house]},
         %{path: [:theme], value: :dark, layer: :house, overrode: []}
       ]
 
@@ -714,7 +735,7 @@ defmodule Visualize.Chart do
       iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{s: [%{x: 0, y: 1, k: "a"}]})
       iex> %{parts: %{stroke: stroke, fill: fill}} = Visualize.Chart.explain(applied, at: [:marks, 0])
       iex> Enum.map(stroke.chain, &{&1.layer, &1.style, &1.via})
-      [{:theme, nil, []}, {:style, :base, [:bad]}]
+      [{:theme, nil, []}, {:style, "base", ["bad"]}]
       iex> stroke.value.width
       3
       iex> fill.drawn
@@ -722,7 +743,13 @@ defmodule Visualize.Chart do
   """
   @spec explain(Applied.t(), keyword()) :: map()
   def explain(%Applied{} = applied, opts) do
-    at = Keyword.fetch!(opts, :at)
+    # A frame in the path is named by its string (D-195), whichever spelling it is given in.
+    at =
+      case Keyword.fetch!(opts, :at) do
+        [:frames, name | rest] -> [:frames, Names.name(name) | rest]
+        at -> at
+      end
+
     state = Keyword.get(opts, :state)
     {stack, kind, frame, series, own} = explained(applied, at)
     stack = if state, do: Visualize.Chart.Style.with_state(stack, state), else: stack
@@ -821,13 +848,13 @@ defmodule Visualize.Chart do
       iex> Visualize.Chart.free_vars([{:house, house}, {:panel, panel}])
       [
         %{
-          name: :accent,
+          name: "accent",
           default: :series_1,
           required: false,
-          uses: [%{path: [:styles, :s, :stroke], expects: :color, layer: :house}]
+          uses: [%{path: [:styles, "s", :stroke], expects: :color, layer: :house}]
         },
         %{
-          name: :unit,
+          name: "unit",
           default: nil,
           required: true,
           uses: [%{path: [:labels, 0, :text], expects: :text, layer: :panel}]
@@ -866,7 +893,7 @@ defmodule Visualize.Chart do
       ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear, domain: [0, 10]}, y: %{kind: :linear, domain: [0, 10]}}}},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
-      iex> {:ok, %{main: compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
+      iex> {:ok, %{"main" => compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}}, ceiling: 1)
       iex> Visualize.Chart.Compiled.dynamic_regions(compiled)
       [{{:mark, 0}, :data}]
       iex> Visualize.Chart.Compiled.targets(compiled)

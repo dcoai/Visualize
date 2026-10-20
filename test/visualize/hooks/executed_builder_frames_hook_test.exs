@@ -85,7 +85,7 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
 
     # Handed back: the server reads the same point in the same frame, a y axis on the left.
     {:noreply, s} = Builder.handle_event("place", payload, s)
-    assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
+    assert Writes.composed(s).frames["now"].axes == [%{scale: "y", side: :left}]
   end
 
   # -- frames placed on the graph (spec/14 §18.16, #614) ---------------------------------
@@ -140,7 +140,7 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
   end
 
   defp box(s, frame),
-    do: Enum.find_value(s.assigns.uses, &get_in(&1.local, [:frames, frame, :box]))
+    do: Enum.find_value(s.assigns.uses, &get_in(&1.local, [:frames, to_string(frame), :box]))
 
   test "a click on a frame's empty space picks the frame; on a drawn node, the node" do
     s = placed("marks[0]")
@@ -235,7 +235,8 @@ defmodule Visualize.Hooks.ExecutedBuilderFramesHookTest do
     s
   end
 
-  defp cell_of(s, frame), do: Map.take(Writes.composed(s).frames[frame], [:cell, :span])
+  defp cell_of(s, frame),
+    do: Map.take(Writes.composed(s).frames[to_string(frame)], [:cell, :span])
 
   test "a frame placed by a cell is dragged by whole cells, the grid drawn while it moves" do
     s = on_grid()

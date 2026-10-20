@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Frame.Defs do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The frame's `defs` (spec/14 §2.7, §3.2): one element first in the frame's group
   # holding every gradient the design declares or a style writes inline, and one filter
   # per effect the tree uses, and every `{:paint, name}` in the tree's styles resolved to
@@ -31,7 +33,7 @@ defmodule Visualize.Chart.Frame.Defs do
 
     table =
       for {name, node} <- defs,
-          is_atom(name),
+          is_name(name),
           into: %{},
           do: {name, paint(node, id(prefix, name), theme, mode)}
 
@@ -254,9 +256,20 @@ defmodule Visualize.Chart.Frame.Defs do
 
   @doc false
   # The id prefix the design's paints share: a hash of the defs, so two charts on one
-  # page collide only when their paints are the same.
+  # page collide only when their paints are the same. The paints are hashed by their
+  # names' strings (D-195), so a design keyed either way gives one prefix, and an inline
+  # paint by its own name as before, so a chart of inline paints keeps its ids.
   @spec prefix(map()) :: String.t()
-  def prefix(defs), do: defs |> :erlang.phash2() |> Integer.to_string(36) |> String.downcase()
+  def prefix(defs) do
+    defs
+    |> Map.new(fn
+      {{:inline, name}, node} -> {name, node}
+      {name, node} -> {Visualize.Chart.Names.name(name), node}
+    end)
+    |> :erlang.phash2()
+    |> Integer.to_string(36)
+    |> String.downcase()
+  end
 
   @doc false
   @spec id(String.t(), atom() | String.t()) :: String.t()

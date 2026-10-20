@@ -45,11 +45,11 @@ defmodule Visualize.VirtualSource.EngineTest do
           function: :f
         )
 
-      assert {:error, errors} = Engine.new(%{[:a] => a, [:f] => f}, feeds: [:hosts])
+      assert {:error, errors} = Engine.new(%{["a"] => a, ["f"] => f}, feeds: [:hosts])
 
       assert errors == [
-               {[:a], [:from, 0], {:unknown_input, :nowhere}},
-               {[:f], [:function], {:undeclared, :function, :f}}
+               {["a"], [:from, 0], {:unknown_input, "nowhere"}},
+               {["f"], [:function], {:undeclared, :function, "f"}}
              ]
     end
 
@@ -59,11 +59,11 @@ defmodule Visualize.VirtualSource.EngineTest do
       c = source(:c, [c: nil], "fn %{c: r} -> r end")
       d = source(:d, [a: nil], "fn %{a: r} -> r end")
 
-      assert {:error, errors} = Engine.new(%{[:a] => a, [:b] => b, [:c] => c, [:d] => d})
+      assert {:error, errors} = Engine.new(%{["a"] => a, ["b"] => b, ["c"] => c, ["d"] => d})
 
       assert errors == [
-               {[:a], [:from], {:cycle, [[:a], [:b]]}},
-               {[:c], [:from], {:cycle, [[:c]]}}
+               {["a"], [:from], {:cycle, [["a"], ["b"]]}},
+               {["c"], [:from], {:cycle, [["c"]]}}
              ]
     end
 
@@ -75,13 +75,13 @@ defmodule Visualize.VirtualSource.EngineTest do
       sources = %{[:sum] => outer, [:cell, :sum] => inner, [:cell, :total] => reader}
       {:ok, engine} = Engine.new(sources, feeds: [:hosts])
 
-      assert Engine.resolve(engine, [:cell], :sum) == {:source, [:cell, :sum]}
-      assert Engine.resolve(engine, [:other], :sum) == {:source, [:sum]}
+      assert Engine.resolve(engine, [:cell], :sum) == {:source, ["cell", "sum"]}
+      assert Engine.resolve(engine, [:other], :sum) == {:source, ["sum"]}
       assert Engine.resolve(engine, [:cell], :hosts) == {:feed, :hosts}
       assert Engine.resolve(engine, [:cell], :nothing) == :error
 
       engine = engine |> push(rows(3)) |> Engine.run(0)
-      assert Engine.outputs(engine)[[:cell, :total]].rows == [%{n: 0}]
+      assert Engine.outputs(engine)[["cell", "total"]].rows == [%{"n" => 0}]
     end
   end
 
@@ -97,7 +97,10 @@ defmodule Visualize.VirtualSource.EngineTest do
       d = source(:d, [c: nil], "fn %{c: [%{n: n}]} -> [%{n: n * 2}] end")
 
       {:ok, engine} =
-        Engine.new(%{[:a] => a, [:b] => b, [:c] => c, [:d] => d}, feeds: [:hosts], debounce: 100)
+        Engine.new(%{["a"] => a, ["b"] => b, ["c"] => c, ["d"] => d},
+          feeds: [:hosts],
+          debounce: 100
+        )
 
       {:ok, engine: engine}
     end
@@ -111,9 +114,9 @@ defmodule Visualize.VirtualSource.EngineTest do
 
       engine = Engine.run(engine, 100)
       assert Engine.due(engine) == nil
-      assert Engine.runs(engine) == %{[:a] => 1, [:b] => 1, [:c] => 1, [:d] => 1}
-      assert Engine.outputs(engine)[[:c]].rows == [%{n: 2 + 30}]
-      assert Engine.outputs(engine)[[:d]].rows == [%{n: 64}]
+      assert Engine.runs(engine) == %{["a"] => 1, ["b"] => 1, ["c"] => 1, ["d"] => 1}
+      assert Engine.outputs(engine)[["c"]].rows == [%{"n" => 2 + 30}]
+      assert Engine.outputs(engine)[["d"]].rows == [%{"n" => 64}]
       assert Engine.status(engine) |> Map.values() |> Enum.uniq() == [:live]
     end
 
@@ -123,8 +126,8 @@ defmodule Visualize.VirtualSource.EngineTest do
       engine = engine |> push(rows(2), 0) |> push(rows(3), 40) |> push(rows(4), 90)
       assert Engine.due(engine) == 100
       engine = Engine.run(engine, 100)
-      assert Engine.runs(engine)[[:c]] == 1
-      assert Engine.outputs(engine)[[:a]].rows == [%{n: 4}]
+      assert Engine.runs(engine)[["c"]] == 1
+      assert Engine.outputs(engine)[["a"]].rows == [%{"n" => 4}]
 
       same = push(engine, rows(4), 200)
       assert Engine.due(same) == nil
@@ -135,15 +138,47 @@ defmodule Visualize.VirtualSource.EngineTest do
       # Same count and sum, other rows: a and b run, their answers are unchanged.
       swapped = [%{t: 1, host: "h1", cpu: 20}, %{t: 2, host: "h0", cpu: 10}]
       engine = engine |> push(swapped, 200) |> Engine.run(300)
-      assert Engine.runs(engine) == %{[:a] => 2, [:b] => 2, [:c] => 1, [:d] => 1}
+      assert Engine.runs(engine) == %{["a"] => 2, ["b"] => 2, ["c"] => 1, ["d"] => 1}
     end
 
     test "a source waits while an input has no delivery" do
       a = source(:a, [hosts: nil], count())
-      {:ok, engine} = Engine.new(%{[:a] => a}, feeds: [:hosts])
+      {:ok, engine} = Engine.new(%{["a"] => a}, feeds: [:hosts])
       engine = Engine.push(engine, %{}, %{}, 0) |> Engine.run(0)
-      assert Engine.status(engine) == %{[:a] => :loading}
-      assert Engine.runs(engine) == %{[:a] => 0}
+      assert Engine.status(engine) == %{["a"] => :loading}
+      assert Engine.runs(engine) == %{["a"] => 0}
+    end
+  end
+
+  describe "names a stored function reads (spec/08 §10.5.6, D-195)" do
+    test "a row's fields and category values are read as the function's own literals are" do
+      checks = Schema.new!(%{day: %{type: :number}, state: %{type: :category}})
+
+      # `:ok` is a word Elixir's functions take, so the row's `:ok` and the literal are one
+      # atom; `:warning` is no word, so both are its string; `day` is a word, so the
+      # function's `%{day: d}` matches the row's field, and `row.state` reads it by spelling.
+      elixir = """
+      fn %{checks: rows} ->
+        [%{n: Enum.count(rows, fn %{day: d} = row -> d > 1 and row.state in [:ok, :warning] end)}]
+      end
+      """
+
+      source = source(:a, [checks: nil], elixir)
+      {:ok, engine} = Engine.new(%{["a"] => source}, feeds: [:checks], debounce: 0)
+
+      rows = [
+        %{day: 1, state: :ok},
+        %{day: 2, state: :ok},
+        %{day: 3, state: :warning},
+        %{day: 4, state: :error}
+      ]
+
+      engine =
+        engine
+        |> Engine.push(%{checks: Delivery.new(rows)}, %{checks: checks}, 0)
+        |> Engine.run(0)
+
+      assert Engine.outputs(engine)[["a"]].rows == [%{"n" => 2}]
     end
   end
 
@@ -153,7 +188,7 @@ defmodule Visualize.VirtualSource.EngineTest do
       d = source(:d, [a: nil], "fn %{a: [%{n: n}]} -> [%{n: n + 1}] end")
 
       {:ok, engine} =
-        Engine.new(%{[:a] => a, [:d] => d}, feeds: [:hosts], timeout: 50, max_heap: 200_000)
+        Engine.new(%{["a"] => a, ["d"] => d}, feeds: [:hosts], timeout: 50, max_heap: 200_000)
 
       engine
     end
@@ -161,19 +196,19 @@ defmodule Visualize.VirtualSource.EngineTest do
     test "a fault keeps the last good output and the pulse stops there" do
       a = "fn %{hosts: rows} -> [%{n: 10 / (Enum.count(rows) - 3)}] end"
       engine = chain(a) |> push(rows(2)) |> Engine.run(0)
-      assert Engine.outputs(engine)[[:a]].rows == [%{n: -10.0}]
-      assert Engine.outputs(engine)[[:d]].rows == [%{n: -9.0}]
+      assert Engine.outputs(engine)[["a"]].rows == [%{"n" => -10.0}]
+      assert Engine.outputs(engine)[["d"]].rows == [%{"n" => -9.0}]
 
       engine = engine |> push(rows(3)) |> Engine.run(0)
-      assert Engine.faults(engine) == %{[:a] => %{kind: :raised, detail: ArithmeticError}}
-      assert Engine.status(engine)[[:a]] == {:down, {:virtual_source, :a, :raised}}
-      assert Engine.outputs(engine)[[:a]].rows == [%{n: -10.0}]
-      assert Engine.runs(engine) == %{[:a] => 2, [:d] => 1}
+      assert Engine.faults(engine) == %{["a"] => %{kind: :raised, detail: ArithmeticError}}
+      assert Engine.status(engine)[["a"]] == {:down, {:virtual_source, "a", :raised}}
+      assert Engine.outputs(engine)[["a"]].rows == [%{"n" => -10.0}]
+      assert Engine.runs(engine) == %{["a"] => 2, ["d"] => 1}
 
       # A good answer clears it.
       engine = engine |> push(rows(4)) |> Engine.run(0)
       assert Engine.faults(engine) == %{}
-      assert Engine.outputs(engine)[[:d]].rows == [%{n: 11.0}]
+      assert Engine.outputs(engine)[["d"]].rows == [%{"n" => 11.0}]
     end
 
     test "the five kinds" do
@@ -188,17 +223,17 @@ defmodule Visualize.VirtualSource.EngineTest do
 
       for {kind, elixir} <- kinds do
         engine = chain(elixir) |> push(rows(2)) |> Engine.run(0)
-        assert %{kind: ^kind} = Engine.faults(engine)[[:a]], "#{kind}"
-        assert Engine.status(engine)[[:d]] == :loading
+        assert %{kind: ^kind} = Engine.faults(engine)[["a"]], "#{kind}"
+        assert Engine.status(engine)[["d"]] == :loading
       end
 
       engine = chain(kinds.nonconforming) |> push(rows(2)) |> Engine.run(0)
-      assert Engine.faults(engine)[[:a]].detail == {0, :n, {:type, :number}}
+      assert Engine.faults(engine)[["a"]].detail == {0, "n", {:type, :number}}
 
       engine = chain(kinds.restricted) |> push(rows(2)) |> Engine.run(0)
 
-      assert [{[:elixir], {:check, 1, {:unknown_field, :load}}}] =
-               Engine.faults(engine)[[:a]].detail
+      assert [{[:elixir], {:check, 1, {:unknown_field, "load"}}}] =
+               Engine.faults(engine)[["a"]].detail
     end
   end
 
@@ -229,9 +264,9 @@ defmodule Visualize.VirtualSource.EngineTest do
         |> push(rows(5))
         |> Engine.run(0)
 
-      assert Engine.outputs(engine)[[:health]].rows == [
-               %{host: "h1", n: 3, state: :error},
-               %{host: "h0", n: 2, state: :ok}
+      assert Engine.outputs(engine)[["health"]].rows == [
+               %{"host" => "h1", "n" => 3, "state" => :error},
+               %{"host" => "h0", "n" => 2, "state" => :ok}
              ]
     end
 
@@ -242,18 +277,18 @@ defmodule Visualize.VirtualSource.EngineTest do
         |> Engine.run(0)
 
       # h1: cpu 10, 30, 50 → the newest two, 30 + 50; h0: 20 + 40. In the window h0 comes first.
-      assert Engine.outputs(engine)[[:health]].rows == [
-               %{host: "h0", n: 60},
-               %{host: "h1", n: 80}
+      assert Engine.outputs(engine)[["health"]].rows == [
+               %{"host" => "h0", "n" => 60},
+               %{"host" => "h1", "n" => 80}
              ]
     end
 
     test "a row naming another entity does not conform" do
       engine = health(~S|fn _ -> %{host: "other"} end|) |> push(rows(2)) |> Engine.run(0)
 
-      assert Engine.faults(engine)[[:health]] == %{
+      assert Engine.faults(engine)[["health"]] == %{
                kind: :nonconforming,
-               detail: {0, :host, :identity}
+               detail: {0, "host", :identity}
              }
     end
 
@@ -263,7 +298,10 @@ defmodule Visualize.VirtualSource.EngineTest do
         |> push(rows(5))
         |> Engine.run(0)
 
-      assert Engine.outputs(engine)[[:health]].rows == [%{host: "h0", n: 1}, %{host: "h1", n: 1}]
+      assert Engine.outputs(engine)[["health"]].rows == [
+               %{"host" => "h0", "n" => 1},
+               %{"host" => "h1", "n" => 1}
+             ]
     end
   end
 end

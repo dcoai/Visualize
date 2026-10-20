@@ -84,11 +84,11 @@ defmodule Visualize.VirtualSource.SandboxTest do
   end
 
   describe "check/2: the faults" do
-    test "too long, unknown atoms and syntax" do
+    test "too long and syntax; a name never seen is a string" do
       assert [{:too_long, 10, 19}] = reasons("fn rows -> rows end", max_source: 10)
 
-      assert [{:unknown_atom, "zz_never_seen_atom_42"}] =
-               reasons("fn r -> :zz_never_seen_atom_42 end")
+      # A name the node never saw is read as its string, never made an atom (D-195).
+      assert ok?("fn r -> :zz_never_seen_atom_42 end")
 
       assert [{:syntax, _message}] = reasons("fn rows -> ")
     end
@@ -111,22 +111,22 @@ defmodule Visualize.VirtualSource.SandboxTest do
                """)
 
       assert faults == [
-               {2, {:restricted, {"File", :read, 1}}},
+               {2, {:restricted, {"File", "read", 1}}},
                {3, {:restricted, {:send, 2}}},
-               {4, {:undefined_variable, :y}}
+               {4, {:undefined_variable, "y"}}
              ]
     end
 
     test "a map read on a variable is allowed; a call on one is dynamic" do
       assert ok?("fn row -> row.cpu end")
-      assert [{:dynamic_call, :cpu}] = reasons("fn row -> row.cpu() end")
-      assert [{:dynamic_call, :cpu}] = reasons("fn row -> row.cpu(1) end")
+      assert [{:dynamic_call, "cpu"}] = reasons("fn row -> row.cpu() end")
+      assert [{:dynamic_call, "cpu"}] = reasons("fn row -> row.cpu(1) end")
     end
 
     test "fields: a map read names a schema's field, by either spelling" do
       assert ok?("fn row -> row.cpu end", fields: [:cpu])
       assert ok?("fn row -> row.cpu end", fields: ["cpu"])
-      assert [{:unknown_field, :mem}] = reasons("fn row -> row.mem end", fields: [:cpu])
+      assert [{:unknown_field, "mem"}] = reasons("fn row -> row.mem end", fields: [:cpu])
     end
 
     test "into: and Enum.into take a literal empty target" do
@@ -150,7 +150,7 @@ defmodule Visualize.VirtualSource.SandboxTest do
 
     test "patterns hold patterns" do
       assert {:pattern, :+} in reasons("fn x + 1 -> x end")
-      assert [{:undefined_variable, :y}] = reasons("fn ^y -> 1 end")
+      assert [{:undefined_variable, "y"}] = reasons("fn ^y -> 1 end")
       assert [{:pattern, :^}] = reasons("fn x -> ^x end")
     end
 
@@ -159,8 +159,8 @@ defmodule Visualize.VirtualSource.SandboxTest do
     end
 
     test "variables are scoped" do
-      assert [{:undefined_variable, :a}] = reasons("fn x -> case x do a -> a end; a end")
-      assert [{:undefined_variable, :i}] = reasons("fn x -> for i <- x, do: i; i end")
+      assert [{:undefined_variable, "a"}] = reasons("fn x -> case x do a -> a end; a end")
+      assert [{:undefined_variable, "i"}] = reasons("fn x -> for i <- x, do: i; i end")
       assert ok?("fn x -> y = x; z = y + 1; z end")
     end
   end
@@ -184,7 +184,8 @@ defmodule Visualize.VirtualSource.SandboxTest do
     test "a map read never calls a function, whatever its receiver holds" do
       assert {:error, :raised, BadMapError} = call("fn m -> m.halt end", [:erlang])
       assert {:ok, 3} = call("fn m -> m.halt end", [%{halt: 3}])
-      assert {:ok, :ok} = call("fn m when m.cpu > 1 -> :ok; _ -> nil end", [%{cpu: 2}])
+      # A guard reads a string-keyed row, as a function's inputs are (D-195).
+      assert {:ok, :ok} = call("fn m when m.cpu > 1 -> :ok; _ -> nil end", [%{"cpu" => 2}])
     end
 
     test "Integer's guards compile" do
@@ -205,8 +206,8 @@ defmodule Visualize.VirtualSource.SandboxTest do
       assert [{:guard, {:to_string, 1}}] =
                reasons(~S|fn x when to_string(x) == "1" -> x end|)
 
-      assert [{:restricted, {"File", :read, 1}}] = reasons(~S|fn x -> "#{File.read(x)}" end|)
-      assert [{:undefined_variable, :y}] = reasons(~S|fn x -> "#{y}" end|)
+      assert [{:restricted, {"File", "read", 1}}] = reasons(~S|fn x -> "#{File.read(x)}" end|)
+      assert [{:undefined_variable, "y"}] = reasons(~S|fn x -> "#{y}" end|)
     end
 
     test "every allowed Visualize.Data function checks, called and captured" do
@@ -218,7 +219,7 @@ defmodule Visualize.VirtualSource.SandboxTest do
     end
 
     test "a function Visualize.Data does not export is refused" do
-      assert [{:restricted, {Visualize.Data, :mode, 1}}] =
+      assert [{:restricted, {Visualize.Data, "mode", 1}}] =
                reasons("fn rows -> Visualize.Data.mode(rows) end")
     end
 
@@ -287,7 +288,7 @@ defmodule Visualize.VirtualSource.SandboxTest do
     test "keyed by the arity and the fields too" do
       {:ok, _c, cache} = Cache.compile(Cache.new(), "fn x -> x.cpu end", fields: [:cpu])
 
-      {:error, [{1, {:unknown_field, :cpu}}], cache} =
+      {:error, [{1, {:unknown_field, "cpu"}}], cache} =
         Cache.compile(cache, "fn x -> x.cpu end", fields: [:mem])
 
       assert map_size(cache.entries) == 2
@@ -304,11 +305,11 @@ defmodule Visualize.VirtualSource.SandboxTest do
           {1, {:restricted, {:send, 2}}},
           {1, {:restricted, :struct}},
           {1, {:restricted_atom, :__struct__}},
-          {1, {:dynamic_call, :x}},
-          {1, {:unknown_field, :x}},
+          {1, {:dynamic_call, "x"}},
+          {1, {:unknown_field, "x"}},
           {1, {:into, :literal}},
           {1, {:uniq, :literal}},
-          {1, {:undefined_variable, :x}},
+          {1, {:undefined_variable, "x"}},
           {1, {:guard, {Enum, :count, 1}}},
           {1, {:guard, {:<>, 2}}},
           {1, {:pattern, :+}},

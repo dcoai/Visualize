@@ -11,7 +11,7 @@ defmodule Visualize.Chart.Text do
   what `unparse/1` takes, which is the migration (§9).
 
       iex> Visualize.Chart.Text.parse("Uptime for \#{var(:host)} over 24h")
-      {:ok, ["Uptime for ", %Visualize.Chart.Var{name: :host}, " over 24h"]}
+      {:ok, ["Uptime for ", %Visualize.Chart.Var{name: "host"}, " over 24h"]}
 
       iex> Visualize.Chart.Text.parse("cost \\\#{literal}")
       {:ok, ["cost \#{literal}"]}
@@ -25,8 +25,10 @@ defmodule Visualize.Chart.Text do
 
   alias Visualize.Chart.{Fact, Var}
 
+  @attributes Visualize.Vocabulary.table(Visualize.Data.Schema.attributes())
+
   @typedoc "One part of a text: a string, a variable, a datum's field, or a schema's fact."
-  @type part :: String.t() | Var.t() | {:field, atom()} | Fact.t()
+  @type part :: String.t() | Var.t() | {:field, String.t()} | Fact.t()
 
   @doc ~S"""
   The parts of a text. A list is already parts and is returned as it is; a string is
@@ -158,7 +160,9 @@ defmodule Visualize.Chart.Text do
 
     with [_, _, _] <- names,
          {:ok, [s, f, k]} <- atoms(names) do
-      {:ok, %Fact{source: s, field: f, key: k}}
+      # The attribute is one of the feed schema's, its atom; any other is left as the string,
+      # for the validator to refuse (spec/14 §9.4).
+      {:ok, %Fact{source: s, field: f, key: Visualize.Vocabulary.read(@attributes, k)}}
     else
       _other -> :error
     end
@@ -184,7 +188,7 @@ defmodule Visualize.Chart.Text do
 
       word ->
         if word =~ ~r/^[a-zA-Z_][a-zA-Z0-9_?!]*$/,
-          do: {:ok, wrap.(String.to_atom(word))},
+          do: {:ok, wrap.(word)},
           else: :error
     end
   end

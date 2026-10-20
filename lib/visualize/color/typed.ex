@@ -98,6 +98,8 @@ defmodule Visualize.Color.Typed do
 
   @doc false
   @spec name?(term()) :: boolean()
+  # A color's name: the library's atom, or the string of one a theme declares (D-195).
+  def name?(name) when is_binary(name), do: name != ""
   def name?(name), do: is_atom(name) and name not in @not_names
 
   @doc false

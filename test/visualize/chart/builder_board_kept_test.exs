@@ -125,7 +125,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     assert computed.virtual == true
   end
 
-  @all [:a, :b, :c, :d]
+  @all ["a", "b", "c", "d"]
 
   test "a pass over what was kept makes nothing again" do
     s = opened()
@@ -138,10 +138,10 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
   test "a cell's own fields remake its slots, its preview and the board's validation" do
     s = opened()
     board = s.assigns.board
-    retitled = put_in(board.cells.a[:title], "Renamed")
+    retitled = put_in(board.cells["a"][:title], "Renamed")
 
     assert remade(s, &assign(&1, :board, retitled)) ==
-             %{facts: true, required: [:a], previews: [:a]}
+             %{facts: true, required: ["a"], previews: ["a"]}
   end
 
   test "the board's shared state remakes every preview and the validation, no slots" do
@@ -155,7 +155,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     changed = Map.put(entries(), {:composite, 2}, entries(%{label: "x"})[{:composite, 2}])
 
     assert remade(s, &assign(&1, :store, {Shelf, changed})) ==
-             %{facts: true, required: [:c, :d], previews: [:c, :d]}
+             %{facts: true, required: ["c", "d"], previews: ["c", "d"]}
 
     # An entry no cell reaches is no input.
     more = Map.put(entries(), {:composite, 9}, entries()[{:composite, 1}])
@@ -171,7 +171,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     assert remade(s, &assign(&1, :binding, binding)) == %{
              facts: false,
              required: [],
-             previews: [:a]
+             previews: ["a"]
            }
   end
 
@@ -185,7 +185,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
       |> assign(:typed, Typed.typed(sources, s.assigns.catalog))
     end
 
-    assert remade(s, changed) == %{facts: false, required: [], previews: [:c, :d]}
+    assert remade(s, changed) == %{facts: false, required: [], previews: ["c", "d"]}
   end
 
   test "the theme and the catalog remake every preview, and neither the slots nor the validation" do

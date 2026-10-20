@@ -98,7 +98,7 @@ defmodule Visualize.Components.ChartTest do
                      %Event{
                        event: "point_click",
                        cell: nil,
-                       frame: :main,
+                       frame: "main",
                        item: {:circle, "api"},
                        path: [{:circle, "api"}],
                        row: %{t: ^t2, service: "api", v: 2},

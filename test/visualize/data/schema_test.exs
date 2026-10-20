@@ -733,16 +733,18 @@ defmodule Visualize.Data.SchemaTest do
       {:ok, applied} = Chart.apply(@design, sources: %{primary: delivery})
       {:ok, plain} = Chart.apply(@design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
 
-      assert applied.sources == %{primary: %{t: [1, 2], v: [3, 9]}}
+      assert applied.sources == %{"primary" => %{t: [1, 2], v: [3, 9]}}
       assert Chart.render(applied) == Chart.render(plain)
 
       assert Chart.apply(@design, sources: %{primary: Delivery.new(%{t: [1, 2]})}) ==
-               {:error, [{[:sources, :primary], {:missing_field, :v}}]}
+               {:error, [{[:sources, "primary"], {:missing_field, "v"}}]}
     end
 
     test "a compiled chart takes a delivery per slot, as it takes any source" do
       rows = [%{t: 1, v: 3}, %{t: 2, v: 9}]
-      {:ok, %{main: compiled}} = Chart.compile(@design, sources: %{primary: Delivery.new(rows)})
+
+      {:ok, %{"main" => compiled}} =
+        Chart.compile(@design, sources: %{primary: Delivery.new(rows)})
 
       plain = %{primary: rows}
       delivered = %{primary: Delivery.new(rows, window: [1, 2])}

@@ -1,6 +1,8 @@
 if Code.ensure_loaded?(Phoenix.Component) do
   defmodule Visualize.Chart.Builder.Events.Graph do
     @moduledoc false
+
+    import Visualize.Chart.Names, only: [is_name: 1]
     # The graph (spec/14 §18.16, #379): a drawn node's menu, its copy and its override, a
     # palette component or a library entry placed where it was dropped, and a drawn node
     # moved.
@@ -686,7 +688,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # The names a copy must not take: every mark id and every declared key of the kind.
     defp taken(design, [:marks, _i]),
-      do: for(%{id: id} <- List.wrap(Map.get(design, :marks, [])), is_atom(id), do: id)
+      do: for(%{id: id} <- List.wrap(Map.get(design, :marks, [])), is_name(id), do: id)
 
     defp taken(design, [:styles, _]), do: Map.keys(Map.get(design, :styles, %{}))
     defp taken(design, [:sources, _]), do: Map.keys(Map.get(design, :sources, %{}))

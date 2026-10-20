@@ -1,10 +1,12 @@
 defmodule Visualize.Chart.Transform.Data do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The data steps of a mark's pipeline (spec/14 §5.4.1): `:bin` over `Visualize.Data.bin/2`,
   # `:stack` over `Visualize.Shape.Stack`, `:filter`, `:sum` and `:sort` over the rows
   # themselves, and `:lttb` and `:m4` over `Visualize.Data.lttb/3` and `m4/3` (#448).
 
-  alias Visualize.Chart.Schema
+  alias Visualize.Chart.{Names, Schema}
   alias Visualize.Data
   alias Visualize.Data.{FFT, Table}
   alias Visualize.Feed.Window
@@ -20,6 +22,11 @@ defmodule Visualize.Chart.Transform.Data do
     week: 604_800,
     year: 31_536_000
   }
+
+  @doc false
+  # A window's units: words a design's `from` and `to` name (spec/14 §5.4.1, §9.4).
+  @spec units() :: [atom(), ...]
+  def units, do: Map.keys(@units)
 
   @doc false
   @spec run(atom(), map(), [map()], map()) :: [map()]
@@ -256,8 +263,9 @@ defmodule Visualize.Chart.Transform.Data do
 
   defp passes?(:present, reading, _value), do: reading != nil
   defp passes?(:absent, reading, _value), do: reading == nil
-  defp passes?(:eq, reading, value), do: reading == value
-  defp passes?(:ne, reading, value), do: reading != value
+  # A category is one value whichever spelling a row or the design gives it (D-195).
+  defp passes?(:eq, reading, value), do: Visualize.Chart.Names.same?(reading, value)
+  defp passes?(:ne, reading, value), do: not Visualize.Chart.Names.same?(reading, value)
   defp passes?(_ordering, nil, _value), do: false
   defp passes?(:lt, reading, value), do: reading < value
   defp passes?(:lte, reading, value), do: reading <= value
@@ -308,7 +316,7 @@ defmodule Visualize.Chart.Transform.Data do
 
   defp spectrum_names([f, m]), do: {f, m, nil}
   defp spectrum_names([f, m, p | _]), do: {f, m, p}
-  defp spectrum_names(name) when is_atom(name), do: {name, :magnitude, nil}
+  defp spectrum_names(name) when is_name(name), do: {name, :magnitude, nil}
 
   # The median gap between consecutive readings of the time column: DateTimes in seconds,
   # numbers as they are; nil without a column or with fewer than two readings.
@@ -383,17 +391,19 @@ defmodule Visualize.Chart.Transform.Data do
   # the row has, the other columns carried, the column's name and value under `as`.
   defp fold(node, rows) do
     fields = node.fields
-    {key, value} = as_pair(Map.get(node, :as, [:key, :value]))
+    {key, value} = as_pair(Map.get(node, :as, ["key", "value"]))
+    # The listed columns are dropped by spelling (D-195): a row may key them either way.
+    folded = MapSet.new(fields, &Names.name/1)
 
     for row <- rows, field <- fields, (reading = Table.get(row, field)) != nil do
       row
-      |> Map.drop(fields)
+      |> Map.reject(fn {k, _v} -> MapSet.member?(folded, Names.name(k)) end)
       |> Map.put(key, field)
       |> Map.put(value, reading)
     end
   end
 
-  defp as_pair([key, value]) when is_atom(key) and is_atom(value), do: {key, value}
+  defp as_pair([key, value]) when is_name(key) and is_name(value), do: {key, value}
 
   defp as_pair(other) do
     raise ArgumentError,

@@ -14,7 +14,7 @@ defmodule Visualize.VirtualSource.Sandbox do
       {:ok, [2, 4]}
       iex> {:error, [{1, reason}]} = Sandbox.check("fn _ -> File.read(\\"/etc/passwd\\") end")
       iex> reason
-      {:restricted, {"File", :read, 1}}
+      {:restricted, {"File", "read", 1}}
 
   Nothing is rescued: a raise, a heap overrun and a timeout are read from the process the
   call ran in, through its monitor.
@@ -67,7 +67,8 @@ defmodule Visualize.VirtualSource.Sandbox do
     end
   end
 
-  # Map reads become `:erlang.map_get/2`, so an atom receiver never calls a function; the
+  # Map reads become `Sandbox.Runtime.get/2`, by spelling, so an atom receiver never calls a
+  # function and a field written as a string reaches an atom key (D-195); the
   # `fn` is evaluated once, under `require Integer`, with its warnings kept, not printed.
   defp evaluate(source, quoted, opts) do
     code =
@@ -100,11 +101,31 @@ defmodule Visualize.VirtualSource.Sandbox do
 
   defp rewrite(quoted) do
     Macro.prewalk(quoted, fn
-      {{:., dot_meta, [receiver, name]}, meta, []} = node when is_atom(name) ->
+      # A guard calls nothing: its map reads stay `:erlang.map_get/2` of the field as its
+      # inputs spell it, a word's atom or the string (spec/08 §10.5.6, D-195).
+      {:->, meta, [[{:when, when_meta, args}], body]} ->
+        {heads, [guard]} = Enum.split(args, -1)
+        {:->, meta, [[{:when, when_meta, heads ++ [guarded(guard)]}], body]}
+
+      {{:., dot_meta, [receiver, name]}, meta, []} = node when is_atom(name) or is_binary(name) ->
+        if meta[:no_parens] && value_receiver?(receiver),
+          do:
+            {{:., dot_meta, [Visualize.VirtualSource.Sandbox.Runtime, :get]},
+             Keyword.delete(meta, :no_parens), [receiver, name]},
+          else: node
+
+      node ->
+        node
+    end)
+  end
+
+  defp guarded(guard) do
+    Macro.prewalk(guard, fn
+      {{:., dot_meta, [receiver, name]}, meta, []} = node when is_atom(name) or is_binary(name) ->
         if meta[:no_parens] && value_receiver?(receiver),
           do:
             {{:., dot_meta, [:erlang, :map_get]}, Keyword.delete(meta, :no_parens),
-             [name, receiver]},
+             [Visualize.VirtualSource.Sandbox.Names.spelling(name), receiver]},
           else: node
 
       node ->

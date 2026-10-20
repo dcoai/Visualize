@@ -9,6 +9,7 @@ defmodule Visualize.Chart.Builder.BoardSources do
 
   alias Visualize.Board
   alias Visualize.Board.Binding
+  alias Visualize.Chart.Names
   alias Visualize.Data.{Delivery, Schema}
   alias Visualize.VirtualSource
   alias Visualize.VirtualSource.{Engine, Join, Sandbox}
@@ -146,9 +147,11 @@ defmodule Visualize.Chart.Builder.BoardSources do
     end
   end
 
+  # A host function is named by its string and its registry read by spelling (D-195).
   defp host_text(name, functions) do
-    with {:ok, module} <- Map.fetch(functions, name),
-         {^name, text} <- List.keyfind(module.__virtual_sources__(), name, 0) do
+    with {:ok, module} <- Names.fetch(functions, name),
+         {_name, text} <-
+           Enum.find(module.__virtual_sources__(), fn {own, _} -> Names.same?(own, name) end) do
       text
     else
       _none -> ""
@@ -158,7 +161,7 @@ defmodule Visualize.Chart.Builder.BoardSources do
   defp state(nil), do: "not run"
   defp state(:loading), do: "loading"
   defp state(:live), do: "live"
-  defp state({:down, {:virtual_source, _id, kind}}), do: Atom.to_string(kind)
+  defp state({:down, {:virtual_source, _id, kind}}), do: to_string(kind)
 
   defp check_lines(%{elixir: text}) when is_binary(text) do
     case Sandbox.check(text) do

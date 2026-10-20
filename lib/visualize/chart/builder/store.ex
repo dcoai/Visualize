@@ -45,6 +45,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     builder does (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     alias Visualize.Chart.{Fragment, Migration}
     alias Visualize.Chart.Theme, as: ChartTheme
 
@@ -167,8 +169,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec theme_name(entry()) :: String.t() | nil
     def theme_name(%{fragment: %{theme: theme}} = entry) do
       case theme do
-        %{name: name} when is_atom(name) and name != nil -> to_string(name)
-        name when is_atom(name) and name != nil -> to_string(name)
+        %{name: name} when is_name(name) -> to_string(name)
+        name when is_name(name) -> to_string(name)
         _unnamed -> last_segment(Map.get(entry, :name))
       end
     end

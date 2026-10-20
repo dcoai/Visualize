@@ -52,7 +52,7 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
 
     {:noreply, _component} = Component.handle_event("visualize_event", params, component)
     assert_receive {:visualize_event, "mines-chart", event} = message
-    assert event.item == {:rect, %{row: r, col: c}}
+    assert event.item == {:rect, %{"row" => r, "col" => c}}
     {:noreply, socket} = MinesweeperLive.handle_info(message, socket)
     socket
   end
@@ -212,7 +212,7 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   test "the design validates, and its cells require the identity the schema declares" do
     assert {:ok, _chart} = Visualize.Chart.from_map(MinesweeperLive.design())
     assert Visualize.Data.Schema.identity(MinesweeperLive.schema()) == [:col, :row]
-    assert MinesweeperLive.applied(layout()).schemas.cells == MinesweeperLive.schema()
+    assert MinesweeperLive.applied(layout()).schemas["cells"] == MinesweeperLive.schema()
   end
 
   # The status line as the page renders it for `socket`'s game.

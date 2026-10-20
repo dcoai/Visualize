@@ -73,7 +73,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
     %{
       version: 2,
       theme: var(:look),
-      sources: %{primary: %{fields: [:t, :v]}},
+      sources: %{primary: %{fields: ["t", "v"]}},
       vars: %{look: %{default: :ocean}, title: %{default: "Latency"}},
       frames: %{
         main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}
@@ -85,8 +85,8 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
 
   @gauge %{
     version: 2,
-    sources: %{reading: %{fields: [:n, :v]}},
-    frames: %{main: %{kind: :polar, scales: %{angle: %{kind: :radial}, r: %{kind: :sqrt}}}},
+    sources: %{reading: %{fields: ["n", "v"]}},
+    frames: %{"main" => %{kind: :polar, scales: %{angle: %{kind: :radial}, r: %{kind: :sqrt}}}},
     marks: [%{type: :rose, data: :reading, channels: %{angle: :n, value: :v}}]
   }
 
@@ -188,8 +188,8 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       to = Memory.start()
       assert {:ok, %{board: imported, ids: ids, outside: []}} = Bundle.import_board(to, bundle)
 
-      assert imported.cells.latency.ref == Map.fetch!(ids, src.line)
-      assert imported.cells.gauge.ref == Map.fetch!(ids, src.gauge)
+      assert imported.cells["latency"].ref == Map.fetch!(ids, src.line)
+      assert imported.cells["gauge"].ref == Map.fetch!(ids, src.gauge)
       assert %{imported | cells: nil} == %{board | cells: nil}
       assert rendered(imported, to) == rendered(board, src.store)
     end
@@ -212,7 +212,7 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       assert Enum.sort(Memory.ids(agent)) == Enum.sort(held ++ new)
 
       # The style the line uses is the one that arrived with it, not the store's own.
-      {:ok, line} = Store.get(to, imported.cells.latency.ref)
+      {:ok, line} = Store.get(to, imported.cells["latency"].ref)
       assert Map.fetch!(ids, src.thick) in Fragment.refs(line.fragment)
       assert rendered(imported, to) == rendered(board(src), src.store)
     end
@@ -225,21 +225,21 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
       {_m, agent} = to = Memory.start()
 
       assert Bundle.import_board(to, bundle) ==
-               {:error, [{[:cells, :gauge, :ref], {:not_carried, src.gauge}}]}
+               {:error, [{[:cells, "gauge", :ref], {:not_carried, src.gauge}}]}
 
       assert Memory.ids(agent) == []
 
-      assert Board.format_error({[:cells, :gauge, :ref], {:not_carried, src.gauge}}) ==
+      assert Board.format_error({[:cells, "gauge", :ref], {:not_carried, src.gauge}}) ==
                "cells.gauge.ref: refers to {:composite, 2}, which the bundle does not carry"
     end
 
     test "a cell whose component the source store did not hold exports and is reported" do
       src = source()
-      board = put_in(board(src).cells.gauge.ref, {:composite, 99})
+      board = put_in(board(src).cells["gauge"].ref, {:composite, 99})
       bundle = Bundle.export_board(src.store, board, :metresis)
 
       assert Bundle.import_board(Memory.start(), bundle) ==
-               {:error, [{[:cells, :gauge, :ref], {:not_carried, {:composite, 99}}}]}
+               {:error, [{[:cells, "gauge", :ref], {:not_carried, {:composite, 99}}}]}
     end
 
     test "a newer bundle is refused before anything is read or put" do

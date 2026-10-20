@@ -9,7 +9,7 @@ defmodule Visualize.Chart.InferredDomainTest do
   use ExUnit.Case, async: true
 
   alias Visualize.Chart
-  alias Visualize.Chart.Frame
+  alias Visualize.Chart.{Frame, Migration}
   alias Visualize.Chart.Validator
 
   # A series over `t` 100..199 in one cartesian frame, `x` and `y` inferred, plus `marks`.
@@ -33,21 +33,22 @@ defmodule Visualize.Chart.InferredDomainTest do
   defp rows, do: for(t <- 100..199, do: %{t: t, v: rem(t, 7) + 10})
 
   # The domain the frame realizes, the design taken as it is: a faulty one is built
-  # unchecked, as a frame drew it before the validator saw it.
+  # unchecked, its names read as strings (D-195), as a frame drew it before the validator
+  # saw it.
   defp x_domain(design) do
-    frame = Frame.new(struct!(Chart, design), sources: %{s: rows()})
-    frame.scales.x.domain
+    frame = Frame.new(struct!(Chart, Migration.names(design)), sources: %{s: rows()})
+    frame.scales["x"].domain
   end
 
   test "a text at a constant x on an inferred x domain is a fault, and it does widen the domain" do
     faulty = design([text(%{x: 0, y: 12})])
 
-    assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, :x, 0}}, y_fault]} =
+    assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, "x", 0}}, y_fault]} =
              Validator.validate(faulty)
 
     # `y` is inferred too, and 12 is inside the data's own extent, but it is still a constant
     # read as data: the check is about what the design says, not what the rows happen to be.
-    assert y_fault == {[:marks, 1, :channels, :y], {:feeds_domain, :y, 12}}
+    assert y_fault == {[:marks, 1, :channels, :y], {:feeds_domain, "y", 12}}
 
     # Why: the realized domain runs from the constant, not from the series.
     assert x_domain(faulty) == [0, 199]
@@ -63,7 +64,7 @@ defmodule Visualize.Chart.InferredDomainTest do
     for domain <- [[:auto, 500], [0, :auto]] do
       d = design([text(%{x: 300, y: :v})], %{x: %{kind: :linear, domain: domain}})
 
-      assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, :x, 300}}]} =
+      assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, "x", 300}}]} =
                Validator.validate(d)
     end
   end
@@ -87,7 +88,7 @@ defmodule Visualize.Chart.InferredDomainTest do
 
     # The baseline is held in the domain, as the author means it to be.
     frame = Frame.new(Chart.from_map!(d), sources: %{s: rows()})
-    assert hd(frame.scales.y.domain) == 0
+    assert hd(frame.scales["y"].domain) == 0
   end
 
   test "a renamed scale is reported under the name the mark reads" do
@@ -97,7 +98,7 @@ defmodule Visualize.Chart.InferredDomainTest do
         %{count: %{kind: :linear}}
       )
 
-    assert {:error, [{[:marks, 1, :channels, :y], {:feeds_domain, :count, 5}}]} =
+    assert {:error, [{[:marks, 1, :channels, :y], {:feeds_domain, "count", 5}}]} =
              Validator.validate(d)
   end
 
@@ -129,7 +130,7 @@ defmodule Visualize.Chart.InferredDomainTest do
       }
     end
 
-    assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, :x, 0}}]} =
+    assert {:error, [{[:marks, 1, :channels, :x], {:feeds_domain, "x", 0}}]} =
              Validator.validate(two.(:auto))
 
     assert :ok = Validator.validate(two.([0, 199]))
@@ -148,13 +149,13 @@ defmodule Visualize.Chart.InferredDomainTest do
       marks: [text(%{x: :t, y: 40})]
     }
 
-    assert {:error, [{[:marks, 0, :channels, :y], {:feeds_domain, :r, 40}}]} =
+    assert {:error, [{[:marks, 0, :channels, :y], {:feeds_domain, "r", 40}}]} =
              Validator.validate(d)
   end
 
   test "the line names the constant, the scale and the remedies" do
-    assert Validator.format({[:marks, 1, :channels, :x], {:feeds_domain, :x, 0}}) ==
-             "marks[1].channels.x: a text at the constant 0 holds scale :x's inferred domain " <>
+    assert Validator.format({[:marks, 1, :channels, :x], {:feeds_domain, "x", 0}}) ==
+             "marks[1].channels.x: a text at the constant 0 holds scale \"x\"'s inferred domain " <>
                "open: place it at {:scale, :min} or {:scale, :max}, as a frame label, or declare the domain"
   end
 end

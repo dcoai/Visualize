@@ -50,7 +50,7 @@ defmodule Visualize.Chart.StyleListsTest do
 
       assert Validator.validate(design) == :ok
       chart = Chart.from_map!(design)
-      assert chart.styles.local == [:bad, %{stroke: %{width: 3}}]
+      assert chart.styles["local"] == ["bad", %{stroke: %{width: 3}}]
       {:ok, json} = Chart.to_json(chart)
       assert Chart.from_json(json) == {:ok, chart}
     end
@@ -59,8 +59,8 @@ defmodule Visualize.Chart.StyleListsTest do
       design = Map.put(@design, :styles, %{s: [:bad, :nope], t: %{extends: [:bold, :none_such]}})
 
       assert {:error, errors} = Validator.validate(design)
-      assert {[:styles, :s, 1], {:undeclared, :style, :nope}} in errors
-      assert {[:styles, :t, :extends, 1], {:undeclared, :style, :none_such}} in errors
+      assert {[:styles, "s", 1], {:undeclared, :style, "nope"}} in errors
+      assert {[:styles, "t", :extends, 1], {:undeclared, :style, "none_such"}} in errors
     end
   end
 
@@ -79,13 +79,13 @@ defmodule Visualize.Chart.StyleListsTest do
       assert {:error, errors} = Validator.validate(design)
 
       assert Enum.sort(for {path, :cycle} <- errors, do: path) ==
-               [[:styles, :a], [:styles, :b], [:styles, :c], [:styles, :d], [:styles, :e]]
+               [[:styles, "a"], [:styles, "b"], [:styles, "c"], [:styles, "d"], [:styles, "e"]]
     end
 
     test "and raises at resolution" do
       styles = Style.all(%{a: [:b], b: %{extends: :a}})
 
-      assert_raise ArgumentError, ~r/style :a reaches itself/, fn -> Style.node(styles, :a) end
+      assert_raise ArgumentError, ~r/style "a" reaches itself/, fn -> Style.node(styles, :a) end
     end
   end
 

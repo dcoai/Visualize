@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Summary.Table do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The data-table fallback of a chart (spec/14 §21.3, D-142): the rows each data mark
   # draws as an HTML `<table>`, every value written as the summary writes it, for a host to
   # place beside the chart. `Visualize.Chart.Summary.table/2` is the public face.
@@ -187,13 +189,13 @@ defmodule Visualize.Chart.Summary.Table do
   defp steps(_mark), do: []
 
   defp source(%{data: %{source: name}}), do: humanize(name)
-  defp source(%{data: name}) when is_atom(name), do: humanize(name)
+  defp source(%{data: name}) when is_name(name), do: humanize(name)
 
-  defp field(field) when is_atom(field) and field not in [nil, true, false], do: field
-  defp field({:field, field}) when is_atom(field), do: field
+  defp field(field) when is_name(field) and field not in [nil, true, false], do: field
+  defp field({:field, field}) when is_name(field), do: field
   defp field(_spec), do: nil
 
-  defp humanize(atom), do: atom |> Atom.to_string() |> String.replace("_", " ")
+  defp humanize(name), do: name |> to_string() |> String.replace("_", " ")
 
   @doc false
   # Text escaped for HTML content and attribute values alike.

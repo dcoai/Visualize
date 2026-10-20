@@ -33,8 +33,10 @@ defmodule Visualize.Chart.Use do
 
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.Chart
-  alias Visualize.Chart.Var
+  alias Visualize.Chart.{Names, Var}
 
   @enforce_keys [:id, :ref]
   defstruct id: nil, ref: nil, mask: [], vars: %{}, local: %{}, key: nil, origin: nil
@@ -93,12 +95,19 @@ defmodule Visualize.Chart.Use do
 
       iex> fragment = %{fill: Visualize.Chart.var(:color), text: [Visualize.Chart.var(:unit)]}
       iex> Visualize.Chart.Use.bind(fragment, %{color: Visualize.Chart.var(:color_1)})
-      %{fill: %Visualize.Chart.Var{name: :color_1}, text: [%Visualize.Chart.Var{name: :unit}]}
+      %{fill: %Visualize.Chart.Var{name: "color_1"}, text: [%Visualize.Chart.Var{name: "unit"}]}
   """
   @spec bind(term(), %{atom() => term()}) :: term()
   def bind(fragment, vars) when map_size(vars) == 0, do: fragment
 
-  def bind(%Var{name: name} = var, vars), do: Map.get(vars, name, var)
+  # A variable is bound by its name's spelling: a host binds by atom or string (D-195).
+  def bind(%Var{name: name} = var, vars) do
+    case Names.fetch(vars, name) do
+      {:ok, value} -> value
+      :error -> var
+    end
+  end
+
   def bind(%_{} = struct, _vars), do: struct
 
   def bind(map, vars) when is_map(map),
@@ -131,12 +140,18 @@ defmodule Visualize.Chart.Use do
   def mask(_fragment, :all), do: %{}
   def mask(fragment, paths) when is_list(paths), do: Enum.reduce(paths, fragment, &drop(&2, &1))
 
-  defp drop(fragment, key) when is_atom(key), do: drop(fragment, [key])
-  defp drop(fragment, [key]) when is_map(fragment), do: Map.delete(fragment, key)
+  defp drop(fragment, key) when is_name(key), do: drop(fragment, [key])
+  # A path names a fragment's names by their spelling (D-195).
+  defp drop(fragment, [key]) when is_map(fragment) do
+    case Names.key(fragment, key) do
+      {:ok, found} -> Map.delete(fragment, found)
+      :error -> fragment
+    end
+  end
 
   defp drop(fragment, [key | rest]) when is_map(fragment) do
-    case Map.fetch(fragment, key) do
-      {:ok, inner} -> Map.put(fragment, key, drop(inner, rest))
+    case Names.key(fragment, key) do
+      {:ok, found} -> Map.put(fragment, found, drop(Map.fetch!(fragment, found), rest))
       :error -> fragment
     end
   end

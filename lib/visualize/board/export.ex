@@ -439,7 +439,7 @@ defmodule Visualize.Board.Export do
         else: "translate(#{num(x)},#{num(y)}) scale(#{num(scale)})"
 
     [
-      ~s(<g class="vis-board-cell" data-vis-cell="#{escape(Atom.to_string(view.cell))}" ),
+      ~s(<g class="vis-board-cell" data-vis-cell="#{escape(to_string(view.cell))}" ),
       ~s(data-vis-state="#{State.name(view.state)}" transform="#{transform}">),
       title(view.title, theme),
       if(banner > 0,

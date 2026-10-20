@@ -99,7 +99,7 @@ defmodule Visualize.Chart.Builder.StackTest do
 
       assert length(Regex.scan(~r/class="vis-builder-entry"/, html)) == length(entries)
       assert html =~ ~s(<td class="vis-builder-entry-path">frames.main.axes[0].scale</td>)
-      assert html =~ ~s(<td class="vis-builder-entry-value">:x</td>)
+      assert html =~ ~s(<td class="vis-builder-entry-value">&quot;x&quot;</td>)
       assert html =~ ~s(<td class="vis-builder-entry-layer">shared</td>)
     end
 
@@ -123,7 +123,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       end
 
       assert_raise ArgumentError, ~r/layer "1" is nil/, fn ->
-        Visualize.Chart.Builder.Stack.seed([%{frames: %{main: %{}}}, nil])
+        Visualize.Chart.Builder.Stack.seed([%{frames: %{"main" => %{}}}, nil])
       end
     end
   end
@@ -144,7 +144,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       {:noreply, off} = Builder.handle_event("toggle_layer", %{"index" => "0"}, socket)
       {:noreply, on} = Builder.handle_event("toggle_layer", %{"index" => "0"}, off)
 
-      assert BuilderFixture.layers(off) == BuilderFixture.layers()
+      assert BuilderFixture.layers(off) == BuilderFixture.named(BuilderFixture.layers())
       assert BuilderFixture.disabled(off) == MapSet.new([0])
       # Flatten writes the version a deployed design carries (§19.8); the house wrote it before.
       assert BuilderFixture.design(off) ==
@@ -161,7 +161,7 @@ defmodule Visualize.Chart.Builder.StackTest do
         Builder.handle_event("reorder", %{"from" => 2, "to" => 0}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
-      assert BuilderFixture.layers(moved) == [panel, house, shared]
+      assert BuilderFixture.layers(moved) == BuilderFixture.named([panel, house, shared])
       assert BuilderFixture.selected(moved) == 0
       assert BuilderFixture.disabled(moved) == MapSet.new([1])
     end
@@ -177,7 +177,7 @@ defmodule Visualize.Chart.Builder.StackTest do
         Builder.handle_event("reorder", %{"from" => 1, "to" => 1}, socket)
 
       for unchanged <- [up, down, same] do
-        assert BuilderFixture.layers(unchanged) == BuilderFixture.layers()
+        assert BuilderFixture.layers(unchanged) == BuilderFixture.named(BuilderFixture.layers())
       end
     end
 
@@ -186,7 +186,7 @@ defmodule Visualize.Chart.Builder.StackTest do
       {:noreply, dropped} = Builder.handle_event("reorder", %{"from" => 0, "to" => 2}, socket)
 
       [house, shared, panel] = BuilderFixture.layers()
-      assert BuilderFixture.layers(dropped) == [shared, panel, house]
+      assert BuilderFixture.layers(dropped) == BuilderFixture.named([shared, panel, house])
     end
 
     test "inspecting selects the layer and opens the deepest node that owns the path" do

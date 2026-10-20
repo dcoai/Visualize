@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Validator.Cycles do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Cycles through style derivation (spec/14 §3.5): `extends`, a list of names, a name.
 
   alias Visualize.Chart.Validator.Types
@@ -35,6 +37,6 @@ defmodule Visualize.Chart.Validator.Cycles do
   # The style names an entry refers to: itself as a name, a list's entries, an `extends`.
   defp refs(entries) when is_list(entries), do: Enum.flat_map(entries, &refs/1)
   defp refs(%{extends: parent} = node) when not is_struct(node), do: refs(parent)
-  defp refs(name) when is_atom(name), do: if(Types.name?(name), do: [name], else: [])
+  defp refs(name) when is_name(name), do: if(Types.name?(name), do: [name], else: [])
   defp refs(_entry), do: []
 end

@@ -174,6 +174,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def expects(%{uses: []}), do: :term
 
     defp params(%{layers: layers, vars: vars}) do
+      # A host binds by either spelling; a variable is named by its string (D-195).
+      vars = Visualize.Chart.Names.keys(vars)
+
       for free <- Chart.free_vars(layers) do
         widget = Editor.widget(expects(free))
         bound = Map.fetch(vars, free.name)

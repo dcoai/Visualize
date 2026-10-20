@@ -94,10 +94,46 @@ defmodule Visualize.Data.Table do
         value
 
       _ ->
-        Enum.find_value(Map.keys(row), fn key ->
-          if is_atom(key) and Atom.to_string(key) == name, do: Map.fetch!(row, key)
-        end)
+        case key(row, name) do
+          nil -> nil
+          key -> Map.fetch!(row, key)
+        end
     end
+  end
+
+  @doc """
+  The key of `row` that spells `name`: `name` itself when it is a key, else the key of the
+  other spelling, `nil` when neither is.
+
+  A design names a field by its string (spec/14 §1.4, D-195) and a host's rows are often
+  keyed by atoms: the atom key a string finds is remembered for the calling process, so a
+  frame that reads the same field from every row scans one row's keys, not all of them. No
+  atom is ever created or looked up by name — the remembered key is one a row held.
+
+      iex> Visualize.Data.Table.key(%{cpu: 1}, "cpu")
+      :cpu
+      iex> Visualize.Data.Table.key(%{"cpu" => 1}, :cpu)
+      "cpu"
+      iex> Visualize.Data.Table.key(%{cpu: 1}, "mem")
+      nil
+  """
+  @spec key(map(), name()) :: name() | nil
+  def key(row, name) when is_map_key(row, name), do: name
+
+  def key(row, name) when is_atom(name),
+    do: if(is_map_key(row, Atom.to_string(name)), do: Atom.to_string(name))
+
+  def key(row, name) when is_binary(name) do
+    case Process.get({__MODULE__, name}) do
+      key when is_map_key(row, key) -> key
+      _other -> scan(row, name)
+    end
+  end
+
+  defp scan(row, name) do
+    found = Enum.find(Map.keys(row), &(is_atom(&1) and Atom.to_string(&1) == name))
+    if found, do: Process.put({__MODULE__, name}, found)
+    found
   end
 
   @doc """

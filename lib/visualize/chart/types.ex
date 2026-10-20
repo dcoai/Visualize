@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Types do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The type check of a binding (spec/14 §7.4, D-153): every field a mark reads through a
   # scale, with what the scale's kind needs of it, and the reads a set of known types does
   # not satisfy. Pure and total over any map — an unfinished design, or one with variables
@@ -7,7 +9,7 @@ defmodule Visualize.Chart.Types do
   # contributes nothing, and the validator reports it.
 
   alias Visualize.Chart.Frame.Scales
-  alias Visualize.Chart.{Style, Var}
+  alias Visualize.Chart.{Names, Style, Var}
   alias Visualize.Chart.Validator.Domain
   alias Visualize.Data.Schema
 
@@ -77,7 +79,7 @@ defmodule Visualize.Chart.Types do
   @spec faults([read()], %{atom() => known()}) :: [{list(), tuple()}]
   def faults(reads, known) when is_list(reads) and is_map(known) do
     for {path, slot, field, need} <- reads,
-        {:ok, types} <- [Map.fetch(known, slot)],
+        {:ok, types} <- [Names.fetch(known, slot)],
         given = type(types, field),
         given != nil,
         not satisfies?(given, need, from(types)),
@@ -97,9 +99,9 @@ defmodule Visualize.Chart.Types do
   end
 
   defp type(types, field) when is_map(types) do
-    case Map.fetch(types, field) do
-      {:ok, type} when is_atom(type) -> type
-      _absent -> types |> Map.get(Atom.to_string(field)) |> atom_or_nil()
+    case Names.fetch(types, field) do
+      {:ok, type} -> atom_or_nil(type)
+      :error -> nil
     end
   end
 
@@ -128,7 +130,7 @@ defmodule Visualize.Chart.Types do
 
   # The slot whose rows the mark reads as they are: named, or named with steps that keep
   # every field; `nil` otherwise.
-  defp slot(name, slots) when is_atom(name) and is_map_key(slots, name), do: name
+  defp slot(name, slots) when is_name(name) and is_map_key(slots, name), do: name
 
   defp slot(%{source: name} = data, slots) when not is_struct(data) do
     case Map.get(data, :transforms, []) do
@@ -143,7 +145,7 @@ defmodule Visualize.Chart.Types do
   defp keeping?(_step), do: false
 
   # A mark is drawn in the frame it names, or the design's only frame (spec/14 §5.1).
-  defp frame(name, frames) when is_atom(name) and is_map_key(frames, name),
+  defp frame(name, frames) when is_name(name) and is_map_key(frames, name),
     do: map_or_nil(frames[name])
 
   defp frame(_name, frames) when map_size(frames) == 1,
@@ -207,7 +209,7 @@ defmodule Visualize.Chart.Types do
   defp field(%Var{}), do: nil
   defp field(value), do: if(name?(value), do: value)
 
-  defp name?(value), do: is_atom(value) and value not in [nil, true, false]
+  defp name?(value), do: Names.name?(value)
 
   defp map_or_empty(%{} = map) when not is_struct(map), do: map
   defp map_or_empty(_other), do: %{}

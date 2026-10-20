@@ -12,7 +12,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     import Visualize.Chart.Builder.Workspace, only: [schedule: 1]
     import Visualize.Chart.Builder.Writes, only: [derived_scales: 1, update_layer: 4]
 
-    alias Visualize.Chart.{Builder, Schema, Use}
+    import Visualize.Chart.Names, only: [is_name: 1]
+
+    alias Visualize.Chart.{Builder, Names, Schema, Use}
     alias Visualize.Chart.Builder.{Editor, Sources, Stack}
     alias Visualize.Signals
 
@@ -39,10 +41,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       name =
         1
         |> Stream.iterate(&(&1 + 1))
-        |> Stream.map(&:"source_#{&1}")
+        |> Stream.map(&"source_#{&1}")
         |> Enum.find(&(&1 not in taken))
 
-      signal = Signals.new(:sine, [:t, :value])
+      signal = Signals.new(:sine, ["t", "value"])
 
       socket =
         socket
@@ -54,7 +56,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("remove_source", %{"source" => name}, socket) do
-      atom = String.to_atom(name)
+      atom = name
 
       {:noreply,
        socket
@@ -76,14 +78,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         not Regex.match?(~r/^[a-z_][a-zA-Z0-9_]*$/, new) ->
           {:noreply, assign(socket, :notice, "#{new} is not a name a source can have")}
 
-        Map.has_key?(sources, String.to_atom(new)) ->
+        Map.has_key?(sources, new) ->
           {:noreply, assign(socket, :notice, "a source is already named #{new}")}
 
-        locked = binds_in_locked(socket.assigns, String.to_atom(old)) ->
+        locked = binds_in_locked(socket.assigns, old) ->
           {:noreply, assign(socket, :notice, "#{old} is bound by #{locked} — from the library")}
 
         true ->
-          {:noreply, renamed_source(socket, String.to_atom(old), String.to_atom(new))}
+          {:noreply, renamed_source(socket, old, new)}
       end
     end
 
@@ -91,18 +93,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       column = String.trim(column)
 
       if Regex.match?(~r/^[a-z_][a-zA-Z0-9_]*$/, column),
-        do:
-          {:noreply,
-           columns_written(socket, String.to_atom(name), &(&1 ++ [String.to_atom(column)]))},
+        do: {:noreply, columns_written(socket, name, &(&1 ++ [column]))},
         else: {:noreply, socket}
     end
 
     def handle_event("rename_column", %{"source" => name, "column" => old, "name" => new}, socket) do
       new = String.trim(new)
-      {source, old} = {String.to_atom(name), String.to_atom(old)}
+      {source, old} = {name, old}
 
       if new != "" and Regex.match?(~r/^[a-z_][a-zA-Z0-9_]*$/, new) and new != to_string(old) do
-        atom = String.to_atom(new)
+        atom = new
         %{design: design} = editing(socket.assigns)
         types = get_in(design, [:sources, source, :types]) || %{}
 
@@ -125,7 +125,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     def handle_event("remove_column", %{"source" => name, "column" => column}, socket) do
-      {source, column} = {String.to_atom(name), String.to_atom(column)}
+      {source, column} = {name, column}
       %{design: design} = editing(socket.assigns)
       types = get_in(design, [:sources, source, :types]) || %{}
 
@@ -140,7 +140,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           %{"source" => name, "column" => column, "type" => type},
           socket
         ) do
-      {source, column} = {String.to_atom(name), String.to_atom(column)}
+      {source, column} = {name, column}
       %{design: design} = editing(socket.assigns)
       types = get_in(design, [:sources, source, :types]) || %{}
 
@@ -156,9 +156,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # The generator is the signal under the source's name over the source's columns; a kind
     # keeps the numbers the signal had, none removes it.
     def handle_event("set_generator", %{"source" => name, "kind" => kind}, socket) do
-      source = String.to_atom(name)
+      source = name
       %{design: design} = editing(socket.assigns)
-      fields = for f <- get_in(design, [:sources, source, :fields]) || [], is_atom(f), do: f
+      fields = for f <- get_in(design, [:sources, source, :fields]) || [], is_binary(f), do: f
 
       case Enum.find(Signals.kinds(), &(to_string(&1) == kind)) do
         nil ->
@@ -190,13 +190,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
           typed -> Editor.parse(:name, typed)
         end
 
-      {:noreply, update_layer(socket, [:sources, String.to_atom(name)], :default, parsed)}
+      {:noreply, update_layer(socket, [:sources, name], :default, parsed)}
     end
 
     def handle_event("edit_signal", %{"_target" => [target]} = params, socket) do
       case String.split(target, ".", parts: 2) do
         [name, key] ->
-          atom = String.to_atom(name)
+          atom = name
 
           {:noreply,
            update(socket, :signals, fn signals ->
@@ -235,7 +235,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{design: design} = editing(socket.assigns)
       fields = List.wrap(get_in(design, [:sources, source, :fields]) || [])
       fields = fields |> fun.() |> Enum.uniq()
-      names = Enum.filter(fields, &is_atom/1)
+      names = Enum.filter(fields, &is_binary/1)
 
       socket
       |> update_layer(
@@ -271,7 +271,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
             %{
               use
               | local: rename_source_in(local, old, new),
-                key: if(key == old and Map.has_key?(local, :source), do: new, else: key)
+                key:
+                  if(Names.same?(key, old) and Map.has_key?(local, :source), do: new, else: key)
             }
 
           use ->
@@ -298,11 +299,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:sources,
            sources
            |> Map.new(fn {k, v} ->
-             {if(k == old, do: new, else: k), rename_source_in(v, old, new)}
+             {if(Names.same?(k, old), do: new, else: k), rename_source_in(v, old, new)}
            end)}
 
-        {key, ^old} when key in [:data, :source, :nodes, :default] ->
-          {key, new}
+        # A layer written in Elixir may name the source by its atom (D-195).
+        {key, value} when key in [:data, :source, :nodes, :default] and is_name(value) ->
+          {key, if(Names.same?(value, old), do: new, else: value)}
 
         {key, value} ->
           {key, rename_source_in(value, old, new)}
@@ -332,8 +334,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp mentions_source?(%{} = map, source) do
       Enum.any?(map, fn
-        {key, ^source} when key in [:data, :source, :nodes] -> true
-        {_key, value} -> mentions_source?(value, source)
+        {key, value} when key in [:data, :source, :nodes] and is_name(value) ->
+          Names.same?(value, source) or mentions_source?(value, source)
+
+        {_key, value} ->
+          mentions_source?(value, source)
       end)
     end
 

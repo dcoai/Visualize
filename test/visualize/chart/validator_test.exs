@@ -7,187 +7,201 @@ defmodule Visualize.Chart.ValidatorTest do
 
   import Visualize.Chart, only: [var: 1]
 
-  alias Visualize.Chart.{Schema, Validator}
+  alias Visualize.Chart.{Migration, Schema, Validator}
 
   doctest Validator
 
   # Every node kind present once, every reference resolving.
-  @full %{
-    version: 3,
-    meta: %{name: "Full", description: ["all ", var(:unit)]},
-    sources: %{primary: %{fields: [:t, :v, :sha], default: :main}, other: %{fields: [:w]}},
-    vars: %{unit: %{default: "%"}, accent: %{}},
-    theme: %{
-      name: :house,
-      series: ["#111111", "#222222"],
-      axis: "#666666",
-      grid: "#e0e0e0",
-      text: "#333333",
-      background: "#ffffff",
-      font_family: "sans-serif",
-      font_size: 10,
-      label_size: 12,
-      title_size: 16
-    },
-    styles: %{
-      series: %{
-        stroke: %{type: :solid, color: var(:accent), width: 2, dash: [4, 2]},
-        curve: %{type: :catmull_rom, alpha: 0.5},
-        fill: %{type: :solid, color: {:field, :sha}}
-      },
-      muted: %{
-        stroke: %{type: :solid, color: :axis},
-        opacity: 0.6,
-        font: %{family: :font_family, size: :label_size},
-        marker: %{shape: :star, size: 64},
-        text: %{anchor: :middle, offset: [2, 0]},
-        effect: %{type: :shadow, radius: 3},
-        transition: %{duration: 200, easing: :cubic_out, fill: %{duration: 400}},
-        animation: %{name: :pulse, duration: 1200, iterations: :infinite, delay: 0},
-        enter: %{name: :grow, duration: 300, easing: :cubic_out},
-        exit: %{name: :explode, duration: 700}
-      },
-      wash: %{fill: %{type: :paint, name: :fade}}
-    },
-    defs: %{
-      fade: %{
-        type: :linear,
-        stops: [%{at: 0, color: :series_1, opacity: 0.8}, %{at: 1, color: "#fff"}],
-        angle: 180
-      }
-    },
-    defaults: %{stroke: %{width: 2, cap: :round}, line: %{stroke: %{width: 1.5}}},
-    layout: %{columns: [1], rows: [1], gap: 4},
-    interaction: %{sync: "dash", frame: :main},
-    frames: %{
-      main: %{
-        kind: :cartesian,
-        margin: %{top: 20, right: 20, bottom: 30, left: 40},
-        scales: %{
-          x: %{kind: :time, domain: :auto},
-          y: %{
-            kind: :linear,
-            domain: [0, :auto],
-            nice: true,
-            transition: %{duration: 300, easing: :cubic_in_out, shrink_after: 0}
+  # The design as a reader holds it, its names strings (spec/14 §1.4, D-195).
+  @full Migration.names(%{
+          version: 3,
+          meta: %{name: "Full", description: ["all ", var(:unit)]},
+          sources: %{primary: %{fields: [:t, :v, :sha], default: :main}, other: %{fields: [:w]}},
+          vars: %{unit: %{default: "%"}, accent: %{}},
+          theme: %{
+            name: :house,
+            series: ["#111111", "#222222"],
+            axis: "#666666",
+            grid: "#e0e0e0",
+            text: "#333333",
+            background: "#ffffff",
+            font_family: "sans-serif",
+            font_size: 10,
+            label_size: 12,
+            title_size: 16
           },
-          color: %{kind: :ordinal, range: :category10}
-        },
-        axes: [
-          %{scale: :x, side: :bottom, ticks: %{count: 6, size_inner: 4}, format: "%H:%M"},
-          %{
-            scale: :y,
-            side: :left,
-            ticks: 5,
-            grid: true,
-            measure: %{unit: "ms", quantity: :duration}
-          }
-        ],
-        legend: %{scale: :color, position: :top_right, title: ["color"]},
-        projection: %{
-          type: :mercator,
-          scale: 100,
-          translate: [1, 2],
-          fit: %{data: :primary, fields: [:t, :v], padding: 8}
-        },
-        facet: %{by: :sha, columns: 2},
-        viewport: %{scale: :x, span: 60}
-      },
-      # A basemap's frame (#475): a mark that draws tiles needs a Mercator projection.
-      map: %{kind: :geo, projection: %{type: :mercator}}
-    },
-    marks: [
-      %{
-        type: :line,
-        data: :primary,
-        channels: %{x: :t, y: :v},
-        style: :series,
-        render: :svg,
-        frame: :main
-      },
-      %{
-        type: :rule,
-        data: :primary,
-        frame: :main,
-        channels: %{x: :t},
-        label: %{text: ["deploy ", {:field, :sha}], anchor: :top, style: :muted, dx: 1, dy: 2}
-      },
-      %{
-        type: :arc,
-        data: %{
-          source: :primary,
-          transforms: [%{op: :bin, field: :v, thresholds: 20, as: :count}]
-        },
-        channels: %{value: :count},
-        scales: %{color: :color},
-        offset: %{x: :v},
-        options: %{inner_radius: 10, outer_radius: 50},
-        frame: :main
-      },
-      %{
-        type: :tiles,
-        frame: :map,
-        tiles: %{
-          url: "https://{s}.tile.example/{z}/{x}/{y}.png",
-          attribution: "© OpenStreetMap contributors",
-          subdomains: ["a", "b"],
-          max_zoom: 18
-        }
-      },
-      # A choice by value (#643, D-194).
-      %{
-        type: :choose,
-        data: :primary,
-        frame: :main,
-        channels: %{x: :t, y: :v},
-        on: :sha,
-        cases: %{ok: %{type: :circle, style: :series, options: %{radius: 2}}},
-        else: %{type: :text}
-      }
-    ],
-    labels: [
-      %{anchor: :title, text: ["Full ", var(:unit)], style: :title, dx: 0, dy: -4, frame: :main},
-      %{anchor: {:axis, :y}, text: ["unit"], frame: :main}
-    ]
-  }
+          styles: %{
+            series: %{
+              stroke: %{type: :solid, color: var(:accent), width: 2, dash: [4, 2]},
+              curve: %{type: :catmull_rom, alpha: 0.5},
+              fill: %{type: :solid, color: {:field, :sha}}
+            },
+            muted: %{
+              stroke: %{type: :solid, color: :axis},
+              opacity: 0.6,
+              font: %{family: :font_family, size: :label_size},
+              marker: %{shape: :star, size: 64},
+              text: %{anchor: :middle, offset: [2, 0]},
+              effect: %{type: :shadow, radius: 3},
+              transition: %{duration: 200, easing: :cubic_out, fill: %{duration: 400}},
+              animation: %{name: :pulse, duration: 1200, iterations: :infinite, delay: 0},
+              enter: %{name: :grow, duration: 300, easing: :cubic_out},
+              exit: %{name: :explode, duration: 700}
+            },
+            wash: %{fill: %{type: :paint, name: :fade}}
+          },
+          defs: %{
+            fade: %{
+              type: :linear,
+              stops: [%{at: 0, color: :series_1, opacity: 0.8}, %{at: 1, color: "#fff"}],
+              angle: 180
+            }
+          },
+          defaults: %{stroke: %{width: 2, cap: :round}, line: %{stroke: %{width: 1.5}}},
+          layout: %{columns: [1], rows: [1], gap: 4},
+          interaction: %{sync: "dash", frame: :main},
+          frames: %{
+            main: %{
+              kind: :cartesian,
+              margin: %{top: 20, right: 20, bottom: 30, left: 40},
+              scales: %{
+                x: %{kind: :time, domain: :auto},
+                y: %{
+                  kind: :linear,
+                  domain: [0, :auto],
+                  nice: true,
+                  transition: %{duration: 300, easing: :cubic_in_out, shrink_after: 0}
+                },
+                color: %{kind: :ordinal, range: :category10}
+              },
+              axes: [
+                %{scale: :x, side: :bottom, ticks: %{count: 6, size_inner: 4}, format: "%H:%M"},
+                %{
+                  scale: :y,
+                  side: :left,
+                  ticks: 5,
+                  grid: true,
+                  measure: %{unit: "ms", quantity: :duration}
+                }
+              ],
+              legend: %{scale: :color, position: :top_right, title: ["color"]},
+              projection: %{
+                type: :mercator,
+                scale: 100,
+                translate: [1, 2],
+                fit: %{data: :primary, fields: [:t, :v], padding: 8}
+              },
+              facet: %{by: :sha, columns: 2},
+              viewport: %{scale: :x, span: 60}
+            },
+            # A basemap's frame (#475): a mark that draws tiles needs a Mercator projection.
+            map: %{kind: :geo, projection: %{type: :mercator}}
+          },
+          marks: [
+            %{
+              type: :line,
+              data: :primary,
+              channels: %{x: :t, y: :v},
+              style: :series,
+              render: :svg,
+              frame: :main
+            },
+            %{
+              type: :rule,
+              data: :primary,
+              frame: :main,
+              channels: %{x: :t},
+              label: %{
+                text: ["deploy ", {:field, :sha}],
+                anchor: :top,
+                style: :muted,
+                dx: 1,
+                dy: 2
+              }
+            },
+            %{
+              type: :arc,
+              data: %{
+                source: :primary,
+                transforms: [%{op: :bin, field: :v, thresholds: 20, as: :count}]
+              },
+              channels: %{value: :count},
+              scales: %{color: :color},
+              offset: %{x: :v},
+              options: %{inner_radius: 10, outer_radius: 50},
+              frame: :main
+            },
+            %{
+              type: :tiles,
+              frame: :map,
+              tiles: %{
+                url: "https://{s}.tile.example/{z}/{x}/{y}.png",
+                attribution: "© OpenStreetMap contributors",
+                subdomains: ["a", "b"],
+                max_zoom: 18
+              }
+            },
+            # A choice by value (#643, D-194).
+            %{
+              type: :choose,
+              data: :primary,
+              frame: :main,
+              channels: %{x: :t, y: :v},
+              on: :sha,
+              cases: %{ok: %{type: :circle, style: :series, options: %{radius: 2}}},
+              else: %{type: :text}
+            }
+          ],
+          labels: [
+            %{
+              anchor: :title,
+              text: ["Full ", var(:unit)],
+              style: :title,
+              dx: 0,
+              dy: -4,
+              frame: :main
+            },
+            %{anchor: {:axis, :y}, text: ["unit"], frame: :main}
+          ]
+        })
 
   # Where an instance of each node kind sits in @full.
   @paths %{
     design: [],
     meta: [:meta],
-    source: [:sources, :primary],
-    var: [:vars, :unit],
+    source: [:sources, "primary"],
+    var: [:vars, "unit"],
     theme: [:theme],
-    style: [:styles, :series],
-    paint: [:defs, :fade],
+    style: [:styles, "series"],
+    paint: [:defs, "fade"],
     defaults: [:defaults],
     kind_defaults: [:defaults, :line],
-    stroke: [:styles, :series, :stroke],
-    curve: [:styles, :series, :curve],
-    font: [:styles, :muted, :font],
-    marker: [:styles, :muted, :marker],
-    text_layout: [:styles, :muted, :text],
-    effect: [:styles, :muted, :effect],
-    style_transition: [:styles, :muted, :transition],
-    part_transition: [:styles, :muted, :transition, :fill],
-    style_animation: [:styles, :muted, :animation],
-    style_enter: [:styles, :muted, :enter],
-    style_exit: [:styles, :muted, :exit],
-    stop: [:defs, :fade, :stops, 0],
+    stroke: [:styles, "series", :stroke],
+    curve: [:styles, "series", :curve],
+    font: [:styles, "muted", :font],
+    marker: [:styles, "muted", :marker],
+    text_layout: [:styles, "muted", :text],
+    effect: [:styles, "muted", :effect],
+    style_transition: [:styles, "muted", :transition],
+    part_transition: [:styles, "muted", :transition, :fill],
+    style_animation: [:styles, "muted", :animation],
+    style_enter: [:styles, "muted", :enter],
+    style_exit: [:styles, "muted", :exit],
+    stop: [:defs, "fade", :stops, 0],
     label: [:labels, 0],
     layout: [:layout],
     interaction: [:interaction],
-    frame: [:frames, :main],
-    margin: [:frames, :main, :margin],
-    scale: [:frames, :main, :scales, :y],
-    axis: [:frames, :main, :axes, 0],
-    ticks: [:frames, :main, :axes, 0, :ticks],
-    measure: [:frames, :main, :axes, 1, :measure],
-    legend: [:frames, :main, :legend],
-    projection: [:frames, :main, :projection],
-    facet: [:frames, :main, :facet],
-    viewport: [:frames, :main, :viewport],
-    transition: [:frames, :main, :scales, :y, :transition],
+    frame: [:frames, "main"],
+    margin: [:frames, "main", :margin],
+    scale: [:frames, "main", :scales, "y"],
+    axis: [:frames, "main", :axes, 0],
+    ticks: [:frames, "main", :axes, 0, :ticks],
+    measure: [:frames, "main", :axes, 1, :measure],
+    legend: [:frames, "main", :legend],
+    projection: [:frames, "main", :projection],
+    facet: [:frames, "main", :facet],
+    viewport: [:frames, "main", :viewport],
+    transition: [:frames, "main", :scales, "y", :transition],
     mark: [:marks, 2],
     data: [:marks, 2, :data],
     transform: [:marks, 2, :data, :transforms, 0],
@@ -198,8 +212,8 @@ defmodule Visualize.Chart.ValidatorTest do
     mark_label: [:marks, 1, :label],
     tooltip: [:marks, 2, :tooltip],
     tiles: [:marks, 3, :tiles],
-    choice: [:marks, 4, :cases, :ok],
-    fit: [:frames, :main, :projection, :fit]
+    choice: [:marks, 4, :cases, "ok"],
+    fit: [:frames, "main", :projection, :fit]
   }
 
   @stack_orders [:none, :ascending, :descending, :inside_out, :reverse, :appearance]
@@ -215,16 +229,27 @@ defmodule Visualize.Chart.ValidatorTest do
     List.update_at(list, i, &put_at(&1, rest, value))
   end
 
+  # A key by its spelling: a test names a design's name as its atom or its string.
   defp put_at(map, [k | rest], value) do
+    k = spelled(map, k)
     Map.put(map, k, put_at(Map.get(map, k, %{}), rest, value))
   end
 
-  defp delete_at(map, [k]), do: Map.delete(map, k)
+  defp spelled(map, k) when is_atom(k) and is_map(map) and not is_map_key(map, k) do
+    if is_map_key(map, Atom.to_string(k)), do: Atom.to_string(k), else: k
+  end
+
+  defp spelled(map, k) when is_binary(k) and is_map(map) and not is_map_key(map, k),
+    do: Enum.find(Map.keys(map), k, &(is_atom(&1) and Atom.to_string(&1) == k))
+
+  defp spelled(_map, k), do: k
+
+  defp delete_at(map, [k]), do: Map.delete(map, spelled(map, k))
 
   defp delete_at(list, [i | rest]) when is_integer(i),
     do: List.update_at(list, i, &delete_at(&1, rest))
 
-  defp delete_at(map, [k | rest]), do: Map.update!(map, k, &delete_at(&1, rest))
+  defp delete_at(map, [k | rest]), do: Map.update!(map, spelled(map, k), &delete_at(&1, rest))
 
   # A mark of the type with its required channels, at index 0 of a minimal design.
   defp design_with_mark(type) do
@@ -357,7 +382,7 @@ defmodule Visualize.Chart.ValidatorTest do
       # A listed key the stack lacks is ignored at run time, so it is no fault here.
       assert Validator.validate(put_at(@full, path, %{step | order: {:keys, [:nope]}})) == :ok
 
-      assert errors(put_at(@full, path, %{step | order: {:keys, ["v"]}})) ==
+      assert errors(put_at(@full, path, %{step | order: {:keys, [1]}})) ==
                [{path ++ [:order], {:type, :key_order}}]
 
       assert errors(put_at(@full, path, %{step | order: {:keys, :v}})) ==
@@ -372,7 +397,7 @@ defmodule Visualize.Chart.ValidatorTest do
       step = %{op: :force, fields: [:t, :v], nodes: :nobody}
 
       assert errors(put_at(@full, path, step)) == [
-               {path ++ [:nodes], {:undeclared, :source, :nobody}}
+               {path ++ [:nodes], {:undeclared, :source, "nobody"}}
              ]
 
       assert Validator.validate(put_at(@full, path, %{step | nodes: :primary})) == :ok
@@ -397,28 +422,30 @@ defmodule Visualize.Chart.ValidatorTest do
       base = design_with_mark(:line)
 
       scale = fn node ->
-        put_at(base, [:frames, :main, :scales, :angle], Map.merge(%{kind: :linear}, node))
+        put_at(base, [:frames, "main", :scales, :angle], Map.merge(%{kind: :linear}, node))
       end
 
-      assert errors(scale.(%{sweep: 0})) == [{[:frames, :main, :scales, :angle, :sweep], :sweep}]
+      assert errors(scale.(%{sweep: 0})) == [
+               {[:frames, "main", :scales, "angle", :sweep], :sweep}
+             ]
 
       assert errors(scale.(%{sweep: 400})) == [
-               {[:frames, :main, :scales, :angle, :sweep], :sweep}
+               {[:frames, "main", :scales, "angle", :sweep], :sweep}
              ]
 
       assert Validator.validate(scale.(%{start: -120, sweep: 240})) == :ok
       assert Validator.validate(scale.(%{sweep: -360})) == :ok
 
       axis = fn node ->
-        put_at(scale.(%{}), [:frames, :main, :axes], [
+        put_at(scale.(%{}), [:frames, "main", :axes], [
           Map.merge(%{scale: :angle, side: :bottom}, node)
         ])
       end
 
-      assert errors(axis.(%{radius: 0})) == [{[:frames, :main, :axes, 0, :radius], :radius}]
+      assert errors(axis.(%{radius: 0})) == [{[:frames, "main", :axes, 0, :radius], :radius}]
       assert Validator.validate(axis.(%{radius: 0.8, at: 45})) == :ok
 
-      assert Validator.format({[:frames, :main, :scales, :angle, :sweep], :sweep}) ==
+      assert Validator.format({[:frames, "main", :scales, "angle", :sweep], :sweep}) ==
                "frames.main.scales.angle.sweep: must be within a turn, and not zero"
     end
 
@@ -451,11 +478,13 @@ defmodule Visualize.Chart.ValidatorTest do
     end
 
     test "an extent carries :auto only as one of two bounds" do
-      assert Validator.validate(put_at(@full, [:frames, :main, :scales, :y, :domain], [:auto, 5])) ==
+      assert Validator.validate(
+               put_at(@full, [:frames, "main", :scales, :y, :domain], [:auto, 5])
+             ) ==
                :ok
 
-      assert errors(put_at(@full, [:frames, :main, :scales, :y, :domain], [1, :auto, 5])) ==
-               [{[:frames, :main, :scales, :y, :domain], {:type, :extent}}]
+      assert errors(put_at(@full, [:frames, "main", :scales, :y, :domain], [1, :auto, 5])) ==
+               [{[:frames, "main", :scales, "y", :domain], {:type, :extent}}]
     end
 
     test "a one_of reports the chosen alternative's errors" do
@@ -465,8 +494,8 @@ defmodule Visualize.Chart.ValidatorTest do
                [{[:marks, 2, :data, :transforms, 0, :op], {:enum, Schema.transform_ops()}}]
     end
 
-    test "a string where a name belongs is a type error" do
-      assert errors(put_at(@full, [:marks, 0, :channels, :x], "t")) ==
+    test "a name is a non-empty string or an atom: anything else is a type error (D-195)" do
+      assert errors(put_at(@full, [:marks, 0, :channels, :x], [:t])) ==
                [{[:marks, 0, :channels, :x], {:type, :channel}}]
     end
 
@@ -485,7 +514,7 @@ defmodule Visualize.Chart.ValidatorTest do
         styles: %{s: %{opacity: :none}}
       }
 
-      assert errors(design) == [{[:styles, :s, :opacity], {:undeclared, :slot, :none}}]
+      assert errors(design) == [{[:styles, "s", :opacity], {:undeclared, :slot, :none}}]
     end
 
     test "something other than a map is not a design" do
@@ -504,7 +533,7 @@ defmodule Visualize.Chart.ValidatorTest do
         marks: [%{type: :line, data: :s, channels: %{x: :t, y: :value}}]
       }
 
-      assert errors(design) == [{[:frames, :main, :axes, 0, :scale], {:undeclared, :scale, :x}}]
+      assert errors(design) == [{[:frames, "main", :axes, 0, :scale], {:undeclared, :scale, "x"}}]
 
       no_sources = %{
         version: 3,
@@ -512,7 +541,7 @@ defmodule Visualize.Chart.ValidatorTest do
         marks: [%{type: :line, data: :s}]
       }
 
-      assert errors(no_sources) == [{[:marks, 0, :data], {:undeclared, :source, :s}}]
+      assert errors(no_sources) == [{[:marks, 0, :data], {:undeclared, :source, "s"}}]
 
       no_styles = %{
         version: 3,
@@ -521,7 +550,7 @@ defmodule Visualize.Chart.ValidatorTest do
         marks: [%{type: :line, data: :s, style: :series}]
       }
 
-      assert errors(no_styles) == [{[:marks, 0, :style], {:undeclared, :style, :series}}]
+      assert errors(no_styles) == [{[:marks, 0, :style], {:undeclared, :style, "series"}}]
 
       no_defs = %{
         version: 3,
@@ -529,14 +558,14 @@ defmodule Visualize.Chart.ValidatorTest do
         styles: %{w: %{fill: {:paint, :g}}}
       }
 
-      assert errors(no_defs) == [{[:styles, :w, :fill, :name], {:undeclared, :paint, :g}}]
+      assert errors(no_defs) == [{[:styles, "w", :fill, :name], {:undeclared, :paint, "g"}}]
 
       no_vars = %{
         version: 3,
         frames: %{main: %{kind: :cartesian, margin: Visualize.Chart.var(:size)}}
       }
 
-      assert errors(no_vars) == [{[:frames, :main, :margin], {:undeclared, :var, :size}}]
+      assert errors(no_vars) == [{[:frames, "main", :margin], {:undeclared, :var, "size"}}]
 
       # A fragment checked alone as its kind still has nothing to look a reference up in.
       assert Validator.validate(%{axis: %{scale: :x, side: :bottom}}, :axis) == :ok
@@ -544,75 +573,75 @@ defmodule Visualize.Chart.ValidatorTest do
 
     # A source's types name only its fields (§2.3, #369).
     test "a typed column the source does not list" do
-      typed = put_at(@full, [:sources, :primary, :types], %{t: :time, nope: :number})
+      typed = put_at(@full, [:sources, "primary", :types], %{t: :time, nope: :number})
 
       assert errors(typed) == [
-               {[:sources, :primary, :types, :nope], {:undeclared, :field, :nope}}
+               {[:sources, "primary", :types, "nope"], {:undeclared, :field, "nope"}}
              ]
 
-      assert Validator.validate(put_at(@full, [:sources, :primary, :types], %{t: :time})) == :ok
+      assert Validator.validate(put_at(@full, [:sources, "primary", :types], %{t: :time})) == :ok
 
-      assert errors(put_at(@full, [:sources, :primary, :types], %{t: :date})) ==
-               [{[:sources, :primary, :types, :t], {:enum, Schema.column_types()}}]
+      assert errors(put_at(@full, [:sources, "primary", :types], %{t: :date})) ==
+               [{[:sources, "primary", :types, "t"], {:enum, Schema.column_types()}}]
     end
 
     test "scales" do
       for path <- [
-            [:frames, :main, :axes, 0, :scale],
-            [:frames, :main, :legend, :scale],
-            [:frames, :main, :viewport, :scale],
+            [:frames, "main", :axes, 0, :scale],
+            [:frames, "main", :legend, :scale],
+            [:frames, "main", :viewport, :scale],
             [:marks, 2, :scales, :color]
           ] do
-        assert errors(put_at(@full, path, :nope)) == [{path, {:undeclared, :scale, :nope}}]
+        assert errors(put_at(@full, path, :nope)) == [{path, {:undeclared, :scale, "nope"}}]
       end
 
       assert errors(put_at(@full, [:labels, 1, :anchor], {:axis, :nope})) ==
-               [{[:labels, 1, :anchor], {:undeclared, :scale, :nope}}]
+               [{[:labels, 1, :anchor], {:undeclared, :scale, "nope"}}]
     end
 
     test "styles, including the built-in names" do
       for path <- [
             [:marks, 0, :style],
             [:marks, 1, :label, :style],
-            [:frames, :main, :axes, 0, :style],
-            [:frames, :main, :legend, :style],
+            [:frames, "main", :axes, 0, :style],
+            [:frames, "main", :legend, :style],
             [:labels, 0, :style]
           ] do
-        assert errors(put_at(@full, path, :nope)) == [{path, {:undeclared, :style, :nope}}]
+        assert errors(put_at(@full, path, :nope)) == [{path, {:undeclared, :style, "nope"}}]
         assert Validator.validate(put_at(@full, path, :grid)) == :ok
       end
     end
 
     test "sources" do
       assert errors(put_at(@full, [:marks, 0, :data], :nope)) ==
-               [{[:marks, 0, :data], {:undeclared, :source, :nope}}]
+               [{[:marks, 0, :data], {:undeclared, :source, "nope"}}]
 
       assert errors(put_at(@full, [:marks, 2, :data, :source], :nope)) ==
-               [{[:marks, 2, :data, :source], {:undeclared, :source, :nope}}]
+               [{[:marks, 2, :data, :source], {:undeclared, :source, "nope"}}]
     end
 
     test "variables, wherever they appear" do
       for path <- [
             [:meta, :description, 1],
-            [:styles, :series, :stroke, :color],
+            [:styles, "series", :stroke, :color],
             [:labels, 0, :text, 1],
             [:marks, 1, :label, :text, 0],
             [:marks, 2, :options],
-            [:frames, :main, :margin]
+            [:frames, "main", :margin]
           ] do
-        assert errors(put_at(@full, path, var(:nope))) == [{path, {:undeclared, :var, :nope}}]
+        assert errors(put_at(@full, path, var(:nope))) == [{path, {:undeclared, :var, "nope"}}]
       end
     end
 
     test "fields, against the mark's source" do
       assert errors(put_at(@full, [:marks, 0, :channels, :x], :nope)) ==
-               [{[:marks, 0, :channels, :x], {:undeclared, :field, :nope}}]
+               [{[:marks, 0, :channels, :x], {:undeclared, :field, "nope"}}]
 
       assert errors(put_at(@full, [:marks, 0, :channels, :x], {:field, :nope})) ==
-               [{[:marks, 0, :channels, :x], {:undeclared, :field, :nope}}]
+               [{[:marks, 0, :channels, :x], {:undeclared, :field, "nope"}}]
 
       assert errors(put_at(@full, [:marks, 1, :label, :text, 1], {:field, :nope})) ==
-               [{[:marks, 1, :label, :text, 1], {:undeclared, :field, :nope}}]
+               [{[:marks, 1, :label, :text, 1], {:undeclared, :field, "nope"}}]
 
       # After a transform the columns are the transform's: unchecked until application.
       assert Validator.validate(put_at(@full, [:marks, 2, :channels, :value], :anything)) == :ok
@@ -621,34 +650,34 @@ defmodule Visualize.Chart.ValidatorTest do
       design = put_at(@full, [:marks, 0, :data], %{source: :primary, transforms: []})
 
       assert errors(put_at(design, [:marks, 0, :channels, :y], :nope)) ==
-               [{[:marks, 0, :channels, :y], {:undeclared, :field, :nope}}]
+               [{[:marks, 0, :channels, :y], {:undeclared, :field, "nope"}}]
     end
 
     test "theme slots, against the built-in or inline theme" do
-      assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :nope)) ==
-               [{[:styles, :muted, :stroke, :color], {:undeclared, :color, :nope}}]
+      assert errors(put_at(@full, [:styles, "muted", :stroke, :color], :nope)) ==
+               [{[:styles, "muted", :stroke, :color], {:undeclared, :color, "nope"}}]
 
-      assert errors(put_at(@full, [:styles, :muted, :stroke, :color], :series_3)) ==
-               [{[:styles, :muted, :stroke, :color], {:undeclared, :color, :series_3}}]
+      assert errors(put_at(@full, [:styles, "muted", :stroke, :color], :series_3)) ==
+               [{[:styles, "muted", :stroke, :color], {:undeclared, :color, :series_3}}]
 
-      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke, :color], {:series, 99})) ==
+      assert Validator.validate(put_at(@full, [:styles, "muted", :stroke, :color], {:series, 99})) ==
                :ok
 
-      assert Validator.validate(put_at(@full, [:styles, :muted, :stroke, :color], :series_2)) ==
+      assert Validator.validate(put_at(@full, [:styles, "muted", :stroke, :color], :series_2)) ==
                :ok
 
       dark = put_at(@full, [:theme], :dark)
 
-      assert Validator.validate(put_at(dark, [:styles, :muted, :stroke, :color], :series_10)) ==
+      assert Validator.validate(put_at(dark, [:styles, "muted", :stroke, :color], :series_10)) ==
                :ok
 
-      assert errors(put_at(dark, [:styles, :muted, :font, :size], :series_11)) ==
-               [{[:styles, :muted, :font, :size], {:undeclared, :slot, :series_11}}]
+      assert errors(put_at(dark, [:styles, "muted", :font, :size], :series_11)) ==
+               [{[:styles, "muted", :font, :size], {:undeclared, :slot, :series_11}}]
 
       # A theme the validator does not know leaves slots to application.
       house = put_at(@full, [:theme], :house)
 
-      assert Validator.validate(put_at(house, [:styles, :muted, :stroke, :color], :anything)) ==
+      assert Validator.validate(put_at(house, [:styles, "muted", :stroke, :color], :anything)) ==
                :ok
     end
   end
@@ -658,23 +687,23 @@ defmodule Visualize.Chart.ValidatorTest do
       design =
         @full
         |> put_at([:marks, 0, :type], 3)
-        |> put_at([:frames, :main, :kind], 3)
+        |> put_at([:frames, "main", :kind], 3)
         |> Map.delete(:version)
 
       assert Enum.map(errors(design), &elem(&1, 0)) == [
-               [:frames, :main, :kind],
+               [:frames, "main", :kind],
                [:marks, 0, :type],
                [:version]
              ]
     end
 
     test "format/1 renders a path and a reason in words" do
-      assert Validator.format({[:marks, 1, :channels, :y], {:undeclared, :field, :temp}}) ==
-               "marks[1].channels.y: field :temp is not declared by the mark's source"
+      assert Validator.format({[:marks, 1, :channels, :y], {:undeclared, :field, "temp"}}) ==
+               "marks[1].channels.y: field \"temp\" is not declared by the mark's source"
 
       assert Validator.format({[], {:type, {:node, :design}}}) == "design: must be a design node"
 
-      assert Validator.format({[:frames, :main, :kind], {:enum, [:cartesian, :polar]}}) ==
+      assert Validator.format({[:frames, "main", :kind], {:enum, [:cartesian, :polar]}}) ==
                "frames.main.kind: must be one of :cartesian, :polar"
 
       assert Validator.format({[:version], {:unsupported_version, 2}}) ==
@@ -683,12 +712,12 @@ defmodule Visualize.Chart.ValidatorTest do
       assert Validator.format({[:marks, 0, :options, :radius], {:invalid_for, :line}}) ==
                "marks[0].options.radius: is not read by :line"
 
-      assert Validator.format({[:styles, :s, :fill], {:type, :color}}) ==
+      assert Validator.format({[:styles, "s", :fill], {:type, :color}}) ==
                "styles.s.fill: must be a color string, :none, a typed color — color(name), " <>
                  "ramp(name, t) with t in 0..1, contrast() — a transform of colors with every " <>
                  "number in 0..1, or a paint"
 
-      assert Validator.format({[:styles, :s, :fill], {:undeclared, :color, :brand}}) ==
+      assert Validator.format({[:styles, "s", :fill], {:undeclared, :color, :brand}}) ==
                "styles.s.fill: color :brand is not a name of the theme's color table"
     end
   end
@@ -718,12 +747,12 @@ defmodule Visualize.Chart.ValidatorTest do
 
     test "a parent nothing declares is undeclared at the key's path" do
       assert Validator.validate(with_styles(%{a: %{extends: :nope}})) ==
-               {:error, [{[:styles, :a, :extends], {:undeclared, :style, :nope}}]}
+               {:error, [{[:styles, "a", :extends], {:undeclared, :style, "nope"}}]}
     end
 
     test "a style that extends itself is :cycle at the style's path" do
       assert Validator.validate(with_styles(%{a: %{extends: :a}})) ==
-               {:error, [{[:styles, :a], :cycle}]}
+               {:error, [{[:styles, "a"], :cycle}]}
     end
 
     test "every style on a cycle is reported, and one merely reaching it is not" do
@@ -731,11 +760,11 @@ defmodule Visualize.Chart.ValidatorTest do
 
       assert Validator.validate(with_styles(styles)) ==
                {:error,
-                [{[:styles, :a], :cycle}, {[:styles, :b], :cycle}, {[:styles, :c], :cycle}]}
+                [{[:styles, "a"], :cycle}, {[:styles, "b"], :cycle}, {[:styles, "c"], :cycle}]}
     end
 
     test "the reason reads as a line" do
-      assert Validator.format({[:styles, :series], :cycle}) ==
+      assert Validator.format({[:styles, "series"], :cycle}) ==
                "styles.series: extends itself, directly or through a chain of `extends`"
     end
   end
@@ -771,7 +800,7 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(synced(%{y: %{kind: :linear}})) ==
                [{[:interaction, :sync], {:sync, :x_scale, nil}}]
 
-      polar = put_at(synced(%{x: %{kind: :linear}}), [:frames, :main, :kind], :polar)
+      polar = put_at(synced(%{x: %{kind: :linear}}), [:frames, "main", :kind], :polar)
       assert errors(polar) == [{[:interaction, :sync], {:sync, :frame_kind, :polar}}]
     end
 
@@ -786,7 +815,7 @@ defmodule Visualize.Chart.ValidatorTest do
       assert errors(design) == [{[:interaction, :sync], {:sync, :x_scale, :band}}]
       assert Validator.validate(put_at(design, [:interaction, :frame], :b)) == :ok
 
-      assert {[:interaction, :frame], {:undeclared, :frame, :nope}} in errors(
+      assert {[:interaction, :frame], {:undeclared, :frame, "nope"}} in errors(
                put_at(design, [:interaction, :frame], :nope)
              )
     end

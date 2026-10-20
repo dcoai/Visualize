@@ -1,5 +1,7 @@
 defmodule Visualize.Theme.Palette do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The style palette of a theme (spec/08 §7.7, D-171, D-172): its fixed names in five
   # groups, the built-in entries every built-in theme shares, written in compound parts, and
   # the contracts an entry holds. `check/1` answers the first entry that breaks its
@@ -170,7 +172,18 @@ defmodule Visualize.Theme.Palette do
     end)
   end
 
-  defp layer(styles, name, seen) when is_atom(name) and name not in [nil, true, false],
+  # A document's entry names a palette style by its string (spec/14 §9.4, D-195): the
+  # palette's names are atoms, found by spelling.
+  defp layer(styles, name, seen) when is_binary(name) do
+    found =
+      Enum.find(Map.keys(styles) ++ names(series(styles)), fn key ->
+        is_atom(key) and Atom.to_string(key) == name
+      end)
+
+    compose(styles, found || name, seen)
+  end
+
+  defp layer(styles, name, seen) when is_name(name) and name not in [nil, true, false],
     do: compose(styles, name, seen)
 
   defp layer(_styles, node, _seen) when is_map(node) and not is_struct(node),
@@ -200,6 +213,11 @@ defmodule Visualize.Theme.Palette do
   @doc false
   @spec series_name(pos_integer()) :: atom()
   def series_name(k), do: :"style_#{k}"
+
+  @doc false
+  # The palette's names but its series, which a theme cannot add to (spec/08 §7.7).
+  @spec fixed_names() :: [atom(), ...]
+  def fixed_names, do: @roles ++ @states ++ @furniture ++ @modifiers
 
   @doc false
   # Every name of the palette whose style series is `series`, in the order of §7.7.
@@ -461,8 +479,8 @@ defmodule Visualize.Theme.Palette do
     end
   end
 
-  defp series_index(name) when is_atom(name) do
-    with "style_" <> rest <- Atom.to_string(name),
+  defp series_index(name) when is_atom(name) or is_binary(name) do
+    with "style_" <> rest <- to_string(name),
          {k, ""} <- Integer.parse(rest) do
       k
     else

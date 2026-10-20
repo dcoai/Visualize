@@ -21,8 +21,8 @@ defmodule Examples.LoadAgeGaugeTest do
     assert {:ok, chart} = Chart.from_map(design)
     assert {:ok, applied} = Chart.apply(chart, sources: sources, theme: Design.theme([]))
 
-    assert applied.frames |> Map.keys() |> Enum.sort() == [:age, :gauge]
-    assert applied.frames.age.box == [0, 0, 1, 1]
+    assert applied.frames |> Map.keys() |> Enum.sort() == ["age", "gauge"]
+    assert applied.frames["age"].box == [0, 0, 1, 1]
   end
 
   describe "the inset" do
@@ -30,12 +30,12 @@ defmodule Examples.LoadAgeGaugeTest do
       for size <- [LoadAgeGauge.size(), {900, 500}] do
         {width, height} = size
         frames = applied(width: width, height: height).frames
-        [x, y, w, h] = frames.gauge.box
+        [x, y, w, h] = frames["gauge"].box
         assert [x, y, w, h] == LoadAgeGauge.box()
 
         # The age plot in pixels: its margin's offset and its own width and height.
-        margin = frames.age.margin
-        plot = frames.age.plot
+        margin = frames["age"].margin
+        plot = frames["age"].plot
         {left, top} = {margin.left, margin.top}
         {right, bottom} = {left + plot.width, top + plot.height}
 
@@ -63,13 +63,13 @@ defmodule Examples.LoadAgeGaugeTest do
 
     test "the dial has no background, so the traces beneath show through it (#514)" do
       {design, _sources} = LoadAgeGauge.design([])
-      assert design.frames.gauge[:background] == nil
-      assert applied([]).frames.gauge.background == nil
+      assert design.frames["gauge"][:background] == nil
+      assert applied([]).frames["gauge"].background == nil
     end
 
     test "the dial is drawn above the age view" do
       frames = applied([]).frames
-      assert frames.gauge.z > frames.age.z
+      assert frames["gauge"].z > frames["age"].z
 
       # Drawn later in the document: the gauge's group follows the age view's.
       svg = Design.render(LoadAgeGauge, [])
@@ -80,8 +80,8 @@ defmodule Examples.LoadAgeGaugeTest do
 
     test "the age view keeps its key in the top-right, and the dial draws none" do
       {design, _sources} = LoadAgeGauge.design([])
-      assert design.frames.age.legend.position == :top_right
-      assert design.frames.gauge[:legend] == nil
+      assert design.frames["age"].legend.position == :top_right
+      assert design.frames["gauge"][:legend] == nil
     end
   end
 
@@ -112,14 +112,14 @@ defmodule Examples.LoadAgeGaugeTest do
     assert Map.take(combined.styles, Map.keys(age.styles)) == age.styles
     assert Map.take(combined.styles, Map.keys(gauge.styles)) == gauge.styles
 
-    assert Map.take(combined.sources, [:loads, :reading, :rim]) ==
+    assert Map.take(combined.sources, ["loads", "reading", "rim"]) ==
              Map.merge(age.sources, gauge.sources)
 
     # The age view's line and the dial's rim and needles, as their own charts draw them.
     strip = &Map.delete(&1, :frame)
-    assert combined.marks |> Enum.filter(&(&1[:frame] == :age)) |> Enum.map(strip) == age.marks
+    assert combined.marks |> Enum.filter(&(&1[:frame] == "age")) |> Enum.map(strip) == age.marks
 
-    assert combined.marks |> Enum.filter(&(&1[:frame] == :gauge)) |> Enum.map(strip) ==
+    assert combined.marks |> Enum.filter(&(&1[:frame] == "gauge")) |> Enum.map(strip) ==
              gauge.marks
   end
 
@@ -138,14 +138,14 @@ defmodule Examples.LoadAgeGaugeTest do
     assert Frames.frames(LoadAgeGauge) == 2
 
     for frame <- [first, later] do
-      assert frame.plots |> Enum.map(& &1.name) |> Enum.sort() == [:age, :gauge]
+      assert frame.plots |> Enum.map(& &1.name) |> Enum.sort() == ["age", "gauge"]
     end
 
     # Each plot's canvas sits in its frame's own box: two canvases, two places.
     assert first.plots |> Enum.map(& &1.box) |> Enum.uniq() |> length() == 2
 
     moved = for {a, b} <- Enum.zip(first.plots, later.plots), a.canvas != b.canvas, do: a.name
-    assert :age in moved and :gauge in moved
+    assert "age" in moved and "gauge" in moved
   end
 
   test "it is a light chart, within the light budget (spec/14 §12.6, #469)" do

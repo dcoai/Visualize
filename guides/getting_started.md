@@ -64,7 +64,7 @@ JSON, or compare two versions of it:
 
 ```elixir
 design.marks
-#=> [%{type: :line, data: :days, channels: %{x: :date, y: :value}}]
+#=> [%{type: :line, data: "days", channels: %{x: "date", y: "value"}}]
 ```
 
 ### Apply the data
@@ -96,7 +96,7 @@ once. Each error is a path into the design and a reason:
   Visualize.Chart.apply(design, sources: %{days: [%{date: ~D[2024-01-01]}]})
 
 Enum.map(errors, &Visualize.Chart.Validator.format/1)
-#=> ["sources.days: has no field :value"]
+#=> ["sources.days: has no field \"value\""]
 ```
 
 ### Render it

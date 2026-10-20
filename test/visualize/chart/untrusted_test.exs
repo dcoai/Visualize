@@ -56,10 +56,10 @@ defmodule Visualize.Chart.UntrustedTest do
         }
 
         assert Validator.validate(design) ==
-                 {:error, [{[:styles, :s, :font, :family], {:unsafe, :font_family}}]}
+                 {:error, [{[:styles, "s", :font, :family], {:unsafe, :font_family}}]}
 
         flat = put_in(design, [:styles, :s], %{font_family: bad})
-        assert {:error, [{[:styles, :s, :font, :family], _}]} = Validator.validate(flat)
+        assert {:error, [{[:styles, "s", :font, :family], _}]} = Validator.validate(flat)
 
         themed = Map.put(design, :theme, %{font_family: bad}) |> Map.delete(:styles)
 
@@ -85,10 +85,10 @@ defmodule Visualize.Chart.UntrustedTest do
 
       for bad <- ["6", "a\" onload=\"x", "a;b", "a>b", ""] do
         assert Validator.validate(Map.put(base, :styles, %{s: %{class: bad}})) ==
-                 {:error, [{[:styles, :s, :class], {:unsafe, :class}}]}
+                 {:error, [{[:styles, "s", :class], {:unsafe, :class}}]}
       end
 
-      assert Validator.format({[:styles, :s, :class], {:unsafe, :class}}) ==
+      assert Validator.format({[:styles, "s", :class], {:unsafe, :class}}) ==
                "styles.s.class: must be CSS class names separated by spaces"
     end
 

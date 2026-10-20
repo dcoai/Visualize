@@ -198,7 +198,7 @@ defmodule Visualize.Chart.Theme do
     end
   end
 
-  defp build(name) when is_atom(name) do
+  defp build(name) when is_atom(name) or is_binary(name) do
     case Theme.builtin(name) do
       nil -> {:error, [{[:theme], {:unknown_theme, name}}]}
       theme -> {:ok, theme}

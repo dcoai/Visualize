@@ -99,7 +99,7 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   end
 
   defp frame_path(word, frames, rest) do
-    case Enum.find(frames, &(Atom.to_string(&1) == word)) do
+    case Enum.find(frames, &(to_string(&1) == word)) do
       nil -> nil
       frame -> [:frames, frame | rest]
     end
@@ -120,8 +120,8 @@ defmodule ExamplesWeb.ChartPanels.Explain do
         applied.sources
         |> Map.get(source(mark.data), [])
         |> Visualize.Data.Table.rows()
-        |> Enum.uniq_by(&Map.get(&1, field))
-        |> Enum.map(&{"#{field} = #{Map.get(&1, field)}", &1})
+        |> Enum.uniq_by(&Visualize.Data.Table.get(&1, field))
+        |> Enum.map(&{"#{field} = #{Visualize.Data.Table.get(&1, field)}", &1})
 
       nil ->
         []

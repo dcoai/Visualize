@@ -20,19 +20,21 @@ defmodule Visualize.VirtualSource.Engine do
       iex> hosts = Schema.new!(%{host: %{type: :category}})
       iex> engine = Engine.push(engine, %{hosts: Delivery.new([%{host: "a"}, %{host: "b"}])}, %{hosts: hosts}, 0)
       iex> engine = Engine.run(engine, 0)
-      iex> Engine.outputs(engine)[[:count]].rows
-      [%{n: 2}]
+      iex> Engine.outputs(engine)[["count"]].rows
+      [%{"n" => 2}]
       iex> Engine.status(engine)
-      %{[:count] => :live}
+      %{["count"] => :live}
 
   """
 
+  alias Visualize.Chart.Names
   alias Visualize.Data.{Delivery, Schema, Table}
   alias Visualize.Feed
   alias Visualize.Feed.Window
   alias Visualize.VirtualSource
   alias Visualize.VirtualSource.Sandbox
   alias Visualize.VirtualSource.Sandbox.Cache
+  alias Visualize.VirtualSource.Sandbox.Names, as: Spelling
 
   defstruct sources: %{},
             feeds: MapSet.new(),
@@ -87,6 +89,8 @@ defmodule Visualize.VirtualSource.Engine do
 
     feeds = MapSet.new(opts[:feeds])
     functions = opts[:functions]
+    # A path is its names' strings (D-195): a host may key its sources by atom paths.
+    sources = Map.new(sources, fn {path, source} -> {Enum.map(path, &Names.name/1), source} end)
     paths = Map.keys(sources)
 
     {inputs, errors} =
@@ -132,8 +136,11 @@ defmodule Visualize.VirtualSource.Engine do
 
     faults =
       case source.function do
-        name when is_atom(name) and name != nil and not is_map_key(functions, name) ->
-          [{path, [:function], {:undeclared, :function, name}} | faults]
+        # A host function is found by its name's spelling (D-195).
+        name when (is_atom(name) and name != nil) or is_binary(name) ->
+          if Visualize.Chart.Names.key(functions, name) == :error,
+            do: [{path, [:function], {:undeclared, :function, name}} | faults],
+            else: faults
 
         _otherwise ->
           faults
@@ -142,10 +149,22 @@ defmodule Visualize.VirtualSource.Engine do
     {resolved, Enum.reverse(faults)}
   end
 
+  # A feed's own name is a feed (spec/08 §10.5.6); a short id or a path a virtual source,
+  # else — a short id — the feed of its spelling. A host names its feeds by atom or string.
+  defp lookup(_paths, feeds, _scope, {:feed, name}), do: feed(feeds, name)
+
   defp lookup(paths, feeds, scope, name) do
     case VirtualSource.resolve(paths, scope, name) do
       {:ok, path} -> {:ok, {:source, path}}
-      :error -> if MapSet.member?(feeds, name), do: {:ok, {:feed, name}}, else: :error
+      :error when is_list(name) -> :error
+      :error -> feed(feeds, name)
+    end
+  end
+
+  defp feed(feeds, name) do
+    case Enum.find(feeds, &Visualize.Chart.Names.same?(&1, name)) do
+      nil -> :error
+      feed -> {:ok, {:feed, feed}}
     end
   end
 
@@ -224,8 +243,13 @@ defmodule Visualize.VirtualSource.Engine do
         end
 
       {path, %{function: name}}, engine ->
-        module = Map.fetch!(engine.functions, name)
-        %{engine | compiled: Map.put(engine.compiled, path, Function.capture(module, name, 1))}
+        {:ok, function} = Visualize.Chart.Names.key(engine.functions, name)
+        module = Map.fetch!(engine.functions, function)
+
+        %{
+          engine
+          | compiled: Map.put(engine.compiled, path, Function.capture(module, function, 1))
+        }
     end)
   end
 
@@ -402,9 +426,27 @@ defmodule Visualize.VirtualSource.Engine do
 
   # -- calling (spec/08 §10.5.7, spec/15 §14.4) --------------------------------------------
 
-  defp call(%{per: nil}, fun, inputs, opts) do
-    argument = Map.new(inputs, &{&1.key, &1.rows})
-    Sandbox.run(fun, [argument], opts)
+  defp rows(%{elixir: elixir}, rows) when is_binary(elixir) and is_list(rows),
+    do: Enum.map(rows, &spelled/1)
+
+  defp rows(_source, rows), do: rows
+
+  # An input's key as the function reads it: a stored function's by the rule its literals
+  # follow, a host's function's its string — the host's rows as it gave them (D-195).
+  defp input_key(%{elixir: elixir}, key) when is_binary(elixir), do: Spelling.spelling(key)
+  defp input_key(_source, key), do: Names.name(key)
+
+  defp spelled(row) when is_map(row) and not is_struct(row),
+    do: Map.new(row, fn {k, v} -> {Spelling.spelling(k), Spelling.spelling(v)} end)
+
+  defp spelled(row), do: row
+
+  # A stored function reads its inputs, its rows' fields and their category values as it
+  # reads its own literals — a word's atom, else the string (spec/08 §10.5.6, D-195); a
+  # host's function its rows as given.
+  defp call(%{per: nil} = source, fun, inputs, opts) do
+    argument = Map.new(inputs, &{input_key(source, &1.key), rows(source, &1.rows)})
+    source |> answer(Sandbox.run(fun, [argument], opts))
   end
 
   # Per identity: one call per entity, every call in one bounded batch, each answer given
@@ -416,8 +458,14 @@ defmodule Visualize.VirtualSource.Engine do
 
     argument = fn rows ->
       case inputs do
-        [_one] -> rows
-        _several -> Map.new(inputs, &{&1.key, if(&1.name == name, do: rows, else: &1.rows)})
+        [_one] ->
+          rows(source, rows)
+
+        _several ->
+          Map.new(inputs, fn input ->
+            {input_key(source, input.key),
+             rows(source, if(input.name == name, do: rows, else: input.rows))}
+          end)
       end
     end
 
@@ -426,9 +474,20 @@ defmodule Visualize.VirtualSource.Engine do
     end
 
     with {:ok, answers} <- Sandbox.run(batch, [], opts) do
-      join(answers, identity_input.schema, source.schema)
+      answer(source, join(answers, identity_input.schema, source.schema))
     end
   end
+
+  # A source's rows are keyed by their fields' strings, whichever function answered them,
+  # so every output reads alike (D-195).
+  defp answer(_source, {:ok, rows}) when is_list(rows), do: {:ok, Enum.map(rows, &keyed/1)}
+
+  defp answer(_source, result), do: result
+
+  defp keyed(row) when is_map(row) and not is_struct(row),
+    do: Map.new(row, fn {k, v} -> {Names.name(k), v} end)
+
+  defp keyed(row), do: row
 
   defp entities(rows, schema) do
     {order, groups} =

@@ -120,7 +120,7 @@ defmodule Visualize.ThemeTest do
       assert theme.name == :default
       assert theme.font_family == "Inter, sans-serif"
       assert theme.series == Theme.default().series
-      assert Theme.merge(Theme.dark(), name: :night).name == :night
+      assert Theme.merge(Theme.dark(), name: :night).name == "night"
       assert Theme.merge(Theme.dark(), name: :night).background == "#1b1e24"
     end
 

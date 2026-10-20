@@ -33,20 +33,19 @@ defmodule Visualize.Theme.Roles do
 
   # Every `{:color, name}` a palette entry paints with is a name of the table.
   defp unresolved(theme, palette, broken) do
-    names = MapSet.new(Theme.color_names(theme))
-
     for {name, entry} <- Enum.sort(palette),
         name not in broken,
-        missing = missing(entry, names),
+        missing = missing(entry, theme),
         missing != [],
         do: {{:style, name}, "names #{list(missing)}, not a color of the theme's color table"}
   end
 
-  defp missing(entry, names) do
+  # A theme's own color is matched by spelling (D-195): `Theme.color_name?/2`.
+  defp missing(entry, theme) do
     for part <- @paints,
         color = color(entry, part),
         name <- Typed.names(color),
-        not MapSet.member?(names, name),
+        not Theme.color_name?(theme, name),
         uniq: true,
         do: name
   end

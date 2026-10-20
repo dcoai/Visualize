@@ -47,4 +47,13 @@ defmodule Visualize.Audit.AtomsTest do
     assert [problem] = Atoms.run(dir, [entry("series_", 1, :e)])
     assert problem =~ "an entry needs"
   end
+
+  test "a declared name is a string: an entry of class (b) or (c) fails", %{tmp_dir: dir} do
+    lib(dir, "a = String.to_atom(name)\n")
+
+    for class <- [:b, :c] do
+      assert [problem] = Atoms.run(dir, [entry("String.to_atom(name)", 1, class)])
+      assert problem =~ "is a string (D-195)"
+    end
+  end
 end

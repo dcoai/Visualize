@@ -282,7 +282,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp text(value) when is_number(value), do: Path.format_number(value)
 
     defp text(value) when is_atom(value) and value not in [nil, true, false],
-      do: Atom.to_string(value)
+      do: to_string(value)
 
     defp text(_absent_binding_or_paint), do: nil
 
@@ -296,9 +296,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       ["vis-builder-palette-entry"]
       |> then(&if row.shadowed, do: &1 ++ ["vis-builder-palette-entry-shadowed"], else: &1)
       |> then(
-        &if (row.shadowed and row.name == open) or (not row.shadowed and row.name == chosen),
-          do: &1 ++ ["vis-builder-palette-entry-open"],
-          else: &1
+        &if (row.shadowed and Visualize.Chart.Names.same?(row.name, open)) or
+              (not row.shadowed and row.name == chosen),
+            do: &1 ++ ["vis-builder-palette-entry-open"],
+            else: &1
       )
       |> Enum.join(" ")
     end
@@ -337,7 +338,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
           for name <- names do
             %{
               name: name,
-              shadowed: name in declared,
+              # The design names a style by its string, the theme by its own word (D-195).
+              shadowed: to_string(name) in Enum.map(declared, &to_string/1),
               preview: preview(theme, name, Theme.style(theme, name))
             }
           end
@@ -365,7 +367,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp summary(style) when map_size(style) == 0, do: "empty"
     defp summary(style), do: style |> Map.keys() |> Enum.sort() |> Enum.join(", ")
 
-    defp entry_word(name) when is_atom(name), do: Atom.to_string(name)
+    defp entry_word(name) when is_atom(name) or is_binary(name), do: to_string(name)
     defp entry_word({:field, field}), do: "field(#{field})"
     defp entry_word({:generate, name, _args}), do: "generate(#{name})"
     defp entry_word(_inline), do: "{…}"

@@ -33,8 +33,10 @@ defmodule Visualize.Event do
   or drops it: a click never names a row other than the one drawn.
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.Chart
-  alias Visualize.Chart.{Applied, Frame, Mark}
+  alias Visualize.Chart.{Applied, Frame, Mark, Names}
   alias Visualize.Data.{Schema, Table}
 
   defstruct event: nil,
@@ -277,9 +279,9 @@ defmodule Visualize.Event do
 
       iex> schema = Visualize.Data.Schema.new!(%{svc: %{type: :category}, v: %{type: :number}})
       iex> Visualize.Event.identity(%{type: :circle}, %{svc: "api", v: 3}, schema)
-      {:svc, "api"}
+      {"svc", "api"}
       iex> Visualize.Event.identity(%{type: :line, channels: %{series: :host}}, %{host: "mx1"}, nil)
-      {:host, "mx1"}
+      {"host", "mx1"}
       iex> Visualize.Event.identity(%{type: :circle}, %{v: 3}, nil)
       nil
   """
@@ -294,15 +296,15 @@ defmodule Visualize.Event do
   def identity(mark, row, nil) when is_map(row), do: series_identity(mark, row)
 
   # The declared identity as a selection names it: the pair for one field, the map for
-  # several, `nil` for a row that lacks it.
+  # several, `nil` for a row that lacks it; a field is named by its string (D-195).
   defp declared_identity(_fields, nil), do: nil
-  defp declared_identity([field], value), do: {field, value}
-  defp declared_identity(_fields, values), do: values
+  defp declared_identity([field], value), do: {Names.name(field), value}
+  defp declared_identity(_fields, values), do: Names.keys(values)
 
   defp series_identity(mark, row) do
     case mark |> Map.get(:channels, %{}) |> series_channel() do
-      {:field, field} when is_atom(field) -> pair(field, row)
-      field when is_atom(field) and field not in @not_names -> pair(field, row)
+      {:field, field} when is_name(field) -> pair(field, row)
+      field when is_name(field) and field not in @not_names -> pair(field, row)
       _other -> nil
     end
   end
@@ -321,7 +323,7 @@ defmodule Visualize.Event do
   defp pair(field, row) do
     case Table.get(row, field) do
       nil -> nil
-      value -> {field, value}
+      value -> {Names.name(field), value}
     end
   end
 
@@ -356,7 +358,7 @@ defmodule Visualize.Event do
 
   def schema_of(nil, _mark), do: nil
 
-  defp slot_of(%{data: %{source: slot}}) when is_atom(slot), do: slot
-  defp slot_of(%{data: slot}) when is_atom(slot), do: slot
+  defp slot_of(%{data: %{source: slot}}) when is_name(slot), do: slot
+  defp slot_of(%{data: slot}) when is_name(slot), do: slot
   defp slot_of(_mark), do: nil
 end

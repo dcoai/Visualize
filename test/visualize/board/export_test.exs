@@ -144,18 +144,18 @@ defmodule Visualize.Board.ExportTest do
       {:ok, _info} = Server.subscribe(server)
 
       live =
-        for name <- [:a, :b, :c], into: %{}, do: {name, view_until(name, &(&1.state == :live))}
+        for name <- ["a", "b", "c"], into: %{}, do: {name, view_until(name, &(&1.state == :live))}
 
       snapshot = Server.snapshot(server)
       views = Snapshot.views(snapshot)
 
-      for name <- [:a, :b, :c] do
+      for name <- ["a", "b", "c"] do
         assert views[name].svg == live[name].svg
         assert views[name].crosshair == live[name].crosshair
         assert views[name].keyboard == live[name].keyboard
       end
 
-      assert Export.svg(snapshot) =~ live.a.svg
+      assert Export.svg(snapshot) =~ live["a"].svg
     end
 
     test "each cell's root is named by its board and its cell, live, in a snapshot and exported (D-188)" do
@@ -168,21 +168,21 @@ defmodule Visualize.Board.ExportTest do
       {:ok, _info} = Server.subscribe(server)
 
       live =
-        for name <- [:a, :b, :c], into: %{}, do: {name, view_until(name, &(&1.state == :live))}
+        for name <- ["a", "b", "c"], into: %{}, do: {name, view_until(name, &(&1.state == :live))}
 
-      for name <- [:a, :b, :c] do
+      for name <- ["a", "b", "c"] do
         assert live[name].svg =~ ~r/^<svg[^>]* id="ops-#{name}-chart"/
         assert live[name].svg =~ ~s(id="ops-#{name}-chart-desc")
       end
 
       snapshot = Server.snapshot(server)
-      assert Snapshot.views(snapshot, id: "ops").b.svg == live.b.svg
-      assert Server.export(server, :svg) =~ live.b.svg
+      assert Snapshot.views(snapshot, id: "ops")["b"].svg == live["b"].svg
+      assert Server.export(server, :svg) =~ live["b"].svg
 
       # A snapshot drawn with no id names its cells as the board's default does.
       default = Visualize.Board.Draw.board_id(snapshot.board)
       assert "vis-board-" <> _ = default
-      assert Snapshot.views(snapshot).a.svg =~ ~s(id="#{default}-a-chart")
+      assert Snapshot.views(snapshot)["a"].svg =~ ~s(id="#{default}-a-chart")
     end
 
     test "a cell in a state with no chart exports the state's panel, as the component draws it" do
@@ -199,8 +199,8 @@ defmodule Visualize.Board.ExportTest do
 
       snapshot = Server.snapshot(server)
       views = Snapshot.views(snapshot)
-      assert views.a.svg == nil and views.a.note == down.note
-      assert views.b.note == unbound.note
+      assert views["a"].svg == nil and views["a"].note == down.note
+      assert views["b"].note == unbound.note
 
       svg = Export.svg(snapshot)
       assert svg =~ ~s(data-vis-cell="a" data-vis-state="down")
@@ -209,8 +209,8 @@ defmodule Visualize.Board.ExportTest do
 
     test "a crashed cell exports its crashed panel" do
       snapshot = realized()
-      snapshot = put_in(snapshot.cells.b.crashed, ":killed")
-      view = Snapshot.views(snapshot).b
+      snapshot = put_in(snapshot.cells["b"].crashed, ":killed")
+      view = Snapshot.views(snapshot)["b"]
 
       assert view.state == {:crashed, ":killed"} and view.svg == nil
       id = Visualize.Board.Draw.root_id(Visualize.Board.Draw.board_id(snapshot.board), :b)
@@ -257,13 +257,15 @@ defmodule Visualize.Board.ExportTest do
       Agent.stop(agent)
 
       assert {:ok, reopened} = Snapshot.from_json(json)
-      assert reopened == snapshot
+      # A row's fields read back as their strings (D-195): no atom is made of a document's
+      # field, and the cells draw as they did.
+      assert Map.delete(reopened, :cells) == Map.delete(snapshot, :cells)
       assert Export.svg(reopened) == before
       assert before =~ "(Europe/Oslo)"
       assert Snapshot.from_map(Snapshot.to_map(snapshot)) == {:ok, snapshot}
     end
 
-    test "rows keep their field names' spelling and a row's missing field stays missing" do
+    test "rows read back with their fields' strings, and a row's missing field stays missing" do
       board = board()
 
       pools = %{
@@ -274,8 +276,13 @@ defmodule Visualize.Board.ExportTest do
 
       {:ok, snapshot} = Snapshot.realize(board, @store, pools, now: @t0)
       {:ok, json} = Snapshot.to_json(snapshot)
-      assert {:ok, ^snapshot} = Snapshot.from_json(json)
-      assert snapshot.cells.a.slots.primary.delivery.rows == pools.a.primary
+      assert {:ok, reopened} = Snapshot.from_json(json)
+      assert snapshot.cells["a"].slots["primary"].delivery.rows == pools.a.primary
+      # Cell a's rows were string-keyed and read back as they were; b's atom keys as strings.
+      assert reopened.cells["a"].slots["primary"].delivery.rows == pools.a.primary
+
+      assert reopened.cells["b"].slots["primary"].delivery.rows ==
+               Enum.map(pools.b.primary, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))
     end
 
     test "a slot bound through its default keeps the source it was bound to" do
@@ -284,8 +291,8 @@ defmodule Visualize.Board.ExportTest do
       pools = %{a: %{uptime: rows(5)}}
 
       {:ok, snapshot} = Snapshot.realize(board, %{{:composite, 1} => design}, pools)
-      assert snapshot.cells.a.slots.primary.delivery.rows == rows(5)
-      assert Snapshot.views(snapshot).a.state == :live
+      assert snapshot.cells["a"].slots["primary"].delivery.rows == rows(5)
+      assert Snapshot.views(snapshot)["a"].state == :live
     end
 
     test "a newer snapshot is refused by name before anything is read" do
@@ -300,30 +307,30 @@ defmodule Visualize.Board.ExportTest do
       map = Snapshot.to_map(realized())
 
       assert {:error, errors} = Snapshot.from_map(map, limits: [items: 15])
-      assert {[:cells, :a, :slots, :primary, :rows], {:limit, :items, 15, 20}} in errors
+      assert {[:cells, "a", :slots, "primary", :rows], {:limit, :items, 15, 20}} in errors
 
       broken =
         map
         |> Map.put(:extra, 1)
-        |> put_in([:cells, :z], %{chart: @line})
-        |> update_in([:cells], &Map.delete(&1, :b))
-        |> put_in([:cells, :a, :slots, :primary, :status], :sideways)
-        |> put_in([:cells, :c, :chart, :marks], [%{type: :nope}])
+        |> put_in([:cells, "z"], %{chart: @line})
+        |> update_in([:cells], &Map.delete(&1, "b"))
+        |> put_in([:cells, "a", :slots, "primary", :status], :sideways)
+        |> put_in([:cells, "c", :chart, :marks], [%{type: :nope}])
 
       assert {:error, errors} = Snapshot.from_map(broken)
       paths = Enum.map(errors, &elem(&1, 0))
       assert [:extra] in paths
-      assert {[:cells, :z], :not_on_board} in errors
-      assert {[:cells, :b], :required} in errors
-      assert {[:cells, :a, :slots, :primary, :status], {:type, :status}} in errors
-      assert Enum.any?(paths, &match?([:cells, :c, :chart, :marks | _], &1))
+      assert {[:cells, "z"], :not_on_board} in errors
+      assert {[:cells, "b"], :required} in errors
+      assert {[:cells, "a", :slots, "primary", :status], {:type, :status}} in errors
+      assert Enum.any?(paths, &match?([:cells, "c", :chart, :marks | _], &1))
 
-      assert Snapshot.format_error({[:cells, :z], :not_on_board}) ==
+      assert Snapshot.format_error({[:cells, "z"], :not_on_board}) ==
                "cells.z: is not a cell of the snapshot's board"
     end
 
     test "a realize that fails is the snapshot's failure, under each cell" do
-      assert {:error, [{[:cells, :a, :sources, :primary], {:unbound, :source, :primary}} | _]} =
+      assert {:error, [{[:cells, "a", :sources, "primary"], {:unbound, :source, "primary"}} | _]} =
                Snapshot.realize(board(), @store, %{})
     end
   end
@@ -343,10 +350,10 @@ defmodule Visualize.Board.ExportTest do
       # `c2` starts below it, so `c0`–`c3` share rows and are one band.
       cells =
         for i <- 0..13, into: %{} do
-          {:"c#{i}", %{x: rem(i, 2) * 6, y: div(i, 2) * 4, w: 6, h: 4, ref: {:composite, 1}}}
+          {"c#{i}", %{x: rem(i, 2) * 6, y: div(i, 2) * 4, w: 6, h: 4, ref: {:composite, 1}}}
         end
-        |> Map.put(:c0, %{x: 0, y: 0, w: 6, h: 6, ref: {:composite, 1}})
-        |> Map.put(:c2, %{x: 0, y: 6, w: 6, h: 2, ref: {:composite, 1}})
+        |> Map.put("c0", %{x: 0, y: 0, w: 6, h: 6, ref: {:composite, 1}})
+        |> Map.put("c2", %{x: 0, y: 6, w: 6, h: 2, ref: {:composite, 1}})
 
       board = Board.from_map!(%{cells: cells})
 
@@ -370,8 +377,8 @@ defmodule Visualize.Board.ExportTest do
               do: {name, i}
 
         if width >= Board.layout(board).breakpoint do
-          assert page_of.c0 == page_of.c1 and page_of.c1 == page_of.c2 and
-                   page_of.c2 == page_of.c3
+          assert page_of["c0"] == page_of["c1"] and page_of["c1"] == page_of["c2"] and
+                   page_of["c2"] == page_of["c3"]
         else
           order = board |> Board.arrange(width) |> Enum.map(&elem(&1, 0))
           assert Enum.map(order, &page_of[&1]) == Enum.sort(Enum.map(order, &page_of[&1]))
@@ -386,9 +393,9 @@ defmodule Visualize.Board.ExportTest do
         Board.from_map!(%{cells: %{tall: %{x: 0, y: 0, w: 12, h: 30, ref: {:composite, 1}}}})
 
       %{size: {pw, ph}, width: width, pages: [page]} = Export.paginate(board)
-      {x, y, w, h} = page.tall
+      {x, y, w, h} = page["tall"]
       assert y + h <= ph - 48 + 1.0e-9 and x >= 48 and x + w <= pw - 48
-      {_, _, bw, bh} = Board.boxes(board, width).tall
+      {_, _, bw, bh} = Board.boxes(board, width)["tall"]
       assert_in_delta w / h, bw / bh, 1.0e-9
     end
 
@@ -453,15 +460,15 @@ defmodule Visualize.Board.ExportTest do
       snapshot = viewer_snapshot()
 
       # Without the board's generators the cells cannot be drawn: the call is unknown.
-      refute Snapshot.views(snapshot).a.state == :live
-      assert Snapshot.views(snapshot, @gens).a.state == :live
-      assert Export.svg(snapshot, @gens) =~ Snapshot.views(snapshot, @gens).a.svg
+      refute Snapshot.views(snapshot)["a"].state == :live
+      assert Snapshot.views(snapshot, @gens)["a"].state == :live
+      assert Export.svg(snapshot, @gens) =~ Snapshot.views(snapshot, @gens)["a"].svg
     end
 
     test "with the viewer's assigns the export is the viewer's drawing" do
       snapshot = viewer_snapshot()
-      globex = Snapshot.views(snapshot, @gens ++ [assigns: %{viewer: "globex"}]).a.svg
-      nobody = Snapshot.views(snapshot, @gens).a.svg
+      globex = Snapshot.views(snapshot, @gens ++ [assigns: %{viewer: "globex"}])["a"].svg
+      nobody = Snapshot.views(snapshot, @gens)["a"].svg
 
       assert globex != nobody
       assert globex =~ ~s(stroke-width="3")
@@ -500,7 +507,7 @@ defmodule Visualize.Board.ExportTest do
       # An option given wins over the board's: another viewer's export.
       other = Server.export(server, :svg, assigns: %{viewer: "initech"})
       refute other =~ live.svg
-      assert Snapshot.views(Server.snapshot(server)).a.state != :live
+      assert Snapshot.views(Server.snapshot(server))["a"].state != :live
     end
   end
 
@@ -520,6 +527,8 @@ defmodule Visualize.Board.ExportTest do
   defp binding(cells, feed), do: Binding.new(for c <- cells, into: %{}, do: {{c, :primary}, feed})
 
   defp view_until(cell, test) do
+    cell = to_string(cell)
+
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} ->
         if test.(view), do: view, else: view_until(cell, test)
@@ -572,24 +581,24 @@ defmodule Visualize.Board.ExportTest do
 
     test "two loading and two crashed cells under one title share no root or id" do
       snapshot = realized(board: alike())
-      snapshot = put_in(snapshot.cells.a.slots, nil)
-      snapshot = put_in(snapshot.cells.b.slots, nil)
-      snapshot = put_in(snapshot.cells.c.crashed, ":killed")
-      snapshot = put_in(snapshot.cells.d.crashed, ":killed")
+      snapshot = put_in(snapshot.cells["a"].slots, nil)
+      snapshot = put_in(snapshot.cells["b"].slots, nil)
+      snapshot = put_in(snapshot.cells["c"].crashed, ":killed")
+      snapshot = put_in(snapshot.cells["d"].crashed, ":killed")
       views = Snapshot.views(snapshot, id: "ops")
 
-      assert views.a.state == :loading and views.b.state == :loading
-      assert {:crashed, _} = views.c.state
-      assert {:crashed, _} = views.d.state
+      assert views["a"].state == :loading and views["b"].state == :loading
+      assert {:crashed, _} = views["c"].state
+      assert {:crashed, _} = views["d"].state
 
-      roots = for name <- [:a, :b, :c, :d], do: own!(views[name].note)
+      roots = for name <- ["a", "b", "c", "d"], do: own!(views[name].note)
       assert roots == ["ops-a-chart", "ops-b-chart", "ops-c-chart", "ops-d-chart"]
 
-      all = Enum.flat_map([:a, :b, :c, :d], &ids(views[&1].note))
+      all = Enum.flat_map(["a", "b", "c", "d"], &ids(views[&1].note))
       assert all == Enum.uniq(all)
 
       # The export holds them as drawn.
-      assert Export.svg(snapshot, id: "ops") =~ views.c.note
+      assert Export.svg(snapshot, id: "ops") =~ views["c"].note
     end
 
     test "a banner over a chart is apart from the chart's root and from the other cells' banners" do
@@ -597,19 +606,19 @@ defmodule Visualize.Board.ExportTest do
       snapshot = realized(board: alike())
 
       snapshot =
-        Enum.reduce([:a, :b], snapshot, fn name, acc ->
-          put_in(acc.cells[name].slots.primary.status, :stale)
+        Enum.reduce(["a", "b"], snapshot, fn name, acc ->
+          put_in(acc.cells[name].slots["primary"].status, :stale)
         end)
 
       views = Snapshot.views(snapshot, id: "ops")
 
-      for name <- [:a, :b] do
+      for name <- ["a", "b"] do
         assert {:stale, _} = views[name].state
         assert root_id(views[name].svg) == "ops-#{name}-chart"
         assert own!(views[name].note) == "ops-#{name}-chart-banner"
       end
 
-      assert ids(views.a.note) -- ids(views.b.note) == ids(views.a.note)
+      assert ids(views["a"].note) -- ids(views["b"].note) == ids(views["a"].note)
     end
   end
 end

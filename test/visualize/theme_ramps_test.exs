@@ -60,7 +60,7 @@ defmodule Visualize.ThemeRampsTest do
           Theme.new(name: :house, ramps: %{status: ~w(#c23238 #bd7407 #4ca34b)})
         end
 
-      assert error.message =~ "theme :house: ramp :status breaks its contract"
+      assert error.message =~ "theme \"house\": ramp :status breaks its contract"
       assert error.message =~ "good (0) must be green or blue"
     end
 
@@ -138,11 +138,11 @@ defmodule Visualize.ThemeRampsTest do
                      Theme.new(colors: %{good: "nope"})
                    end
 
-      assert_raise ArgumentError, ~r/color :mine breaks its contract: names :nope/, fn ->
+      assert_raise ArgumentError, ~r/color "mine" breaks its contract: names "nope"/, fn ->
         Theme.new(colors: %{mine: {:color, :nope}})
       end
 
-      assert_raise ArgumentError, ~r/color :a breaks its contract: reaches itself/, fn ->
+      assert_raise ArgumentError, ~r/color "a" breaks its contract: reaches itself/, fn ->
         Theme.new(colors: %{a: {:color, :b}, b: {:color, :a}})
       end
 
@@ -306,7 +306,7 @@ defmodule Visualize.ThemeRampsTest do
     test "a scale whose range length is its bucket count refuses a ramp" do
       color = %{kind: :quantize, domain: [0, 1], range: {:ramp, :status}}
 
-      assert_raise ArgumentError, ~r/scale :color \(quantize\) cannot range over/, fn ->
+      assert_raise ArgumentError, ~r/scale "color" \(quantize\) cannot range over/, fn ->
         Frame.new(chart(%{color: color}), size: @size)
       end
     end
@@ -381,13 +381,13 @@ defmodule Visualize.ThemeRampsTest do
       end
 
       for fill <- [{:ramp, :heat, 0.3}, {:ramp, :status, 2}] do
-        assert {:error, [{[:styles, :by_state, :fill, :color], {:type, :color}}]} =
+        assert {:error, [{[:styles, "by_state", :fill, :color], {:type, :color}}]} =
                  Validator.validate(put_in(design, [:styles, :by_state, :fill], fill))
       end
 
       bad = put_in(design, [:frames, :main, :scales, :color, :range], {:ramp, :heat})
 
-      assert {:error, [{[:frames, :main, :scales, :color, :range], {:type, :ramp}}]} =
+      assert {:error, [{[:frames, "main", :scales, "color", :range], {:type, :ramp}}]} =
                Validator.validate(bad)
     end
 

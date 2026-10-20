@@ -250,15 +250,15 @@ defmodule Visualize.Chart.BuildTest do
   describe "the fold" do
     test "two fragments that declare one name differently are a conflict at its path" do
       fragments = [style(:series, stroke_width: 1), style(:series, stroke_width: 2)]
-      assert Chart.compose(fragments) == {:error, [{[:styles, :series], :conflict}]}
+      assert Chart.compose(fragments) == {:error, [{[:styles, "series"], :conflict}]}
     end
 
     test "scales union and axes concatenate whatever the order of the fragments" do
       fragments = [scale(:x, :time), axis(:x, :bottom), cartesian(), axis(:y, :left)]
-      assert {:ok, %{frames: %{main: frame}}} = Chart.compose(fragments)
+      assert {:ok, %{frames: %{"main" => frame}}} = Chart.compose(fragments)
       assert frame.kind == :cartesian
-      assert frame.scales == %{x: %{kind: :time}}
-      assert frame.axes == [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}]
+      assert frame.scales == %{"x" => %{kind: :time}}
+      assert frame.axes == [%{scale: "x", side: :bottom}, %{scale: "y", side: :left}]
     end
 
     test "a facet frame lifts by and columns into its facet node" do
@@ -293,13 +293,13 @@ defmodule Visualize.Chart.BuildTest do
           ])
 
       assert {:ok, design} = Chart.compose(fragments)
-      assert design.frames |> Map.keys() |> Enum.sort() == [:history, :now]
-      assert design.frames.history.box == [0, 0, 1, 1]
-      assert design.frames.history.scales == %{x: %{kind: :time}}
-      assert design.frames.now.scales == %{angle: %{kind: :linear, domain: [0, 4]}}
+      assert design.frames |> Map.keys() |> Enum.sort() == ["history", "now"]
+      assert design.frames["history"].box == [0, 0, 1, 1]
+      assert design.frames["history"].scales == %{"x" => %{kind: :time}}
+      assert design.frames["now"].scales == %{"angle" => %{kind: :linear, domain: [0, 4]}}
       # A mark and a label say the frame their group was put in.
-      assert Enum.map(design.marks, & &1.frame) == [:history, :now]
-      assert Enum.map(design.labels, & &1.frame) == [:history]
+      assert Enum.map(design.marks, & &1.frame) == ["history", "now"]
+      assert Enum.map(design.labels, & &1.frame) == ["history"]
     end
 
     test "in_frame/2 keeps a frame a mark already says, and refuses a fragment of two frames" do

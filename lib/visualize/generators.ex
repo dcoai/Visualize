@@ -112,6 +112,32 @@ defmodule Visualize.Generators do
             "got #{inspect(name)} and #{inspect(args)}"
   end
 
+  @doc false
+  # The generator a design names, `{name, module}` with the host's own atom, found by the
+  # name's spelling: a design holds a generator's name as its string (spec/14 §9.4, D-195).
+  @spec lookup(registry(), atom() | String.t(), arity()) :: {:ok, {atom(), module()}} | :error
+  def lookup(registry, name, arity) when is_atom(name) do
+    case Map.fetch(registry, {name, arity}) do
+      {:ok, module} -> {:ok, {name, module}}
+      :error -> lookup(registry, Atom.to_string(name), arity)
+    end
+  end
+
+  def lookup(registry, name, arity) when is_binary(name) do
+    Enum.find_value(registry, :error, fn
+      {{atom, ^arity}, module} -> if Atom.to_string(atom) == name, do: {:ok, {atom, module}}
+      _other -> nil
+    end)
+  end
+
+  @doc false
+  # Whether the registry defines a generator of the name at any arity, by spelling.
+  @spec defines?(registry(), atom() | String.t()) :: boolean()
+  def defines?(registry, name) do
+    spelled = to_string(name)
+    Enum.any?(Map.keys(registry), fn {atom, _arity} -> Atom.to_string(atom) == spelled end)
+  end
+
   @doc """
   The registry of `modules` then `config :visualize, generators:` (spec/14 §3.13): each
   generator `{name, arity}` by the module that defines it. Raises `ArgumentError` for a

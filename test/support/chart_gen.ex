@@ -28,7 +28,8 @@ defmodule Visualize.ChartGen do
     # A color channel and its frame's color scale are drawn independently, so a constant
     # or a typed column can land outside a declared domain — the validator's
     # `{:outside_domain, …}` (spec/14 §10.1, D-122). Such a design is not valid; drop it.
-    filter(designs(), &(Domain.faults(&1) == []), 50)
+    # The faults are found in the map the validator reads, its names strings (D-195).
+    filter(designs(), &(Domain.faults(Visualize.Chart.Migration.parts(&1, :design)) == []), 50)
   end
 
   defp designs do

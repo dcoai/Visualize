@@ -38,9 +38,11 @@ defmodule Visualize.Chart.Frame do
 
   """
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.{Chart, Theme}
   alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Motion, Scales}
-  alias Visualize.Chart.{Mark, Schema, Style, Validator, Var}
+  alias Visualize.Chart.{Mark, Names, Schema, Style, Validator, Var}
   alias Visualize.Chart.Style.{Defaults, Parts}
   alias Visualize.Chart.Transform.Force
   alias Visualize.Geo.Projection
@@ -98,7 +100,7 @@ defmodule Visualize.Chart.Frame do
           styles: %{atom() => map()},
           design_styles: %{atom() => map()},
           defaults: [map() | nil],
-          defs: %{atom() => map()},
+          defs: %{(String.t() | {:inline, String.t()}) => map()},
           now: term() | nil,
           schemas: %{atom() => Visualize.Data.Schema.t()},
           system: Visualize.Quantity.system(),
@@ -175,7 +177,8 @@ defmodule Visualize.Chart.Frame do
 
   # The frame over one margin: its plot, projection, forces, panels and scales.
   defp realize(chart, opts, name, node, size, margin) do
-    sources = Keyword.get(opts, :sources, %{})
+    # Sources by the names the design gives them (spec/14 §1.4, D-195).
+    sources = opts |> Keyword.get(:sources, %{}) |> Visualize.Chart.Names.keys()
     kind = node.kind
 
     # The frame's own pixel box is its fractions of the render's (spec/14 §4.2, #383), and
@@ -188,7 +191,8 @@ defmodule Visualize.Chart.Frame do
     }
 
     now = Keyword.get(opts, :now)
-    schemas = Keyword.get(opts, :schemas, %{})
+    # A slot is named by its string (D-195), whichever spelling the host keyed it by.
+    schemas = opts |> Keyword.get(:schemas, %{}) |> Names.keys()
     system = system(Keyword.get(opts, :system, :as_posted))
     theme = theme(chart.theme, Keyword.get(opts, :theme))
     styles = Style.all(chart.styles, theme)
@@ -222,7 +226,7 @@ defmodule Visualize.Chart.Frame do
         sources,
         styles,
         ctx,
-        Keyword.get(opts, :domains, %{})
+        opts |> Keyword.get(:domains, %{}) |> Visualize.Chart.Names.keys()
       )
 
     %__MODULE__{
@@ -288,7 +292,11 @@ defmodule Visualize.Chart.Frame do
           end)
       )
 
-    Parts.inline_paints(Map.values(styles) ++ laid ++ sites ++ defaults)
+    # Held under `{:inline, name}` beside the declared ones, whose names are strings too
+    # (D-195): `Defs.defs/3` declares a declared paint always and an inline one when drawn.
+    (Map.values(styles) ++ laid ++ sites ++ defaults)
+    |> Parts.inline_paints()
+    |> Map.new(fn {name, node} -> {{:inline, name}, node} end)
   end
 
   defp stack(%{style: stack}) when is_map(stack) or is_list(stack), do: List.wrap(stack)
@@ -304,6 +312,9 @@ defmodule Visualize.Chart.Frame do
   @doc "One realized scale; `ArgumentError` when the frame declares no such scale."
   @spec scale(t(), atom()) :: struct()
   def scale(%__MODULE__{scales: scales}, name) do
+    # A scale is named by its string (spec/14 §1.4, D-195); the library asks by its atom.
+    name = Visualize.Chart.Names.name(name)
+
     Map.get(scales, name) ||
       raise ArgumentError,
             "the frame declares no scale #{inspect(name)}; it has #{inspect(Map.keys(scales))}"
@@ -312,8 +323,8 @@ defmodule Visualize.Chart.Frame do
   @doc "The frame with the realized scale replaced: the override of spec/14 §4.3."
   @spec put_scale(t(), atom(), struct()) :: t()
   def put_scale(%__MODULE__{scales: scales} = frame, name, scale)
-      when is_atom(name) and is_struct(scale) do
-    %{frame | scales: Map.put(scales, name, scale)}
+      when is_name(name) and is_struct(scale) do
+    %{frame | scales: Map.put(scales, Visualize.Chart.Names.name(name), scale)}
   end
 
   @doc """
@@ -364,7 +375,7 @@ defmodule Visualize.Chart.Frame do
   @spec generate(t(), keyword()) :: Element.t()
   def generate(%__MODULE__{} = frame, opts) do
     mode = Keyword.get(opts, :resolve, :css)
-    sources = Keyword.get(opts, :sources)
+    sources = opts |> Keyword.get(:sources) |> Visualize.Chart.Names.keys()
     paths? = Keyword.get(opts, :paths, false)
 
     children =
@@ -521,6 +532,7 @@ defmodule Visualize.Chart.Frame do
   def render(%__MODULE__{} = frame, opts) do
     {mode, opts} = Keyword.pop_lazy(opts, :resolve, fn -> Theme.mode(opts[:backend]) end)
     {sources, opts} = Keyword.pop(opts, :sources)
+    sources = Visualize.Chart.Names.keys(sources)
     {paths?, opts} = Keyword.pop(opts, :paths, false)
 
     frame

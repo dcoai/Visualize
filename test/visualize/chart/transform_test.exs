@@ -157,10 +157,11 @@ defmodule Visualize.Chart.TransformTest do
       wide = [%{hour: 0, cpu: 1, mem: 2}, %{hour: 1, cpu: 3}, %{hour: 2, mem: nil, cpu: 5}]
 
       assert run(%{op: :fold, fields: [:cpu, :mem, :disk]}, wide) == [
-               %{hour: 0, key: :cpu, value: 1},
-               %{hour: 0, key: :mem, value: 2},
-               %{hour: 1, key: :cpu, value: 3},
-               %{hour: 2, key: :cpu, value: 5}
+               # The default `as` names its two columns by their strings (D-195).
+               %{:hour => 0, "key" => :cpu, "value" => 1},
+               %{:hour => 0, "key" => :mem, "value" => 2},
+               %{:hour => 1, "key" => :cpu, "value" => 3},
+               %{:hour => 2, "key" => :cpu, "value" => 5}
              ]
 
       # The order within a row is the author's; `as` names the two columns.

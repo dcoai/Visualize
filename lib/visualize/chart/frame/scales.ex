@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Frame.Scales do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Scale realization and inference for a frame (spec/14 §4.3): one struct per `:scale`
   # node through the constructors of `Visualize.Scale`, `:auto` domains from the whole
   # bound column of every mark channel naming the scale, `:auto` ranges from the plot
@@ -233,10 +235,11 @@ defmodule Visualize.Chart.Frame.Scales do
   @doc false
   # The offset scale of a family for a mark: `x_offset`/`y_offset`, renamed by the mark's
   # `scales` node (spec/14 §5.1).
-  @spec offset_scale(map(), :x | :y) :: atom()
+  @spec offset_scale(map(), :x | :y) :: String.t()
   def offset_scale(mark, family) do
     name = :"#{family}_offset"
-    Map.get(Map.get(mark, :scales, %{}), name, name)
+    # The mark's `scales` node is keyed by channel; a scale is named by its string (D-195).
+    Map.get(Map.get(mark, :scales, %{}), name, Atom.to_string(name))
   end
 
   @doc false
@@ -249,7 +252,7 @@ defmodule Visualize.Chart.Frame.Scales do
   @doc false
   # The scale a channel of a mark names in a frame kind — the kind's table, renamed by
   # the mark's `scales` node — or `nil` when it names none (spec/14 §4.3, §5.1, §5.2).
-  @spec scale_for(atom(), map(), atom()) :: atom() | nil
+  @spec scale_for(atom(), map(), atom()) :: String.t() | nil
   def scale_for(_kind, %{type: type}, :value) when type in @unscaled_value, do: nil
 
   # A rect's `value` reaches the color scale in every frame (spec/14 §4.3): in a polar
@@ -259,7 +262,7 @@ defmodule Visualize.Chart.Frame.Scales do
   def scale_for(kind, mark, channel) do
     case Map.get(channel_scales(kind), channel) do
       nil -> nil
-      name -> Map.get(Map.get(mark, :scales, %{}), name, name)
+      name -> Map.get(Map.get(mark, :scales, %{}), name, Atom.to_string(name))
     end
   end
 
@@ -267,11 +270,11 @@ defmodule Visualize.Chart.Frame.Scales do
   # A mark's color scale: `color`, or what its `scales` node renames `color` to — the one
   # scale its series' paint, its style's color bindings and its labels read (spec/14
   # §4.3, D-143).
-  @spec color_scale(map()) :: atom()
+  @spec color_scale(map()) :: String.t()
   def color_scale(mark) do
     case Map.get(mark, :scales, %{}) do
-      %{color: name} when is_atom(name) and name not in [nil, true, false] -> name
-      _none -> :color
+      %{color: name} when is_name(name) and name not in [nil, true, false] -> name
+      _none -> "color"
     end
   end
 
@@ -284,7 +287,8 @@ defmodule Visualize.Chart.Frame.Scales do
   def mark_rows(mark, _sources, _ctx) when not is_map_key(mark, :data), do: []
 
   def mark_rows(mark, sources, ctx) do
-    case Map.fetch(sources, source_name(mark.data)) do
+    # A source is found by its name's spelling, whichever the caller keyed it by (D-195).
+    case Visualize.Chart.Names.fetch(sources, source_name(mark.data)) do
       {:ok, source} ->
         rows = source |> Table.rows() |> Enum.filter(&is_map/1)
 
@@ -304,7 +308,7 @@ defmodule Visualize.Chart.Frame.Scales do
   end
 
   defp source_name(%Var{name: name}), do: Style.unresolved!(name)
-  defp source_name(name) when is_atom(name), do: name
+  defp source_name(name) when is_name(name), do: name
   defp source_name(%{source: name}), do: name
 
   defp transforms(%{transforms: steps}) when is_list(steps), do: steps
@@ -374,7 +378,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # (spec/14 §5.2, #420): it is read *from* the domain, so it cannot be an input to it.
   defp values({:scale, _end}, _rows), do: []
 
-  defp values(field, rows) when is_atom(field), do: column(rows, field)
+  defp values(field, rows) when is_name(field), do: column(rows, field)
 
   defp column(rows, field), do: rows |> Enum.map(&Table.get(&1, field)) |> Enum.reject(&is_nil/1)
 
@@ -412,7 +416,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # The color scale draws a value outside its domain in a visible neutral, the theme's
   # `:axis` slot, unless the node says otherwise (spec/14 §4.3, D-122): a color that
   # vanished would hide the mismatch, and the backends disagree about a missing fill.
-  defp unknown(:ordinal, :color, node), do: neutral_unknown(node)
+  defp unknown(:ordinal, "color", node), do: neutral_unknown(node)
 
   # A map of colors is a color scale whatever its name (§4.3, D-143).
   defp unknown(:ordinal, _name, %{range: %{} = colors} = node) when not is_struct(colors),
@@ -448,7 +452,7 @@ defmodule Visualize.Chart.Frame.Scales do
 
   # An `angle` scale with a start or a sweep has its range said in degrees (§4.3, #390);
   # a list range wins, and any other scale's start and sweep say nothing.
-  defp sweep(:angle, node, :auto) do
+  defp sweep("angle", node, :auto) do
     start = get(node, :start)
     sweep = get(node, :sweep)
 
@@ -463,7 +467,7 @@ defmodule Visualize.Chart.Frame.Scales do
   # end so the band centers span the sweep — on a full turn the step is `sweep / n` and
   # the ring closes with the last category one step before the first; on a partial
   # sweep `sweep / (n − 1)`, the categories ends-inclusive.
-  defp ring([a0, a1], :band, :angle, domain) when is_list(domain) and domain != [] do
+  defp ring([a0, a1], :band, "angle", domain) when is_list(domain) and domain != [] do
     n = length(domain)
     sweep = a1 - a0
 
@@ -539,7 +543,10 @@ defmodule Visualize.Chart.Frame.Scales do
   defp fixed(:auto, inferred), do: inferred
   defp fixed(given, _inferred), do: given
 
-  defp infer(kind, _name, values) when kind in [:ordinal, :band], do: Enum.uniq(values)
+  # A category is its spelling (spec/14 §9.4, D-195): a row's atom and a string are one.
+  defp infer(kind, _name, values) when kind in [:ordinal, :band],
+    do: values |> Enum.map(&Visualize.Chart.Names.category/1) |> Enum.uniq()
+
   defp infer(:quantile, _name, values), do: values
   defp infer(:time, name, values), do: time_extent(name, Enum.map(values, &temporal(&1, name)))
 
@@ -620,20 +627,20 @@ defmodule Visualize.Chart.Frame.Scales do
   defp range(kind, name, range, plot, theme, axes, _worth),
     do: range(kind, name, range, plot, theme, axes)
 
-  defp range(_kind, :x, :auto, plot, _theme, _axes), do: [0, plot.width]
-  defp range(_kind, :y, :auto, plot, _theme, _axes), do: [plot.height, 0]
+  defp range(_kind, "x", :auto, plot, _theme, _axes), do: [0, plot.width]
+  defp range(_kind, "y", :auto, plot, _theme, _axes), do: [plot.height, 0]
   # The angle scale's range is its sweep from its start, degrees to radians (§4.3, #390).
-  defp range(_kind, :angle, :auto, _plot, _theme, _axes), do: [0, 2 * :math.pi()]
-  defp range(_kind, :r, :auto, plot, _theme, _axes), do: [0, min(plot.width, plot.height) / 2]
+  defp range(_kind, "angle", :auto, _plot, _theme, _axes), do: [0, 2 * :math.pi()]
+  defp range(_kind, "r", :auto, plot, _theme, _axes), do: [0, min(plot.width, plot.height) / 2]
 
-  defp range(kind, :color, :auto, _plot, theme, _axes) when kind in @discrete do
+  defp range(kind, "color", :auto, _plot, theme, _axes) when kind in @discrete do
     Enum.map(1..length(theme.series)//1, &Theme.series_slot(theme, &1))
   end
 
   defp range(kind, name, :auto, plot, theme, axes) do
     case Enum.find(axes, &(&1.scale == name)) do
-      %{side: side} when side in [:top, :bottom] -> range(kind, :x, :auto, plot, theme, [])
-      %{side: side} when side in [:left, :right] -> range(kind, :y, :auto, plot, theme, [])
+      %{side: side} when side in [:top, :bottom] -> range(kind, "x", :auto, plot, theme, [])
+      %{side: side} when side in [:left, :right] -> range(kind, "y", :auto, plot, theme, [])
       nil -> [0, 1]
     end
   end

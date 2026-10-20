@@ -156,18 +156,19 @@ defmodule Visualize.GeneratorsTest do
     test "an unknown name is a fault at its path; a registered one is not" do
       style = [generate(:tenant_style, [{:field, :tenant}]), generate(:nope, [])]
 
-      assert {:error, [{[:marks, 0, :style, 1], {:undeclared, :generator, :nope}}]} =
+      # A generator's name is held as its string (D-195).
+      assert {:error, [{[:marks, 0, :style, 1], {:undeclared, :generator, "nope"}}]} =
                Chart.from_map(design(style), @gens)
 
-      assert {:error, [{[:marks, 0, :style, 0], {:undeclared, :generator, :tenant_style}}, _]} =
+      assert {:error, [{[:marks, 0, :style, 0], {:undeclared, :generator, "tenant_style"}}, _]} =
                Chart.from_map(design(style))
     end
 
     test "a name registered at another arity, and a malformed call" do
-      style = [generate(:tenant_style, []), {:generate, "x", []}]
+      style = [generate(:tenant_style, []), {:generate, 42, []}]
 
       assert {:error, errors} = Chart.from_map(design(style), @gens)
-      assert {[:marks, 0, :style, 0], {:arity, :generator, :tenant_style, 0}} in errors
+      assert {[:marks, 0, :style, 0], {:arity, :generator, "tenant_style", 0}} in errors
       assert {[:marks, 0, :style, 1], {:type, :generator}} in errors
 
       assert Validator.format({[:marks, 0, :style, 0], {:arity, :generator, :tenant_style, 0}}) =~
@@ -177,7 +178,7 @@ defmodule Visualize.GeneratorsTest do
     test "a field argument is checked as any field binding" do
       style = generate(:tenant_style, [{:field, :nope}])
 
-      assert {:error, [{[:marks, 0, :style, 0], {:undeclared, :field, :nope}}]} =
+      assert {:error, [{[:marks, 0, :style, 0], {:undeclared, :field, "nope"}}]} =
                Chart.from_map(design(style), @gens)
     end
 
@@ -238,7 +239,7 @@ defmodule Visualize.GeneratorsTest do
       assert_received {:context,
                        %{
                          theme: %Visualize.Theme{},
-                         vars: %{unit: "kg"},
+                         vars: %{"unit" => "kg"},
                          assigns: %{viewer: "acme"}
                        }}
     end
@@ -282,7 +283,7 @@ defmodule Visualize.GeneratorsTest do
           assert group(applied).style.fill == "var(--vis-green, #4ca34b)"
         end)
 
-      assert log =~ "marks[0].style: generator :tenant_style returned no style"
+      assert log =~ ~s(marks[0].style: generator "tenant_style" returned no style)
     end
 
     test "a color result that is no color applies nothing: the layer under it shows" do
@@ -304,7 +305,7 @@ defmodule Visualize.GeneratorsTest do
           assert group(applied).style.fill == "var(--vis-green, #4ca34b)"
         end)
 
-      assert log =~ "generator :brand_color returned no color"
+      assert log =~ ~s(generator "brand_color" returned no color)
     end
 
     test "a result holding a generator, a gradient in place or an unknown color is a fault" do
@@ -377,7 +378,7 @@ defmodule Visualize.GeneratorsTest do
           assigns: %{viewer: "acme"}
         )
 
-      {:ok, %{main: compiled}} = Chart.compile(applied)
+      {:ok, %{"main" => compiled}} = Chart.compile(applied)
       {group, _compiled} = Visualize.Chart.Compiled.step(compiled, %{s: @rows})
       assert Visualize.Render.to_string(group) =~ ~s(stroke-width="3")
     end
@@ -394,7 +395,7 @@ defmodule Visualize.GeneratorsTest do
       applied = apply!(design([:style_1, generate(:tenant_style, [{:field, :tenant}])]))
       explained = Chart.explain(applied, at: [:marks, 0], datum: hd(@rows))
 
-      assert [%{name: :tenant_style, args: ["acme"], at: [], layer: :generator, result: result}] =
+      assert [%{name: "tenant_style", args: ["acme"], at: [], layer: :generator, result: result}] =
                explained.generators
 
       assert result.fill.color == {:color, :red}
@@ -453,12 +454,12 @@ defmodule Visualize.GeneratorsTest do
 
       assert {:error,
               [
-                {[:cells, :chat, :ref, :marks, 0, :style],
-                 {:undeclared, :generator, :tenant_style}}
+                {[:cells, "chat", :ref, :marks, 0, :style],
+                 {:undeclared, :generator, "tenant_style"}}
               ]} =
                Visualize.Board.realize(board, store, %{chat: %{s: @rows}})
 
-      {:ok, %{chat: applied}, _cache} =
+      {:ok, %{"chat" => applied}, _cache} =
         Visualize.Board.realize(board, store, %{chat: %{s: @rows}},
           generators: [Tenants],
           assigns: %{viewer: "globex"}

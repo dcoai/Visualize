@@ -90,7 +90,7 @@ defmodule Visualize.Board.StateTest do
 
     test "a cell whose data cannot be applied says why, in the validator's words" do
       words =
-        State.words({:down, {:apply, [{[:sources, :primary], {:unbound, :source, :primary}}]}})
+        State.words({:down, {:apply, [{[:sources, "primary"], {:unbound, :source, "primary"}}]}})
 
       assert words =~ "Feed down: sources.primary:"
     end

@@ -67,6 +67,8 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
   end
 
   defp view_until(cell, test) do
+    cell = to_string(cell)
+
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} ->
         if test.(view), do: view, else: view_until(cell, test)
@@ -82,7 +84,7 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
     assert view.svg =~ ~s(class="mark mark-line")
 
     info = Server.info(board)
-    assert %{state: :live, fault: nil, runs: runs} = info.virtual_sources[[:doubled]]
+    assert %{state: :live, fault: nil, runs: runs} = info.virtual_sources[["doubled"]]
     assert runs >= 1
   end
 
@@ -96,10 +98,10 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
     :ok = Server.tick(board)
 
     view = view_until(:a, &match?({:down, _}, &1.state))
-    assert view.state == {:down, {:virtual_source, :doubled, :raised}}
+    assert view.state == {:down, {:virtual_source, "doubled", :raised}}
     assert view.svg =~ ~s(class="mark mark-line")
 
-    assert Server.info(board).virtual_sources[[:doubled]].fault == %{
+    assert Server.info(board).virtual_sources[["doubled"]].fault == %{
              kind: :raised,
              detail: ArithmeticError
            }
@@ -113,14 +115,14 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
 
     assert answer ==
              {:error,
-              {:virtual_sources, [{[:virtual_sources, :looped, :from], {:cycle, [[:looped]]}}]}}
+              {:virtual_sources, [{[:virtual_sources, "looped", :from], {:cycle, [["looped"]]}}]}}
 
     {answer, _agent} = start(board: board(%{lost: lost, doubled: @doubled}))
 
     assert answer ==
              {:error,
               {:virtual_sources,
-               [{[:virtual_sources, :lost, :from, 0], {:unknown_input, :nowhere}}]}}
+               [{[:virtual_sources, "lost", :from, 0], {:unknown_input, "nowhere"}}]}}
   end
 
   test "a row carries a per-identity source's answer for its own identity (spec/15 §14.7)" do
@@ -157,10 +159,11 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
       )
 
     :ok = Server.tick(board)
-    %{delivery: delivery, schema: schema} = Server.snapshot(board).cells.a.slots.primary
+    %{delivery: delivery, schema: schema} = Server.snapshot(board).cells["a"].slots["primary"]
 
-    assert Enum.map(delivery.rows, & &1[:"health.state"]) == [:error, :ok, :error]
-    assert {:ok, [:ok, :error]} = Schema.fetch(schema, :"health.state", :values)
+    assert Enum.map(delivery.rows, & &1["health.state"]) == [:error, :ok, :error]
+    # The source's schema holds its category values as strings, a row's by spelling (D-195).
+    assert {:ok, ["ok", "error"]} = Schema.fetch(schema, "health.state", :values)
     assert delivery.schema == Schema.version(schema)
   end
 

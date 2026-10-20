@@ -161,7 +161,8 @@ defmodule Visualize.Board.Server do
         virtual_source_heap: 10_000_000
       ])
 
-    board = Keyword.fetch!(opts, :board)
+    # A board's names are strings (D-195), whichever spelling it was built with.
+    board = opts |> Keyword.fetch!(:board) |> Board.named()
     store = Keyword.fetch!(opts, :store)
     limits = Keyword.take(opts, [:limits, :generators])
 
@@ -278,14 +279,15 @@ defmodule Visualize.Board.Server do
   @spec select(GenServer.server(), Board.identity() | nil) :: :ok
   def select(board, nil), do: GenServer.call(board, {:select, nil})
 
-  def select(board, {field, _value} = identity) when is_atom(field) or is_binary(field),
-    do: GenServer.call(board, {:select, identity})
+  # A field is named by its string (D-195), whichever spelling the caller gives.
+  def select(board, {field, value}) when is_atom(field) or is_binary(field),
+    do: GenServer.call(board, {:select, {Visualize.Chart.Names.name(field), value}})
 
   def select(board, identity) when is_map(identity) and map_size(identity) == 1,
     do: select(board, identity |> Map.to_list() |> hd())
 
   def select(board, identity) when is_map(identity) and map_size(identity) > 1 do
-    GenServer.call(board, {:select, identity})
+    GenServer.call(board, {:select, Visualize.Chart.Names.keys(identity)})
   end
 
   @doc """
@@ -328,7 +330,8 @@ defmodule Visualize.Board.Server do
   # A question put to a cell's process from the caller's: the board names the process,
   # and the cell answers under the caller's reference.
   defp ask(board, cell, message) do
-    case GenServer.call(board, {:cell, cell}) do
+    # A cell is named by its string (D-195), whichever spelling the caller gives.
+    case GenServer.call(board, {:cell, Visualize.Chart.Names.name(cell)}) do
       pid when is_pid(pid) -> ask(pid, message)
       nil -> :error
     end
@@ -354,7 +357,8 @@ defmodule Visualize.Board.Server do
   §8.2): `:ok`, or `{:error, errors}`.
   """
   @spec vars(GenServer.server(), map()) :: :ok | {:error, [Board.error(), ...]}
-  def vars(board, vars) when is_map(vars), do: GenServer.call(board, {:vars, vars})
+  def vars(board, vars) when is_map(vars),
+    do: GenServer.call(board, {:vars, Visualize.Chart.Names.keys(vars)})
 
   @doc "The container width set and every cell's box recomputed (spec/15 §1.6, §8.2); `:ok`."
   @spec resize(GenServer.server(), number()) :: :ok

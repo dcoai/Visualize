@@ -13,6 +13,7 @@ defmodule Visualize.Chart.StackTest do
   use ExUnitProperties
 
   alias Visualize.Chart
+  alias Visualize.Chart.Migration
 
   @theme %{version: 2, theme: :default, styles: %{series: %{stroke_width: 1}}}
   @frame %{
@@ -47,14 +48,14 @@ defmodule Visualize.Chart.StackTest do
       design = Chart.stack([@theme, @frame, @house, @panel])
 
       assert design.theme == :dark
-      assert design.styles.series == %{stroke: :series_2, stroke_width: 2}
-      assert design.styles.muted == %{opacity: 0.5}
-      assert design.frames.main.kind == :cartesian
-      assert design.frames.main.margin == @frame.frames.main.margin
-      assert Map.keys(design.frames.main.scales) |> Enum.sort() == [:x, :y]
-      assert design.frames.main.scales.y == %{kind: :linear, domain: [0, :auto]}
-      assert Enum.map(design.frames.main.axes, & &1.scale) == [:x, :y]
-      assert design.marks == @panel.marks
+      assert design.styles["series"] == %{stroke: :series_2, stroke_width: 2}
+      assert design.styles["muted"] == %{opacity: 0.5}
+      assert design.frames["main"].kind == :cartesian
+      assert design.frames["main"].margin == @frame.frames.main.margin
+      assert Map.keys(design.frames["main"].scales) |> Enum.sort() == ["x", "y"]
+      assert design.frames["main"].scales["y"] == %{kind: :linear, domain: [0, :auto]}
+      assert Enum.map(design.frames["main"].axes, & &1.scale) == ["x", "y"]
+      assert design.marks == Migration.names(@panel).marks
 
       rows = %{t: [~U[2026-01-01 00:00:00Z], ~U[2026-01-02 00:00:00Z]], v: [3, 9]}
       assert {:ok, applied} = Chart.apply(design, sources: %{primary: rows})
@@ -69,14 +70,14 @@ defmodule Visualize.Chart.StackTest do
       a = Chart.stack([@theme, @frame, @house, @panel])
       b = Chart.stack([@theme, @frame, other, @panel])
 
-      assert a.styles.series == %{stroke: :series_2, stroke_width: 2}
-      assert b.styles.series == %{stroke: :series_3, stroke_width: 4}
+      assert a.styles["series"] == %{stroke: :series_2, stroke_width: 2}
+      assert b.styles["series"] == %{stroke: :series_3, stroke_width: 4}
       assert Map.delete(a, :styles) == Map.delete(b, :styles)
     end
 
     test "the empty stack is the empty fragment and one layer is itself" do
       assert Chart.stack([]) == %{}
-      assert Chart.stack([@panel]) == @panel
+      assert Chart.stack([@panel]) == Migration.names(@panel)
       assert Chart.stack([@theme, @frame]) == Chart.stack(@theme, @frame)
     end
 
@@ -104,8 +105,8 @@ defmodule Visualize.Chart.StackTest do
       lower = %{styles: %{series: %{stroke: :series_1, stroke_width: 2}}}
       higher = %{styles: %{series: %{stroke_width: 3}}}
 
-      assert Chart.stack(lower, higher) == %{styles: %{series: %{stroke_width: 3}}}
-      assert Chart.compose(lower, higher) == {:error, [{[:styles, :series], :conflict}]}
+      assert Chart.stack(lower, higher) == %{styles: %{"series" => %{stroke_width: 3}}}
+      assert Chart.compose(lower, higher) == {:error, [{[:styles, "series"], :conflict}]}
     end
 
     test "union entries only one layer declares are kept" do
@@ -113,8 +114,8 @@ defmodule Visualize.Chart.StackTest do
       higher = %{vars: %{n: %{default: 3}}}
 
       assert Chart.stack(lower, higher) == %{
-               vars: %{unit: %{default: "%"}, n: %{default: 3}},
-               sources: %{a: %{fields: [:t]}}
+               vars: %{"unit" => %{default: "%"}, "n" => %{default: 3}},
+               sources: %{"a" => %{fields: ["t"]}}
              }
     end
 
@@ -122,14 +123,16 @@ defmodule Visualize.Chart.StackTest do
       lower = %{marks: [%{type: :line, data: :p, channels: %{}}], labels: [%{anchor: :caption}]}
       higher = %{marks: [%{type: :rule, data: :p, channels: %{}}]}
 
-      assert Chart.stack(lower, higher).marks == lower.marks ++ higher.marks
-      assert Chart.stack(lower, higher).labels == lower.labels
+      assert Chart.stack(lower, higher).marks ==
+               Migration.names(%{marks: lower.marks ++ higher.marks}).marks
+
+      assert Chart.stack(lower, higher).labels == Migration.names(lower).labels
     end
 
     test "a node both layers give as a map cascades key by key" do
       assert Chart.stack(%{frames: %{main: %{kind: :polar, margin: %{top: 10}}}}, %{
                frames: %{main: %{margin: %{top: 30}}}
-             }) == %{frames: %{main: %{kind: :polar, margin: %{top: 30}}}}
+             }) == %{frames: %{"main" => %{kind: :polar, margin: %{top: 30}}}}
     end
 
     test "a node either layer gives as anything else is the higher layer's whole" do
@@ -138,11 +141,11 @@ defmodule Visualize.Chart.StackTest do
       assert Chart.stack(%{frames: %{main: %{kind: :polar}}}, %{frames: var}) == %{frames: var}
 
       assert Chart.stack(%{frames: var}, %{frames: %{main: %{kind: :polar}}}) ==
-               %{frames: %{main: %{kind: :polar}}}
+               %{frames: %{"main" => %{kind: :polar}}}
 
-      assert Chart.stack(%{styles: var}, %{styles: %{a: %{}}}) == %{styles: %{a: %{}}}
+      assert Chart.stack(%{styles: var}, %{styles: %{a: %{}}}) == %{styles: %{"a" => %{}}}
       assert Chart.stack(%{styles: %{a: %{}}}, %{styles: var}) == %{styles: var}
-      assert Chart.stack(%{theme: :dark}, %{theme: %{name: :house}}) == %{theme: %{name: :house}}
+      assert Chart.stack(%{theme: :dark}, %{theme: %{name: :house}}) == %{theme: %{name: "house"}}
     end
 
     test "every union key given as a whole-node variable is the higher layer's, where compose conflicts" do
@@ -153,11 +156,11 @@ defmodule Visualize.Chart.StackTest do
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
             {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}},
-             %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]}
+             %{frames: %{main: %{scales: v}}}, [:frames, "main", :scales]}
           ] do
-        assert Chart.stack(declared, variable) == variable
-        assert Chart.stack(variable, declared) == declared
-        assert Chart.stack(variable, variable) == variable
+        assert Chart.stack(declared, variable) == Migration.names(variable)
+        assert Chart.stack(variable, declared) == Migration.names(declared)
+        assert Chart.stack(variable, variable) == Migration.names(variable)
 
         assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
         assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
@@ -174,17 +177,17 @@ defmodule Visualize.Chart.StackTest do
 
       assert Chart.stack([a, b, c]) == %{vars: %{}}
       assert Chart.stack(Chart.stack(a, b), c) == %{vars: %{}}
-      assert Chart.stack(a, Chart.stack(b, c)) == %{vars: %{n: %{default: 0}}}
+      assert Chart.stack(a, Chart.stack(b, c)) == %{vars: %{"n" => %{default: 0}}}
 
       # The same holds for a node key, where the rule is to recurse rather than unite.
       f = %{frames: %{main: %{kind: :polar}}}
       g = %{frames: Chart.var(:f)}
       h = %{frames: %{main: %{margin: %{top: 1}}}}
 
-      assert Chart.stack([f, g, h]) == %{frames: %{main: %{margin: %{top: 1}}}}
+      assert Chart.stack([f, g, h]) == %{frames: %{"main" => %{margin: %{top: 1}}}}
 
       assert Chart.stack(f, Chart.stack(g, h)) == %{
-               frames: %{main: %{kind: :polar, margin: %{top: 1}}}
+               frames: %{"main" => %{kind: :polar, margin: %{top: 1}}}
              }
     end
 
@@ -194,8 +197,8 @@ defmodule Visualize.Chart.StackTest do
     end
 
     test "a key one layer alone carries is taken as it is" do
-      assert Chart.stack(%{}, @panel) == @panel
-      assert Chart.stack(@panel, %{}) == @panel
+      assert Chart.stack(%{}, @panel) == Migration.names(@panel)
+      assert Chart.stack(@panel, %{}) == Migration.names(@panel)
     end
   end
 
@@ -211,8 +214,8 @@ defmodule Visualize.Chart.StackTest do
       higher = %{marks: [%{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}}]}
 
       assert Chart.stack(lower, higher).marks == [
-               %{id: :series, type: :area, data: :p, channels: %{x: :t, y: :v}},
-               %{type: :rule, data: :d, channels: %{x: :at}}
+               %{id: "series", type: :area, data: "p", channels: %{x: "t", y: "v"}},
+               %{type: :rule, data: "d", channels: %{x: "at"}}
              ]
     end
 
@@ -220,23 +223,25 @@ defmodule Visualize.Chart.StackTest do
       lower = %{marks: [%{type: :line, data: :p, channels: %{}}]}
       higher = %{marks: [%{type: :area, data: :p, channels: %{}}]}
 
-      assert Chart.stack(lower, higher).marks == lower.marks ++ higher.marks
+      assert Chart.stack(lower, higher).marks ==
+               Migration.names(%{marks: lower.marks ++ higher.marks}).marks
     end
 
     test "an id one layer alone uses appends rather than replacing anything" do
       lower = %{marks: [%{id: :a, type: :line, data: :p, channels: %{}}]}
       higher = %{marks: [%{id: :b, type: :area, data: :p, channels: %{}}]}
 
-      assert Chart.stack(lower, higher).marks == lower.marks ++ higher.marks
+      assert Chart.stack(lower, higher).marks ==
+               Migration.names(%{marks: lower.marks ++ higher.marks}).marks
     end
 
     test "a label with the same id replaces; compose keeps both" do
       lower = %{labels: [%{id: :title, anchor: :title, text: ["House"]}]}
       higher = %{labels: [%{id: :title, anchor: :title, text: ["Panel"]}]}
 
-      assert Chart.stack(lower, higher).labels == higher.labels
+      assert Chart.stack(lower, higher).labels == Migration.names(higher).labels
       assert {:ok, composed} = Chart.compose(lower, higher)
-      assert composed.labels == lower.labels ++ higher.labels
+      assert composed.labels == Migration.names(%{labels: lower.labels ++ higher.labels}).labels
     end
 
     test "two axes for the same scale and side collapse to the higher layer's" do
@@ -250,9 +255,9 @@ defmodule Visualize.Chart.StackTest do
         frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true, style: :heavy}]}}
       }
 
-      assert Chart.stack(lower, higher).frames.main.axes == [
-               %{scale: :x, side: :bottom, grid: true, style: :heavy},
-               %{scale: :y, side: :left}
+      assert Chart.stack(lower, higher).frames["main"].axes == [
+               %{scale: "x", side: :bottom, grid: true, style: "heavy"},
+               %{scale: "y", side: :left}
              ]
     end
 
@@ -260,7 +265,7 @@ defmodule Visualize.Chart.StackTest do
       lower = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}}
       higher = %{frames: %{main: %{axes: [%{scale: :x, side: :top}]}}}
 
-      assert length(Chart.stack(lower, higher).frames.main.axes) == 2
+      assert length(Chart.stack(lower, higher).frames["main"].axes) == 2
     end
 
     test "identity matches within one key: a mark and a label may share an id" do
@@ -268,15 +273,16 @@ defmodule Visualize.Chart.StackTest do
       higher = %{labels: [%{id: :a, anchor: :title, text: ["T"]}]}
 
       stacked = Chart.stack(lower, higher)
-      assert stacked.marks == lower.marks
-      assert stacked.labels == higher.labels
+      assert stacked.marks == Migration.names(lower).marks
+      assert stacked.labels == Migration.names(higher).labels
     end
 
     test "transforms have no identity: a data pipeline is a sequence" do
       step = %{op: :filter, field: :v, test: :gt, value: 0}
       lower = %{marks: [%{type: :rect, data: %{source: :p, transforms: [step]}, channels: %{}}]}
 
-      assert Chart.stack(lower, lower).marks == lower.marks ++ lower.marks
+      assert Chart.stack(lower, lower).marks ==
+               Migration.names(%{marks: lower.marks ++ lower.marks}).marks
     end
 
     test "merging two lists collapses a duplicate identity in either of them" do
@@ -288,11 +294,11 @@ defmodule Visualize.Chart.StackTest do
       }
 
       assert Chart.stack(dup, %{marks: []}).marks == [
-               %{id: :a, type: :area, data: :p, channels: %{}}
+               %{id: "a", type: :area, data: "p", channels: %{}}
              ]
 
       assert Chart.stack(%{marks: []}, dup).marks == [
-               %{id: :a, type: :area, data: :p, channels: %{}}
+               %{id: "a", type: :area, data: "p", channels: %{}}
              ]
     end
 
@@ -304,8 +310,8 @@ defmodule Visualize.Chart.StackTest do
         ]
       }
 
-      assert Chart.stack(%{}, dup) == dup
-      assert Chart.stack([dup]) == dup
+      assert Chart.stack(%{}, dup) == Migration.names(dup)
+      assert Chart.stack([dup]) == Migration.names(dup)
     end
 
     test "a design carrying id round-trips through the map and the JSON forms" do
@@ -360,7 +366,7 @@ defmodule Visualize.Chart.StackTest do
       }
 
       design = Chart.stack([frame, panel])
-      assert length(design.frames.main.axes) == 2
+      assert length(design.frames["main"].axes) == 2
       assert Enum.map(design.marks, & &1.type) == [:area]
 
       assert {:ok, applied} = Chart.apply(design, sources: %{p: %{t: [1, 2], v: [3, 9]}})
@@ -414,7 +420,11 @@ defmodule Visualize.Chart.StackTest do
     })
   end
 
-  defp fragment do
+  # A fragment as a reader holds it: its names strings (spec/14 §1.4, D-195), so a stack
+  # of fragments is compared with fragments of the same spelling.
+  defp fragment, do: StreamData.map(atom_fragment(), &Migration.names/1)
+
+  defp atom_fragment do
     optional_map(%{
       version: constant(1),
       theme: member_of([:default, :dark]),

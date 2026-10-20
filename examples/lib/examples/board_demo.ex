@@ -260,7 +260,7 @@ defmodule Examples.BoardDemo do
 
     %{
       {:composite, 1} => load,
-      {:composite, 2} => put_in(line, [:frames, :main, :scales, :x], %{kind: :time}),
+      {:composite, 2} => put_in(line, [:frames, "main", :scales, "x"], %{kind: :time}),
       {:composite, 3} => metric(),
       {:composite, 4} => by_service(nil),
       {:composite, 5} => latest(),
