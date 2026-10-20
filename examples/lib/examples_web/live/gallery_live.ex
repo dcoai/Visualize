@@ -47,7 +47,8 @@ defmodule ExamplesWeb.GalleryLive do
         calls that make it — the thing to copy — the map
         they fold to, and the same design on SVG and canvas.
         Also under this tab: the <a href="/theme-lab">Theme lab</a>, a host's theme built in
-        code — its color table, pinned steps, ramps, palette, defaults and contracts.
+        code — its color table, pinned steps, ramps, palette, defaults and contracts — and <a href="/sources">Data sources</a>: an Nx tensor and an Explorer data frame drawn as a
+        host draws them, the function components used directly, quantities and a feed's window box.
       </p>
       <div class="gallery">
         <%= for {module, slug} <- @charts do %>
