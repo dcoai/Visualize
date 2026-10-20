@@ -802,6 +802,8 @@ The contracts bind what an entry *means*, not every key's type; a value of the w
 - **contracts** (7.7, #666, #637): a design's inline theme read by `Visualize.Chart.from_map/1` and refused at its path, the measured value and the rule worded by `Visualize.Chart.Validator.format/1` — a role fill under 3:1, two roles that differ only in hue, a name the table lacks — and the same roles fixed, accepted and drawn;
 - **print, in grayscale** (7.2, #673): the role bars under the default theme and under `print/0`, on a grayscale view by default, so the default's roles fall to near grays while the print theme's hatches keep their meaning.
 
+**A chart page's theme in the lab** (#792, work item #795). `/theme-lab?theme=<key>` loads a theme of the chart pages' picker (`Examples.Themes`, 7.2) by its key, looked up in the same list — the string matched against the listed keys, never made an atom — and a key the list lacks, or none, shows the lab as above, the house. A row of links above the panels patches between them. The loaded theme comes first, **beside Default**: the code that builds it (`new/1` with a host theme's options, or a built-in merged with the gallery's font stack), `violations/1` (empty for every listed theme), the names of its color table whose color differs from Default's or that Default lacks, red's steps from 0 to 1000 under each, the role chart under each, and the palette entries it changes, `style/2` under each.
+
 The page's switches match their parameters against fixed lists of words and make no atom (D-195).
 
 ## 8. Signals
