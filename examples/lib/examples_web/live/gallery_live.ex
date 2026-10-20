@@ -46,6 +46,8 @@ defmodule ExamplesWeb.GalleryLive do
         library on any backend. Open one for the <code>Visualize.Chart.Build</code>
         calls that make it — the thing to copy — the map
         they fold to, and the same design on SVG and canvas.
+        Also under this tab: the <a href="/theme-lab">Theme lab</a>, a host's theme built in
+        code — its color table, pinned steps, ramps, palette, defaults and contracts.
       </p>
       <div class="gallery">
         <%= for {module, slug} <- @charts do %>
