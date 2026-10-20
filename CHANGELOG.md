@@ -155,6 +155,12 @@ release it merely follows.
   and `globalCompositeOperation` accept. Before, they got `color_dodge` and ignored it. The
   schema's own blends (`:multiply`, `:screen`, `:overlay`, `:darken`, `:lighten`) are
   unchanged.
+- **A `:text` mark spaces its lines by its style's line height** (#824, D-210). A mark's
+  value with a newline in it draws one line per `tspan`, and each line now sits
+  `font.line_height` em below the last, as a frame label's already did. Before, a text
+  mark's lines always sat `1.2em` apart, whatever its style said. A text that sets its own
+  line height keeps it under a group that sets another. A mark whose style sets no line
+  height draws as before.
 
 ## [0.7.0] — 2026-10-20
 
