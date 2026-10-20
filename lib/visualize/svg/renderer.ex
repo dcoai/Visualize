@@ -75,7 +75,7 @@ defmodule Visualize.SVG.Renderer do
   def attribute_name(key) when is_atom(key) do
     case Map.fetch(@camel_case, key) do
       {:ok, name} -> name
-      :error -> key |> Atom.to_string() |> String.replace("_", "-")
+      :error -> key |> Atom.to_string() |> :binary.replace("_", "-", [:global])
     end
   end
 
@@ -87,20 +87,26 @@ defmodule Visualize.SVG.Renderer do
   def render_attrs(attrs) when map_size(attrs) == 0, do: []
 
   def render_attrs(attrs) do
-    attrs
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.map(fn {key, value} -> {attribute_name(key), value} end)
-    |> Enum.sort_by(fn {name, _} -> name end)
-    |> Enum.map(fn {name, value} -> [" ", name, "=\"", escape_attr(value), "\""] end)
+    named = for {key, value} <- attrs, value != nil, do: {attribute_name(key), value}
+
+    for {name, value} <- List.keysort(named, 0),
+        do: [" ", name, "=\"", escape_attr(value), "\""]
   end
 
   @doc false
-  # Text content escapes `&`, `<` and `>` only.
+  # Text content escapes `&`, `<` and `>` only. Most text has none of them, and is
+  # returned as it is without being copied (#812).
   def escape_text(text) when is_binary(text) do
-    text
-    |> String.replace("&", "&amp;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
+    case :binary.match(text, ["&", "<", ">"]) do
+      :nomatch ->
+        text
+
+      _found ->
+        text
+        |> String.replace("&", "&amp;")
+        |> String.replace("<", "&lt;")
+        |> String.replace(">", "&gt;")
+    end
   end
 
   def escape_text(text), do: to_string(text)
@@ -138,12 +144,19 @@ defmodule Visualize.SVG.Renderer do
     Enum.map(children, &render_element/1)
   end
 
+  # A value with nothing to escape, which is nearly every value, is returned as it is.
   defp escape_attr(value) when is_binary(value) do
-    value
-    |> String.replace("&", "&amp;")
-    |> String.replace("\"", "&quot;")
-    |> String.replace("<", "&lt;")
-    |> String.replace(">", "&gt;")
+    case :binary.match(value, ["&", "\"", "<", ">"]) do
+      :nomatch ->
+        value
+
+      _found ->
+        value
+        |> String.replace("&", "&amp;")
+        |> String.replace("\"", "&quot;")
+        |> String.replace("<", "&lt;")
+        |> String.replace(">", "&gt;")
+    end
   end
 
   defp escape_attr(value) when is_number(value), do: to_string(value)

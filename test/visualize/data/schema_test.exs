@@ -418,6 +418,24 @@ defmodule Visualize.Data.SchemaTest do
       assert Schema.identity(schema) == [:host, "iface"]
     end
 
+    test "new/1 keeps the identity fields, and a struct assembled by hand derives them" do
+      schema =
+        Schema.new!(%{
+          iface: %{type: :category, identity: true},
+          host: %{type: :category, identity: true}
+        })
+
+      assert schema.identity == [:host, :iface]
+      by_hand = %Schema{fields: schema.fields, version: schema.version}
+      assert by_hand.identity == nil
+      assert Schema.identity(by_hand) == [:host, :iface]
+
+      assert Schema.identity(by_hand, %{host: "mx1", iface: "eth0"}) == %{
+               host: "mx1",
+               iface: "eth0"
+             }
+    end
+
     test "never on a :time field, and only a boolean" do
       assert faults(%{t: %{type: :time, identity: true}}) ==
                [{[:t, :identity], {:invalid_for, :time}}]

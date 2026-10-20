@@ -103,7 +103,16 @@ defmodule Visualize.Hooks.Keyboard do
   defp number(n), do: Path.format_number(n)
 
   # A JSON string: the two characters JSON escapes by name, and every control character.
+  # A text with none of them, which is nearly every readout, is written as it is (#812).
   defp string(text) do
+    if plain?(text), do: ~s(") <> text <> ~s("), else: escaped(text)
+  end
+
+  defp plain?(<<c, _rest::binary>>) when c in [?", ?\\] or c < 0x20, do: false
+  defp plain?(<<_c, rest::binary>>), do: plain?(rest)
+  defp plain?(<<>>), do: true
+
+  defp escaped(text) do
     escaped =
       for <<c::utf8 <- text>>, into: "" do
         case c do

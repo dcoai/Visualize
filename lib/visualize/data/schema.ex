@@ -48,7 +48,10 @@ defmodule Visualize.Data.Schema do
   alias Visualize.{Quantity, Unit}
 
   @enforce_keys [:fields, :version]
-  defstruct [:fields, :version]
+  # `identity` is derived by `new/1`: the identity fields in order, read once per schema
+  # rather than per row (#812). A struct assembled by hand leaves it `nil`, and
+  # `identity/1` derives it from the fields then.
+  defstruct [:fields, :version, identity: nil]
 
   @typedoc "A field name, as the feed's rows spell it."
   @type name :: atom() | String.t()
@@ -71,7 +74,11 @@ defmodule Visualize.Data.Schema do
           optional(:values) => [String.t() | atom() | number(), ...]
         }
 
-  @type t :: %__MODULE__{fields: %{name() => description()}, version: String.t()}
+  @type t :: %__MODULE__{
+          fields: %{name() => description()},
+          version: String.t(),
+          identity: [name()] | nil
+        }
 
   @typedoc "A fault of `new/1`: the path from the schema to the value, and why."
   @type error :: {[name() | atom() | non_neg_integer() | term()], term()}
@@ -144,7 +151,7 @@ defmodule Visualize.Data.Schema do
     case Enum.sort_by(errors, &elem(&1, 0)) do
       [] ->
         fields = Map.new(fields, fn {name, d} -> {name, declared(d)} end)
-        {:ok, %__MODULE__{fields: fields, version: hash(fields)}}
+        {:ok, %__MODULE__{fields: fields, version: hash(fields), identity: identities(fields)}}
 
       errors ->
         {:error, errors}
@@ -209,7 +216,10 @@ defmodule Visualize.Data.Schema do
       [:host, :iface]
   """
   @spec identity(t()) :: [name()]
-  def identity(%__MODULE__{fields: fields}) do
+  def identity(%__MODULE__{identity: identity}) when is_list(identity), do: identity
+  def identity(%__MODULE__{fields: fields}), do: identities(fields)
+
+  defp identities(fields) do
     for({name, %{identity: true}} <- fields, do: name)
     |> Enum.sort_by(&to_string/1)
   end

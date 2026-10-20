@@ -684,9 +684,22 @@ defmodule Visualize.IR.Path do
   @spec format_number(number()) :: String.t()
   def format_number(n) when is_integer(n), do: Integer.to_string(n)
 
+  # Every number a drawing writes passes through here, so it builds no more than it must
+  # (#812): a whole value is its integer's digits, and any other has its trailing zeros cut
+  # from the four decimals.
   def format_number(n) when is_float(n) do
-    :erlang.float_to_binary(Float.round(n, 4) + 0.0, decimals: 4)
-    |> String.trim_trailing("0")
-    |> String.trim_trailing(".")
+    rounded = Float.round(n, 4)
+    whole = trunc(rounded)
+
+    if rounded == whole,
+      do: Integer.to_string(whole),
+      else: rounded |> :erlang.float_to_binary(decimals: 4) |> trim_zeros()
+  end
+
+  defp trim_zeros(text) do
+    case byte_size(text) - 1 do
+      last when binary_part(text, last, 1) == "0" -> trim_zeros(binary_part(text, 0, last))
+      _last -> text
+    end
   end
 end

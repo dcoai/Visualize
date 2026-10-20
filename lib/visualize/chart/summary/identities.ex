@@ -23,13 +23,14 @@ defmodule Visualize.Chart.Summary.Identities do
     schema = Event.schema_of(schemas, mark)
     name = series_name(mark)
     grid? = grid?(frame, mark)
+    template = template(mark)
 
     for {{row, position}, ordinal} <- Enum.with_index(Enum.zip(rows, positions(ctx, rows))),
         identity = Event.identity(mark, row, schema),
         identity != nil do
       said =
         Enum.join(
-          Enum.reject([identity_text(identity), tooltip_text(mark, row)], &is_nil/1),
+          Enum.reject([identity_text(identity), tooltip_text(template, row)], &is_nil/1),
           ", "
         )
 
@@ -101,19 +102,37 @@ defmodule Visualize.Chart.Summary.Identities do
   defp identity_text(identity) when is_map(identity),
     do: identity |> Enum.sort() |> Enum.map_join(", ", fn {f, v} -> "#{f} #{v}" end)
 
-  # The mark's tooltip template with the row's fields in it, as `TooltipHook` writes it,
-  # trimmed, since a field with no value leaves its space behind;
-  # `nil` without a template.
-  defp tooltip_text(%{tooltip: %{template: template}}, row) when is_binary(template) do
+  # The mark's tooltip template, split once per mark (#812) into its text and the fields
+  # it names: text at the even places, a `{field}`'s name at the odd ones. `nil` without a
+  # template.
+  defp template(%{tooltip: %{template: template}}) when is_binary(template) do
     ~r/\{([^}]+)\}/
-    |> Regex.replace(template, fn _all, field ->
-      case Table.get(row, field) do
-        nil -> ""
-        value -> to_string(value)
-      end
+    |> Regex.split(template, include_captures: true)
+    |> Enum.with_index()
+    |> Enum.map(fn
+      {text, i} when rem(i, 2) == 0 -> text
+      {"{" <> field, _i} -> {:field, String.trim_trailing(field, "}")}
+    end)
+  end
+
+  defp template(_mark), do: nil
+
+  # The template with the row's fields in it, as `TooltipHook` writes it, trimmed, since a
+  # field with no value leaves its space behind; `nil` without a template.
+  defp tooltip_text(nil, _row), do: nil
+
+  defp tooltip_text(parts, row) do
+    parts
+    |> Enum.map_join(fn
+      {:field, field} ->
+        case Table.get(row, field) do
+          nil -> ""
+          value -> to_string(value)
+        end
+
+      text ->
+        text
     end)
     |> String.trim()
   end
-
-  defp tooltip_text(_mark, _row), do: nil
 end

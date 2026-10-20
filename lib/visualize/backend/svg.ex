@@ -345,50 +345,72 @@ defmodule Visualize.Backend.SVG do
   # Style and Transform Helpers
   # ============================================================
 
+  # A line height is the frame's to apply (spec/14 §7.1), never an attribute; a motion is
+  # a class the frame wrote in `:css`, and in any other SVG the end state (spec/09 §2.5);
+  # a blend and an effect are `effects/2`'s.
+  @not_attributes [
+    :line_height,
+    :transition,
+    :animation,
+    :enter,
+    :exit,
+    :blend,
+    :effect,
+    :effect_radius,
+    :effect_offset,
+    :effect_color
+  ]
+
   defp style_to_attrs(style) when map_size(style) == 0, do: %{}
 
+  # One pass over the style (#812): each key an attribute, a `nil` left out, and the
+  # blend and effect laid over them as `effects/2` writes them.
   defp style_to_attrs(style) do
-    style
-    |> effects()
-    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
-    |> Enum.map(fn
-      {:fill, :none} -> {:fill, "none"}
-      {:fill, :current_color} -> {:fill, "currentColor"}
-      {:stroke, :none} -> {:stroke, "none"}
-      {:stroke, :current_color} -> {:stroke, "currentColor"}
-      {key, %Paint{} = paint} when key in [:fill, :stroke] -> {key, Paint.url(paint)}
-      {:text_anchor, :start} -> {:text_anchor, "start"}
-      {:text_anchor, :middle} -> {:text_anchor, "middle"}
-      {:text_anchor, :end} -> {:text_anchor, "end"}
-      {:stroke_linecap, v} -> {:stroke_linecap, Atom.to_string(v)}
-      {:stroke_linejoin, v} -> {:stroke_linejoin, Atom.to_string(v)}
-      {:dominant_baseline, v} when is_atom(v) -> {:dominant_baseline, Atom.to_string(v)}
-      {:vector_effect, :non_scaling_stroke} -> {:vector_effect, "non-scaling-stroke"}
-      {k, v} -> {k, v}
-    end)
-    |> Map.new()
+    attrs =
+      for {key, value} <- style,
+          value != nil and key not in @not_attributes,
+          into: %{},
+          do: attribute(key, value)
+
+    effects(attrs, style)
   end
+
+  defp attribute(:fill, :none), do: {:fill, "none"}
+  defp attribute(:fill, :current_color), do: {:fill, "currentColor"}
+  defp attribute(:stroke, :none), do: {:stroke, "none"}
+  defp attribute(:stroke, :current_color), do: {:stroke, "currentColor"}
+  defp attribute(key, %Paint{} = paint) when key in [:fill, :stroke], do: {key, Paint.url(paint)}
+  defp attribute(:text_anchor, :start), do: {:text_anchor, "start"}
+  defp attribute(:text_anchor, :middle), do: {:text_anchor, "middle"}
+  defp attribute(:text_anchor, :end), do: {:text_anchor, "end"}
+  defp attribute(:stroke_linecap, v), do: {:stroke_linecap, Atom.to_string(v)}
+  defp attribute(:stroke_linejoin, v), do: {:stroke_linejoin, Atom.to_string(v)}
+
+  defp attribute(:dominant_baseline, v) when is_atom(v),
+    do: {:dominant_baseline, Atom.to_string(v)}
+
+  defp attribute(:vector_effect, :non_scaling_stroke), do: {:vector_effect, "non-scaling-stroke"}
+  defp attribute(key, value), do: {key, value}
 
   # A blend is an inline style (spec/09 §2.5), an effect a filter reference to the filter
   # the frame declared for its pair (spec/14 §2.7); the radius alone says nothing.
-  defp effects(style) do
-    # A line height is the frame's to apply (spec/14 §7.1), never an attribute; a motion is
-    # a class the frame wrote in `:css`, and in any other SVG the end state (spec/09 §2.5).
-    style = Map.drop(style, [:line_height, :transition, :animation, :enter, :exit])
-    {blend, style} = Map.pop(style, :blend)
-    {effect, style} = Map.pop(style, :effect)
-    {radius, style} = Map.pop(style, :effect_radius)
-    {offset, style} = Map.pop(style, :effect_offset)
-    {color, style} = Map.pop(style, :effect_color)
+  defp effects(attrs, style) do
+    blend = Map.get(style, :blend)
+    effect = Map.get(style, :effect)
 
-    style
+    attrs
     |> then(
       &if(blend in [nil, :normal], do: &1, else: Map.put(&1, :style, "mix-blend-mode: #{blend}"))
     )
     |> then(
       &if(effect in [nil, :none],
         do: &1,
-        else: Map.put(&1, :filter, "url(##{effect_id(effect, radius, offset, color)})")
+        else:
+          Map.put(
+            &1,
+            :filter,
+            "url(##{effect_id(effect, style[:effect_radius], style[:effect_offset], style[:effect_color])})"
+          )
       )
     )
   end
