@@ -32,7 +32,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 
 ### 1.3 Number formatting
 
-Wherever this document says "formatted", a number goes through `Visualize.IR.Path.format_number/1` (spec/02 §2.2; D-12, D-32): an integer as-is; a float with at most four decimals, trailing zeros and point trimmed, never in exponent notation, never `-0`. The SVG backend uses it for path data, transform strings and points; the Canvas backend for every numeric argument.
+Wherever this document says "formatted", a number goes through `Visualize.IR.Path.format_number/1` (spec/02 §2.2; D-12, D-32): an integer as-is; a float with at most four decimals, trailing zeros and point trimmed, never in exponent notation, never `-0`. A float that rounds to a whole number is written as that integer's digits, at any magnitude (#812): `1.0e20` is `100000000000000000000`, as before, and a float past about `1.0e253`, which the four-decimal conversion could not write and raised on, is its digits too. Every number of every drawing passes through it, so it builds only the text it returns. The SVG backend uses it for path data, transform strings and points; the Canvas backend for every numeric argument.
 
 SVG *attribute* values (as opposed to path data, transform strings and points) are NOT formatted: numbers are printed with `to_string/1`, so a float attribute keeps its full precision and may use exponent notation (`1.0e3`).
 
