@@ -10,6 +10,11 @@ All notable changes to Visualize are recorded here, following
 > [`spec/`](https://github.com/dcoai/Visualize/blob/main/spec/README.md), which is the
 > source of truth for that and is not restated here.
 
+## [Unreleased]
+
+`mix.exs` reads `0.7.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
+release it merely follows.
+
 ## [0.7.0] — 2026-10-20
 
 `mix.exs` reads `0.6.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
@@ -3238,6 +3243,7 @@ the meaning of a patch.
   discipline — tagged ticks, restart keeps the state, alpha is clamped — under an ExTLA
   model that is checked in CI (D-14).
 
+[Unreleased]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/compare/v0.7.0...main
 [0.7.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.7.0
 [0.6.0]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.6.0
 [0.5.1]: https://gitlab.conet.yarina.org/dco-tek/visualize/-/tags/v0.5.1
