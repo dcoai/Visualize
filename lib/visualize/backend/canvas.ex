@@ -601,7 +601,7 @@ defmodule Visualize.Backend.Canvas do
     cmds =
       case style[:blend] do
         blend when blend in [nil, :normal] -> cmds
-        blend -> cmds ++ [{:set_globalCompositeOperation, [to_string(blend)]}]
+        blend -> cmds ++ [{:set_globalCompositeOperation, [blend_word(blend)]}]
       end
 
     radius = style[:effect_radius] || 3
@@ -685,6 +685,13 @@ defmodule Visualize.Backend.Canvas do
         draw
     end
   end
+
+  @doc false
+  # A blend as its CSS `mix-blend-mode` word, which `globalCompositeOperation` takes too: an
+  # IR atom's underscore is the word's hyphen, `:color_dodge` `"color-dodge"` (spec/09
+  # §3.3.3); SVG writes the same word (§2.5).
+  @spec blend_word(atom() | String.t()) :: String.t()
+  def blend_word(blend), do: blend |> to_string() |> String.replace("_", "-")
 
   @doc false
   # A dash pattern as the numbers `setLineDash` takes (spec/09 §3.3.3, #675): an SVG

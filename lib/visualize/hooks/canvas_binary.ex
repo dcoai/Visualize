@@ -351,6 +351,11 @@ defmodule Visualize.Hooks.CanvasBinary do
         if (note) note.remove();
       }
 
+      // The blend record's words by their byte, from 0x01 (spec/09 §4.3.19).
+      const VISUALIZE_BLENDS = ['multiply', 'screen', 'overlay', 'darken', 'lighten',
+        'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion',
+        'hue', 'saturation', 'color', 'luminosity'];
+
       // `motion`, a VisualizeMotion state, runs the stream's motion spans (spec/10 §4.5);
       // without it a span is skipped and every element drawn at its target.
       export function executeVisualizeBinary(ctx, bytes, startOffset, endOffset, motion) {
@@ -540,6 +545,26 @@ defmodule Visualize.Hooks.CanvasBinary do
               break;
             }
 
+            case 0x56: { // clip, version 4 (§4.3.18, #788): the current path, kept inside or outside
+              const keep = bytes[offset++];
+              if (keep === 0x01) ctx.clip();
+              else if (keep === 0x02) {
+                ctx.rect(-100000, -100000, 200000, 200000);
+                ctx.clip('evenodd');
+              } else {
+                throw new Error('Unknown canvas binary clip keep 0x' + keep.toString(16) + ' at offset ' + (offset - 1));
+              }
+              break;
+            }
+
+            case 0x57: { // blend, version 4 (§4.3.19, #788): the composite operation, context state
+              const mode = bytes[offset++];
+              const word = VISUALIZE_BLENDS[mode - 1];
+              if (!word) throw new Error('Unknown canvas binary blend mode 0x' + mode.toString(16) + ' at offset ' + (offset - 1));
+              ctx.globalCompositeOperation = word;
+              break;
+            }
+
             case 0x53: { // motion: a span begins, its arguments as JSON (§4.3.15, #653)
               const length = view.getUint16(offset, true);
               if (motion) {
@@ -559,7 +584,7 @@ defmodule Visualize.Hooks.CanvasBinary do
 
             case 0x00: { // version (spec/09 §4.3.11)
               const version = bytes[offset++];
-              if (version > 3) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
+              if (version > 4) throw new Error('Unknown canvas binary stream version ' + version + ' at offset ' + (offset - 2));
               break;
             }
 

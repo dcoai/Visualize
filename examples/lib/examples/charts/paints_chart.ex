@@ -18,9 +18,9 @@ defmodule Examples.Charts.PaintsChart do
   - **Translucent fills, multiplied**: the two incident series overlap, and where they do both
     show, their colors multiplied (`blend: :multiply`).
   - **Swatches** beneath (#786): the `:lines` and `:dots` hatch patterns, and a stroke's
-    `placement` on its edge — `:inside`, `:outside`, `:double`. The binary canvas has no
-    record for a clip or a blend yet (spec/09 §4, #788), so on the canvas those swatches
-    draw a centered stroke and the incidents do not multiply.
+    `placement` on its edge — `:inside`, `:outside`, `:double`. The binary canvas clips the
+    edged strokes and multiplies the incidents as SVG does, with its version 4 `clip` and
+    `blend` records (spec/09 §4.3.18, §4.3.19, #788).
   """
 
   import Visualize.Chart.Build

@@ -437,7 +437,10 @@ defmodule Visualize.Backend.SVG do
 
     attrs
     |> then(
-      &if(blend in [nil, :normal], do: &1, else: Map.put(&1, :style, "mix-blend-mode: #{blend}"))
+      &if(blend in [nil, :normal],
+        do: &1,
+        else: Map.put(&1, :style, "mix-blend-mode: #{Visualize.Backend.Canvas.blend_word(blend)}")
+      )
     )
     |> then(
       &if(effect in [nil, :none],
