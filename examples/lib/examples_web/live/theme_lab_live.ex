@@ -6,8 +6,14 @@ defmodule ExamplesWeb.ThemeLabLive do
   defaults drawn beside the default theme's, the contracts that refuse a theme, and the
   print theme's hatched roles on a grayscale view.
 
-  The page's three switches — forced colors, grayscale and the contract case — each match
-  their parameter against a fixed list of words, so no event makes an atom.
+  A chart page's theme comes in by key, `/theme-lab?theme=sunrise` (#792, work item #795):
+  looked up in `Examples.Themes`' list, it is shown first, beside Default — its code, the
+  colors of its table that differ, red's steps, the palette entries it changes, the role
+  chart and its contracts — and a key the list lacks shows the lab as it is, the house.
+
+  The page's three switches — forced colors, grayscale and the contract case — and the
+  theme key each match their parameter against a fixed list of words, so no event or URL
+  makes an atom.
   """
   use Phoenix.LiveView
 
@@ -20,7 +26,7 @@ defmodule ExamplesWeb.ThemeLabLive do
   @rule "@media (forced-colors: active)"
 
   @impl true
-  def mount(_params, _session, socket) do
+  def mount(params, _session, socket) do
     house = ThemeLab.house()
 
     {:ok,
@@ -42,10 +48,16 @@ defmodule ExamplesWeb.ThemeLabLive do
        plain_svg: ThemeLab.roles_svg(Theme.default(), "theme-lab-plain"),
        print_svg: ThemeLab.roles_svg(Theme.print(), "theme-lab-print"),
        forced: "system",
-       gray: "gray"
+       gray: "gray",
+       picked: ThemeLab.picked(params["theme"])
      )
      |> pick_case("pale")}
   end
+
+  # A link of the theme row patches: the key the URL carries, looked up in the list.
+  @impl true
+  def handle_params(params, _uri, socket),
+    do: {:noreply, assign(socket, picked: ThemeLab.picked(params["theme"]))}
 
   @impl true
   def handle_event("forced", %{"mode" => mode}, socket) when mode in @forced,
@@ -96,7 +108,89 @@ defmodule ExamplesWeb.ThemeLabLive do
         one thing the theme now holds.
       </p>
 
+      <nav class="lab-themes" aria-label="Theme in the lab">
+        <span>A chart page's theme:</span>
+        <.link patch="/theme-lab" aria-current={if(@picked == nil, do: "page", else: false)}>
+          House
+        </.link>
+        <.link
+          :for={theme <- Examples.Themes.list()}
+          patch={"/theme-lab?theme=#{theme.key}"}
+          data-theme={theme.key}
+          aria-current={if(@picked && @picked.key == theme.key, do: "page", else: false)}
+        >
+          {theme.name}
+        </.link>
+      </nav>
+
       <div class="panels">
+        <Panel.panel :if={@picked} id="panel-picked">
+          <:title>{@picked.name}, beside Default</:title>
+          <p class="panel-note">
+            {@picked.description}. The theme the chart pages draw under when <em>{@picked.name}</em>
+            is picked, built in code:
+          </p>
+          <Highlight.code code={@picked.code} />
+          <p :if={@picked.violations == []} class="lab-holds">
+            Holds every contract: <code>Visualize.Theme.violations(theme)</code> is <code>[]</code>.
+          </p>
+          <ul :if={@picked.violations != []} class="lab-faults">
+            <li :for={{_subject, message} <- @picked.violations} class="lab-fault">{message}</li>
+          </ul>
+          <p class="panel-note">
+            Its color table where it differs from Default's: the theme's color, then Default's.
+          </p>
+          <p :if={@picked.table == []} class="panel-note">Every color is Default's.</p>
+          <ul :if={@picked.table != []} class="lab-swatches lab-compare">
+            <li :for={{name, literal, default} <- @picked.table}>
+              <span class="lab-swatch" style={"background: #{literal}"}></span>
+              <span :if={default} class="lab-swatch" style={"background: #{default}"}></span>
+              <code>{name(name)}</code> <span class="lab-hex">{literal}</span>
+            </li>
+          </ul>
+          <table class="lab-steps">
+            <tr>
+              <th>n</th>
+              <td :for={{n, _theme, _default} <- @picked.steps}>{n}</td>
+            </tr>
+            <tr>
+              <th>{@picked.name}</th>
+              <td :for={{_n, {literal, css, _pinned}, _default} <- @picked.steps}>
+                <span class="lab-swatch" style={"background: #{literal}"} title={css}></span>
+              </td>
+            </tr>
+            <tr>
+              <th>Default</th>
+              <td :for={{_n, _theme, {literal, css, _pinned}} <- @picked.steps}>
+                <span class="lab-swatch" style={"background: #{literal}"} title={css}></span>
+              </td>
+            </tr>
+          </table>
+          <div class="lab-pair">
+            <figure>
+              {Phoenix.HTML.raw(@picked.default_svg)}
+              <figcaption>Default</figcaption>
+            </figure>
+            <figure>
+              {Phoenix.HTML.raw(@picked.svg)}
+              <figcaption>{@picked.name}</figcaption>
+            </figure>
+          </div>
+          <p :if={@picked.palette == []} class="panel-note">Every palette entry is Default's.</p>
+          <table :if={@picked.palette != []} class="lab-palette">
+            <tr>
+              <th>entry</th>
+              <th>Theme.style(default, name)</th>
+              <th>Theme.style(theme, name)</th>
+            </tr>
+            <tr :for={{name, default, own} <- @picked.palette}>
+              <td><code>{name(name)}</code></td>
+              <td><code class="lab-wrap">{inspect(default)}</code></td>
+              <td><code class="lab-wrap">{inspect(own)}</code></td>
+            </tr>
+          </table>
+        </Panel.panel>
+
         <Panel.panel id="panel-house">
           <:title>The house theme</:title>
           <Highlight.code code={ThemeLab.house_code()} />
@@ -361,6 +455,9 @@ defmodule ExamplesWeb.ThemeLabLive do
       .theme-lab .lab-forced { background: var(--vis-background, #fff); display: inline-block; padding: 0.25rem; }
       .theme-lab .lab-fault { color: #a3171c; font-family: monospace; font-size: 0.85rem; }
       .theme-lab .lab-holds { color: #1d6b2b; font-weight: bold; }
+      .theme-lab .lab-themes { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; margin: 0.5rem 0 1rem; font-size: 0.9rem; }
+      .theme-lab .lab-themes [aria-current="page"] { font-weight: bold; text-decoration: none; color: inherit; }
+      .theme-lab .lab-compare .lab-swatch + .lab-swatch { margin-left: -0.5rem; }
     </style>
     """
   end

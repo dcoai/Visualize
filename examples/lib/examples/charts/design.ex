@@ -295,8 +295,14 @@ defmodule Examples.Charts.Design do
 
   @doc """
   The `theme` option as a `Visualize.Theme`: a key looked up in `Examples.Themes.list/0`,
-  the gallery's Default when absent or unlisted.
+  the gallery's Default when absent or unlisted, or a theme itself — what
+  `Examples.Themes.Changes` draws a chart under to learn what it draws.
   """
   @spec theme(keyword()) :: Visualize.Theme.t()
-  def theme(opts), do: Themes.theme(opts[:theme])
+  def theme(opts) do
+    case opts[:theme] do
+      %Visualize.Theme{} = theme -> theme
+      key -> Themes.theme(key)
+    end
+  end
 end

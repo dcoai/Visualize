@@ -103,4 +103,48 @@ defmodule ExamplesWeb.ThemeLabLiveTest do
 
     assert_raise ArgumentError, fn -> String.to_existing_atom(word) end
   end
+
+  describe "a chart page's theme in the lab (#795)" do
+    test "Open in Theme lab lands on the lab with that theme, beside Default" do
+      html = build_conn() |> get("/theme-lab?theme=sunrise") |> html_response(200)
+
+      assert html =~ ~s(id="panel-picked")
+      assert html =~ "Sunrise, beside Default"
+      assert html =~ ~s(Visualize.Theme.new)
+      assert html =~ "Holds every contract"
+      # Its table where it differs, its title style, and the role chart under it.
+      assert html =~ "#b52f21"
+      assert html =~ ":title"
+      assert html =~ ~s(id="theme-lab-picked")
+      assert html =~ ~r/<a[^>]*aria-current="page"[^>]*>\s*Sunrise/
+      # The lab's own panels follow, the house among them.
+      assert html =~ ~s(id="panel-house")
+    end
+
+    test "a key the list lacks, or none, is the lab as it is, and makes no atom" do
+      word = "no_theme_#{System.unique_integer([:positive])}"
+      {:ok, socket} = ThemeLabLive.mount(%{"theme" => word}, %{}, %Phoenix.LiveView.Socket{})
+      assert socket.assigns.picked == nil
+      assert_raise ArgumentError, fn -> String.to_existing_atom(word) end
+
+      html = build_conn() |> get("/theme-lab") |> html_response(200)
+      refute html =~ ~s(id="panel-picked")
+      assert html =~ ~r/href="\/theme-lab"[^>]*aria-current="page"/
+    end
+
+    test "the theme row patches between themes" do
+      {:ok, socket} = ThemeLabLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+      {:noreply, socket} = ThemeLabLive.handle_params(%{"theme" => "print"}, "/theme-lab", socket)
+      assert socket.assigns.picked.key == "print"
+
+      assert Enum.map(socket.assigns.picked.palette, &elem(&1, 0)) == [
+               :good,
+               :warning,
+               :bad,
+               :info
+             ]
+
+      assert socket.assigns.picked.violations == []
+    end
+  end
 end

@@ -78,4 +78,94 @@ defmodule ExamplesWeb.ThemePickerTest do
     assert html =~ ~r/data-theme="default"\s+aria-pressed="true"/
     assert html =~ ~s(phx-click="theme")
   end
+
+  describe "What this theme changes (#795)" do
+    test "Default is the baseline; the links go to the explain panel and the lab" do
+      html = html(page("bar"))
+      assert html =~ ~s(id="theme-changes")
+      assert html =~ "Default is the baseline"
+      assert html =~ ~s(href="#chart-panel-explain-bar")
+      assert html =~ ~s(id="open-in-theme-lab" href="/theme-lab?theme=default")
+    end
+
+    test "Color-safe on a bar chart: only the status ramp changes, and the chart draws none of it" do
+      {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "color_safe"}, page("bar"))
+      html = html(s)
+
+      assert s.assigns.theme_drawn == {"color_safe", "bar", []}
+      assert html =~ "Color-safe changes, from Default:"
+      assert html =~ ":status (the roles :good, :warning and :bad follow it)"
+      assert html =~ "not drawn by this chart"
+      assert html =~ "This chart draws none of them, so it looks as it does under Default."
+      assert html =~ ~s(href="/theme-lab?theme=color_safe")
+    end
+
+    test "Print on Composition: the hatched role styles are drawn here" do
+      {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "print"}, page("composition"))
+      {"print", "composition", drawn} = s.assigns.theme_drawn
+      assert :styles in drawn and :ramps in drawn
+
+      html = html(s)
+
+      assert html =~
+               ~r/data-aspect="styles">\s*<strong>Palette styles<\/strong>: :bad, :good, :info, :warning \(:bad, :good, :info, :warning hatched\)\s*<span class="theme-drawn">drawn here/
+
+      assert html =~ "This chart draws #{length(drawn)} of the 3."
+      refute html =~ "Measuring"
+    end
+
+    test "an answer is shown only for the theme and chart it was measured for" do
+      {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "winter"}, page("bar"))
+      measured = s.assigns.theme_drawn
+
+      # A late answer for another pick changes nothing; the current one is kept.
+      stale = ExamplesWeb.ThemePicker.measured(s, {:ok, {"dark", "bar", [:page]}})
+      assert stale.assigns.theme_drawn == measured
+      assert ExamplesWeb.ThemePicker.measured(s, {:exit, :killed}) == s
+
+      # While measuring the lines are unmarked.
+      waiting = Phoenix.Component.assign(s, theme_drawn: nil)
+      assert html(waiting) =~ "Measuring which of these this chart draws"
+      refute html(waiting) =~ "drawn here"
+    end
+
+    test "Why it looks as it does explains the chart under the picked theme" do
+      s = page("bar")
+
+      {:noreply, s} =
+        ChartLive.handle_event("chart_panel", %{"panel" => "explain", "action" => "open"}, s)
+
+      {:noreply, s} = ChartLive.handle_event("pick", %{"node" => "marks[0]"}, s)
+      [explain: was] = s.assigns.panels
+      assert was.svg =~ "var(--vis-series-1, #{hd(Visualize.Theme.default().series)})"
+
+      {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "sunrise"}, s)
+      [explain: now] = s.assigns.panels
+      sunrise = Themes.theme("sunrise")
+
+      assert now.open and now.node == "marks[0]" and now.look != nil
+      assert now.svg =~ "var(--vis-series-1, #{hd(sunrise.series)})"
+      # A series slot is named, not resolved, in the stack, so the bar's look is the same.
+
+      # A role style is the theme's: under Print the service bars' :good is a hatch.
+      c = page("composition")
+      open = %{"panel" => "explain", "action" => "open"}
+      {:noreply, c} = ChartLive.handle_event("chart_panel", open, c)
+      {:noreply, c} = ChartLive.handle_event("pick", %{"node" => "marks[0]"}, c)
+      solid = Keyword.fetch!(c.assigns.panels, :explain)
+      {:noreply, c} = ChartLive.handle_event("theme", %{"theme" => "print"}, c)
+      hatched = Keyword.fetch!(c.assigns.panels, :explain)
+
+      assert hatched.node == "marks[0]" and hatched.datum == solid.datum
+      refute inspect(solid.look) =~ ":hatch"
+      assert inspect(hatched.look, limit: :infinity) =~ ":hatch"
+
+      # A step to another chart keeps the theme for its explain panel too.
+      {:noreply, s} = ChartLive.handle_params(%{"chart" => "line"}, "/chart/line", s)
+      [explain: line] = s.assigns.panels
+
+      assert ExamplesWeb.ChartPanels.Explain.event(line, %{"action" => "open"}).svg =~
+               hd(sunrise.series)
+    end
+  end
 end

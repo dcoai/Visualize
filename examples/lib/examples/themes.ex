@@ -81,6 +81,37 @@ defmodule Examples.Themes do
   @spec theme(term()) :: Theme.t()
   def theme(key), do: (entry(key) || hd(@list)).theme
 
+  @doc """
+  The Elixir that builds the theme of a listed `key`, as the Theme lab shows it (#795): a
+  built-in theme merged with the gallery's font stack, or a host theme's `Theme.new/1`
+  call with its options.
+  """
+  @spec code(String.t()) :: String.t()
+  def code(key) do
+    builtin = Enum.find_value(@builtins, fn {k, _n, _d, f} -> if k == key, do: f end)
+    host = Enum.find(Hosts.keys(), &(Atom.to_string(&1) == key))
+
+    built =
+      cond do
+        builtin ->
+          "Visualize.Theme.merge(Visualize.Theme.#{builtin}(),\n" <>
+            "  font_family: #{inspect(Hosts.font_family())}\n)"
+
+        host ->
+          options =
+            Enum.map_join(Hosts.options(host), ",\n", fn {name, value} ->
+              "#{name}: #{inspect(value, pretty: true, width: 76, limit: :infinity)}"
+            end)
+
+          "Visualize.Theme.new(\n" <> indent(options) <> "\n)"
+      end
+
+    "theme =\n" <> indent(built) <> "\n\nVisualize.Theme.check(theme)\n#=> :ok\n"
+  end
+
+  defp indent(text),
+    do: text |> String.split("\n") |> Enum.map_join("\n", &("  " <> &1))
+
   @doc "The gallery's Default: `Visualize.Theme.default/0` with the gallery's font stack."
   @spec default() :: Theme.t()
   def default, do: hd(@list).theme
