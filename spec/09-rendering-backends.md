@@ -126,7 +126,7 @@ A color value reaches the SVG backend already resolved for `:css` (spec/08 §1.9
 | `:stroke_linecap`, `:stroke_linejoin` | any atom | `Atom.to_string/1` |
 | `:dominant_baseline` | any atom | `Atom.to_string/1` |
 | `:vector_effect` | `:non_scaling_stroke` | `vector-effect="non-scaling-stroke"` (spec/14 §3.9, #651). The property does not inherit, so on a `:group` it is not written on the group: each child takes it, a child group passing it on the same way, unless the child sets its own |
-| `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"` — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honors |
+| `:blend` | any atom | dropped for `:normal`; else `style="mix-blend-mode: <word>"`, the word the atom's name with each `_` a `-` (`:color_dodge` is `color-dodge`) — an inline `style` attribute, since `mix-blend-mode` is a CSS property and not a presentation attribute every browser honors |
 | `:transition`, `:animation`, `:enter`, `:exit` | a list, maps (spec/14 §3.10–§3.12) | dropped: never an attribute. In `:css` output the frame has already written it as a class and a rule in its `<style>` (#653); any other SVG — a `:literal` render rasterized for a PNG — draws the element's end state |
 | `:effect` with `:effect_radius`, `:effect_offset`, `:effect_color` | `:shadow`, `:blur` | `filter="url(#vis-effect-<effect>-<radius>)"`, the radius `3` when absent, and `url(#vis-effect-shadow-<radius>-<h>)` for a shadow with an offset or a color, `<h>` the base-36 `:erlang.phash2/1` of `{offset, color}` (spec/14 §2.7, #674); `:none` and the three keys alone are dropped |
 
@@ -238,7 +238,7 @@ Every tuple names a Canvas 2D method, so the `:commands`, `:json` and `:js` outp
 | `:stroke_linejoin` | `{:set_lineJoin, [to_string(v)]}` | |
 | `:stroke_dasharray` | `{:setLineDash, [lengths]}` | the lengths of SVG's `stroke-dasharray`, apart by spaces or commas, or a list of numbers; `none` is `[]`, the solid line; a value that does not read writes nothing (#675) |
 | `:opacity` | `{:set_globalAlpha, [o]}` | |
-| `:blend` | `{:set_globalCompositeOperation, [to_string(v)]}` | omitted for `:normal` |
+| `:blend` | `{:set_globalCompositeOperation, [word]}` | omitted for `:normal`; the word as SVG writes it (2.5), each `_` of the atom's name a `-` |
 | `:effect` | `:shadow`: `{:set_shadowColor, [c]}`, `{:set_shadowBlur, [r]}`, `{:set_shadowOffsetX, [dx]}`, `{:set_shadowOffsetY, [dy]}`; `:blur`: `{:set_filter, ["blur(<r>px)"]}`; `r` the `:effect_radius`, `3` when absent; `[dx, dy]` the `:effect_offset`, `[r / 2, r / 2]` when absent; `c` the `:effect_color` as `rgba()` (as a stop is, 3.3.3), `"rgba(0,0,0,0.35)"` when absent (#674) | omitted for `:none` |
 
 `style_apply_commands/1` emits `{:fill, []}` when `:fill` is present and not `:none`, then `{:stroke, []}` when `:stroke` is present and not `:none`.
@@ -323,7 +323,7 @@ The output is `[` + objects joined by `,` + `]`, each object exactly `{"cmd":"<n
 | `Visualize.Backend.CanvasBinary.encode_element!/1` | `encode_element!(element, [])`. |
 | `Visualize.Backend.CanvasBinary.encode_element!/2` | As `encode_element/2` but returns the binary directly and raises `RuntimeError` when Nx is absent. |
 | `Visualize.Backend.CanvasBinary.to_base64/1` | Standard Base64 (`Base.encode64/1`, padded) of a binary, for embedding in an HTML attribute or a LiveView event payload. |
-| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style` (with `non_scaling: true` when bit 4 is set and `fill_paint:`/`stroke_paint:` with the index when bit 5 or 6 is, §4.3.5), `transform`, the version 2 records `{:version, v}`, `{:paint, index, paint}` and `{:box, {x, y, w, h}}` (§4.3.11–4.3.13), `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
+| `Visualize.Backend.CanvasBinary.Decoder.decode/1` | The reference decoder (#270): the records of a stream in order — the path records with their commands, `circles`, `rects`, `style` (with `non_scaling: true` when bit 4 is set and `fill_paint:`/`stroke_paint:` with the index when bit 5 or 6 is, §4.3.5), `transform`, the version 2 records `{:version, v}`, `{:paint, index, paint}` and `{:box, {x, y, w, h}}` (§4.3.11–4.3.13), the version 4 records `{:clip, :inside | :outside}` and `{:blend, mode}` (§4.3.18, §4.3.19), `save`/`restore`/`fill`/`stroke`, and the `0x60` records of §5 as `{:incremental, mode, dx, dy, viewport, regions}` and `{:full_redraw, viewport, records}` with the viewport as `{x, y, w, h}` — written against the record layouts this section states, not against the encoder, so `decode(encode(x))` is a round trip (D-36). Raises on an unknown opcode or a truncated record. It is the executing guard a consumer runs over its own streams under test; the JavaScript executor of spec/10 §12 reads the same layouts. |
 | `Visualize.Backend.CanvasBinary.Decoder.decode_path/1` | The one path record of a stream as a `Visualize.IR.Path`. |
 
 ### 4.2 Stream model and opcodes
@@ -354,10 +354,14 @@ Opcodes (`Visualize.Backend.CanvasBinary.Opcodes`, internal macros so they can a
 | `motion` | `0x53` | A motion span begins: an element's identity and its transition, version 2 (4.3.15) |
 | `motion_end` | `0x54` | The motion span ends, version 2 (4.3.16) |
 | `paint_state` | `0x55` | A paint's own alpha, the cap, the join and the dash, version 3 (4.3.17) |
+| `clip` | `0x56` | The current path becomes the clip, kept inside or outside it, version 4 (4.3.18) |
+| `blend` | `0x57` | The compositing operation the following draws are made with, version 4 (4.3.19) |
 
 **Stream versions** (#652, D-175). The records above `version` are **version 1**, the stream as it was before paints. **Version 2** adds `version`, `paint`, `box`, `effect` (#674), `motion` and `motion_end` (#653), and bits 5 and 6 of the style record. A stream that uses none of them is a version 1 stream, byte for byte the same as before, and the encoder writes it so: only a stream that draws a paint, an effect or a motion span carries the version 2 records, and it begins with the record `0x00 0x02`. So a version 1 decoder — a page still running an older hook — reads every stream it could read before, and on a version 2 stream it throws at the first byte, an unknown opcode `0x00`, rather than drawing a gradient as black; a version 2 decoder reads both. A stream is still a concatenation of records with no header: two streams concatenated, as `render_scene/2` does (3.2), are one stream, each part declaring its own version and defining its own paints before it uses them. A `version` record may stand anywhere and states the version of the records after it; a decoder MUST refuse a version it does not know.
 
 **Version 3** (#675, D-180) adds `paint_state`, under the same rule: only a stream whose styles set a paint's opacity, a cap, a join or a dash carries it and begins `0x00 0x03`, every other stream is what it was, and a version 2 decoder throws at the version record rather than drawing the paint opaque. A version 3 stream may hold every version 2 record.
+
+**Version 4** (#788, D-208) adds `clip` and `blend`, under the same rule: only a stream whose tree clips an element or whose styles set a blend other than `:normal` carries them and begins `0x00 0x04`, every other stream is what it was, and a version 3 decoder throws at the version record rather than drawing an inside stroke at twice its width or an overlap unblended. A version 4 stream may hold every version 3 record.
 
 No other opcode is defined by this module. `0x60` is defined by `Visualize.Backend.CanvasIncremental` (section 5) and encloses streams of these records. The module's doc comment carries the same table, and `test/visualize/backend/canvas_binary_test.exs` holds it to `Opcodes`. `test/support/canvas_binary_decoder.ex` is a decoder written from this section, not from the encoder, and the same test file proves `decode(encode(path))` over random paths (D-36).
 
@@ -494,7 +498,7 @@ The path `M x0,y0` followed by `count` absolute cubic curves `C x1,y1 x2,y2 x,y`
 0x00  version:u8
 ```
 
-The version of the records that follow (4.2): `3` is the one the encoder writes first in a stream whose styles set a paint's state (4.3.17), else `2` in one that draws a paint, an effect or a motion span. A decoder MUST raise on a version it does not know; the reference decoder knows `1`, `2` and `3`.
+The version of the records that follow (4.2): `4` is the one the encoder writes first in a stream that clips an element or blends one (4.3.18, 4.3.19), else `3` in one whose styles set a paint's state (4.3.17), else `2` in one that draws a paint, an effect or a motion span. A decoder MUST raise on a version it does not know; the reference decoder knows `1`, `2`, `3` and `4`.
 
 #### 4.3.12 `paint` (0x50)
 
@@ -553,6 +557,24 @@ The span the last `motion` record began ends. One byte.
 
 Version 3 (#675, D-180). What a fill or a stroke paints with that the style record has no field for, each field present when its bit is set, in this order: `0x01` the fill's own opacity (`fill_opacity`), `0x02` the stroke's (`stroke_opacity`), `0x04` the cap (`0` butt, `1` round, `2` square), `0x08` the join (`0` miter, `1` round, `2` bevel), `0x10` the dash, its lengths as `setLineDash` takes them (3.3.3), at most 255. The IR encoder writes it directly after an element's or a group's style record (and its `effect` record) when the style sets any of the five. A reader sets the cap, the join and the dash on the context, and keeps the two alphas as state that `save` and `restore` scope as they scope the paints (4.3.5), each `1` at the start of a stream: a `fill` drawn while the fill's alpha is not `1` is drawn at `globalAlpha` times it, and the context's alpha is set back after the draw; likewise a `stroke`. The SVG encoder (4.7) writes it with the cap, the join and the dash alone (bits `0x04`, `0x08`, `0x10`; #693): it folds the two opacities into its colors' alpha.
 
+#### 4.3.18 `clip` (0x56)
+
+```
+0x56  keep:u8
+```
+
+Version 4 (#788, D-208). The current path — the geometry record just before it, which began it — becomes the context's clip: `keep` `0x01` keeps what is inside it, `ctx.clip()`; `0x02` keeps what is outside it, the reader adding the rectangle `-100000, -100000, 200000, 200000` to the path and clipping with `ctx.clip('evenodd')`, so the clip is everything but the shape, as the `:json` commands' outside clip is (3.3.1). It is context state, so `save` and `restore` scope it. Two bytes. Any other `keep` is refused.
+
+The encoder writes it for an element with a `clip` (spec/02 §2.1), in the order the `:json` commands give it (3.3.1): `save`, the clip shape's geometry — the record that shape is drawn with (4.4, 4.5), its style, its transform and its draw records left out — the `clip` record, then the element's own records, then `restore`. So the clip holds the element's own transform, its style records and its draws, and nothing after the `restore` is clipped. The shape is a `:path`, `:rect`, `:circle`, `:ellipse` or `:polygon`, as spec/02 §2.1 allows; the last two are the path they are (4.4).
+
+#### 4.3.19 `blend` (0x57)
+
+```
+0x57  mode:u8
+```
+
+Version 4 (#788, D-208). The `globalCompositeOperation` the following draws are made with, the CSS `mix-blend-mode` word SVG writes for the style's `:blend` (2.5) and the `:json` commands set (3.3.3): `0x01` `multiply`, `0x02` `screen`, `0x03` `overlay`, `0x04` `darken`, `0x05` `lighten`, `0x06` `color-dodge`, `0x07` `color-burn`, `0x08` `hard-light`, `0x09` `soft-light`, `0x0A` `difference`, `0x0B` `exclusion`, `0x0C` `hue`, `0x0D` `saturation`, `0x0E` `color`, `0x0F` `luminosity` — an IR blend atom spelled with an underscore, `:color_dodge`, being the word with a hyphen. It is context state, so `save` and `restore` scope it, and a reader refuses any other byte. The encoder writes it after the style record (and its `effect` and `paint_state` records) of a style whose `:blend` is one of those words; `:normal` and a word outside them write nothing, as `:normal` writes nothing on SVG and on the `:json` commands. Two bytes.
+
 ### 4.4 Encoding IR elements
 
 `encode_element/1` on an `IR.Element` writes, per type:
@@ -564,6 +586,7 @@ Version 3 (#675, D-180). What a fill or a stroke paints with that the style reco
 | `:rect` | transform, style, `rects` with one entry from `attrs.x/y/width/height`, draw records as above |
 | `:group` | `save`, transform (if any), style (if the style map is non-empty — it sets the state the children draw in, scoped by the `save`/`restore`), each child's records, `restore` (#231) |
 | `:root` | each child's records, nothing else |
+| any element with a `clip` | `save`, the clip shape's geometry record, `clip` (4.3.18), the element's own records as above, `restore` |
 | any other type | nothing (zero bytes) |
 
 **A leaf's records are its own** (#679, D-179), as a leaf's commands are (3.3.1), and as the SVG-element encoder's are (4.7, D-193): a `:path`, `:circle` or `:rect` — and a type encoded as the path it is — that writes a `transform` or a `style` record is written between a `save` and a `restore`, so neither the transform nor the state the style record sets (the colors, the width, the alpha, a paint, an effect) reaches the element after it; one that writes neither has no `save`. A reader needs nothing new: it scopes the fill and stroke paints with `save` and `restore` already (4.3.5).
@@ -572,7 +595,7 @@ Version 3 (#675, D-180). What a fill or a stroke paints with that the style reco
 
 **Paints** (#652, D-175). When any `:fill` or `:stroke` in the tree's styles is a `Visualize.IR.Paint`, or any `:effect` a shadow or a blur (#674), the stream begins with `version` 2 and one `paint` record per distinct paint (4.3.11, 4.3.12); a style that holds a paint sets bit 5 or 6 with the paint's index in place of the RGBA field; and every element whose effective fill or stroke is a paint gets a `box` record between its geometry and its draw records (4.3.13). An element drawn as the path it is — a `:line`, `:ellipse`, `:polyline`, `:polygon` — takes the box of the shape it was.
 
-An element's `clip` (spec/02 §2.1) has no record: the element is encoded as it is, unclipped, so an inside or outside stroke (spec/14 §5.6) draws single on the binary stream. An `:effect` is the `effect` record after the style record (4.3.14, #674). The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its center with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, `:pattern`, filters and `:stop` are dropped from the binary stream, and a `:blend` in a style has no record. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
+**Clips and blends** (#788, D-208). When any element in the tree has a `clip`, or any style a `:blend` that writes a `blend` record (4.3.19), the stream begins with `version` 4. A clipped element is written inside its clip (4.3.18), so an inside or an outside stroke (spec/14 §5.6) — the doubled width `Visualize.Chart.Mark.Strokes` draws clipped to the shape or away from it — draws on the binary canvas at its width, on its side of the edge, as on SVG and on the `:json` canvas; and a style's blend is the `blend` record after its style record, so a multiplied element multiplies there too. Before #788 the binary stream had a record for neither: an element was encoded unclipped, an inside or outside stroke drew at twice its width centered on the edge, and a blend was dropped. Where the element's own fill and stroke overlap, SVG blends the element as a whole and the canvas blends the fill and then the stroke, each in turn, as it composites a paint's opacity (3.3.3, D-180) — the same picture for a fill or a stroke alone, and wherever the two do not overlap. An `:effect` is the `effect` record after the style record (4.3.14, #674). The geometric types that are not paths are encoded **as the path they are** (#269): a `:line` as `M x1 y1 L x2 y2`; a `:polyline` as a move to its first point and a line to each of the rest; a `:polygon` the same, closed; an `:ellipse` as four cubic Bézier quarter-arcs about its center with the control distance κ = 0.5522847 of each radius, closed — each with the element's style and transform as a `:path` gets them, through the same record and form selection (§4.5), so a `:line` is byte for byte the two-point `Visualize.IR.Path` with the same style. Elements of type `:text`, `:title`, `:desc`, `:style`, `:image`, `:defs`, `:clip_path`, gradients, `:pattern`, filters and `:stop` are dropped from the binary stream. A basemap's tiles (spec/14 §5.2, #475) are `:image` elements and are dropped with them, and the stream has no image record (D-120): a compiled chart draws the tiles as SVG in a backdrop the page stacks beneath the canvas (spec/14 §12.3, §12.4, #476), so a canvas track sits over them with nothing in the stream to fetch, order or wait for. Text has no binary representation by design; before #269 the four geometric types above were dropped silently as well, so an axis's tick lines drew nothing on a binary canvas.
 
 ### 4.5 Path form selection
 
@@ -616,6 +639,33 @@ Style attributes read: `fill`, `stroke`, `stroke_width` or `"stroke-width"`, `st
 **The `transform` attribute is read as SVG reads it** (#746), on a `:g` and on a drawing element alike (a root's `viewBox` places it, so the root's is not read): a list of `matrix(a b c d e f)`, `translate(tx [ty])` (`ty` `0` when missing), `scale(sx [sy])` (`sy` = `sx` when missing), `rotate(a [cx cy])`, `skewX(a)` and `skewY(a)`, angles in degrees, each number with an optional sign, decimal point and exponent, numbers separated by commas or whitespace, operations by whitespace or a comma, applied left to right as SVG composes them. It becomes the `Visualize.IR.Transform` of those operations and is written as the IR encoder writes one (4.3.6): `0x01` for exactly one `translate`, `0x03` for a `translate` then a `scale`, `0xFF` with the folded matrix otherwise. A string that does not read as a whole list — an unknown name, a wrong count of numbers, a stray character — is in error, which SVG ignores, and emits no transform record; an empty one (`""`) likewise.
 
 The `d` string parser accepts the commands `M m L l H h V v C c Q q A a Z z`, numbers with optional sign, decimal point and exponent, comma or whitespace separators, and implicit `L` for bare coordinate pairs following a command. `S s T t` are not recognized and end the parse at that point.
+
+### 4.8 Every style key on the binary stream
+
+**The binary canvas draws every style key SVG draws, or this table says why not** (#788, D-208). Each key a style takes (spec/14 §3.1) — every leaf of `Visualize.Chart.Schema.describe(:style)`, a node's keys under its name — has a row: the records it reaches the binary stream as, or **not drawn** and the reason. A key the table marks **not drawn** is a deviation from SVG; every other key draws on the binary canvas as on the `:json` canvas.
+
+| Style key | On the binary stream |
+|---|---|
+| `fill.type`, `fill.color`, `fill.opacity` | the style record's fill (4.3.5), a paint (4.3.12) or none; the fill's alpha (4.3.17) |
+| `fill.stops.at`, `fill.stops.color`, `fill.stops.opacity`, `fill.angle`, `fill.center`, `fill.radius`, `fill.name` | the `paint` record (4.3.12) |
+| `fill.pattern`, `fill.spacing`, `fill.width`, `fill.background` | the hatch `paint` record (4.3.12) |
+| `stroke.type`, `stroke.color`, `stroke.opacity` | the style record's stroke, a paint or none; the stroke's alpha (4.3.17) |
+| `stroke.stops.at`, `stroke.stops.color`, `stroke.stops.opacity`, `stroke.angle`, `stroke.center`, `stroke.radius`, `stroke.name` | the `paint` record |
+| `stroke.width`, `stroke.non_scaling` | the style record's width, bit 4 (4.3.5) |
+| `stroke.dash`, `stroke.join`, `stroke.cap` | the `paint_state` record (4.3.17) |
+| `stroke.placement` | `:inside` and `:outside` a doubled width inside a `clip` (4.3.18), `:double` a second element |
+| `effect.type`, `effect.radius`, `effect.offset`, `effect.color` | the `effect` record (4.3.14) |
+| `opacity` | the style record's alpha (4.3.5) |
+| `blend` | the `blend` record (4.3.19) |
+| `marker.shape`, `marker.size`, `curve.type`, `curve.tension`, `curve.alpha` | the geometry the mark generates (spec/14 §5.6) |
+| `transition.*`, `animation.*`, `enter.*`, `exit.*` | the `motion` span (4.3.15) |
+| `font.family`, `font.size`, `font.weight`, `font.style`, `font.line_height` | **not drawn**: text has no record (4.4); a compiled chart draws its texts as SVG (spec/14 §12.3) |
+| `text.anchor`, `text.baseline`, `text.offset`, `text.angle` | **not drawn**: text has no record (4.4) |
+| `class` | **not drawn**: a class is a stylesheet's (2.5), and a canvas is given `:literal` styles, already resolved (spec/14 §3.4) |
+
+A `transition.*`, `animation.*`, `enter.*` or `exit.*` row stands for every key of that part, its per-property entries (`transition.fill.duration`, …) among them.
+
+**The recurrence guard.** `test/visualize/backend/style_key_conformance_test.exs` walks the schema's style keys and fails on a key with no row here. For each key it draws one design — a `:rect`, a `:line`, a `:symbol` and a `:text` mark, each styled by the one style the key is set in — with the key and without it. It fails on a key whose sample leaves the SVG unchanged, since such a sample tests nothing. It replays the `:json` commands on `CanvasChart` and the binary stream on `CanvasBinaryChart`, both on the recording stub (spec/12 §6), and fails where, outside the texts, the two hooks' draws are not the same draws in the same state: the transform, the alphas, the fill and the stroke, each paint, the width, the cap, the join, the dash, the shadow, the filter, the compositing operation and the clips. And it fails on a key marked **not drawn** that the binary stream does carry — the stream changes with it — so a deviation that no longer holds is found as well. A style key added to the schema therefore fails the guard until either the binary canvas draws it or this table says why it does not.
 
 ## 5. Visualize.Backend.CanvasIncremental
 
