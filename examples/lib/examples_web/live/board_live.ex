@@ -516,6 +516,7 @@ defmodule ExamplesWeb.BoardLive do
       .board-lifecycle td.fail { color: #a3171c; }
       .board-finding { display: block; font-size: 0.75rem; }
       .board-fault { color: #a3171c; font-family: monospace; font-size: 0.85rem; }
+      .board-bundle-json { max-height: 20rem; overflow: auto; font-size: 0.75rem; }
       .board-reopened-svg svg { max-width: 100%; height: auto; border: 1px solid #e0e0e0; }
       .board-unit-current { font-weight: 600; text-decoration: none; color: inherit; }
       .board-reading { margin-right: 1rem; }

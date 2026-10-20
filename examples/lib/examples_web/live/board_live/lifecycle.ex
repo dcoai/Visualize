@@ -11,7 +11,9 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
     `Snapshot.format_error/1`.
   - **A board in a bundle.** The demo board exported from the authoring host's library with
     `Visualize.Chart.Builder.Bundle.export_board/3` and imported into a second host's with
-    `import_board/3`: the entries it carried, the ids the receiving library issued them,
+    `import_board/3` — between them written to the JSON file another host would receive
+    (`Bundle.to_json/1`) and read back from it (`from_json/2`): the file, the entries it
+    carried, the ids the receiving library issued them,
     each cell's ref rewritten, and the slots the receiving host must bind to its own feeds,
     since a binding never travels.
   - **The conformance kit.** `Visualize.Feed.Conformance.check/3` over each of the board's
@@ -23,6 +25,7 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
 
   alias Examples.BoardDemo
   alias Examples.BoardDemo.Library
+  alias ExamplesWeb.Highlight
   alias Visualize.Board
   alias Visualize.Board.{Export, Server, Snapshot}
   alias Visualize.Chart.Builder.Bundle
@@ -61,10 +64,11 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
   end
 
   @doc """
-  The demo board carried in a bundle from the authoring host's library to a second host's:
-  the entries carried, the receiving library before and after, the `old → new` id table,
+  The demo board carried in a bundle from the authoring host's library to a second host's,
+  as a file: the bundle written as JSON (`Bundle.to_json/1`) and its size, read back
+  (`Bundle.from_json/2`) and the bundle read imported; the entries carried, the receiving library before and after, the `old → new` id table,
   each cell's ref as exported and as imported, and the slots the receiving host binds.
-  `{:error, faults}` when the import refuses the bundle.
+  `{:error, faults}` when the file does not read or the import refuses the bundle.
   """
   @spec carry() :: {:ok, map()} | {:error, term()}
   def carry do
@@ -72,13 +76,16 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
     receiving = Library.receiving()
     before = Library.entries(receiving)
     board = BoardDemo.value()
-    bundle = Bundle.export_board(authoring, board, "examples /board")
+    {:ok, json} = Bundle.to_json(Bundle.export_board(authoring, board, "examples /board"))
 
-    with {:ok, %{board: imported, ids: ids, outside: outside}} <-
+    with {:ok, bundle} <- Bundle.from_json(json),
+         {:ok, %{board: imported, ids: ids, outside: outside}} <-
            Bundle.import_board(receiving, bundle),
          {:ok, needs} <- Board.required_sources(imported, Library.fragments(receiving)) do
       {:ok,
        %{
+         file: json |> Jason.decode!() |> Jason.encode!(pretty: true),
+         bytes: byte_size(json),
          carried: for(entry <- bundle.entries, do: {entry.id, entry.name}),
          schema: bundle.provenance.schema,
          before: before,
@@ -174,7 +181,11 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
         design it shows (<code>Bundle.export_board/3</code>), and arrives under ids the
         receiving library issues (<code>import_board/3</code>): every check runs before any
         entry is put. Bindings never travel: the receiving host binds the slots to its own
-        feeds. A bundle has no file form yet (#818), so here both libraries are on this node.
+        feeds. Between the two libraries the bundle travels as the file another host would
+        receive: <code>Bundle.to_json/1</code>
+        writes it, and <code>Bundle.from_json/2</code>
+        reads it back — its version and the limits checked before a key is read — into the
+        bundle the import is given.
       </p>
       <button type="button" phx-click="carry">Carry the board to a second library</button>
       <%= case @bundle do %>
@@ -184,6 +195,10 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
             receiving library held {length(carried.before)} and now holds {length(carried.after)};
             references outside the bundle: {length(carried.outside)}.
           </p>
+          <details class="board-bundle-file">
+            <summary>The bundle as a file: {carried.bytes} bytes of JSON</summary>
+            <div class="board-bundle-json"><Highlight.code code={carried.file} lang="json" /></div>
+          </details>
           <table class="board-bundle-ids">
             <tr>
               <th>carried as</th>
@@ -213,7 +228,7 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
             </li>
           </ul>
         <% {:error, faults} -> %>
-          <p class="board-fault">{inspect(faults)}</p>
+          <p :for={fault <- faults} class="board-fault">{fault_words(fault)}</p>
         <% nil -> %>
       <% end %>
 
@@ -250,6 +265,11 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
     </section>
     """
   end
+
+  defp fault_words({path, _reason} = fault) when is_list(path),
+    do: Visualize.Chart.Validator.format(fault)
+
+  defp fault_words(other), do: inspect(other)
 
   defp stamp(nil), do: "with no clock"
   defp stamp(%DateTime{} = t), do: Calendar.strftime(t, "%Y-%m-%d %H:%M:%S UTC")
