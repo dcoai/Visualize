@@ -14,7 +14,7 @@ defmodule ExamplesWeb.InteractionLive do
   """
   use Phoenix.LiveView
 
-  alias ExamplesWeb.{Highlight, MotionDemo, Panel}
+  alias ExamplesWeb.{AnimationsDemo, Highlight, MotionDemo, Panel}
   alias Visualize.Chart
   alias Visualize.Event
   alias Visualize.Hooks.Crosshair
@@ -96,6 +96,7 @@ defmodule ExamplesWeb.InteractionLive do
      socket
      |> assign(build(size))
      |> assign(picked: nil, hovered: nil, hidden: %{}, size: size)
+     |> assign(animations_chart: AnimationsDemo.applied(size), animations_run: 0)
      |> motion(MotionDemo.rows(), 0)}
   end
 
@@ -130,6 +131,11 @@ defmodule ExamplesWeb.InteractionLive do
   def handle_event("motion_reset", _params, socket) do
     {:noreply, motion(socket, MotionDemo.rows(), 0)}
   end
+
+  # A new id remounts the chart, so the browser inserts its elements again and the
+  # animations that ran out start over.
+  def handle_event("animations_replay", _params, socket),
+    do: {:noreply, update(socket, :animations_run, &(&1 + 1))}
 
   def handle_event("hover", %{"index" => index}, socket) do
     {:noreply, assign(socket, hovered: index)}
@@ -327,6 +333,38 @@ defmodule ExamplesWeb.InteractionLive do
           </p>
         </Panel.panel>
 
+        <Panel.panel id="panel-animations">
+          <:title>Animations</:title>
+          <p class="panel-note">
+            A style's <code>animation</code>
+            runs while the style holds: each tile's row names
+            its style, and each style one of the built-ins — <code>:pulse</code>, <code>:blink</code>, <code>:shake</code>,
+            <code>:spin</code>
+            — with its own <code>duration</code>, <code>easing</code>, <code>iterations</code>
+            and <code>delay</code>, or a string, <code>"wiggle"</code>, naming keyframes this
+            page's stylesheet defines. The canvas hooks run the same keyframes, and a host
+            registers its own with <code>VisualizeMotion.register/2</code>.
+            <strong>A reader who asks for less motion</strong>
+            (<code>prefers-reduced-motion: reduce</code>) sees every tile still: the chart's
+            own stylesheet turns every animation off, and a design cannot override it.
+          </p>
+
+          <div class="chart-container">
+            <.live_component
+              module={Visualize.Components.Chart}
+              id={"animations-chart-#{@animations_run}"}
+              chart={@animations_chart}
+            />
+          </div>
+
+          <p class="picked">
+            <button phx-click="animations_replay">Replay</button>
+            The blink and the shake run a few times and stop; <em>Replay</em>
+            starts them again.
+          </p>
+          <Highlight.code code={AnimationsDemo.code()} />
+        </Panel.panel>
+
         <Panel.panel id="panel-code" class="panel-wide">
           <:title>The design and the markup</:title>
           <p class="panel-note">
@@ -351,6 +389,7 @@ defmodule ExamplesWeb.InteractionLive do
       .picked { margin-top: 1rem; color: #444; }
       #tooltip-chart .mark-circle circle { cursor: pointer; }
       #motion-chart .mark-rect rect { cursor: pointer; }
+      <%= Phoenix.HTML.raw(AnimationsDemo.keyframes()) %>
       #crosshair-svg, #crosshair-canvas { display: inline-block; }
       #crosshair-canvas canvas { max-width: 100%; height: auto; }
     </style>

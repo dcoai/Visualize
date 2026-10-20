@@ -15,14 +15,17 @@ defmodule Examples.Charts.CompositionChart do
     `pt(1)` outline in the background color, and every line `pt(1.5)` on a smooth curve; the
     trend frame's own defaults draw its lines thinner, `pt(1)`, and its text at `pct(90)`
     — the nearer container wins, kind entry over parts.
-  - **Units** (§3.9): `pt` for widths, `mm` for a label's gap, `em` and `pct` for sizes.
+  - **Units** (§3.9): `pt` for widths, `mm` for a label's gap, `em` and `pct` for sizes; and
+    across the bottom, one length in six units (#786) — a dash of half an inch and a width of
+    6 px written in `px`, `pt`, `pc`, `inch`, `cm` and `mm`, which line up dash for dash. The
+    page's *Units* panel shows each as its stored JSON, `{"$unit": [n, "unit"]}`.
   - **A stroke that does not scale** (§3.9): the budget line is `non_scaling: true`, so
     under the page's zoom it keeps its hairline while the trend lines grow with the zoom.
   """
 
   import Visualize.Chart.Build
   import Visualize.Color, only: [color: 1]
-  import Visualize.Units, only: [pt: 1, mm: 1, em: 1, pct: 1]
+  import Visualize.Units, only: [px: 1, pt: 1, pc: 1, inch: 1, cm: 1, mm: 1, em: 1, pct: 1]
 
   alias Examples.Charts.Design
 
@@ -37,8 +40,20 @@ defmodule Examples.Charts.CompositionChart do
   # The latency budget, in milliseconds: the line drawn across the trend.
   @budget 200
 
+  # One length in each absolute unit, at CSS's ratios (96 px = 1 in = 72 pt): a dash of half
+  # an inch and a width of 6 px, each written in the row's own unit. Each row's style is
+  # named by the call that writes it.
+  @units [
+    {"px(48)", px(48), px(6)},
+    {"pt(36)", pt(36), pt(4.5)},
+    {"pc(3)", pc(3), pc(0.375)},
+    {"inch(0.5)", inch(0.5), inch(0.0625)},
+    {"cm(1.27)", cm(1.27), cm(0.15875)},
+    {"mm(12.7)", mm(12.7), mm(1.5875)}
+  ]
+
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
-  def size, do: {820, 400}
+  def size, do: {820, 540}
 
   def title, do: "Composition"
 
@@ -46,8 +61,11 @@ defmodule Examples.Charts.CompositionChart do
     do:
       "Palette names and modifiers stacked, extends, defaults, units and a stroke that does not scale"
 
-  @doc "The page's own panels (spec/14 §12.6): the chart under zoom."
-  def panels, do: [:zoom]
+  @doc "The page's own panels (spec/14 §12.6): the chart under zoom, and its units as stored."
+  def panels, do: [:zoom, :units]
+
+  @doc "The unit styles' names, top to bottom (the *Units* panel's order)."
+  def unit_names, do: Enum.map(@units, &elem(&1, 0))
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
@@ -55,10 +73,11 @@ defmodule Examples.Charts.CompositionChart do
       Design.fold(
         List.flatten([
           chart(meta: %{name: title(), description: [description()]}),
-          layout(columns: [2, 3], gap: 12),
+          layout(columns: [2, 3], rows: [3, 1], gap: 12),
           source(:services, [:service, :latency, :state]),
           source(:trend, [:minute, :ms, :service]),
           source(:budget, [:ms]),
+          source("units", ["unit", "x"]),
 
           # What every element inherits: one place says it (spec/14 §3.8).
           defaults(%{
@@ -111,6 +130,26 @@ defmodule Examples.Charts.CompositionChart do
             ),
             label({:axis, :x}, ["minute"]),
             label(:subtitle, ["The last hour, against the #{@budget} ms budget"], style: :heading)
+          ]),
+          # One length in six units: each dash half an inch and each line 6 px wide, so the
+          # six lines line up dash for dash (spec/14 §3.9).
+          Enum.map(@units, fn {name, dash, width} ->
+            style(name, stroke: %{dash: [dash, dash], width: width, cap: :butt})
+          end),
+          in_frame("units", [
+            cartesian(
+              cell: [0, 1],
+              span: [2, 1],
+              margin: %{top: 26, right: 16, bottom: 6, left: 150}
+            ),
+            linear_scale(:x, domain: [0, 1]),
+            # A band runs up the y axis, so the domain lists the rows bottom first.
+            band_scale(:y, domain: Enum.map(Enum.reverse(@units), &elem(&1, 0)), padding: 0.2),
+            axis(:y, :left),
+            line("units", %{x: "x", y: "unit", series: "unit"}, style: {:field, "unit"}),
+            label(:subtitle, ["One length, six units: 96 px = 72 pt = 6 pc = 1 in = 2.54 cm"],
+              style: :heading
+            )
           ])
         ])
       )
@@ -119,11 +158,16 @@ defmodule Examples.Charts.CompositionChart do
      %{
        services: @services,
        trend: trend_rows(opts[:animation_tick] || 0),
-       budget: [%{ms: @budget}]
+       budget: [%{ms: @budget}],
+       units: unit_rows(@units)
      }}
   end
 
   def render(opts \\ []), do: Design.render(__MODULE__, opts)
+
+  # Each unit's line: from the frame's left edge to its right.
+  defp unit_rows(units),
+    do: for({name, _dash, _width} <- units, x <- [0, 1], do: %{"unit" => name, "x" => x})
 
   # A minute's latency per service: each its own level and swing; an animation tick moves
   # the hour on by a minute.
@@ -149,14 +193,25 @@ defmodule Examples.Charts.CompositionChart do
       %{service: "queue", latency: 176, state: :degraded}
     ]
 
+    # One length in six units: half an inch of dash, 6 px of width, each in its own unit.
+    units = [
+      {"px(48)", px(48), px(6)},
+      {"pt(36)", pt(36), pt(4.5)},
+      {"pc(3)", pc(3), pc(0.375)},
+      {"inch(0.5)", inch(0.5), inch(0.0625)},
+      {"cm(1.27)", cm(1.27), cm(0.15875)},
+      {"mm(12.7)", mm(12.7), mm(1.5875)}
+    ]
+
     {:ok, design} =
       Visualize.Chart.compose(
         List.flatten([
           chart(meta: %{name: "Composition"}),
-          layout(columns: [2, 3], gap: 12),
+          layout(columns: [2, 3], rows: [3, 1], gap: 12),
           source(:services, [:service, :latency, :state]),
           source(:trend, [:minute, :ms, :service]),
           source(:budget, [:ms]),
+          source("units", ["unit", "x"]),
 
           # What every element inherits, said once: every text, every rect, every line.
           defaults(%{
@@ -208,13 +263,37 @@ defmodule Examples.Charts.CompositionChart do
             ),
             label({:axis, :x}, ["minute"]),
             label(:subtitle, ["The last hour, against the 200 ms budget"], style: :heading)
+          ]),
+          # One length in six units: each dash half an inch and each line 6 px wide, so the
+          # six lines line up dash for dash (spec/14 §3.9).
+          Enum.map(units, fn {name, dash, width} ->
+            style(name, stroke: %{dash: [dash, dash], width: width, cap: :butt})
+          end),
+          in_frame("units", [
+            cartesian(
+              cell: [0, 1],
+              span: [2, 1],
+              margin: %{top: 26, right: 16, bottom: 6, left: 150}
+            ),
+            linear_scale(:x, domain: [0, 1]),
+            band_scale(:y, domain: Enum.map(Enum.reverse(units), &elem(&1, 0)), padding: 0.2),
+            axis(:y, :left),
+            line("units", %{x: "x", y: "unit", series: "unit"}, style: {:field, "unit"}),
+            label(:subtitle, ["One length, six units: 96 px = 72 pt = 6 pc = 1 in = 2.54 cm"],
+              style: :heading
+            )
           ])
         ])
       )
 
     {:ok, applied} =
       Visualize.Chart.apply(design,
-        sources: %{services: services, trend: trend, budget: [%{ms: 200}]}
+        sources: %{
+          services: services,
+          trend: trend,
+          budget: [%{ms: 200}],
+          units: for({name, _, _} <- units, x <- [0, 1], do: %{"unit" => name, "x" => x})
+        }
       )
 
     Visualize.Chart.render(applied)

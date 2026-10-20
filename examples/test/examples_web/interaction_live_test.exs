@@ -230,6 +230,29 @@ defmodule ExamplesWeb.InteractionLiveTest do
     refute Visualize.Chart.render(chart) =~ ~s(data-vis-id="main.1.name=db")
   end
 
+  # The animations (#677, #786): every built-in with its own timing, the page's own
+  # keyframes by name, and every animation off for a reader who asks for less motion.
+  test "the animations panel runs every built-in and the page's keyframes, and stops for reduced motion" do
+    html = page({720, 380})
+    {_tag, rest} = element(html, "animations-chart-0")
+
+    for name <- ~w(pulse blink shake spin), do: assert(rest =~ "@keyframes vis-#{name}", name)
+    assert rest =~ "animation: vis-blink 800ms linear 400ms 3;"
+    assert rest =~ "animation: vis-spin 3000ms linear 0ms infinite;"
+    assert rest =~ ~r/animation: vis-shake 700ms linear\([^)]*\) 200ms 4;/
+    # The host's keyframes are named as written, and the page defines them.
+    assert rest =~ "animation: wiggle 900ms "
+    assert html =~ "@keyframes wiggle {"
+    assert rest =~ "@media (prefers-reduced-motion: reduce)"
+    assert rest =~ ~s([class*="vis-animation-"] { animation: none !important; })
+
+    # Replay remounts the chart under a new id, so the browser starts every animation over.
+    socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, animations_run: 0}}
+
+    assert {:noreply, %{assigns: %{animations_run: 1}}} =
+             InteractionLive.handle_event("animations_replay", %{}, socket)
+  end
+
   # Every demo's panel, its heading and the id of the chart it holds (#505); the code
   # section holds its markup in place of a chart.
   @panels [
@@ -238,6 +261,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
     {"panel-crosshair-canvas", "Crosshair over the canvas", "crosshair-canvas"},
     {"panel-legend", "Legend toggling", "legend-chart"},
     {"panel-motion", "Motion by identity", "motion-chart"},
+    {"panel-animations", "Animations", "animations-chart-0"},
     {"panel-code", "The design and the markup", nil}
   ]
 
