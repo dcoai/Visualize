@@ -418,7 +418,7 @@ defmodule ExamplesWeb.InteractionLive do
             <span class="backend-buttons">
               <button type="button" class="backend-btn" phx-click="mines_new">New game</button>
             </span>
-            <a href="/minesweeper">The full page</a>, with a Flag mode, a clock and every backend.
+            <a href="/minesweeper">The full page</a>, with every board size up to 50 × 50, a Flag mode, a clock and every backend.
           </p>
         </Panel.panel>
 
