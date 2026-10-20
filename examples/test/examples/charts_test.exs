@@ -62,7 +62,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.WorldMap,
     Examples.Charts.DayNightGps,
     Examples.Charts.Globe,
-    Examples.Charts.GpsTrack,
+    Examples.Charts.Marathon,
     # The style grammar of 0.7.0 (#705).
     Examples.Charts.ColorsChart,
     Examples.Charts.PaintsChart,
@@ -103,7 +103,7 @@ defmodule Examples.ChartsTest do
     Examples.Charts.WorldMap,
     Examples.Charts.DayNightGps,
     Examples.Charts.Globe,
-    Examples.Charts.GpsTrack,
+    Examples.Charts.Marathon,
     Examples.Charts.HexbinChart,
     Examples.Charts.SpectrumChart,
     Examples.Charts.ColorsChart,

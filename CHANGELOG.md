@@ -88,6 +88,16 @@ release it merely follows.
 
 ### Changed
 
+- **The examples app's GPS view is now Grandma's Marathon** (#783, #819). *GPS Track*
+  (`/chart/gps_track`), one runner round Central Park, is replaced by *Grandma's
+  Marathon* (`/chart/grandmas_marathon`). It is a reference for several moving things on
+  one route over a basemap. A traced 26.2-mile course runs from Two Harbors to Canal
+  Park, Duluth, with ten fictional runners on it. The design is four frames in a layout:
+  the course fitted to its line, a pack inset whose `fit` follows the field every tick
+  (its tiles move with it), the race clock, and standings bars. All four read one
+  `runners` source, so the map and the standings cannot disagree. The library is
+  unchanged. A link to `/chart/gps_track` now goes to the gallery index.
+
 - **A band scale places a category in constant time** (#809, #810). `Visualize.Scale.Band`
   searched its domain on every `apply/2` and laid its bands out again on every call, so a
   chart of `n` items over `n` categories cost `O(n²)`; a 50 × 50 band × band grid spent a
