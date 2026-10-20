@@ -62,26 +62,20 @@ defmodule Examples.Renderer do
   end
 
   @doc """
-  Re-prepares the backend's state at `opts` — a new size, a new density — keeping the
-  window's rows and **carrying the easing** (spec/14 §12.5, #434).
+  Re-prepares the backend's state for `backend` at `opts` without stopping (spec/14 §12.6):
+  a new size (#434), another backend (#502), a theme or a hex size picked mid-run (#796) —
+  whatever the page changes that the compiled chart is built over. The fresh state
+  **carries the easing** of the one it replaces (spec/14 §12.5), which is dropped —
+  released, never drawn again — and the window's rows are the run's, kept.
 
-  A compiled chart's plot is part of its state, so a chart drawn at another size is
-  compiled again; `Visualize.Chart.Compiled.carry/2` keeps each frame's eased scales and
-  mark motions, so a transition goes on from where it stood. A cast, like `frame/4`, so a
-  resize never blocks the view.
+  A compiled chart's plot, its theme and its marks are part of its state, so a chart drawn
+  under other options is compiled again; `Visualize.Chart.Compiled.carry/2` keeps each
+  frame's eased scales and mark motions, so a transition goes on from where it stood. A
+  cast handled in order, like `frame/4`, so it never blocks the view: a frame asked before
+  it is drawn under the old options and one asked after under the new.
   """
-  @spec resize(pid(), keyword()) :: :ok
-  def resize(renderer, opts), do: GenServer.cast(renderer, {:prepare, nil, opts})
-
-  @doc """
-  Re-prepares for `backend` at `opts` without stopping (spec/14 §12.6, #502): the resize
-  path with a backend. The new backend's state carries the easing of the one it
-  replaces, which is dropped — released, never drawn again — and the window's rows are
-  the run's, kept. A cast handled in order, so a frame asked before it is drawn on the
-  old backend and one asked after on the new.
-  """
-  @spec switch(pid(), Frames.backend(), keyword()) :: :ok
-  def switch(renderer, backend, opts),
+  @spec prepare(pid(), Frames.backend(), keyword()) :: :ok
+  def prepare(renderer, backend, opts),
     do: GenServer.cast(renderer, {:prepare, backend, opts})
 
   @doc "Stops a renderer; a pid that is gone is `:ok` too."
@@ -122,7 +116,6 @@ defmodule Examples.Renderer do
 
   @impl true
   def handle_cast({:prepare, backend, opts}, state) do
-    backend = backend || state.backend
     fresh = Frames.prepare(state.module, opts, backend)
     {:noreply, %{state | backend: backend, state: Frames.carry(state.state, fresh)}}
   end
