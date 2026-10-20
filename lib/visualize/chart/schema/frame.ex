@@ -178,7 +178,9 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:data, {:ref, :source}, :binding, required: true),
       spec(:fields, {:list, :field}, :binding),
       spec(:field, :field, :binding),
-      spec(:padding, :number, :geometry, default: 0)
+      spec(:padding, :number, :geometry, default: 0),
+      # Meters on the ground the view spans at least (spec/14 §4.6, #828, D-212).
+      spec(:min_span, :number, :geometry, default: 0)
     ]
   end
 

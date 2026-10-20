@@ -794,13 +794,38 @@ defmodule Visualize.Chart.Frame do
     case Map.fetch(sources, name) do
       {:ok, source} ->
         points = source |> Visualize.Data.Table.rows() |> Enum.flat_map(&fit_points(&1, node))
+        span = Map.get(node, :min_span, Schema.default(:fit, :min_span))
         pad = Map.get(node, :padding, Schema.default(:fit, :padding))
         box = [[pad, pad], [plot.width - pad, plot.height - pad]]
-        Projection.fit(projection, box, points)
+        Projection.fit(projection, box, spanned(points, span))
 
       :error ->
         projection
     end
+  end
+
+  # The mean Earth radius in meters, which a fit's `min_span` is measured on (§4.6).
+  @earth_radius 6_371_008.8
+
+  # The points of a fit and, with a `min_span`, four more about the center of their bounds:
+  # half the span north and south along its meridian, east and west along its parallel —
+  # so the view spans at least that much ground on both axes, and points that coincide
+  # still have an extent (spec/14 §4.6, #828, D-212).
+  defp spanned([], _span), do: []
+  defp spanned(points, span) when span <= 0, do: points
+
+  defp spanned(points, span) do
+    {lons, lats} = Enum.unzip(points)
+    {lon0, lon1} = Enum.min_max(lons)
+    {lat0, lat1} = Enum.min_max(lats)
+    {lon, lat} = {(lon0 + lon1) / 2, (lat0 + lat1) / 2}
+    dlat = span / 2 / @earth_radius * 180 / :math.pi()
+    # A parallel is shorter than a meridian by the cosine of its latitude; at a pole the
+    # meridians alone give the span.
+    cos = :math.cos(lat * :math.pi() / 180)
+    dlon = if cos > 1.0e-9, do: min(dlat / cos, 180), else: 0
+
+    points ++ [{lon - dlon, lat}, {lon + dlon, lat}, {lon, lat - dlat}, {lon, lat + dlat}]
   end
 
   defp fit_points(row, %{field: field}) when is_map(row),
