@@ -11,10 +11,16 @@ defmodule ExamplesWeb.InteractionLive do
   Each demo is one `ExamplesWeb.Panel` — its heading, its explanation and its chart
   together — and the chart's legend sits in the frame's right margin, beside the plot
   rather than over a series (#505).
+
+  The Minesweeper panel (#800) plays the game of `/minesweeper` in place: the same design
+  (`ExamplesWeb.MinesweeperLive.applied/2`), the game in this page's process, and each
+  click made the next game by the step that page takes (`Examples.Minesweeper.Move`).
   """
   use Phoenix.LiveView
 
-  alias ExamplesWeb.{AnimationsDemo, Highlight, MotionDemo, Panel}
+  alias Examples.Minesweeper
+  alias Examples.Minesweeper.Move
+  alias ExamplesWeb.{AnimationsDemo, Highlight, MinesweeperLive, MotionDemo, Panel}
   alias Visualize.Chart
   alias Visualize.Event
   alias Visualize.Hooks.Crosshair
@@ -88,7 +94,8 @@ defmodule ExamplesWeb.InteractionLive do
     labels: [%{anchor: :title, text: ["Hover a point; click one to send it to the LiveView"]}]
   }
 
-  # The page at its one size; a session may name another, as its tests draw it at two (#507).
+  # The page at its one size; a session may name another, as its tests draw it at two (#507),
+  # and a seed for the Minesweeper panel's first game, as its tests play a known layout.
   def mount(_params, session, socket) do
     size = Map.get(session, "size", @size)
 
@@ -97,7 +104,18 @@ defmodule ExamplesWeb.InteractionLive do
      |> assign(build(size))
      |> assign(picked: nil, hovered: nil, hidden: %{}, size: size)
      |> assign(animations_chart: AnimationsDemo.applied(size), animations_run: 0)
-     |> motion(MotionDemo.rows(), 0)}
+     |> motion(MotionDemo.rows(), 0)
+     |> mines(mines_game(session))}
+  end
+
+  defp mines_game(%{"mines_seed" => seed}) when is_integer(seed), do: Minesweeper.new(seed: seed)
+  defp mines_game(_session), do: Minesweeper.new()
+
+  # The Minesweeper panel's game and its grid, drawn square at the page's chart height:
+  # the panel's chart size (#513), its cells kept square.
+  defp mines(socket, game) do
+    {_width, height} = socket.assigns.size
+    assign(socket, mines_game: game, mines_chart: MinesweeperLive.applied(game, {height, height}))
   end
 
   # The motion demo's rows, the next service whose state changes, and its chart (#653).
@@ -122,6 +140,15 @@ defmodule ExamplesWeb.InteractionLive do
     rows = MotionDemo.delete(socket.assigns.motion_rows, row.name)
     {:noreply, motion(socket, rows, socket.assigns.motion_turn)}
   end
+
+  # A click, Enter, a right-click, a long-press or the Menu key on a Minesweeper cell: the
+  # next game, by the step `/minesweeper` takes. The panel has no Flag mode; Shift flags.
+  def handle_info({:visualize_event, "mines-panel-chart", %Event{} = event}, socket) do
+    {:noreply, mines(socket, Move.play(socket.assigns.mines_game, event, :reveal))}
+  end
+
+  def handle_event("mines_new", _params, socket),
+    do: {:noreply, mines(socket, Minesweeper.new())}
 
   def handle_event("motion_next", _params, socket) do
     %{motion_rows: rows, motion_turn: turn} = socket.assigns
@@ -365,6 +392,34 @@ defmodule ExamplesWeb.InteractionLive do
           <Highlight.code code={AnimationsDemo.code()} />
         </Panel.panel>
 
+        <Panel.panel id="panel-minesweeper">
+          <:title>Minesweeper</:title>
+          <p class="panel-note">
+            The grid is a design: a <code>:rect</code>
+            per cell on two <code>:band</code>
+            scales, each cell's <code>state</code>
+            naming its style, and the game is this page's. A click reveals and sends <code>cell_click</code>; a right-click, a long-press or the Menu key sends the mark's <code>context_event</code>, <code>flag</code>, as does a click with Shift held.
+            <code>KeyboardHook</code>
+            moves on the band × band grid by row and column, and Enter reveals. On a canvas
+            the same click resolves through the hit index to the same <code>Visualize.Event</code>.
+          </p>
+
+          <MinesweeperLive.status game={@mines_game} />
+
+          <div class="chart-container mines-board">
+            <.live_component
+              module={Visualize.Components.Chart}
+              id="mines-panel-chart"
+              chart={@mines_chart}
+            />
+          </div>
+
+          <p class="picked">
+            <button phx-click="mines_new">New game</button>
+            <a href="/minesweeper">The full page</a>, with a Flag mode, a clock and every backend.
+          </p>
+        </Panel.panel>
+
         <Panel.panel id="panel-code" class="panel-wide">
           <:title>The design and the markup</:title>
           <p class="panel-note">
@@ -390,6 +445,7 @@ defmodule ExamplesWeb.InteractionLive do
       #tooltip-chart .mark-circle circle { cursor: pointer; }
       #motion-chart .mark-rect rect { cursor: pointer; }
       <%= Phoenix.HTML.raw(AnimationsDemo.keyframes()) %>
+      <%= Phoenix.HTML.raw(MinesweeperLive.board_css()) %>
       #crosshair-svg, #crosshair-canvas { display: inline-block; }
       #crosshair-canvas canvas { max-width: 100%; height: auto; }
     </style>

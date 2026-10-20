@@ -18,7 +18,10 @@ defmodule ExamplesWeb.InteractionLiveTest do
 
   import Phoenix.ConnTest, only: [build_conn: 0, init_test_session: 2, html_response: 2]
 
+  alias Examples.Minesweeper
   alias ExamplesWeb.{InteractionLive, MotionDemo}
+  alias Phoenix.LiveView.Socket
+  alias Visualize.Components.Chart, as: Component
 
   @endpoint ExamplesWeb.Endpoint
   alias Visualize.Backend.CanvasBinary.Decoder
@@ -253,6 +256,120 @@ defmodule ExamplesWeb.InteractionLiveTest do
              InteractionLive.handle_event("animations_replay", %{}, socket)
   end
 
+  # The Minesweeper panel (#800): the game of `/minesweeper` played in place. Seed 42 opened
+  # at the center, the layout `Examples.MinesweeperTest` holds exactly.
+  @mines_seed 42
+  @mines_first {4, 4}
+
+  defp mines_page do
+    {:ok, socket} =
+      InteractionLive.mount(%{}, %{"mines_seed" => @mines_seed}, %Socket{
+        assigns: %{__changed__: %{}}
+      })
+
+    socket
+  end
+
+  # A move on the cell `{r, c}` as `TooltipHook` or `KeyboardHook` pushes it on the panel's
+  # chart — the rect mark (the frame's first), the cell's ordinal among the rows, and the
+  # token of the drawing it landed on — resolved by the component, and its message handled
+  # by the page. `event` is `"flag"` for a right-click, a long-press or the Menu key.
+  defp mines_move(socket, {r, c}, event \\ "cell_click", modifiers \\ []) do
+    {:ok, component} = Component.mount(%Socket{assigns: %{__changed__: %{}}})
+
+    {:ok, component} =
+      Component.update(%{id: "mines-panel-chart", chart: socket.assigns.mines_chart}, component)
+
+    params = %{
+      "event" => event,
+      "frame" => "main",
+      "mark" => 0,
+      "row" => r * 9 + c,
+      "drawn" => component.assigns.drawn,
+      "modifiers" => modifiers
+    }
+
+    {:noreply, _component} = Component.handle_event("visualize_event", params, component)
+    assert_receive {:visualize_event, "mines-panel-chart", event} = message
+    assert event.item == {:rect, %{"row" => r, "col" => c}}
+    {:noreply, socket} = InteractionLive.handle_info(message, socket)
+    socket
+  end
+
+  defp mines_layout, do: Minesweeper.reveal(Minesweeper.new(seed: @mines_seed), @mines_first)
+
+  # The status line as the panel renders it, without the full page's clock.
+  defp render_status(game) do
+    %{game: game, elapsed: nil}
+    |> ExamplesWeb.MinesweeperLive.status()
+    |> Phoenix.HTML.Safe.to_iodata()
+    |> IO.iodata_to_binary()
+  end
+
+  test "the Minesweeper panel draws the grid at the page's chart height, with its status, New game and the full page" do
+    html = page({720, 380})
+    {tag, rest} = element(html, "mines-panel-chart")
+    assert tag =~ ~s(phx-hook="TooltipHook")
+    assert rest =~ ~s(data-tooltip-event="cell_click" )
+    assert rest =~ ~s(data-tooltip-context-event="flag")
+    # One tab stop whose cells the arrows reach by row and column (D-198).
+    {keys, _rest} = element(html, "mines-panel-chart-keys")
+    assert keys =~ ~s(phx-hook="KeyboardHook")
+    assert keys =~ "&quot;grid&quot;:true"
+    assert length(Regex.scan(~r/<rect data-datum="state count"/, rest)) == 81
+    assert rest =~ ~s(viewBox="0 0 380 380")
+
+    [{_id, body}] = Enum.filter(panels(html), &(elem(&1, 0) == "panel-minesweeper"))
+    assert body =~ "10 mines left"
+    assert body =~ "Click any cell to start"
+    refute body =~ "mines-time"
+    assert body =~ ~s(phx-click="mines_new")
+    assert body =~ ~s(<a href="/minesweeper">)
+    assert body =~ "<code>context_event</code>"
+    assert body =~ "<code>KeyboardHook</code>"
+    assert html =~ ".mines-board .mark-text, .mines-board .mark-symbol { pointer-events: none; }"
+
+    # At a narrower page the grid is drawn square at its height.
+    assert page({480, 320}) |> element("mines-panel-chart") |> elem(1) =~
+             ~s(viewBox="0 0 320 320")
+  end
+
+  test "the Minesweeper panel plays a seeded game to a win in place" do
+    game = mines_layout()
+    socket = mines_move(mines_page(), @mines_first)
+    assert socket.assigns.mines_game.status == :playing
+
+    # A flag, by the context event, comes off again; Shift held flags as well.
+    socket = mines_move(socket, {0, 0}, "flag")
+    assert Minesweeper.mines_left(socket.assigns.mines_game) == 9
+    socket = mines_move(socket, {0, 0}, "cell_click", ["shift"])
+    assert Minesweeper.mines_left(socket.assigns.mines_game) == 10
+
+    safe = for cell <- Minesweeper.cells(game), not Minesweeper.mine?(game, cell), do: cell
+    socket = Enum.reduce(safe, socket, &mines_move(&2, &1))
+
+    assert socket.assigns.mines_game.status == :won
+    assert render_status(socket.assigns.mines_game) =~ "Cleared: you won"
+    assert render_status(socket.assigns.mines_game) =~ "0 mines left"
+  end
+
+  test "the Minesweeper panel plays a seeded game to a loss, and New game starts another" do
+    socket =
+      mines_page()
+      |> mines_move(@mines_first)
+      |> mines_move({1, 1}, "flag")
+      |> mines_move({0, 0})
+
+    assert socket.assigns.mines_game.status == :lost
+    assert render_status(socket.assigns.mines_game) =~ "Boom: you lost"
+    svg = Visualize.Chart.render(socket.assigns.mines_chart, root: true)
+    assert svg =~ ~s(data-datum-state="exploded")
+
+    {:noreply, socket} = InteractionLive.handle_event("mines_new", %{}, socket)
+    assert socket.assigns.mines_game.status == :ready
+    assert render_status(socket.assigns.mines_game) =~ "Click any cell to start"
+  end
+
   # Every demo's panel, its heading and the id of the chart it holds (#505); the code
   # section holds its markup in place of a chart.
   @panels [
@@ -262,6 +379,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
     {"panel-legend", "Legend toggling", "legend-chart"},
     {"panel-motion", "Motion by identity", "motion-chart"},
     {"panel-animations", "Animations", "animations-chart-0"},
+    {"panel-minesweeper", "Minesweeper", "mines-panel-chart"},
     {"panel-code", "The design and the markup", nil}
   ]
 
