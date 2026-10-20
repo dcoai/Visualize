@@ -744,9 +744,12 @@ defmodule Visualize.Backend.CanvasBinary do
       Enum.flat_map(children, &paints/1)
   end
 
-  # A hatch (#673): the pattern, the angle, spacing and width, then its color and its ground,
-  # a ground of alpha 0 being none; no stops.
-  defp paint_record({%Paint{type: :hatch, geometry: g} = paint, index}) do
+  @doc false
+  # A paint and its index as its `paint` record (spec/09 §4.3.12), for this encoder and the
+  # SVG-element one (D-218). A hatch (#673): the pattern, the angle, spacing and width, then
+  # its color and its ground, a ground of alpha 0 being none; no stops.
+  @spec paint_record({Paint.t(), non_neg_integer()}) :: iodata()
+  def paint_record({%Paint{type: :hatch, geometry: g} = paint, index}) do
     pattern = Map.fetch!(%{lines: 0x01, crosshatch: 0x02, dots: 0x03}, g.pattern)
     {r, gr, b, a} = Paint.rgba({0, paint.color, 1})
 
@@ -758,7 +761,7 @@ defmodule Visualize.Backend.CanvasBinary do
       bb::8, ba::8>>
   end
 
-  defp paint_record({%Paint{type: type, geometry: g} = paint, index}) do
+  def paint_record({%Paint{type: type, geometry: g} = paint, index}) do
     {kind, geometry} =
       case type do
         :linear -> {0x01, [g.x1, g.y1, g.x2, g.y2]}
