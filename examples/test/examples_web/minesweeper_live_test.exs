@@ -15,6 +15,8 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   """
   use ExUnit.Case, async: true
 
+  doctest ExamplesWeb.MinesweeperLive
+
   import Phoenix.ConnTest
   import Phoenix.LiveViewTest, only: [render_component: 2]
 
@@ -48,7 +50,7 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
       "event" => event,
       "frame" => "main",
       "mark" => 0,
-      "row" => r * 9 + c,
+      "row" => r * socket.assigns.game.cols + c,
       "drawn" => component.assigns.drawn,
       "modifiers" => modifiers
     }
@@ -90,7 +92,8 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
     for [_, state, i] <- Regex.scan(~r/data-datum-state="([a-z]+)" data-row="(\d+)"/, svg),
         into: %{} do
       i = String.to_integer(i)
-      {{div(i, 9), rem(i, 9)}, state}
+      cols = socket.assigns.game.cols
+      {{div(i, cols), rem(i, cols)}, state}
     end
   end
 
@@ -353,6 +356,250 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
     assert {:ok, _chart} = Visualize.Chart.from_map(MinesweeperLive.design())
     assert Visualize.Data.Schema.identity(MinesweeperLive.schema()) == [:col, :row]
     assert MinesweeperLive.applied(layout()).schemas["cells"] == MinesweeperLive.schema()
+  end
+
+  # #808: the board is chosen on the page and lives in the address with the seed.
+  describe "the board size" do
+    # The page mounted at `params`, the address's, and its params handled, as LiveView
+    # does on a page's first render.
+    defp page_at(params) do
+      {:ok, socket} = MinesweeperLive.mount(params, %{}, %Socket{assigns: %{__changed__: %{}}})
+      uri = "http://localhost/minesweeper?" <> URI.encode_query(params)
+      {:noreply, socket} = MinesweeperLive.handle_params(params, uri, socket)
+      socket
+    end
+
+    defp board(socket),
+      do: {socket.assigns.game.rows, socket.assigns.game.cols, socket.assigns.game.mines}
+
+    # Where a choice sent the page: the address it patched to, parsed.
+    defp patched(socket) do
+      {:live, :patch, %{to: to}} = socket.redirected
+      %URI{path: "/minesweeper", query: query} = URI.parse(to)
+      URI.decode_query(query)
+    end
+
+    test "the address names the board and the seed, and a game replays from it" do
+      socket = page_at(%{"rows" => "16", "cols" => "30", "mines" => "99", "seed" => "7"})
+      assert board(socket) == {16, 30, 99}
+      assert socket.assigns.game.seed == 7
+
+      assert MinesweeperLive.path(board(socket), 7) ==
+               "/minesweeper?rows=16&cols=30&mines=99&seed=7"
+
+      # The same address is the same layout.
+      again = page_at(%{"rows" => "16", "cols" => "30", "mines" => "99", "seed" => "7"})
+      first = Minesweeper.reveal(socket.assigns.game, {8, 15})
+      assert Minesweeper.reveal(again.assigns.game, {8, 15}).mined == first.mined
+
+      # A seed alone is Beginner's board, as `/minesweeper?seed=n` always was.
+      assert board(page_at(%{"seed" => "42"})) == {9, 9, 10}
+    end
+
+    test "values are clamped to the bounds, and anything not a whole number is Beginner's" do
+      assert MinesweeperLive.board(%{"rows" => "2", "cols" => "99", "mines" => "5"}) == {5, 50, 5}
+
+      assert MinesweeperLive.board(%{"rows" => "50", "cols" => "50", "mines" => "9999"}) ==
+               {50, 50, 2499}
+
+      assert MinesweeperLive.board(%{"rows" => "-3", "cols" => " 12 ", "mines" => "-1"}) ==
+               {5, 12, 1}
+
+      # Mines left out, or left empty, are about one cell in six.
+      assert MinesweeperLive.board(%{"rows" => "20", "cols" => "20"}) == {20, 20, 64}
+
+      assert MinesweeperLive.board(%{"rows" => "20", "cols" => "20", "mines" => ""}) ==
+               {20, 20, 64}
+
+      for bad <- [
+            %{"rows" => "1e3", "cols" => "20"},
+            %{"rows" => "20", "cols" => "twenty"},
+            %{"rows" => "20", "cols" => "20", "mines" => "lots"},
+            %{"rows" => "20.5", "cols" => "20"},
+            %{"rows" => "", "cols" => "20"},
+            %{"rows" => "20"},
+            %{"rows" => ["20"], "cols" => "20"},
+            %{}
+          ] do
+        assert MinesweeperLive.board(bad) == {9, 9, 10}, inspect(bad)
+      end
+
+      # The page plays what the clamp gives, and a bad seed is a new game's.
+      socket = page_at(%{"rows" => "80", "cols" => "50", "seed" => "x"})
+      assert board(socket) == {50, 50, 400}
+      assert is_integer(socket.assigns.game.seed)
+    end
+
+    test "the address is the game's own once connected: a seed is written, a clamp shown" do
+      for {params, board} <- [
+            {%{"rows" => "16", "cols" => "16", "mines" => "40"}, {16, 16, 40}},
+            {%{"rows" => "99", "cols" => "3", "mines" => "0", "seed" => "5"}, {50, 5, 1}}
+          ] do
+        {:ok, socket} = MinesweeperLive.mount(params, %{}, %Socket{assigns: %{__changed__: %{}}})
+        # A connected socket: the address it was asked for is rewritten in place.
+        socket = %{socket | transport_pid: self()}
+        uri = "http://localhost/minesweeper?" <> URI.encode_query(params)
+        {:noreply, socket} = MinesweeperLive.handle_params(params, uri, socket)
+
+        {:live, :patch, %{to: to, kind: :replace}} = socket.redirected
+        assert to == MinesweeperLive.path(board, socket.assigns.game.seed)
+        assert board(socket) == board
+      end
+
+      # An address that is already the game's own is left alone.
+      params = %{"rows" => "16", "cols" => "16", "mines" => "40", "seed" => "3"}
+      {:ok, socket} = MinesweeperLive.mount(params, %{}, %Socket{assigns: %{__changed__: %{}}})
+      socket = %{socket | transport_pid: self()}
+      own = "http://localhost" <> MinesweeperLive.path({16, 16, 40}, 3)
+      game = socket.assigns.game
+      {:noreply, socket} = MinesweeperLive.handle_params(params, own, socket)
+      assert socket.redirected == nil
+      assert socket.assigns.game == game
+    end
+
+    test "a preset, Custom and New game start a game and put it in the address" do
+      socket = page_at(%{"seed" => "42"})
+
+      {:noreply, expert} = MinesweeperLive.handle_event("preset", %{"preset" => "expert"}, socket)
+      assert board(expert) == {16, 30, 99}
+      assert expert.assigns.game.status == :ready
+
+      assert patched(expert) == %{
+               "rows" => "16",
+               "cols" => "30",
+               "mines" => "99",
+               "seed" => "#{expert.assigns.game.seed}"
+             }
+
+      # The patch's own params find the game already on the page, and keep it.
+      {:noreply, kept} =
+        MinesweeperLive.handle_params(patched(expert), "http://localhost/", %{
+          expert
+          | redirected: nil
+        })
+
+      assert kept.assigns.game == expert.assigns.game
+
+      {:noreply, custom} =
+        MinesweeperLive.handle_event(
+          "custom",
+          %{"rows" => "50", "cols" => "50", "mines" => ""},
+          socket
+        )
+
+      assert board(custom) == {50, 50, 400}
+      assert patched(custom)["rows"] == "50"
+
+      {:noreply, bad} =
+        MinesweeperLive.handle_event("custom", %{"rows" => "x", "cols" => "9"}, socket)
+
+      assert board(bad) == {9, 9, 10}
+
+      # A preset the selector does not name is refused, and nothing changes.
+      assert {:noreply, ^socket} =
+               MinesweeperLive.handle_event("preset", %{"preset" => "huge"}, socket)
+
+      # New game keeps the board under a new seed.
+      # (LiveView would have followed the patch; the test clears it.)
+      played = click(%{custom | redirected: nil}, {25, 25})
+      {:noreply, renewed} = MinesweeperLive.handle_event("new", %{}, played)
+      assert board(renewed) == {50, 50, 400}
+      assert renewed.assigns.game.status == :ready
+      assert patched(renewed)["seed"] == "#{renewed.assigns.game.seed}"
+    end
+
+    test "the selector marks the current board, and the grid is drawn at the board's size" do
+      for {query, current, view, min} <- [
+            {"seed=42", "beginner", "0 0 368 368", 152},
+            {"rows=16&cols=30&mines=99&seed=7", "expert", "0 0 1208 648", 488},
+            {"rows=50&cols=50&mines=400&seed=7", nil, "0 0 1208 1208", 808}
+          ] do
+        html = build_conn() |> get("/minesweeper?" <> query) |> html_response(200)
+
+        [form] = Regex.run(~r/<form class="mines-bar mines-size".*?<\/form>/s, html)
+
+        on =
+          Regex.scan(~r/class="backend-btn active"[^>]*>\s*(\w+)/, form) |> Enum.map(&List.last/1)
+
+        assert on == [if(current, do: String.capitalize(current), else: "Custom")], query
+
+        for {_name, label, _board} <- MinesweeperLive.presets(), do: assert(form =~ label)
+        assert form =~ ~s(phx-submit="custom")
+        assert html =~ ~s(viewBox="#{view}"), query
+        assert html =~ "--mines-min-width: #{min}px", query
+      end
+
+      html =
+        build_conn() |> get("/minesweeper?rows=16&cols=30&mines=99&seed=7") |> html_response(200)
+
+      assert html =~ ~s(name="rows" aria-label="rows" min="5" max="50" value="16")
+      assert html =~ ~s(name="mines" aria-label="mines" min="1" value="99")
+      assert length(Regex.scan(~r/<rect data-datum="state count"/, html)) == 480
+      assert html =~ "99 mines left"
+    end
+
+    test "the cell follows the board, and the counts and glyphs the cell" do
+      assert MinesweeperLive.cell_size(9, 9) == 40
+      assert MinesweeperLive.cell_size(16, 30) == 40
+      assert MinesweeperLive.cell_size(50, 50) == 24
+      assert MinesweeperLive.cell_size(50, 50) >= 16
+
+      big = MinesweeperLive.design(50, 50, 24)
+      assert {:ok, _chart} = Visualize.Chart.from_map(big)
+      assert big.frames.main.scales.x.domain == Enum.to_list(0..49)
+      assert big.frames.main.scales.y.domain == Enum.to_list(49..0//-1)
+      assert big.styles.count_face.font.size == 14
+      assert big.styles.flag.marker.size == 54
+
+      # At 40 pixels and over, the classic board's faces.
+      assert MinesweeperLive.design().styles.count_face.font.size == 18
+      assert MinesweeperLive.design(9, 9, 41.3).styles.bomb.marker.size == 200
+    end
+
+    # 2,500 cells, played through the chart's component on every backend. A sparse board
+    # opens almost whole at the first reveal (the flood fill); seed 2's leaves two cells.
+    test "a 50 × 50 game played to a win and to a loss, on every backend" do
+      for {backend, _label, _opts} <- MinesweeperLive.backends() do
+        socket =
+          page_at(%{"rows" => "50", "cols" => "50", "mines" => "10", "seed" => "2"})
+          |> on(backend)
+          |> click({25, 25})
+
+        assert MapSet.size(socket.assigns.game.revealed) == 2488, backend
+
+        socket =
+          Enum.reduce_while(Stream.cycle([:move]), socket, fn :move, socket ->
+            game = socket.assigns.game
+
+            case Enum.find(Minesweeper.cells(game), fn cell ->
+                   not Minesweeper.mine?(game, cell) and not MapSet.member?(game.revealed, cell)
+                 end) do
+              nil -> {:halt, socket}
+              cell -> {:cont, click(socket, cell)}
+            end
+          end)
+
+        assert socket.assigns.game.status == :won, backend
+        assert Minesweeper.mines_left(socket.assigns.game) == 0
+
+        # The default density, and a mine revealed after the first click.
+        socket =
+          page_at(%{"rows" => "50", "cols" => "50", "seed" => "42"})
+          |> on(backend)
+          |> click({25, 25})
+
+        mine =
+          Enum.find(
+            Minesweeper.cells(socket.assigns.game),
+            &Minesweeper.mine?(socket.assigns.game, &1)
+          )
+
+        socket = click(socket, mine)
+        assert socket.assigns.game.status == :lost, backend
+        assert states(socket)[mine] == "exploded"
+        assert map_size(states(socket)) == 2500
+      end
+    end
   end
 
   # The status line as the page renders it for `socket`'s game.
