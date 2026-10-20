@@ -15,6 +15,17 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.7.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A mark's events with nothing under the pointer: `tooltip.show: false`** (#803, #804,
+  D-200). A mark that only wants clicks writes `tooltip: %{show: false, event: :pick}`:
+  clicks, `context_event` (right-click, long-press, the Menu key) and the keyboard work
+  exactly as before, on SVG and on either canvas, but `TooltipHook` shows no hover text
+  and no hover outline over its items. `fields` may be omitted then, and only the fields
+  you name are written into the markup. A `template` is still allowed: it is not shown,
+  but the keyboard readout still says it for each item. A design without `show`, or with
+  `show: true`, renders exactly as before.
+
 ## [0.7.0] — 2026-10-20
 
 `mix.exs` reads `0.6.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the

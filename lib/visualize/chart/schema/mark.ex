@@ -292,7 +292,9 @@ defmodule Visualize.Chart.Schema.Mark do
       spec(:template, :string, :content),
       spec(:event, {:one_of, [:name, :string]}, :binding),
       # The name a secondary gesture delivers (spec/14 §5.7, #767, D-199).
-      spec(:context_event, {:one_of, [:name, :string]}, :binding)
+      spec(:context_event, {:one_of, [:name, :string]}, :binding),
+      # `false`: the events without hover text (spec/14 §5.7, #803, D-200).
+      spec(:show, :boolean, :content, default: true)
     ]
   end
 

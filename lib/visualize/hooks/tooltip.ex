@@ -46,6 +46,8 @@ defmodule Visualize.Hooks.Tooltip do
   - `data-datum-<field>` - the value of each field, `_` in the name as `-`
   - `data-tooltip-template` - the text with `{field}` placeholders; the nearest wins
   - `data-tooltip-event` - the declared event a click delivers; absent, nothing is pushed
+  - `data-tooltip-show` - `"false"`: the element's mark takes clicks with nothing shown
+    under the pointer, no tooltip and no outline (D-200)
   - `data-frame`, `data-mark` - on a mark's group with an event: its frame and position
   - `data-row` - on each datum element of such a mark: the row's ordinal in its rows
   """
@@ -338,6 +340,12 @@ defmodule Visualize.Hooks.Tooltip do
         return el && this.el.contains(el) ? el : null;
       },
 
+      // A datum element the tooltip shows: not one under data-tooltip-show="false", whose
+      // mark takes clicks with nothing under the pointer (spec/10 §12.3, D-200).
+      shown(el) {
+        return this.nearest(el, 'data-tooltip-show') !== 'false';
+      },
+
       // The field names in the server's order and each one's attribute value, '' when
       // the value was nil and the attribute absent.
       fields(el) {
@@ -424,6 +432,7 @@ defmodule Visualize.Hooks.Tooltip do
         let bestDistance = Infinity;
         let bestBox = null;
         this.el.querySelectorAll('[data-datum]').forEach((el) => {
+          if (!this.shown(el)) return;
           const box = el.getBoundingClientRect();
           const distance = Math.abs(box.left + box.width / 2 - clientX);
           if (distance < bestDistance) {
@@ -441,7 +450,7 @@ defmodule Visualize.Hooks.Tooltip do
 
       show(target, pageX, pageY) {
         const el = this.datumElement(target);
-        if (!el) {
+        if (!el || !this.shown(el)) {
           this.hide();
           return;
         }
