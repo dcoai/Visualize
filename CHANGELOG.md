@@ -42,6 +42,17 @@ release it merely follows.
   but the keyboard readout still says it for each item. A design without `show`, or with
   `show: true`, renders exactly as before.
 
+### Changed
+
+- **A band scale places a category in constant time** (#809, #810). `Visualize.Scale.Band`
+  searched its domain on every `apply/2` and laid its bands out again on every call, so a
+  chart of `n` items over `n` categories cost `O(n²)`; a 50 × 50 band × band grid spent a
+  fifth of its drawing there. Every setter now lays the bands out once, and `apply/2`,
+  `bandwidth/1` and `step/1` read the result. Positions are unchanged. The struct carries
+  two derived fields, `slots` and `layout`, that `inspect/1` leaves out; build a band scale
+  with its setters (`Visualize.Scale.band/0`, `domain/2`, `range/2`, …), since a struct
+  written by hand has no slots and places nothing.
+
 ## [0.7.0] — 2026-10-20
 
 `mix.exs` reads `0.6.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the

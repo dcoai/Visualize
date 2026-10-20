@@ -2716,3 +2716,19 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - **Breaking** for a host that reads the `<title>` out of a chart's markup, or styles or tests it: the name is the root's `aria-label` now. Every rooted chart's first lines change, so the charts golden changes on every line in the root and its first child, and the component fixtures with a title change in the same two places; the canvas and hybrid outputs, which already used `aria-label`, are unchanged.
 - No chart drawn by the library shows a native tooltip; with `tooltip.show: false` (D-200) a chart can take clicks with nothing following the pointer at all, as Minesweeper does.
+
+## 202. D-202 — A 2,500-item interactive grid redraws one move in 100 ms and 200 KB, on every backend
+
+**Context.** #808 measured a 50 × 50 Minesweeper board, 2,500 cells on two band scales, drawn by `Visualize.Components.Chart` (spec/10 §19). A move took 0.46 s on SVG, 0.75 s on the JSON canvas and 0.55 s on the binary canvas on the server, and its patch carried 1.6 to 3.8 MB of changed dynamics; the Expert board (16 × 30, 480 cells) took 60 to 98 ms. The page's own work, the game step and one `Chart.apply/2`, was under 25 ms: the cost was the library's. #809 found where it went: `Visualize.Scale.Band.apply/2` searched its domain and recomputed its layout on every call, so a band × band chart cost `O(n²)`; `Summary.points/1` placed every item a second time for the keyboard; and the component sent the whole drawing and the whole `data-keyboard-points` attribute on every update, though a move changes three cells. The browser side was measured under the hook harness (spec/12 §6) and is not the cost: `KeyboardHook` takes 4–7 ms over 2,500 points, and a click's hit-index lookup 0.03–0.1 ms.
+
+**Decision.** A budget for a large interactive grid, recorded in spec/12 §6 and held by a cost test:
+- **2,500 keyed items on two band scales, one move:** `Component.update/2` with the next `%Applied{}`, plus the component's render and diff, in **≤ 100 ms on the server**, and **≤ 200 KB of changed dynamics on the wire**, on SVG, the JSON canvas and the binary canvas.
+- **The Expert board, 480 items: ≤ 25 ms.**
+- **The bytes are uncompressed.** They are the component's diff, JSON-encoded, as the socket carries it. The examples endpoint, like Phoenix's default, does not compress the socket, and a host that does is not one the budget may assume. Socket compression is documented as a host's option and counts for nothing here.
+- **The milliseconds are a measurement; the test counts work.** By D-114 no default-suite test reads a clock, so the cost test holds the update and render to a `Visualize.Work.reductions/1` budget per backend, set from the measured counts, and the bytes of one move's diff to 200 KB.
+- The milestone meets it in order: the band scale in constant time per lookup (#810), one placement pass per update (#811), the avoidable per-item cost of generating and serializing (#812), the transport (#813, its choices D-203 on), then the guard (#814).
+
+**Consequences.**
+- 100 ms is the rate at which a click still feels immediate, and 200 KB a move is what a slow connection carries in well under a second; a 2,500-item chart that misses either is not interactive, whatever its first render costs.
+- A change that makes a lookup walk a domain, places items twice, or re-sends what a move did not change fails the cost test by name, not as a slow page someone notices.
+- The budget is the component's: a page that recomputes its whole design per move pays for that itself, as the Minesweeper page's `Chart.apply/2` (17–24 ms at 2,500 rows) does outside it.
