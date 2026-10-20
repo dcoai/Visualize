@@ -17,6 +17,13 @@ release it merely follows.
 
 ### Added
 
+- **A grid of states from the keyboard** (#765, D-198). `KeyboardHook` now reaches every
+  mark with an identity, not only marks that draw a number: a band × band grid's cells
+  are reached with the arrows in two dimensions (row and column), each read as its
+  identity and its tooltip's text. Enter on an item whose mark declares an event sends the
+  page the same `Visualize.Event` a click there does. `Visualize.Components.Chart` is now
+  one tab stop on every backend (it wraps its drawing in `KeyboardHook`).
+
 - **A chart's clicks on a canvas** (#764, D-197). `Visualize.Components.Chart` takes
   `backend: :canvas` (and `canvas_format: :binary`, the default, or `:json`) and draws the
   chart on a canvas, its text laid over the binary stream as an SVG layer. A click on it
@@ -649,6 +656,11 @@ release it merely follows.
   name still wins.
 
 ### Fixed
+
+- **One click is one event** (#765, D-198). With a pick event set, as on a board's cell,
+  a click on an item whose mark declares an event arrived twice: as the mark's event and
+  as the keyboard's pick of the nearest point. Now it arrives once, as the mark's event;
+  a click elsewhere still picks.
 
 - **A field binding in a mark label's style draws** (#766, D-196). `label: %{style: %{fill:
   {:field, :v}}}` validated and then raised `Protocol.UndefinedError` at render; each label
