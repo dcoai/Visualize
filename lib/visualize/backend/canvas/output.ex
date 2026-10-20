@@ -301,7 +301,15 @@ defmodule Visualize.Backend.Canvas.Output do
 
   defp encode_json_value(v), do: ["\"", to_string(v), "\""]
 
+  # A string with nothing to escape, nearly every one a stream carries, is written as it is.
   defp escape_json_string(str) do
+    case :binary.match(str, ["\\", "\"", "\n", "\r", "\t"]) do
+      :nomatch -> str
+      _found -> escape_json_chars(str)
+    end
+  end
+
+  defp escape_json_chars(str) do
     str
     |> String.replace("\\", "\\\\")
     |> String.replace("\"", "\\\"")

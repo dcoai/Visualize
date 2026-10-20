@@ -36,6 +36,32 @@ defmodule Visualize.IR.Motion do
   # same points (spec/14 §3.10).
   @steps 20
 
+  # Every easing's samples, and their text in a span, computed once when the module is
+  # compiled (#812): a canvas writes them in the span of every element that moves, and a
+  # grid of 2,500 cells sampled and wrote the same curve 2,500 times per drawing.
+  @samples Map.new(Ease.names(), fn
+             :linear ->
+               {:linear, [0, 1]}
+
+             easing ->
+               curve = Ease.by_name(easing)
+
+               {easing,
+                for i <- 0..@steps do
+                  rounded = Float.round(curve.(i / @steps) * 1.0, 4)
+                  if rounded == trunc(rounded), do: trunc(rounded), else: rounded
+                end}
+           end)
+
+  @samples_json Map.new(Map.values(@samples), fn samples ->
+                  {samples,
+                   IO.iodata_to_binary([
+                     "[",
+                     Enum.map_join(samples, ",", &Path.format_number/1),
+                     "]"
+                   ])}
+                end)
+
   # The values a keyframe may hold, in the order a span writes them.
   @properties [:opacity, :x, :y, :rotate, :scale]
 
@@ -44,9 +70,14 @@ defmodule Visualize.IR.Motion do
   `:linear`, which two points draw exactly.
   """
   @spec samples(atom()) :: [number()]
-  def samples(:linear), do: [0, 1]
-
   def samples(easing) do
+    case @samples do
+      %{^easing => samples} -> samples
+      _unknown -> sample(easing)
+    end
+  end
+
+  defp sample(easing) do
     curve = Ease.by_name(easing)
     for i <- 0..@steps, do: tidy(curve.(i / @steps))
   end
@@ -88,6 +119,8 @@ defmodule Visualize.IR.Motion do
   """
   @spec oklch(term()) :: term()
   def oklch("oklch(" <> _ = color), do: color
+  # A theme's slot is no literal `Color.parse/1` reads: it is relative at once (#812).
+  def oklch("var(" <> _ = color), do: "oklch(from #{color} l c h / alpha)"
 
   def oklch(color) when is_binary(color) do
     case Color.parse(color) do
@@ -285,14 +318,29 @@ defmodule Visualize.IR.Motion do
 
   defp encode(nil), do: "null"
 
-  defp encode(list) when is_list(list),
-    do: ["[", list |> Enum.map(&encode/1) |> Enum.intersperse(","), "]"]
+  # An easing's samples are written as compiled (`@samples_json`); any other list item by
+  # item.
+  defp encode(list) when is_list(list) do
+    case @samples_json do
+      %{^list => json} -> json
+      _other -> ["[", list |> Enum.map(&encode/1) |> Enum.intersperse(","), "]"]
+    end
+  end
 
   defp encode(n) when is_number(n), do: Path.format_number(n)
   defp encode(atom) when is_atom(atom), do: encode(Atom.to_string(atom))
   defp encode(string) when is_binary(string), do: ["\"", escape(string), "\""]
 
+  # An identity with nothing to escape, nearly every one, is written as it is (#812).
   defp escape(string) do
+    if plain?(string), do: string, else: escaped(string)
+  end
+
+  defp plain?(<<c, _rest::binary>>) when c in [?", ?\\] or c < 0x20, do: false
+  defp plain?(<<_c, rest::binary>>), do: plain?(rest)
+  defp plain?(<<>>), do: true
+
+  defp escaped(string) do
     for <<c::utf8 <- string>>, into: "" do
       case c do
         ?" -> ~S(\")

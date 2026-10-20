@@ -893,10 +893,14 @@ defmodule Visualize.Chart.CompiledTest do
       small = cost.(200, rows(280))
       large = cost.(3200, rows(4480))
 
-      # Sixteen times the window: under twice the work of the tick. It is 1.7; rebuilding
-      # the neighbors as a list per row made it 2.5.
-      assert large < small * 2,
-             "a 16x window cost #{Float.round(large / small, 2)}x the tick's reductions"
+      # Sixteen times the window adds under 60,000 reductions to the tick: it adds ~44,000
+      # to 47,000, and rebuilding the neighbors as a list per row added ~78,000 (2.5 times a
+      # tick of ~52,000). The bound is on what the window adds, not on a ratio: a ratio
+      # moves when work the tick does whatever its window leaves it, as #812's cheaper
+      # serialization took ~9,000 off both ticks and moved 1.8 to 2.1 with the strip's cost
+      # unchanged.
+      assert large - small < 60_000,
+             "a 16x window added #{large - small} reductions to a tick of #{small}"
 
       # At scale the strip is a fraction of the full redraw: a thousand-row window on
       # 100 px scrolled 20 px carries 200 rows and six neighbors against 1,001.

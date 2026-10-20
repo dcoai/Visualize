@@ -39,9 +39,12 @@ defmodule Visualize.Chart.Mark.Label do
   # `{:field, f}` value read from that datum as the mark's elements read theirs (spec/14
   # §3.2, §5.5, D-196); with no datum a binding reads nothing.
   @spec style(map(), map() | nil) :: map()
-  def style(%{label: label, frame: frame, mode: mode} = ctx, datum \\ nil) do
-    ctx
-    |> node(label || %{}, datum)
+  def style(%{label: label} = ctx, datum \\ nil),
+    do: ctx |> node(label || %{}, datum) |> resolved(ctx, datum)
+
+  # A label's style node resolved and bound to its datum.
+  defp resolved(node, %{frame: frame, mode: mode}, datum) do
+    node
     |> Style.resolve(frame.theme, mode)
     |> Style.bind(datum || %{}, frame, mode)
   end
@@ -105,8 +108,9 @@ defmodule Visualize.Chart.Mark.Label do
     bounds = Map.get(shape, :bounds)
     label = ctx.label || %{}
     datum = Map.get(shape, :datum)
-    style = style(%{ctx | label: label}, datum)
+    # The node once, for the style and for what it says of the text's fit (#812).
     style_node = node(ctx, label, datum)
+    style = resolved(style_node, ctx, datum)
 
     anchor = Map.get(label, :anchor, default_anchor(ctx))
     dx = Map.get(label, :dx, 0)

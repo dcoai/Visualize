@@ -59,6 +59,17 @@ release it merely follows.
   two derived fields, `slots` and `layout`, that `inspect/1` leaves out; build a band scale
   with its setters (`Visualize.Scale.band/0`, `domain/2`, `range/2`, …), since a struct
   written by hand has no slots and places nothing.
+- **Drawing a large chart costs a third less** (#809, #812). Work every item paid and did
+  not need is gone: a schema's identity fields read once per schema rather than per row,
+  each easing's motion samples computed once rather than per moving element, the
+  keyboard's readout template split once per mark, a label's style resolved once rather
+  than twice, and attribute values, JSON strings and numbers written without copying
+  what needs no escaping or trimming. At 2,500 cells a `Visualize.Components.Chart`
+  update does 34–43 % less work; the output is byte for byte the same.
+  `%Visualize.Data.Schema{}` has a derived `identity` field, which `Schema.new/1` fills;
+  a struct you assemble by hand may leave it `nil`. `Visualize.IR.Path.format_number/1`
+  now writes a float too large for four decimals (past about `1.0e253`) as its digits
+  instead of raising.
 
 ## [0.7.0] — 2026-10-20
 

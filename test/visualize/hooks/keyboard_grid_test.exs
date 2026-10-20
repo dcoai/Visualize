@@ -89,6 +89,26 @@ defmodule Visualize.Hooks.KeyboardGridTest do
     assert Enum.at(points, 1).text == "cells, 2 of 9: col 1, row 0, shut"
   end
 
+  # #812: the template is split once per mark, and reads as `TooltipHook` writes it — text
+  # around and between fields, a field with no value leaving nothing, the whole trimmed.
+  test "a template's text, its fields and a missing field read as the hook writes them" do
+    template = " [{state}]{nope}-{state}/{col} "
+    tooltip = %{fields: [:state], template: template, event: :cell_click}
+    design = put_in(@design, [:marks], [%{hd(@design.marks) | tooltip: tooltip}])
+
+    {:ok, applied} =
+      Chart.apply(design,
+        sources: %{
+          cells: Delivery.new([%{row: 0, col: 2, state: "open"}], schema: Schema.version(@schema))
+        },
+        schemas: Schema.Cache.new([{:cells, @schema}]),
+        size: {120, 120}
+      )
+
+    assert [%{points: [point]}] = Summary.points(applied)
+    assert point.text == "cells, 1 of 1: col 2, row 0, [open]-open/2"
+  end
+
   # The scenario over a drawing: both hooks mounted as the page mounts them, the chart at
   # twice its size, then the keys, Enter, and clicks fired on both hooks' elements — the
   # stub does not bubble, so a click reaches each as the browser's would.
