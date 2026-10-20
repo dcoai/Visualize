@@ -2678,3 +2678,20 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `Visualize.Event.declared/1` lists context names too, so a host that checks a chart's names sees them.
 - A long-press that would have opened a touch browser's own menu over such an item opens nothing now: the item's secondary action is the host's.
 - **Rejected:** a `button:` field on the click event, a single runtime `:item_context` event, and a chart-wide opt-in, for the reasons above.
+
+## 200. D-200 — A mark's events need no hover text: `tooltip.show: false` keys the elements and shows nothing under the pointer
+
+**Context.** #803, found on the Minesweeper page (user, 2026-10-20). A mark declares the events a click and a secondary gesture deliver only through its `tooltip` node (spec/14 §5.7, D-170, D-199), and `TooltipHook` shows hover text for every element that node writes: the template, else `field: value` per line, and the palette's `:hover` outline around it. A design that wanted clicks therefore also had a label following the pointer, and Minesweeper showed "hidden" and "revealed 1" over every cell. The proposal left open the key's name (`show: false` or `hover: false`), whether the outline stays, and whether a template beside it is refused as contradictory.
+
+**Decision.**
+- **`show`, a boolean, default `true`.** `tooltip: %{show: false, event: :pick}` reads as what it is: the tooltip node, not shown. `hover: false` was rejected because *hover* already names a view state the palette draws (spec/10 §4.4) and the sync group's shared pointer (§4.3), and a reader could take it to turn those off chart-wide rather than this mark's text.
+- **The key stays, the hover goes.** Under `show: false` the mark writes everything it writes now for a click — `data-frame`, `data-mark`, `data-row`, `data-tooltip-event`, `data-tooltip-context-event`, and its entry in the hit index (D-197) — so clicks, right-clicks, long-presses, the Menu key and the keyboard (D-198) are untouched. The group adds `data-tooltip-show="false"`, which the hook reads as the template is read, nearest wins.
+- **No outline either.** The outline is drawn around *the element the tooltip shows* (spec/10 §12.3, #638); with nothing shown there is nothing it outlines, and an outline that tracks the pointer is itself a thing following the pointer. A sync group's hover skips such elements for the same reason. The keyboard's focus marker is the keyboard's (§17.3) and is not the hover's, so a focused item is still shown.
+- **Only the named fields are written.** With nothing shown the fields have no reader on the page, and `fields: []`'s "every column" would put a grid's whole rows into the DOM for nothing; so under `show: false` the fields `fields` names are written and `[]` writes none, the element keeping `data-datum=""`, which is how a click finds its element (`closest('[data-datum]')`). A host that reads fields from the DOM itself names them.
+- **A template is allowed.** The proposal suggested refusing `show: false` with a `template`. It is not contradictory: the template is also the item's text in the keyboard readout (spec/14 §21.5, D-198), and that is how a grid that shows nothing under the pointer — Minesweeper's — still tells a screen reader each cell's state. Refusing it would force a choice between the readout and a clean pointer.
+- **Byte for byte without it.** `show: true`, or no `show`, writes no new attribute.
+
+**Consequences.**
+- The schema table of spec/14 §5.7 gains the key; JSON carries it as a boolean, and it round-trips.
+- `TooltipHook` hides over an element under `data-tooltip-show="false"`, and its sync lookup skips one; on a canvas, which draws no datum element, the hook already showed nothing, and still does.
+- **Rejected:** `hover: false`; refusing a template beside `show: false`; keeping the outline for hidden marks.
