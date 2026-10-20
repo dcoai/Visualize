@@ -277,28 +277,30 @@ defmodule ExamplesWeb.MinesweeperLive do
           </p>
 
           <div class="mines-bar">
-            <span class="mines-mode" role="group" aria-label="click mode">
-              <button
+            <span class="backend-buttons mines-mode" role="group" aria-label="click mode">
+              <.toggle
                 :for={{mode, name} <- [reveal: "Reveal", flag: "Flag"]}
-                type="button"
-                phx-click="mode"
-                phx-value-mode={mode}
-                aria-pressed={to_string(@mode == mode)}
+                event="mode"
+                name="mode"
+                value={mode}
+                on={@mode == mode}
               >
                 {name}
-              </button>
+              </.toggle>
             </span>
-            <button type="button" phx-click="new">New game</button>
-            <span class="mines-backend-switch" role="group" aria-label="backend">
-              <button
+            <span class="backend-buttons">
+              <button type="button" class="backend-btn" phx-click="new">New game</button>
+            </span>
+            <span class="backend-buttons mines-backend-switch" role="group" aria-label="backend">
+              <.toggle
                 :for={{name, label, _opts} <- backends()}
-                type="button"
-                phx-click="backend"
-                phx-value-backend={name}
-                aria-pressed={to_string(@backend == name)}
+                event="backend"
+                name="backend"
+                value={name}
+                on={@backend == name}
               >
                 {label}
-              </button>
+              </.toggle>
             </span>
           </div>
 
@@ -335,10 +337,31 @@ defmodule ExamplesWeb.MinesweeperLive do
     </main>
 
     <style>
-      .mines-bar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
-      .mines-mode button[aria-pressed="true"], .mines-backend-switch button[aria-pressed="true"] { font-weight: bold; }
+      .mines-bar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin: 0.5rem 0; }
       <%= Phoenix.HTML.raw(board_css()) %>
     </style>
+    """
+  end
+
+  attr(:event, :string, required: true, doc: "the `phx-click` the button sends")
+  attr(:name, :string, required: true, doc: "the value's name, `phx-value-<name>`")
+  attr(:value, :any, required: true)
+  attr(:on, :boolean, required: true, doc: "whether this is the group's current option")
+  slot(:inner_block, required: true)
+
+  # One option of a toggle group: the site's button (the layout's `.backend-btn`), the
+  # current option marked `active` for the eye and `aria-pressed` for a screen reader.
+  defp toggle(assigns) do
+    ~H"""
+    <button
+      type="button"
+      class={"backend-btn" <> if(@on, do: " active", else: "")}
+      phx-click={@event}
+      {%{"phx-value-#{@name}" => @value}}
+      aria-pressed={to_string(@on)}
+    >
+      {render_slot(@inner_block)}
+    </button>
     """
   end
 
