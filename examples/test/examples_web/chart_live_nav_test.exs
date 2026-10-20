@@ -81,9 +81,9 @@ defmodule ExamplesWeb.ChartLiveNavTest do
 
   test "Next patches: the same view loads the next chart and keeps the page's own state" do
     s = page("bar")
-    # The page's state: a measured width (#434), a color style, the drawer open.
+    # The page's state: a measured width (#434), a theme, the drawer open.
     {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 500}, s)
-    {:noreply, s} = ChartLive.handle_event("change_palette", %{"palette" => "winter"}, s)
+    {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "winter"}, s)
     {:noreply, s} = ChartLive.handle_event("drawer_toggle", %{}, s)
 
     {next, _tag} = nav_link(html(s), "next")
@@ -94,7 +94,7 @@ defmodule ExamplesWeb.ChartLiveNavTest do
     assert s.assigns.slug == next_slug and s.assigns.module == next_module
     assert s.assigns.title == next_module.title()
     assert s.assigns.width == 500
-    assert s.assigns.current_palette == :winter
+    assert s.assigns.theme == "winter"
     assert s.assigns.drawer_open
     # The new chart is drawn at the width the page already knew.
     assert s.assigns.still_frame != nil

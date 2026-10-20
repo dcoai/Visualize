@@ -1,9 +1,8 @@
 defmodule ExamplesWeb.ChartLive do
   use Phoenix.LiveView
 
-  alias Examples.ColorPalettes
   alias Examples.{Compare, Frames, Gallery, Run}
-  alias ExamplesWeb.{Highlight, PerformanceDrawer}
+  alias ExamplesWeb.{Highlight, PerformanceDrawer, ThemePicker}
 
   @doc """
   The gallery's charts by slug, for the performance view (#328): the map derived from the
@@ -68,9 +67,8 @@ defmodule ExamplesWeb.ChartLive do
         {:ok,
          socket
          |> assign(
-           current_palette: :default,
-           palettes: ColorPalettes.list_palettes(),
-           palette_info: ColorPalettes.palette_info(),
+           # The picked theme's key (spec/14 §12.6, #792), a key of `Examples.Themes`.
+           theme: "default",
            # The performance drawer (spec/14 §12.6, #322), open or not.
            drawer_open: false,
            # The page measures itself (spec/10 §10, #434): the container's width once the
@@ -108,7 +106,7 @@ defmodule ExamplesWeb.ChartLive do
   # A chart on the page, the one path for a mount and a patch (spec/14 §12.6, #484). The
   # outgoing chart's work ends first — a run's renderer, a still render and a Compare in
   # flight, whose late results then fall to the stale clauses — and everything that is the
-  # chart's starts afresh; the page's own state (palette, drawer, width) is untouched.
+  # chart's starts afresh; the page's own state (theme, drawer, width) is untouched.
   defp load(socket, module, chart_slug) do
     socket
     |> ended()
@@ -123,7 +121,7 @@ defmodule ExamplesWeb.ChartLive do
       # The chart's own panels (spec/14 §12.6, #705), each with its state, made afresh.
       panels: ExamplesWeb.ChartPanels.init(module),
       # The still chart (#362): the last frame rendered outside a run — on mount and on
-      # a palette, backend or hex-size change — in a task, with the design as data.
+      # a theme, backend or hex-size change — in a task, with the design as data.
       still_frame: nil,
       still_state: nil,
       still_design: nil,
@@ -253,23 +251,10 @@ defmodule ExamplesWeb.ChartLive do
   def handle_event(gesture, _params, socket) when gesture in ["move", "menu"],
     do: {:noreply, socket}
 
-  def handle_event("change_palette", %{"palette" => palette_key}, socket) do
-    palette =
-      case palette_key do
-        "default" -> :default
-        "sunrise" -> :sunrise
-        "winter" -> :winter
-        "sunset" -> :sunset
-        "fall" -> :fall
-        "spring" -> :spring
-        "summer" -> :summer
-        "dark" -> :dark
-        "color_safe" -> :color_safe
-        _ -> :default
-      end
-
-    {:noreply, socket |> assign(current_palette: palette) |> still()}
-  end
+  # A theme picked (#792): the key looked up in the picker's own list, never an atom.
+  def handle_event("theme", %{"theme" => word}, socket),
+    do:
+      {:noreply, socket |> assign(theme: ThemePicker.pick(socket.assigns.theme, word)) |> still()}
 
   # Animate is the drawer's run on the page's backend (#362): one frame loop.
   def handle_event("toggle_animation", _params, %{assigns: %{run: %Run{running: true}}} = socket),
@@ -648,7 +633,7 @@ defmodule ExamplesWeb.ChartLive do
       do: run_opts(assigns, 0),
       else:
         build_chart_opts(
-          assigns.current_palette,
+          assigns.theme,
           0,
           false,
           assigns.slug,
@@ -769,7 +754,7 @@ defmodule ExamplesWeb.ChartLive do
   defp run_opts(%{run_scroll: %Examples.Scroll{} = scroll} = assigns, tick) do
     count = Examples.Scroll.count(scroll)
 
-    assigns.current_palette
+    assigns.theme
     |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius, assigns.width)
     |> Keyword.merge(
       samples_per_px: scroll.samples_per_px,
@@ -780,7 +765,7 @@ defmodule ExamplesWeb.ChartLive do
   end
 
   defp run_opts(assigns, tick) do
-    assigns.current_palette
+    assigns.theme
     |> build_chart_opts(tick, true, assigns.slug, assigns.hex_radius, assigns.width)
     |> clock(assigns)
     |> Keyword.put(:motion, assigns.motion)
@@ -926,28 +911,7 @@ defmodule ExamplesWeb.ChartLive do
             </div>
           </div>
 
-          <div class="palette-selector">
-            <span class="palette-label">Color Style:</span>
-            <div class="palette-buttons">
-              <%= for palette_key <- @palettes do %>
-                <% info = @palette_info[palette_key] %>
-                <button
-                  type="button"
-                  phx-click="change_palette"
-                  phx-value-palette={Atom.to_string(palette_key)}
-                  class={"palette-btn #{if @current_palette == palette_key, do: "active", else: ""}"}
-                  title={info.description}
-                >
-                  <span class="palette-preview">
-                    <%= for color <- info.preview do %>
-                      <span class="color-dot" style={"background-color: #{color}"}></span>
-                    <% end %>
-                  </span>
-                  <span class="palette-name">{info.name}</span>
-                </button>
-              <% end %>
-            </div>
-          </div>
+          <ThemePicker.picker current={@theme} />
 
           <%= if @animatable do %>
             <div class="animation-control">
@@ -993,7 +957,7 @@ defmodule ExamplesWeb.ChartLive do
           data-resize-event="resize"
           data-resize-debounce="150"
           class="chart-container"
-          style={"background-color: #{ColorPalettes.background(@current_palette)}"}
+          style={"background-color: #{Examples.Themes.theme(@theme).background}"}
         >
           <%!-- One frame loop (spec/14 §12.6, #362): the run's frame while a run is going, the still one
                 otherwise — SVG whole, or the canvas under the compiled chart's static furniture. --%>
@@ -1233,73 +1197,6 @@ defmodule ExamplesWeb.ChartLive do
         border-color: #3d6089;
       }
 
-      .palette-selector {
-        display: flex;
-        align-items: center;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-
-      .palette-label {
-        font-weight: 600;
-        color: #444;
-        margin-right: 0.5rem;
-      }
-
-      .palette-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-      }
-
-      .palette-btn {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: 0.5rem 0.75rem;
-        border: 2px solid #ddd;
-        border-radius: 8px;
-        background: white;
-        cursor: pointer;
-        transition: all 0.2s ease;
-      }
-
-      .palette-btn:hover {
-        border-color: #999;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      }
-
-      .palette-btn.active {
-        border-color: #4e79a7;
-        background: #f0f7ff;
-        box-shadow: 0 0 0 2px rgba(78, 121, 167, 0.2);
-      }
-
-      .palette-preview {
-        display: flex;
-        gap: 2px;
-        margin-bottom: 4px;
-      }
-
-      .color-dot {
-        width: 12px;
-        height: 12px;
-        border-radius: 2px;
-        border: 1px solid rgba(0,0,0,0.1);
-      }
-
-      .palette-name {
-        font-size: 11px;
-        color: #666;
-        font-weight: 500;
-      }
-
-      .palette-btn.active .palette-name {
-        color: #4e79a7;
-        font-weight: 600;
-      }
-
       .animation-control {
         display: flex;
         align-items: center;
@@ -1422,10 +1319,10 @@ defmodule ExamplesWeb.ChartLive do
 
   defp chart_path(slug), do: "/chart/#{slug}"
 
-  defp build_chart_opts(palette, tick, animating, slug, hex_radius, width) do
+  defp build_chart_opts(theme, tick, animating, slug, hex_radius, width) do
     # A design records no size (spec/14 §4.2, #427): the page gives one, the width its
     # container measured and the height that width at the chart's own aspect (#434).
-    opts = [palette: palette] ++ measured(width, slug)
+    opts = [theme: theme] ++ measured(width, slug)
 
     opts =
       if animating do

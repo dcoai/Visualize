@@ -16,10 +16,11 @@ defmodule ExamplesWeb.SiteHeaderTest do
     {"/interaction", :interaction},
     {"/dashboard", :interaction},
     {"/board", :interaction},
+    {"/theme-lab", :theme_lab},
     {"/builder", :builder}
   ]
 
-  test "every page renders the one header, the subtitle, the four tabs, and marks its own" do
+  test "every page renders the one header, the subtitle, every tab, and marks its own" do
     for {path, tab} <- @pages do
       html = build_conn() |> get(path) |> html_response(200)
       assert length(Regex.scan(~r/<header class="site-header">/, html)) == 1, path
@@ -36,6 +37,24 @@ defmodule ExamplesWeb.SiteHeaderTest do
       assert html =~ ~s(href="#{href}" class="site-tab" aria-current="page"), path
       assert length(Regex.scan(~r/class="site-tab" aria-current="page"/, html)) == 1, path
     end
+  end
+
+  test "the tabs run Charts, Performance Test, Client-side Interactions, Theme lab, Chart Builder" do
+    assert for({_tab, _href, name, _icon} <- ExamplesWeb.SiteHeader.tabs(), do: name) ==
+             [
+               "Charts",
+               "Performance Test",
+               "Client-side Interactions",
+               "Theme lab",
+               "Chart Builder"
+             ]
+
+    {:theme_lab, "/theme-lab", _name, icon} =
+      List.keyfind(ExamplesWeb.SiteHeader.tabs(), :theme_lab, 0)
+
+    # An icon in the others' style: inline SVG in `currentColor`, hidden from a reader.
+    assert icon =~
+             ~s(<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor")
   end
 
   test "the header is half its former height: the h1 and the padding halved" do

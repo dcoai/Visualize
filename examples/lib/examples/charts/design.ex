@@ -10,9 +10,10 @@ defmodule Examples.Charts.Design do
   Three things the gallery needs that a design does not carry, each in one place rather than
   in twenty-nine modules:
 
-  - **The palette is the theme.** The gallery's `palette` option becomes the `theme:` of
-    `Visualize.Chart.apply/2` (`Examples.ColorPalettes.theme/1`), so a mark that names no
-    color paints in the palette's series slots and a palette swap recolors every chart.
+  - **The theme is the picker's.** The gallery's `theme` option, a key of
+    `Examples.Themes.list/0`, becomes the `theme:` of `Visualize.Chart.apply/2`
+    (`Examples.Themes.theme/1`), so a mark that names no color paints in the theme's series
+    slots and a theme swap recolors every chart.
   - **The `<svg>` shell** is the library's: `Visualize.Chart.render/2` with `root: true`
     draws the accessible root of spec/02 §2.1 around the frame, titled from the design's
     `meta` (#131).
@@ -20,7 +21,7 @@ defmodule Examples.Charts.Design do
     the gallery's backend selector pushes to `CanvasBinaryChart`.
   """
 
-  alias Examples.ColorPalettes
+  alias Examples.Themes
   alias Visualize.Chart
   alias Visualize.Chart.Frame
 
@@ -148,7 +149,7 @@ defmodule Examples.Charts.Design do
     {svg, Enum.reverse(stepped)}
   end
 
-  @doc "The module's design applied over its rows, with the `palette` option as the theme."
+  @doc "The module's design applied over its rows, with the `theme` option's theme."
   @spec applied(module(), keyword()) :: Chart.Applied.t()
   def applied(module, opts) do
     {design, sources} = module.design(opts)
@@ -292,7 +293,10 @@ defmodule Examples.Charts.Design do
     {width - margin.left - margin.right, height - margin.top - margin.bottom}
   end
 
-  @doc "The `palette` option as a `Visualize.Theme`, the default palette when absent."
+  @doc """
+  The `theme` option as a `Visualize.Theme`: a key looked up in `Examples.Themes.list/0`,
+  the gallery's Default when absent or unlisted.
+  """
   @spec theme(keyword()) :: Visualize.Theme.t()
-  def theme(opts), do: ColorPalettes.theme(opts[:palette] || :default)
+  def theme(opts), do: Themes.theme(opts[:theme])
 end

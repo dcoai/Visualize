@@ -153,7 +153,7 @@ defmodule Examples.LoadAgeGaugeTest do
 
     {work, svg} =
       Visualize.Work.reductions(fn ->
-        Design.render(LoadAgeGauge, width: 700, height: 450, palette: :default)
+        Design.render(LoadAgeGauge, width: 700, height: 450)
       end)
 
     assert svg =~ "<svg"

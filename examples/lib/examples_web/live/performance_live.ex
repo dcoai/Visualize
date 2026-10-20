@@ -45,7 +45,7 @@ defmodule ExamplesWeb.PerformanceLive do
   def handle_event("compare", _params, %{assigns: %{task: nil}} = socket) do
     %{slug: slug, ticks: ticks} = socket.assigns
     module = ChartLive.charts()[slug]
-    opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
+    opts_for = fn tick -> [width: 700, height: 450, animation_tick: tick] end
     {:noreply, start_task(socket, fn -> {:rows, Compare.run(module, opts_for, ticks)} end, :rows)}
   end
 
@@ -53,7 +53,7 @@ defmodule ExamplesWeb.PerformanceLive do
     %{charts: charts, ticks: ticks} = socket.assigns
 
     work = fn ->
-      opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
+      opts_for = fn tick -> [width: 700, height: 450, animation_tick: tick] end
 
       {:all,
        for chart <- charts, row <- Compare.run(chart.module, opts_for, ticks) do

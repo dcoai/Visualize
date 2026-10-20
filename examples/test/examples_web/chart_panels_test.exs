@@ -91,13 +91,13 @@ defmodule ExamplesWeb.ChartPanelsTest do
     end
   end
 
-  test "the panel's state is the chart's: a palette change keeps it, a step resets it" do
+  test "the panel's state is the chart's: a theme change keeps it, a step resets it" do
     s = mounted("colors")
 
     {:noreply, s} =
       ChartLive.handle_event("chart_panel", %{"panel" => "dark_mode", "scheme" => "dark"}, s)
 
-    {:noreply, kept} = ChartLive.handle_event("change_palette", %{"palette" => "dark"}, s)
+    {:noreply, kept} = ChartLive.handle_event("theme", %{"theme" => "dark"}, s)
     assert [dark_mode: %{scheme: :dark}, explain: _] = kept.assigns.panels
 
     {:noreply, stepped} = ChartLive.handle_params(%{"chart" => "paints"}, "/chart/paints", s)

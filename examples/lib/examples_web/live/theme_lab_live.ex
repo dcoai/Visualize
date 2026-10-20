@@ -85,7 +85,7 @@ defmodule ExamplesWeb.ThemeLabLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <ExamplesWeb.SiteHeader.header tab={:charts} />
+    <ExamplesWeb.SiteHeader.header tab={:theme_lab} />
     <main class="theme-lab">
       <a href="/" class="back-link"><span>&larr;</span> Back to Charts</a>
       <h2>Theme lab</h2>
