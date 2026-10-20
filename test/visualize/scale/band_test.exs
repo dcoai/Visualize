@@ -39,6 +39,49 @@ defmodule Visualize.Scale.BandTest do
     assert Scale.apply(scale, :missing) == nil
   end
 
+  test "categories equal by == are one category, and a repeated one keeps its first slot" do
+    scale = Scale.band() |> Scale.domain([1.0, -0.0, :a, :b, :a]) |> Scale.range([0, 50])
+
+    assert Scale.apply(scale, 1) == 0.0
+    assert Scale.apply(scale, 1.0) == 0.0
+    assert Scale.apply(scale, 0) == 10.0
+    assert Scale.apply(scale, 0.0) == 10.0
+    assert Scale.apply(scale, :a) == 20.0
+    assert Scale.apply(scale, :b) == 30.0
+    assert Scale.apply(scale, 1.5) == nil
+  end
+
+  test "every setter lays the bands out again" do
+    scale = Scale.band() |> Scale.domain([:a, :b]) |> Scale.range([0, 100])
+    assert Scale.apply(scale, :b) == 50.0
+    assert Scale.apply(Scale.range(scale, [100, 0]), :b) == 0.0
+    assert Scale.apply(Scale.domain(scale, [:b, :a]), :b) == 0.0
+    assert Scale.apply(Band.padding_outer(scale, 1), :b) == 50.0
+    assert Band.step(Band.padding_outer(scale, 1)) == 25.0
+    assert Scale.apply(Band.align(Band.padding_outer(scale, 1), 0), :a) == 0.0
+    assert Scale.bandwidth(Band.padding_inner(scale, 0.5)) == 100 / 1.5 * 0.5
+    assert Scale.bandwidth(Scale.padding(scale, 0.5)) == 100 / 2.5 * 0.5
+    # step = floor(99 / 2) = 49, start = round(1 · 0.5) = 1
+    assert Scale.apply(Band.round(Scale.range(scale, [0, 99]), true), :b) == 50.0
+  end
+
+  # #809, D-202: a lookup reads the category's slot; it walks no domain and recomputes no
+  # layout, so a 2,500-item band × band chart is not O(n²). Counted, not timed (D-114).
+  test "apply/2 over a thousand categories costs what it costs over ten" do
+    work = fn n ->
+      scale = Scale.band() |> Scale.domain(Enum.to_list(1..n)) |> Scale.range([0, 1000])
+      # The last category, which a linear search reaches last.
+      {reductions, _} =
+        Visualize.Work.reductions(fn -> for _ <- 1..100, do: Scale.apply(scale, n) end)
+
+      reductions
+    end
+
+    small = work.(10)
+    large = work.(1000)
+    assert large <= small * 1.1, "1,000 categories: #{large}; 10: #{small}"
+  end
+
   property "bands stay inside the range whichever way it runs" do
     check all(
             n <- integer(1..12),

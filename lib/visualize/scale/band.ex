@@ -6,16 +6,24 @@ defmodule Visualize.Scale.Band do
   is d3-scale's: a descending range lays the bands out in reverse with positive `step`
   and `bandwidth`, and `round/2` floors the step and rounds the start and bandwidth so
   every position is an integer.
+
+  Every setter lays the bands out again, as d3-scale's `rescale` does, and keeps the
+  layout and each category's slot in the struct, so `apply/2`, `bandwidth/1` and `step/1`
+  cost the same over a domain of a thousand categories as over ten (spec/03 §9.3).
   """
 
   @behaviour Visualize.Scale.Behaviour
 
+  # `slots` and `layout` are derived by every setter, and left out of `inspect`.
+  @derive {Inspect, except: [:slots, :layout]}
   defstruct domain: [],
             range: [0, 1],
             padding_inner: 0,
             padding_outer: 0,
             align: 0.5,
-            round?: false
+            round?: false,
+            slots: %{},
+            layout: {0, 0, 0, false}
 
   @type t :: %__MODULE__{
           domain: [any()],
@@ -23,7 +31,9 @@ defmodule Visualize.Scale.Band do
           padding_inner: number(),
           padding_outer: number(),
           align: number(),
-          round?: boolean()
+          round?: boolean(),
+          slots: %{optional(any()) => non_neg_integer()},
+          layout: {number(), number(), number(), boolean()}
         }
 
   @doc "Creates a new band scale"
@@ -34,54 +44,54 @@ defmodule Visualize.Scale.Band do
   @impl true
   @spec domain(t(), [any()]) :: t()
   def domain(%__MODULE__{} = scale, categories) when is_list(categories) do
-    %{scale | domain: categories}
+    rescale(%{scale | domain: categories})
   end
 
   @doc "Sets the range"
   @impl true
   @spec range(t(), [number()]) :: t()
   def range(%__MODULE__{} = scale, [r0, r1]) do
-    %{scale | range: [r0, r1]}
+    rescale(%{scale | range: [r0, r1]})
   end
 
   @doc "Sets both inner and outer padding (0 to 1)"
   @impl true
   @spec padding(t(), number()) :: t()
   def padding(%__MODULE__{} = scale, p) when p >= 0 and p < 1 do
-    %{scale | padding_inner: p, padding_outer: p}
+    rescale(%{scale | padding_inner: p, padding_outer: p})
   end
 
   @doc "Sets inner padding between bands"
   @spec padding_inner(t(), number()) :: t()
   def padding_inner(%__MODULE__{} = scale, p) when p >= 0 and p < 1 do
-    %{scale | padding_inner: p}
+    rescale(%{scale | padding_inner: p})
   end
 
   @doc "Sets outer padding at range edges"
   @spec padding_outer(t(), number()) :: t()
   def padding_outer(%__MODULE__{} = scale, p) when p >= 0 do
-    %{scale | padding_outer: p}
+    rescale(%{scale | padding_outer: p})
   end
 
   @doc "Sets alignment (0 to 1) for distributing outer space"
   @spec align(t(), number()) :: t()
   def align(%__MODULE__{} = scale, a) when a >= 0 and a <= 1 do
-    %{scale | align: a}
+    rescale(%{scale | align: a})
   end
 
   @doc "Enables rounding: the step is floored, the start and bandwidth rounded"
   @spec round(t(), boolean()) :: t()
   def round(%__MODULE__{} = scale, round?) do
-    %{scale | round?: round?}
+    rescale(%{scale | round?: round?})
   end
 
   @doc "Returns the start position for a category, or `nil` when it is not in the domain"
   @impl true
   @spec apply(t(), any()) :: number() | nil
-  def apply(%__MODULE__{} = scale, value) do
-    case Enum.find_index(scale.domain, &(&1 == value)) do
-      nil -> nil
-      index -> position(scale, index)
+  def apply(%__MODULE__{slots: slots, layout: {start, step, _bandwidth, _reverse?}}, value) do
+    case Map.fetch(slots, category(value)) do
+      {:ok, slot} -> start + slot * step
+      :error -> nil
     end
   end
 
@@ -93,17 +103,11 @@ defmodule Visualize.Scale.Band do
   @doc "Returns the width of each band"
   @impl true
   @spec bandwidth(t()) :: number()
-  def bandwidth(%__MODULE__{} = scale) do
-    {_start, _step, bandwidth, _reverse?} = layout(scale)
-    bandwidth
-  end
+  def bandwidth(%__MODULE__{layout: {_start, _step, bandwidth, _reverse?}}), do: bandwidth
 
   @doc "Returns the step (band + padding); floored when `round?`"
   @spec step(t()) :: number()
-  def step(%__MODULE__{} = scale) do
-    {_start, step, _bandwidth, _reverse?} = layout(scale)
-    step
-  end
+  def step(%__MODULE__{layout: {_start, step, _bandwidth, _reverse?}}), do: step
 
   @doc "Returns the domain as ticks"
   @impl true
@@ -120,12 +124,27 @@ defmodule Visualize.Scale.Band do
   @spec clamp(t(), boolean()) :: t()
   def clamp(%__MODULE__{} = scale, _clamp?), do: scale
 
-  defp position(scale, index) do
-    {start, step, _bandwidth, reverse?} = layout(scale)
-    n = length(scale.domain)
-    slot = if reverse?, do: n - 1 - index, else: index
-    start + slot * step
+  # The layout and every category's slot — its band's place along the ascending range —
+  # once per setter. A category repeated in the domain keeps its first index's slot, and
+  # categories equal by `==` are one category: `1` finds `1.0`.
+  defp rescale(%__MODULE__{domain: domain} = scale) do
+    {_start, _step, _bandwidth, reverse?} = layout = layout(scale)
+    last = length(domain) - 1
+
+    slots =
+      domain
+      |> Enum.with_index()
+      |> Enum.reduce(%{}, fn {value, index}, slots ->
+        Map.put_new(slots, category(value), if(reverse?, do: last - index, else: index))
+      end)
+
+    %{scale | slots: slots, layout: layout}
   end
+
+  # A category as a map key matches as `==` does: an integral float is its integer, so
+  # `1.0`, `1` — and `-0.0` and `0` — are one key.
+  defp category(value) when is_float(value) and value == trunc(value), do: trunc(value)
+  defp category(value), do: value
 
   # d3-scale's `rescale`: {start, step, bandwidth, reverse?}. `start` is the first band's
   # position along the ascending range; a descending range reverses the slot order.
