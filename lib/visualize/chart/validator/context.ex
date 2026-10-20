@@ -35,6 +35,8 @@ defmodule Visualize.Chart.Validator.Context do
       # A style reference reaches the design's styles, then the theme's palette (spec/14
       # §3.3, #637): a theme the validator cannot see says how many style series it has.
       styles: union(declared(map[:styles]), Palette.names(theme)),
+      # The design's styles themselves, for the bindings a reference reaches (D-196).
+      style_nodes: if(is_map(map[:styles]), do: map[:styles], else: %{}),
       open_series: theme == :unknown,
       paints: declared(map[:defs] || %{}),
       sources: source_fields(map[:sources]),

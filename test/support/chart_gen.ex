@@ -174,7 +174,9 @@ defmodule Visualize.ChartGen do
 
   defp styles(theme, vars, defs) do
     style = style(theme, vars, defs)
-    optional_map(%{series: style, muted: style, axis: style})
+    # The axes and the legend draw `:axis` with no datum, where a bound value is refused
+    # (spec/14 §3.2, D-196): its replacement binds nothing.
+    optional_map(%{series: style, muted: style, axis: style(theme, vars, defs, false)})
   end
 
   # The paints (spec/14 §2.7): a gradient in the words a person uses, its stops' colors
@@ -206,16 +208,17 @@ defmodule Visualize.ChartGen do
     optional_map(%{fade: gradient, glow: gradient})
   end
 
-  defp style(theme, vars, defs) do
+  defp style(theme, vars, defs, bindings? \\ true) do
     paints = if map_size(defs) == 0, do: [], else: [map(member_of(Map.keys(defs)), &{:paint, &1})]
+    field_refs = if bindings?, do: [field_ref(@fields)], else: []
 
     color =
       with_var(
-        [member_of(@colors), constant(:none), color_slot(theme), field_ref(@fields)] ++ paints,
+        [member_of(@colors), constant(:none), color_slot(theme)] ++ field_refs ++ paints,
         vars
       )
 
-    size = with_var([number(), slot(theme), field_ref(@fields)], vars)
+    size = with_var([number(), slot(theme)] ++ field_refs, vars)
     font = with_var([member_of(@fonts), slot(theme)], vars)
 
     optional_map(%{
@@ -250,6 +253,12 @@ defmodule Visualize.ChartGen do
   end
 
   defp style_ref(styles), do: member_of(Map.keys(styles) ++ Schema.builtin_styles())
+
+  # A style a site with no datum may name: one that binds no value (spec/14 §3.2, D-196).
+  defp unbound_ref(styles) do
+    bound = for {name, style} <- styles, Enum.any?(style, &match?({_, {:field, _}}, &1)), do: name
+    member_of(Enum.uniq(Map.keys(styles) ++ Schema.builtin_styles()) -- bound)
+  end
 
   # -- frame ----------------------------------------------------------------------------
 
@@ -530,7 +539,7 @@ defmodule Visualize.ChartGen do
 
     label =
       node(%{anchor: one_of(frame_anchors ++ axis_anchors), text: text(vars, nil)}, %{
-        style: style_ref(styles),
+        style: unbound_ref(styles),
         dx: number(),
         dy: number()
       })
