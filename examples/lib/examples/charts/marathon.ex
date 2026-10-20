@@ -33,7 +33,7 @@ defmodule Examples.Charts.Marathon do
 
   **The race clock is the animation tick.** At rest the view is 1:20:00 into the race, a
   mid-race moment rather than the start line, where every dot would sit on one point.
-  Running, each tick is forty seconds of race time from five minutes in, round to 2:40:00,
+  Running, each tick is twenty seconds of race time from five minutes in, round to 2:40:00,
   after every runner has finished. A runner who has finished stays at the finish.
 
   The course is over the compile ceiling, so on the Canvas backend it is drawn on the
@@ -59,10 +59,10 @@ defmodule Examples.Charts.Marathon do
     max_zoom: 19
   }
 
-  # The race clock at rest, and the run's: a tick is forty seconds of race time, from
+  # The race clock at rest, and the run's: a tick is twenty seconds of race time, from
   # five minutes in round to 2:40:00.
   @at_rest 4_800
-  @step 40
+  @step 20
   @first 300
   @last 9_600
 

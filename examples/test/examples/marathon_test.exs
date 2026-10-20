@@ -170,17 +170,17 @@ defmodule Examples.MarathonTest do
     end
 
     test "the pack inset's fit follows the field, and its tiles with it; the course's does not move" do
-      [a, b] = for tick <- [40, 41], do: Design.applied(Marathon, animation_tick: tick)
+      [a, b] = for tick <- [80, 81], do: Design.applied(Marathon, animation_tick: tick)
 
       refute projection(a, "pack") == projection(b, "pack")
       assert projection(a, "course") == projection(b, "course")
 
-      [svg_a, svg_b] = for tick <- [40, 41], do: Marathon.render(animation_tick: tick)
+      [svg_a, svg_b] = for tick <- [80, 81], do: Marathon.render(animation_tick: tick)
       refute tiles(svg_a, "pack") == tiles(svg_b, "pack")
     end
 
     test "the inset fits the runners themselves, every one inside its padding (#828)" do
-      for tick <- [0, 40, 120, 180] do
+      for tick <- [0, 80, 240, 360] do
         {_design, sources} = Marathon.design(animation_tick: tick)
         assert Map.keys(sources) |> Enum.sort() == ["clock", "course", "markers", "runners"]
         pack = Design.applied(Marathon, animation_tick: tick).frames["pack"]
@@ -200,9 +200,9 @@ defmodule Examples.MarathonTest do
     end
 
     test "the inset keeps an extent of at least 500 m when everyone stands at the finish" do
-      {_design, sources} = Marathon.design(animation_tick: 230)
+      {_design, sources} = Marathon.design(animation_tick: 460)
       assert Enum.all?(sources["runners"], & &1["finished"])
-      pack = Design.applied(Marathon, animation_tick: 230).frames["pack"]
+      pack = Design.applied(Marathon, animation_tick: 460).frames["pack"]
       %{width: w, height: h} = pack.plot
       {_, top} = Visualize.Geo.Projection.invert(pack.projection, w / 2, 32)
       {_, bottom} = Visualize.Geo.Projection.invert(pack.projection, w / 2, h - 32)
@@ -210,7 +210,7 @@ defmodule Examples.MarathonTest do
     end
 
     test "the inset draws the whole course and every marker, clipped to its plot (D-212)" do
-      svg = Marathon.render(animation_tick: 120)
+      svg = Marathon.render(animation_tick: 240)
       [_, pack] = String.split(svg, ~s(class="frame frame-pack"), parts: 2)
       [pack | _] = String.split(pack, ~s(class="frame frame-), parts: 2)
 
@@ -230,11 +230,11 @@ defmodule Examples.MarathonTest do
 
     test "the animation runs the clock forward from five minutes in, round to 2:40:00" do
       assert Marathon.clock(animation_tick: 0) == 300
-      assert Marathon.clock(animation_tick: 1) == 340
-      assert Enum.max(for t <- 0..400, do: Marathon.clock(animation_tick: t)) < 9_600
+      assert Marathon.clock(animation_tick: 1) == 320
+      assert Enum.max(for t <- 0..800, do: Marathon.clock(animation_tick: t)) < 9_600
 
       # Past the last finish, every runner stands at the finish.
-      {_design, sources} = Marathon.design(animation_tick: 230)
+      {_design, sources} = Marathon.design(animation_tick: 460)
       assert Enum.all?(sources["runners"], & &1["finished"])
       assert Enum.all?(sources["runners"], &(&1["miles"] == Float.round(Course.miles(), 2)))
     end
