@@ -137,7 +137,7 @@ defmodule Visualize.Chart.Mark.Styled do
   defp path(%{frame: frame, mark: mark}) do
     case Enum.find_index(frame.marks, &(&1 == mark)) do
       nil -> [:style]
-      i -> [:marks, Enum.at(frame.mark_paths, i, i), :style]
+      i -> [:marks, Enum.at(frame.paths.marks, i, i), :style]
     end
   end
 

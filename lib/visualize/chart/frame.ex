@@ -70,11 +70,11 @@ defmodule Visualize.Chart.Frame do
             system: :as_posted,
             name: nil,
             domains: %{},
-            mark_paths: [],
-            label_paths: [],
+            paths: %{marks: [], labels: []},
             box: [0, 0, 1, 1],
             z: 0,
             background: nil,
+            clip: false,
             sync: nil,
             brush: nil,
             forces: %{},
@@ -106,11 +106,11 @@ defmodule Visualize.Chart.Frame do
           system: Visualize.Quantity.system(),
           name: atom() | nil,
           domains: %{atom() => term()},
-          mark_paths: [non_neg_integer()],
-          label_paths: [non_neg_integer()],
+          paths: %{marks: [non_neg_integer()], labels: [non_neg_integer()]},
           box: [number()],
           z: integer(),
           background: term() | nil,
+          clip: boolean(),
           sync: String.t() | nil,
           brush: :x | nil,
           forces: map(),
@@ -244,11 +244,15 @@ defmodule Visualize.Chart.Frame do
       marks: marks,
       name: name,
       domains: Keyword.get(opts, :domains, %{}),
-      mark_paths: paths_of(chart.marks, name, chart),
-      label_paths: paths_of(chart.labels, name, chart),
+      # The design positions of the frame's marks and labels, which their paths name (§4.7).
+      paths: %{
+        marks: paths_of(chart.marks, name, chart),
+        labels: paths_of(chart.labels, name, chart)
+      },
       box: box,
       z: Map.get(node, :z, Schema.default(:frame, :z)),
       background: Map.get(node, :background),
+      clip: Map.get(node, :clip, Schema.default(:frame, :clip)),
       sync: sync_group(chart, name),
       brush: brush(chart, name),
       theme: theme,
@@ -553,6 +557,31 @@ defmodule Visualize.Chart.Frame do
     do: Element.put_attr(element, "data-node", Validator.format_path(path))
 
   def stamp(element, _path, false), do: element
+
+  @doc false
+  # A mark's group as the frame draws it (spec/14 §4.1, #828, D-212): as it is, or with
+  # `clip: true` drawn only inside the plot area — `[0, 0, width, height]` in the plot's
+  # coordinates, about the center in a polar frame's centered group. The clip is on the
+  # mark's own group, so it travels with every layer a compiled chart splits the mark
+  # across. A group with a transform or a clip of its own is wrapped in a plain one that
+  # carries the clip: a clip is in its element's user space, under its transform (D-211),
+  # so on the translated group it would move with the translation. A `:tiles` mark's group already carries
+  # this very clip (D-209) and is left as it is.
+  @spec clip_mark(Element.t(), t()) :: Element.t()
+  def clip_mark(element, %__MODULE__{clip: true, kind: kind, plot: plot}) do
+    {x, y} = if kind == :polar, do: {-plot.width / 2, -plot.height / 2}, else: {0, 0}
+
+    plot_area =
+      Element.clip(Element.group([]), Element.rect(x, y, plot.width, plot.height), :inside)
+
+    case element do
+      %Element{clip: same} when same == plot_area.clip -> element
+      %Element{transform: nil, clip: nil} -> %{element | clip: plot_area.clip}
+      _transformed_or_clipped -> %{plot_area | children: [element]}
+    end
+  end
+
+  def clip_mark(element, %__MODULE__{}), do: element
 
   # -- construction ---------------------------------------------------------------------
 
@@ -895,7 +924,8 @@ defmodule Visualize.Chart.Frame do
     |> Enum.map(fn {mark, i} ->
       frame
       |> Mark.generate(mark, [sources: sources, resolve: mode, index: i + 1] ++ opts)
-      |> stamp([:marks, Enum.at(frame.mark_paths, i, i)], paths?)
+      |> stamp([:marks, Enum.at(frame.paths.marks, i, i)], paths?)
+      |> clip_mark(frame)
     end)
   end
 
