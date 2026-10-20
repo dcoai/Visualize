@@ -15,7 +15,12 @@ defmodule Examples.Charts.PaintsChart do
   - **A radial gradient** on each incident, off center so the circle reads as lit from the
     top left, its outline a translucent stroke; the second team's look `extends` the first
     and sets only its own colors, keeping the gradient's geometry (spec/14 §3.5, D-186).
-  - **Translucent fills**: the two incident series overlap, and where they do both show.
+  - **Translucent fills, multiplied**: the two incident series overlap, and where they do both
+    show, their colors multiplied (`blend: :multiply`).
+  - **Swatches** beneath (#786): the `:lines` and `:dots` hatch patterns, and a stroke's
+    `placement` on its edge — `:inside`, `:outside`, `:double`. The binary canvas has no
+    record for a clip or a blend yet (spec/09 §4, #788), so on the canvas those swatches
+    draw a centered stroke and the incidents do not multiply.
   """
 
   import Visualize.Chart.Build
@@ -27,96 +32,147 @@ defmodule Examples.Charts.PaintsChart do
   @margin %{top: 30, right: 24, bottom: 34, left: 44}
 
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
-  def size, do: {760, 420}
+  def size, do: {760, 540}
 
   def title, do: "Paints"
 
   def description,
-    do: "Gradients, a hatch, a shadow and translucent paints, written in place"
+    do: "Gradients, hatches, a shadow, stroke placement and blend, written in place"
 
   @doc "The design and the rows it binds (spec/14 §16.1)."
   def design(opts \\ []) do
     design =
-      Design.fold([
-        chart(meta: %{name: title(), description: [description()]}),
-        source(:requests, [:hour, :rate]),
-        source(:maintenance, [:from, :to]),
-        source(:incidents, [:hour, :rate, :team, :look]),
+      Design.fold(
+        List.flatten([
+          chart(meta: %{name: title(), description: [description()]}),
+          layout(rows: [3, 1], gap: 8),
+          source("swatches", ["look"]),
+          source(:requests, [:hour, :rate]),
+          source(:maintenance, [:from, :to]),
+          source(:incidents, [:hour, :rate, :team, :look]),
 
-        # The rate's area: the series color fading out, top to bottom, in place.
-        style(:fade,
-          fill: %{
-            type: :linear,
-            color: [color(:series_1) |> alpha(0.55), color(:series_1) |> alpha(0)],
-            angle: 180
-          },
-          stroke: :none
-        ),
+          # The rate's area: the series color fading out, top to bottom, in place.
+          style(:fade,
+            fill: %{
+              type: :linear,
+              color: [color(:series_1) |> alpha(0.55), color(:series_1) |> alpha(0)],
+              angle: 180
+            },
+            stroke: :none
+          ),
 
-        # The rate's line, lifted off the area by a soft shadow.
-        style(:trace,
-          stroke: %{color: color(:series_1), width: 2.5},
-          curve: :monotone_x,
-          effect: %{
-            type: :shadow,
-            radius: 3,
-            offset: [pt(2), pt(3)],
-            color: color(:text) |> alpha(0.45)
-          }
-        ),
+          # The rate's line, lifted off the area by a soft shadow.
+          style(:trace,
+            stroke: %{color: color(:series_1), width: 2.5},
+            curve: :monotone_x,
+            effect: %{
+              type: :shadow,
+              radius: 3,
+              offset: [pt(2), pt(3)],
+              color: color(:text) |> alpha(0.45)
+            }
+          ),
 
-        # The maintenance window: crosshatched, so it reads without a hue of its own.
-        style(:maintenance,
-          fill: %{
-            type: :hatch,
-            pattern: :crosshatch,
-            color: color(:warning) |> alpha(0.7),
-            angle: 45,
-            spacing: pt(6),
-            width: pt(0.75)
-          },
-          stroke: %{color: color(:warning), width: 1, dash: [4, 3]}
-        ),
+          # The maintenance window: crosshatched, so it reads without a hue of its own.
+          style(:maintenance,
+            fill: %{
+              type: :hatch,
+              pattern: :crosshatch,
+              color: color(:warning) |> alpha(0.7),
+              angle: 45,
+              spacing: pt(6),
+              width: pt(0.75)
+            },
+            stroke: %{color: color(:warning), width: 1, dash: [4, 3]}
+          ),
 
-        # Each incident lit from the top left, translucent so overlaps show: one look per
-        # team, the second extending the first — its radial gradient's center, radius and
-        # opacity, its outline's width — in its own colors.
-        style(:incident,
-          fill: %{
-            type: :radial,
-            color: shades(color(:bad)),
-            center: [0.35, 0.3],
-            radius: 0.7,
-            opacity: 0.7
-          },
-          stroke: %{color: color(:bad) |> alpha(0.5), width: 2}
-        ),
-        style(:incident_info,
-          extends: :incident,
-          fill: %{color: shades(color(:info))},
-          stroke: %{color: color(:info) |> alpha(0.5)}
-        ),
-        cartesian(margin: @margin),
-        linear_scale(:x, domain: [0, 24]),
-        linear_scale(:y, domain: [0, :auto], nice: true),
-        axis(:x, :bottom, ticks: 12),
-        axis(:y, :left, ticks: 5, grid: true),
-        x_band(:maintenance, %{x0: :from, x1: :to}, style: :maintenance),
-        area(:requests, %{x: :hour, y: :rate, y0: {:scale, :min}}, style: :fade),
-        line(:requests, %{x: :hour, y: :rate}, style: :trace),
-        circle(:incidents, %{x: :hour, y: :rate, series: :team},
-          style: {:field, :look},
-          options: %{radius: 16}
-        ),
-        label({:axis, :x}, ["hour of the day"]),
-        label(:subtitle, ["Requests per second, the maintenance window, and incidents"])
-      ])
+          # Each incident lit from the top left, translucent so overlaps show: one look per
+          # team, the second extending the first — its radial gradient's center, radius and
+          # opacity, its outline's width — in its own colors.
+          style(:incident,
+            fill: %{
+              type: :radial,
+              color: shades(color(:bad)),
+              center: [0.35, 0.3],
+              radius: 0.7,
+              opacity: 0.7
+            },
+            stroke: %{color: color(:bad) |> alpha(0.5), width: 2},
+            # Where two incidents overlap, their colors multiply.
+            blend: :multiply
+          ),
+          style(:incident_info,
+            extends: :incident,
+            fill: %{color: shades(color(:info))},
+            stroke: %{color: color(:info) |> alpha(0.5)}
+          ),
+          in_frame("main", [
+            cartesian(cell: [0, 0], margin: @margin),
+            linear_scale(:x, domain: [0, 24]),
+            linear_scale(:y, domain: [0, :auto], nice: true),
+            axis(:x, :bottom, ticks: 12),
+            axis(:y, :left, ticks: 5, grid: true),
+            x_band(:maintenance, %{x0: :from, x1: :to}, style: :maintenance),
+            area(:requests, %{x: :hour, y: :rate, y0: {:scale, :min}}, style: :fade),
+            line(:requests, %{x: :hour, y: :rate}, style: :trace),
+            circle(:incidents, %{x: :hour, y: :rate, series: :team},
+              style: {:field, :look},
+              options: %{radius: 16}
+            ),
+            label({:axis, :x}, ["hour of the day"]),
+            label(:subtitle, ["Requests per second, the maintenance window, and incidents"])
+          ]),
+          # The swatches: the other hatch patterns, and a stroke's placement on its edge — inside
+          # the shape, outside it, or doubled (spec/14 §3.1).
+          style("lines",
+            fill: %{
+              type: :hatch,
+              pattern: :lines,
+              color: color(:series_1),
+              spacing: pt(5),
+              width: pt(1)
+            },
+            stroke: %{color: color(:series_1), width: 1}
+          ),
+          style("dots",
+            fill: %{
+              type: :hatch,
+              pattern: :dots,
+              color: color(:series_4),
+              spacing: pt(5),
+              width: pt(2)
+            },
+            stroke: %{color: color(:series_4), width: 1}
+          ),
+          style("inside",
+            fill: color(:series_2) |> alpha(0.25),
+            stroke: %{color: color(:series_2), width: 6, placement: :inside}
+          ),
+          style("outside",
+            fill: color(:series_2) |> alpha(0.25),
+            stroke: %{color: color(:series_2), width: 6, placement: :outside}
+          ),
+          style("double",
+            fill: color(:series_2) |> alpha(0.25),
+            stroke: %{color: color(:series_2), width: 9, placement: :double}
+          ),
+          in_frame("swatches", [
+            cartesian(cell: [0, 1], margin: %{top: 24, right: 24, bottom: 24, left: 44}),
+            band_scale(:x, padding: 0.3),
+            linear_scale(:y, domain: [0, 1]),
+            axis(:x, :bottom),
+            rect("swatches", %{x0: "look", x1: "look", y0: 0, y1: 1}, style: {:field, "look"}),
+            label(:subtitle, ["Hatch patterns, and a stroke inside, outside and doubled"])
+          ])
+        ])
+      )
 
     {design,
      %{
        requests: request_rows(opts[:animation_tick] || 0),
        maintenance: [%{from: 2, to: 5}],
-       incidents: incident_rows()
+       incidents: incident_rows(),
+       swatches: for(look <- ~w(lines dots inside outside double), do: %{"look" => look})
      }}
   end
 
@@ -154,8 +210,11 @@ defmodule Examples.Charts.PaintsChart do
     shades = fn hue -> [hue |> lighten(0.5), hue, hue |> darken(0.3)] end
 
     {:ok, design} =
-      Visualize.Chart.compose([
+      Visualize.Chart.compose(
+        List.flatten([
         chart(meta: %{name: "Paints"}),
+        layout(rows: [3, 1], gap: 8),
+        source("swatches", ["look"]),
         source(:requests, [:hour, :rate]),
         source(:maintenance, [:from, :to]),
         source(:incidents, [:hour, :rate, :team, :look]),
@@ -199,14 +258,17 @@ defmodule Examples.Charts.PaintsChart do
             radius: 0.7,
             opacity: 0.7
           },
-          stroke: %{color: color(:bad) |> alpha(0.5), width: 2}
+          stroke: %{color: color(:bad) |> alpha(0.5), width: 2},
+          # Where two incidents overlap, their colors multiply.
+          blend: :multiply
         ),
         style(:incident_info,
           extends: :incident,
           fill: %{color: shades.(color(:info))},
           stroke: %{color: color(:info) |> alpha(0.5)}
         ),
-        cartesian(margin: %{top: 30, right: 24, bottom: 34, left: 44}),
+        in_frame("main", [
+        cartesian(cell: [0, 0], margin: %{top: 30, right: 24, bottom: 34, left: 44}),
         linear_scale(:x, domain: [0, 24]),
         linear_scale(:y, domain: [0, :auto], nice: true),
         axis(:x, :bottom, ticks: 12),
@@ -220,11 +282,49 @@ defmodule Examples.Charts.PaintsChart do
           options: %{radius: 16}
         ),
         label({:axis, :x}, ["hour of the day"])
-      ])
+        ]),
+        # The swatches: the other hatch patterns, and a stroke's placement on its edge — inside
+        # the shape, outside it, or doubled (spec/14 §3.1).
+        style("lines",
+          fill: %{type: :hatch, pattern: :lines, color: color(:series_1), spacing: pt(5), width: pt(1)},
+          stroke: %{color: color(:series_1), width: 1}
+        ),
+        style("dots",
+          fill: %{type: :hatch, pattern: :dots, color: color(:series_4), spacing: pt(5), width: pt(2)},
+          stroke: %{color: color(:series_4), width: 1}
+        ),
+        style("inside",
+          fill: color(:series_2) |> alpha(0.25),
+          stroke: %{color: color(:series_2), width: 6, placement: :inside}
+        ),
+        style("outside",
+          fill: color(:series_2) |> alpha(0.25),
+          stroke: %{color: color(:series_2), width: 6, placement: :outside}
+        ),
+        style("double",
+          fill: color(:series_2) |> alpha(0.25),
+          stroke: %{color: color(:series_2), width: 9, placement: :double}
+        ),
+        in_frame("swatches", [
+          cartesian(cell: [0, 1], margin: %{top: 24, right: 24, bottom: 24, left: 44}),
+          band_scale(:x, padding: 0.3),
+          linear_scale(:y, domain: [0, 1]),
+          axis(:x, :bottom),
+          rect("swatches", %{x0: "look", x1: "look", y0: 0, y1: 1}, style: {:field, "look"}),
+          label(:subtitle, ["Hatch patterns, and a stroke inside, outside and doubled"])
+        ])
+
+        ])
+      )
 
     {:ok, applied} =
       Visualize.Chart.apply(design,
-        sources: %{requests: requests, maintenance: [%{from: 2, to: 5}], incidents: incidents}
+        sources: %{
+          requests: requests,
+          maintenance: [%{from: 2, to: 5}],
+          incidents: incidents,
+          swatches: for(look <- ~w(lines dots inside outside double), do: %{"look" => look})
+        }
       )
 
     Visualize.Chart.render(applied)

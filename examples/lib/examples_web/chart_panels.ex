@@ -12,9 +12,9 @@ defmodule ExamplesWeb.ChartPanels do
 
   use Phoenix.Component
 
-  alias ExamplesWeb.ChartPanels.{DarkMode, Explain, Zoom}
+  alias ExamplesWeb.ChartPanels.{DarkMode, Explain, Units, Zoom}
 
-  @panels %{dark_mode: DarkMode, zoom: Zoom, explain: Explain}
+  @panels %{dark_mode: DarkMode, zoom: Zoom, units: Units, explain: Explain}
 
   @doc """
   The panels of `module`'s page: those it names, in its order — none for a module without
@@ -66,6 +66,7 @@ defmodule ExamplesWeb.ChartPanels do
     <%= for {name, state} <- @panels do %>
       <DarkMode.panel :if={name == :dark_mode} id={"chart-panel-#{name}-#{@slug}"} state={state} />
       <Zoom.panel :if={name == :zoom} id={"chart-panel-#{name}-#{@slug}"} state={state} />
+      <Units.panel :if={name == :units} id={"chart-panel-#{name}-#{@slug}"} state={state} />
       <Explain.panel :if={name == :explain} id={"chart-panel-#{name}-#{@slug}"} state={state} />
     <% end %>
     """

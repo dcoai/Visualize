@@ -107,7 +107,7 @@ defmodule ExamplesWeb.ChartPanelsTest do
   end
 
   test "the Composition chart is drawn under ZoomHook, its budget line non-scaling" do
-    assert ChartPanels.of(CompositionChart) == [:zoom, :explain]
+    assert ChartPanels.of(CompositionChart) == [:zoom, :units, :explain]
     s = mounted("composition")
     page = html(s)
 
@@ -122,6 +122,21 @@ defmodule ExamplesWeb.ChartPanelsTest do
     # The hook's report changes nothing on the page.
     params = %{"k" => 2.0, "x" => -10.0, "y" => -5.0}
     assert {:noreply, ^s} = ChartLive.handle_event("chart_zoom", params, s)
+  end
+
+  # The units (#786, spec/14 §3.9, §11): one length in six units, each stored as `$unit`
+  # JSON and resolved to the same user units, read from the chart's own design.
+  test "the Composition chart's units panel shows each unit stored as $unit JSON, all one length" do
+    %{rows: rows} = ExamplesWeb.ChartPanels.Units.init(CompositionChart)
+    assert Enum.map(rows, & &1.name) == CompositionChart.unit_names()
+    assert Enum.map(rows, & &1.dash) |> hd() == ~s({"$unit":[48,"px"]})
+    assert ~s({"$unit":[0.5,"in"]}) in Enum.map(rows, & &1.dash)
+    assert Enum.all?(rows, &(&1.dash_px == 48.0 and &1.width_px == 6.0))
+
+    page = html(mounted("composition"))
+    [_, panel] = String.split(page, ~s(id="chart-panel-units-composition"), parts: 2)
+    assert panel =~ "{&quot;$unit&quot;:[12.7,&quot;mm&quot;]}"
+    assert panel =~ "48.00 dash, 6.00 wide"
   end
 
   defp event(s, name, params) do
