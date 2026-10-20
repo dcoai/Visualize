@@ -3,10 +3,12 @@ defmodule Visualize.Chart.Types do
 
   import Visualize.Chart.Names, only: [is_name: 1]
   # The type check of a binding (spec/14 §7.4, D-153): every field a mark reads through a
-  # scale, with what the scale's kind needs of it, and the reads a set of known types does
-  # not satisfy. Pure and total over any map — an unfinished design, or one with variables
-  # still in it, is checked as far as it says anything; a shape it does not recognize
-  # contributes nothing, and the validator reports it.
+  # scale, with what the scale's kind needs of it, and every field a channel reads as a
+  # number with no scale between — a size, an angle, a radius, a pixel (D-215) — and the
+  # reads a set of known types does not satisfy. Pure and total over any map — an
+  # unfinished design, or one with variables still in it, is checked as far as it says
+  # anything; a shape it does not recognize contributes nothing, and the validator
+  # reports it.
 
   alias Visualize.Chart.Frame.Scales
   alias Visualize.Chart.{Names, Style, Var}
@@ -57,8 +59,15 @@ defmodule Visualize.Chart.Types do
   def satisfies?(_type, :category, :rows), do: true
   def satisfies?(type, need, _from), do: type == need
 
+  # The channels whose reading, with no scale between, is not a number: `series` groups
+  # rows and `path` is a path (spec/14 §5.2); a `:text` mark's `value` is its content and a
+  # `:rect` mark's a color (§5.2, §5.6).
+  @not_numbers [:series, :path]
+  @not_numbers_of [text: :value, rect: :value]
+
   @doc false
-  # Every field the design's marks read through a scale, in mark order.
+  # Every field the design's marks read through a scale, or as a number with none, in mark
+  # order.
   @spec reads(map()) :: [read()]
   def reads(%{marks: marks} = design) when is_list(marks) do
     frames = map_or_empty(design[:frames])
@@ -118,8 +127,10 @@ defmodule Visualize.Chart.Types do
       kind = frame[:kind]
       scales = map_or_empty(frame[:scales])
       need = fn name -> scale_need(scales[name], frames, []) end
+      # A scale the frame declares; a channel naming one it does not reads pixels (§5.2).
+      declared? = &is_map_key(scales, &1)
 
-      channels(mark, kind, need, slot, path) ++
+      channels(mark, kind, need, declared?, slot, path) ++
         style(mark, styles, need, slot, path) ++ offsets(mark, kind, need, slot, path)
     else
       _unchecked -> []
@@ -164,16 +175,44 @@ defmodule Visualize.Chart.Types do
   defp scale_need(%{kind: kind} = node, _frames, _seen) when not is_struct(node), do: need(kind)
   defp scale_need(_node, _frames, _seen), do: nil
 
-  # Each channel naming a scale whose value is a field (spec/14 §4.3, §5.2).
-  defp channels(mark, kind, need, slot, path) do
+  # Each channel whose value is a field: through the scale it names (spec/14 §4.3, §5.2),
+  # or, naming none or one the frame does not declare, as the number it is drawn at
+  # (D-215).
+  defp channels(mark, kind, need, declared?, slot, path) do
+    offsets = map_or_empty(mark[:offset])
+
     for {channel, value} <- mark |> Map.get(:channels) |> map_or_empty() |> Enum.sort(),
         field = field(value),
         field != nil,
-        name = Scales.scale_for(kind, mark, channel),
-        needed = name && need.(name),
+        needed = channel_need(mark, kind, channel, need, declared?, offsets),
         needed != nil,
         do: {path ++ [:channels, channel], slot, field, needed}
   end
+
+  defp channel_need(mark, kind, channel, need, declared?, offsets) do
+    name = Scales.scale_for(kind, mark, channel)
+
+    if name != nil and declared?.(name),
+      do: need.(name),
+      else: unscaled_need(mark, channel, offsets)
+  end
+
+  # A channel read with no scale between is drawn at its reading — a radius, a size, an
+  # angle in radians, a pixel — so it needs a number, save for the channels whose reading
+  # is something else, and a channel whose family a band within a band places (§5.1).
+  defp unscaled_need(_mark, channel, _offsets) when channel in @not_numbers, do: nil
+
+  defp unscaled_need(mark, channel, offsets) do
+    cond do
+      {mark[:type], channel} in @not_numbers_of -> nil
+      is_map_key(offsets, family(channel)) -> nil
+      true -> :number
+    end
+  end
+
+  defp family(channel) when channel in [:x, :x0, :x1], do: :x
+  defp family(channel) when channel in [:y, :y0, :y1], do: :y
+  defp family(channel), do: channel
 
   # A `{:field, f}` on the style's color keys reads through the mark's color scale
   # (spec/14 §4.3, D-143).

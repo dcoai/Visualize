@@ -134,6 +134,24 @@ release it merely follows.
   *Affects* code that read a bound tensor back from `Visualize.Chart.Applied`'s
   `sources`: it is now the named column map, not the tensor. Nx is still optional.
 
+- **A field of the wrong type on a channel with no scale is a type fault, not a crash**
+  (#835, #853, D-215). A `:circle` mark's `value` is its radius and reads no scale.
+  Bound to a text field, it used to pass `check_types/2` and `apply/2` and then raise
+  `ArithmeticError` at render, so a board cell over it crashed. Every channel drawn at
+  its reading now needs a number:
+  - a `:circle`'s, `:symbol`'s or `:arc`'s `value`;
+  - an `:arc`'s `start`, `end`, `inner` and `outer` outside a polar frame;
+  - a position in a `:geo` frame;
+  - any channel naming a scale its frame does not declare.
+
+  A field of another type is `{:type_mismatch, slot, field, :number, given}` at
+  `[:marks, i, :channels, channel]`, as on a scale. A board cell then draws
+  `{:invalid, errors}` and the builder its fault panel. `series`, `path`, a `:text`
+  mark's `value` and a `:rect` mark's `value` are not numbers and are not checked.
+  *Affects* code that matches the fault's words: *Before:* `…is a category, and the scale
+  it is read through needs a number`. *After:* `…is a category, and the design reads it
+  as a number`. The reason term is unchanged.
+
 - **A basemap stays inside its own frame** (#826, #827, D-209). A `:tiles` mark covers
   its plot with whole tiles, so the tiles at the edges reach up to one tile past it. A
   chart of one frame hid this at the document's edge. In a design of several frames, one

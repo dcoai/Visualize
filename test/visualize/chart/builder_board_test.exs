@@ -726,7 +726,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert html =~ "vis-builder-fault"
 
       assert html =~
-               "field \"t\" of slot \"primary\" is a time, and the scale it is read through needs a number"
+               "field \"t\" of slot \"primary\" is a time, and the design reads it as a number"
 
       html =
         render_component(&Preview.panel/1, %{
@@ -775,7 +775,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
 
       latency = s |> BuilderFixture.render() |> body("latency")
       assert latency =~ "vis-builder-fault"
-      assert latency =~ "is a time, and the scale it is read through needs a number"
+      assert latency =~ "is a time, and the design reads it as a number"
 
       s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => "api"})
       latency = s |> BuilderFixture.render() |> body("latency")

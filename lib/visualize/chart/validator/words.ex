@@ -122,10 +122,11 @@ defmodule Visualize.Chart.Validator.Words do
       "it as #{inspect(described)}"
   end
 
-  # The type check of a binding (spec/14 §7.4, D-153).
+  # The type check of a binding (spec/14 §7.4, D-153): through a scale, or as the number a
+  # channel is drawn at (D-215).
   def words({:type_mismatch, slot, field, expected, given}) do
-    "field #{inspect(field)} of slot #{inspect(slot)} is #{a_type(given)}, and the scale " <>
-      "it is read through needs #{a_type(expected)}"
+    "field #{inspect(field)} of slot #{inspect(slot)} is #{a_type(given)}, and the design " <>
+      "reads it as #{a_type(expected)}"
   end
 
   # A mark that keeps each entity's latest row (spec/14 §7.3, D-168).
