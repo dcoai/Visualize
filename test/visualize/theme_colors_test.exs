@@ -28,7 +28,7 @@ defmodule Visualize.ThemeColorsTest do
     assert Color.resolve(color(:red), theme, :literal) == "#e00000"
     assert Color.resolve(color(:brand), theme, :css) == "var(--vis-brand, #123456)"
     assert Theme.stylesheet(theme) =~ "\n  --vis-brand: #123456;\n"
-    assert :brand in Theme.color_names(theme)
+    assert "brand" in Theme.color_names(theme)
 
     assert_raise ArgumentError, ~r/unknown theme slot :brand/, fn ->
       Color.resolve(color(:brand), Theme.default(), :css)

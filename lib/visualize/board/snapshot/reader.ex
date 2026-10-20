@@ -106,6 +106,9 @@ defmodule Visualize.Board.Snapshot.Reader do
   # -- cells ---------------------------------------------------------------------------------
 
   defp cells(cells, board, limits) when is_map(cells) and not is_struct(cells) do
+    # A cell is named by its string (D-195), whichever spelling the snapshot was built with.
+    cells = Visualize.Chart.Names.keys(cells)
+
     on_board = if board, do: Map.keys(board.cells), else: Map.keys(cells)
 
     missing = for name <- on_board, not Map.has_key?(cells, name), do: {[:cells, name], :required}
@@ -143,7 +146,7 @@ defmodule Visualize.Board.Snapshot.Reader do
           {nil, []}
       end
 
-    vars = Map.get(cell, :vars, %{})
+    vars = cell |> Map.get(:vars, %{}) |> Visualize.Chart.Names.keys()
     {slots, slot_errors} = slots(Map.get(cell, :slots), path ++ [:slots])
     crashed = Map.get(cell, :crashed)
 
@@ -166,7 +169,9 @@ defmodule Visualize.Board.Snapshot.Reader do
   defp cell(_cell, path, _limits), do: {:error, [{path, {:type, {:node, :cell}}}]}
 
   defp vars(vars, path) when is_map(vars) and not is_struct(vars) do
-    for {name, _value} <- vars, not is_atom(name), do: {path ++ [name], {:type, :name}}
+    for {name, _value} <- vars,
+        not Visualize.Chart.Names.name?(name),
+        do: {path ++ [name], {:type, :name}}
   end
 
   defp vars(_vars, path), do: [{path, {:type, {:map, :term}}}]
@@ -176,9 +181,14 @@ defmodule Visualize.Board.Snapshot.Reader do
   defp slots(slots, path) when is_map(slots) and not is_struct(slots) do
     Enum.reduce(slots, {%{}, []}, fn {name, slot}, {read, errors} ->
       case slot(slot, path ++ [name]) do
-        {:ok, slot} when is_atom(name) -> {Map.put(read, name, slot), errors}
-        {:ok, _slot} -> {read, [{path ++ [name], {:type, :name}} | errors]}
-        {:error, faults} -> {read, faults ++ errors}
+        {:ok, slot} when is_atom(name) or is_binary(name) ->
+          {Map.put(read, Visualize.Chart.Names.name(name), slot), errors}
+
+        {:ok, _slot} ->
+          {read, [{path ++ [name], {:type, :name}} | errors]}
+
+        {:error, faults} ->
+          {read, faults ++ errors}
       end
     end)
   end

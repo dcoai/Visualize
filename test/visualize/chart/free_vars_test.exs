@@ -21,21 +21,23 @@ defmodule Visualize.Chart.FreeVarsTest do
   }
 
   defp free(design), do: Chart.free_vars(design)
-  defp entry(design, name), do: Enum.find(free(design), &(&1.name == name))
+
+  defp entry(design, name),
+    do: Enum.find(free(design), &(&1.name == Visualize.Chart.Names.name(name)))
 
   describe "free_vars/1" do
     test "one entry per variable, ordered by name" do
-      assert Enum.map(free([@house, @panel]), & &1.name) == [:accent, :unit, :width, :y]
+      assert Enum.map(free([@house, @panel]), & &1.name) == ["accent", "unit", "width", "y"]
     end
 
     test "the default comes from the stacked vars node and required is its absence" do
       vars = free([@house, @panel])
 
       assert entry([@house, @panel], :accent) == %{
-               name: :accent,
+               name: "accent",
                default: :series_1,
                required: false,
-               uses: [%{path: [:styles, :series, :stroke], expects: :color, layer: 0}]
+               uses: [%{path: [:styles, "series", :stroke], expects: :color, layer: 0}]
              }
 
       assert entry([@house, @panel], :unit).default == nil
@@ -62,12 +64,12 @@ defmodule Visualize.Chart.FreeVarsTest do
       expects = for v <- free(design), use <- v.uses, into: %{}, do: {v.name, use.expects}
 
       assert expects == %{
-               color: :color,
-               opts: {:node, :curve_opts},
+               "color" => :color,
+               "opts" => {:node, :curve_opts},
                # A style site admits a reference, an inline node, a generator, a field
                # naming a style by data, or a list of those (spec/14 §3.6, §3.13); the
                # expectation is the whole type, as it is for any key.
-               style:
+               "style" =>
                  {:one_of,
                   [
                     {:ref, :style},
@@ -76,10 +78,10 @@ defmodule Visualize.Chart.FreeVarsTest do
                     :field_ref,
                     {:list, {:one_of, [{:ref, :style}, {:node, :style}, :generator, :field_ref]}}
                   ]},
-               options: {:node, :options},
-               part: :text,
-               domain: :extent,
-               pool: :name
+               "options" => {:node, :options},
+               "part" => :text,
+               "domain" => :extent,
+               "pool" => :name
              }
     end
 
@@ -92,8 +94,8 @@ defmodule Visualize.Chart.FreeVarsTest do
       # A text is one use however many times it names the variable (§7.1).
       assert entry(design, :c).uses |> Enum.map(& &1.path) == [
                [:labels, 0, :text],
-               [:styles, :a, :stroke],
-               [:styles, :b, :fill]
+               [:styles, "a", :stroke],
+               [:styles, "b", :fill]
              ]
     end
 
@@ -117,7 +119,7 @@ defmodule Visualize.Chart.FreeVarsTest do
           labels: [%{anchor: :title, text: [Chart.var(:unit)]}]
         })
 
-      assert [%{name: :unit, default: "%", required: false}] = free(chart)
+      assert [%{name: "unit", default: "%", required: false}] = free(chart)
     end
 
     test "a literal above a variable closes it and a variable above a literal opens one" do
@@ -125,8 +127,8 @@ defmodule Visualize.Chart.FreeVarsTest do
       literal = %{styles: %{s: %{stroke: "#3b6fa8"}}}
 
       assert free([lower, literal]) == []
-      assert Enum.map(free([literal, lower]), & &1.name) == [:accent]
-      assert Enum.map(free([lower]), & &1.name) == [:accent]
+      assert Enum.map(free([literal, lower]), & &1.name) == ["accent"]
+      assert Enum.map(free([lower]), & &1.name) == ["accent"]
     end
 
     test "no variables is no entries" do
@@ -151,7 +153,7 @@ defmodule Visualize.Chart.FreeVarsTest do
 
       assert {:error, errors} = Chart.apply(@design, sources: %{p: %{t: [1], v: [2]}})
       assert Enum.map(errors, &elem(&1, 0)) == required
-      assert Enum.all?(errors, &match?({_, {:unresolved, :var, :unit}}, &1))
+      assert Enum.all?(errors, &match?({_, {:unresolved, :var, "unit"}}, &1))
     end
 
     test "supplying exactly the free variables applies" do
@@ -178,22 +180,22 @@ defmodule Visualize.Chart.FreeVarsTest do
       assert Chart.apply(@design, vars: %{unit: Chart.var(:other), other: "%"}) ==
                {:error,
                 [
-                  {[:labels, 0, :text], {:var_binding, :unit}},
-                  {[:labels, 1, :text], {:var_binding, :unit}}
+                  {[:labels, 0, :text], {:var_binding, "unit"}},
+                  {[:labels, 1, :text], {:var_binding, "unit"}}
                 ]}
     end
 
     test "a declared default that is a variable is the same error" do
-      design = put_in(@design, [:vars, :unit], %{default: Chart.var(:other)})
+      design = put_in(@design, [:vars, "unit"], %{default: Chart.var(:other)})
 
       assert {:error, errors} = Chart.apply(design, vars: %{other: "%"})
-      assert Enum.all?(errors, &match?({_, {:var_binding, :unit}}, &1))
+      assert Enum.all?(errors, &match?({_, {:var_binding, "unit"}}, &1))
       assert length(errors) == 2
     end
 
     test "the error formats as a line a person reads" do
-      assert Visualize.Chart.Validator.format({[:labels, 0, :text], {:var_binding, :unit}}) ==
-               "labels[0].text: variable :unit is bound to another variable; " <>
+      assert Visualize.Chart.Validator.format({[:labels, 0, :text], {:var_binding, "unit"}}) ==
+               "labels[0].text: variable \"unit\" is bound to another variable; " <>
                  "resolution is single level"
     end
 
@@ -206,7 +208,7 @@ defmodule Visualize.Chart.FreeVarsTest do
       }
 
       assert Chart.apply(design, vars: %{opts: %{stroke: Chart.var(:deep)}}) ==
-               {:error, [{[:styles, :s, :stroke, :color], {:undeclared, :var, :deep}}]}
+               {:error, [{[:styles, "s", :stroke, :color], {:undeclared, :var, "deep"}}]}
     end
   end
 

@@ -209,7 +209,9 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
     end
 
     test "compile/2 keeps it for every realization per tick" do
-      {:ok, %{main: compiled}} = Chart.compile(mass(), sources: %{primary: @rows}, system: :us)
+      {:ok, %{"main" => compiled}} =
+        Chart.compile(mass(), sources: %{primary: @rows}, system: :us)
+
       assert compiled.system == :us
 
       {group, _compiled} = Compiled.step(compiled, %{primary: @rows})
@@ -257,14 +259,14 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
 
     test "realize/4 applies every cell in it" do
       {:ok, applied, _cache} = Board.realize(board(), @store, pools(), system: :us)
-      assert applied.a.frame.system == :us
+      assert applied["a"].frame.system == :us
     end
 
     test "a snapshot is drawn in the reader's system, and an export with it" do
       {:ok, snapshot} = Snapshot.realize(board(), @store, pools(), now: DateTime.add(@t0, 600))
 
-      assert %{a: %View{svg: kg}} = Snapshot.views(snapshot)
-      assert %{a: %View{svg: lb}} = Snapshot.views(snapshot, system: :us)
+      assert %{"a" => %View{svg: kg}} = Snapshot.views(snapshot)
+      assert %{"a" => %View{svg: lb}} = Snapshot.views(snapshot, system: :us)
       assert kg =~ ">40 kg<" and not (kg =~ " lb<")
       assert lb =~ ">80 lb<"
 
@@ -295,9 +297,11 @@ defmodule Visualize.Chart.AxisDisplayTicksTest do
   end
 
   defp live_view(cell) do
+    name = to_string(cell)
+
     receive do
-      {:visualize_board, _board, {:cell, ^cell, %View{state: :live} = view}} -> view
-      {:visualize_board, _board, _other} -> live_view(cell)
+      {:visualize_board, _board, {:cell, ^name, %View{state: :live} = view}} -> view
+      {:visualize_board, _board, _other} -> live_view(name)
     end
   end
 end

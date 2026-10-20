@@ -22,7 +22,7 @@ defmodule Visualize.Chart.Builder.DefaultsTest do
     s
   end
 
-  defp series(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series])
+  defp series(s), do: get_in(hd(s.assigns.uses).local, [:styles, "series"])
 
   describe "a size is a number and a unit (§18.6)" do
     setup do
@@ -101,7 +101,7 @@ defmodule Visualize.Chart.Builder.DefaultsTest do
 
       design = BuilderFixture.design(s)
 
-      assert design.frames.main.defaults == %{
+      assert design.frames["main"].defaults == %{
                stroke: %{width: 3},
                line: %{stroke: %{cap: :round}}
              }
@@ -115,7 +115,7 @@ defmodule Visualize.Chart.Builder.DefaultsTest do
       containers =
         for link <- parts.stroke.chain, link.layer in [:defaults, :kind], do: link.container
 
-      assert {:frame, :main} in containers
+      assert {:frame, "main"} in containers
 
       # The kind's entry shows, with its ×; the others are offered.
       html = BuilderFixture.render(s)
@@ -129,7 +129,7 @@ defmodule Visualize.Chart.Builder.DefaultsTest do
           s
         )
 
-      refute Map.has_key?(BuilderFixture.design(s).frames.main.defaults, :line)
+      refute Map.has_key?(BuilderFixture.design(s).frames["main"].defaults, :line)
     end
 
     test "a group's in the site's context, written into the composite and composed under its objects" do

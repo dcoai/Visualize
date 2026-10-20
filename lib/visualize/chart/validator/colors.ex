@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Validator.Colors do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The validator's view of a typed color (spec/14 §3.2, spec/08 §1.9, #664, D-173): its
   # shape, the literal operands a transform computes from, and every name it reads from the
   # theme's color table.
@@ -23,7 +25,7 @@ defmodule Visualize.Chart.Validator.Colors do
   @doc false
   # A ramp's anchor is a color string or a name of the theme's table (spec/08 §7.5, #664).
   @spec anchor?(term()) :: boolean()
-  def anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_atom(name), anchor)
+  def anchor?(anchor), do: is_binary(anchor) or match?({:color, name} when is_name(name), anchor)
 
   # The fields of an inline theme its contracts are measured with: the role styles are read
   # against its own background and colors (spec/08 §7.7, #666).
@@ -55,9 +57,18 @@ defmodule Visualize.Chart.Validator.Colors do
 
   defp undeclared(_value, _path, :unknown), do: []
 
+  # A name is the table's by its spelling: a theme's own colors may be keyed either way.
   defp undeclared(value, path, names) do
-    for name <- value |> Typed.names() |> Enum.uniq(),
-        not MapSet.member?(names, name),
-        do: {path, {:undeclared, :color, name}}
+    case value |> Typed.names() |> Enum.uniq() |> Enum.reject(&MapSet.member?(names, &1)) do
+      [] ->
+        []
+
+      missing ->
+        spelled = MapSet.new(names, &to_string/1)
+
+        for name <- missing,
+            not MapSet.member?(spelled, to_string(name)),
+            do: {path, {:undeclared, :color, name}}
+    end
   end
 end

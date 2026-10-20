@@ -158,14 +158,14 @@ defmodule Visualize.Chart.DownsampleTest do
   end
 
   defp mark_rows(applied),
-    do: Mark.rows(applied.frames.main, hd(applied.chart.marks), applied.sources)
+    do: Mark.rows(applied.frames["main"], hd(applied.chart.marks), applied.sources)
 
   describe "through Visualize.Chart.apply/2" do
     test ":plot binds to the frame's plot width, and follows it when the size changes" do
       rows = wave(5_000)
       step = %{op: :lttb, fields: [:t, :v], n: :plot}
 
-      assert applied([step], rows).frames.main.plot.width == 600
+      assert applied([step], rows).frames["main"].plot.width == 600
       assert length(mark_rows(applied([step], rows))) == 600
       assert length(mark_rows(applied([step], rows, {350, 300}))) == 300
     end
@@ -223,10 +223,10 @@ defmodule Visualize.Chart.DownsampleTest do
       # the inferred domains — and so every pixel position — are the unreduced line's.
       assert length(kept) <= 4 * 600
       assert length(kept) > 600
-      x = Frame.scale(reduced.frames.main, :x)
-      y = Frame.scale(reduced.frames.main, :y)
-      assert x == Frame.scale(whole.frames.main, :x)
-      assert y == Frame.scale(whole.frames.main, :y)
+      x = Frame.scale(reduced.frames["main"], :x)
+      y = Frame.scale(reduced.frames["main"], :y)
+      assert x == Frame.scale(whole.frames["main"], :x)
+      assert y == Frame.scale(whole.frames["main"], :y)
       assert x.range == [0, 600]
 
       # Each point's pixel column (the plot's right edge belongs to its last column) and

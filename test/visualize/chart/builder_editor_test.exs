@@ -133,7 +133,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.panel/1, %{
           kind: :style,
           node: %{stroke: %{join: :round}, curve: %{type: :step}},
-          path: [:styles, :series],
+          path: [:styles, "series"],
           facet: :style
         })
 
@@ -173,7 +173,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.panel/1, %{
           kind: :scale,
           node: %{kind: :linear},
-          path: [:frames, :main, :scales, :x]
+          path: [:frames, "main", :scales, "x"]
         })
 
       assert html =~ ~s(<select name="kind">)
@@ -196,7 +196,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.panel/1, %{
           kind: :style,
           node: %{opacity: 0.4, stroke: %{width: :label_size}},
-          path: [:styles, :series],
+          path: [:styles, "series"],
           facet: :style
         })
 
@@ -243,7 +243,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.panel/1, %{
           kind: :style,
           node: %{stroke: %{dash: [4, 2]}},
-          path: [:styles, :series],
+          path: [:styles, "series"],
           facet: :style
         })
 
@@ -274,11 +274,11 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert Editor.widget(:channel) == :text
       assert Editor.widget(:extent) == :text
 
-      assert Editor.parse(:channel, "value") == {:ok, :value}
-      assert Editor.parse(:channel, ":value") == {:ok, :value}
+      assert Editor.parse(:channel, "value") == {:ok, "value"}
+      assert Editor.parse(:channel, ":value") == {:ok, "value"}
       assert Editor.parse(:channel, "0") == {:ok, 0}
       assert Editor.parse(:channel, "2.5") == {:ok, 2.5}
-      assert Editor.parse(:channel, "{:field, :v}") == {:ok, {:field, :v}}
+      assert Editor.parse(:channel, "{:field, :v}") == {:ok, {:field, "v"}}
       assert Editor.parse(:channel, "{:scale, :min}") == {:ok, {:scale, :min}}
       assert Editor.parse(:channel, "not a name") == :error
 
@@ -314,7 +314,16 @@ defmodule Visualize.Chart.Builder.EditorTest do
             _other -> to_string(spec.default)
           end
 
-        assert Editor.parse(spec.type, shown) == {:ok, spec.default},
+        # Read as the form reads it, the key giving the word its vocabulary (D-195).
+        key = to_string(spec.key)
+
+        read =
+          case Editor.change(kind, %{"_target" => [key], key => shown}) do
+            {_key, read} -> read
+            nil -> Editor.parse(spec.type, shown)
+          end
+
+        assert read == {:ok, spec.default},
                "#{kind}.#{spec.key}: #{shown} did not read back as #{inspect(spec.default)}"
       end
     end
@@ -335,9 +344,9 @@ defmodule Visualize.Chart.Builder.EditorTest do
       assert Editor.parse({:enum, [:top, :bottom]}, "bottom") == {:ok, :bottom}
       assert Editor.parse({:enum, [:top, :bottom]}, "sideways") == :error
       assert Editor.parse(:string, "%H:%M") == {:ok, "%H:%M"}
-      assert Editor.parse(:field, "t") == {:ok, :t}
-      assert Editor.parse(:field, ":t") == {:ok, :t}
-      assert Editor.parse({:ref, :scale}, "x") == {:ok, :x}
+      assert Editor.parse(:field, "t") == {:ok, "t"}
+      assert Editor.parse(:field, ":t") == {:ok, "t"}
+      assert Editor.parse({:ref, :scale}, "x") == {:ok, "x"}
     end
 
     test "a color, a size and a font read loosely: an atom, a number, or the string" do
@@ -353,12 +362,12 @@ defmodule Visualize.Chart.Builder.EditorTest do
         {:extent, [0, 100]},
         {:extent, :auto},
         {:extent, [-1, 1]},
-        {:anchor, {:axis, :y}},
-        {:channel, {:field, :sha}},
+        {:anchor, {:axis, "y"}},
+        {:channel, {:field, "sha"}},
         {:channel, {:scale, :min}},
-        {:term, %{a: 1, b: [true, false, nil]}},
+        {:term, %{"a" => 1, "b" => [true, false, nil]}},
         {{:node, :size}, %{width: 400, height: 200}},
-        {{:list, :field}, [:t, :v]},
+        {{:list, :field}, ["t", "v"]},
         {:term, ~U[2024-01-01 00:00:00Z]}
       ]
 
@@ -410,7 +419,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
       html =
         render_component(&Editor.panel/1, %{
           kind: :axis,
-          node: %{scale: :x, side: :bottom},
+          node: %{scale: "x", side: :bottom},
           facet: :geometry
         })
 
@@ -525,7 +534,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
         render_component(&Editor.form_body/1, %{
           kind: :axis,
           node: %{},
-          path: [:frames, :main, :axes, 1],
+          path: [:frames, "main", :axes, 1],
           label: "frames.main.axes[1]"
         })
 
@@ -539,7 +548,7 @@ defmodule Visualize.Chart.Builder.EditorTest do
 
     test "two node forms on one page differ" do
       ids =
-        for path <- [[:marks, 0], [:marks, 1], [:styles, :series]] do
+        for path <- [[:marks, 0], [:marks, 1], [:styles, "series"]] do
           html = render_component(&Editor.panel/1, %{kind: :mark, node: %{}, path: path})
           [id] = form_ids(html)
           id

@@ -26,7 +26,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Chart
     alias Visualize.Chart.Builder.{Editor, Params, Stack, StyleForm, StyleStack}
-    alias Visualize.Chart.{Fragment, Schema, Use, Var}
+    alias Visualize.Chart.{Fragment, Names, Schema, Use, Var}
     alias Visualize.{Theme, Vocabulary}
 
     # The events this module handles: `Visualize.Chart.Builder.handle_event/3` routes
@@ -50,15 +50,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc false
     def handle_event("toggle_axis", %{"scale" => scale, "side" => side} = params, socket) do
       case Vocabulary.fetch(@sides, side) do
-        # #778 class (b): a scale's name from the event.
-        {:ok, side} -> axis_toggled(socket, String.to_atom(scale), side, params)
+        # A scale is named by its string (D-195), as the event gives it.
+        {:ok, side} -> axis_toggled(socket, scale, side, params)
         # A side an axis does not have is no edit: nothing is made of the string.
         :error -> {:noreply, socket}
       end
     end
 
     def handle_event("toggle_grid", %{"scale" => scale} = params, socket) do
-      scale = String.to_atom(scale)
       %{design: design} = editing(socket.assigns)
       frame_path = [:frames, ticked_frame(design, params)]
 
@@ -164,7 +163,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       %{design: design} = editing(socket.assigns)
 
       case Editor.parse({:ref, :style}, String.trim(submitted)) do
-        {:ok, name} when is_atom(name) ->
+        {:ok, name} when is_binary(name) ->
           if Map.has_key?(Map.get(design, :styles) || %{}, name) do
             socket
             |> opened_style(name)
@@ -197,9 +196,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         name ->
           socket = assign(socket, :palette_chosen, nil)
 
-          if Map.has_key?(Map.get(design, :styles) || %{}, name),
+          # The design names the style by its string (D-195); the theme by its own word.
+          if Map.has_key?(Map.get(design, :styles) || %{}, to_string(name)),
             do: {:noreply, opened_style(socket, name)},
-            else: {:noreply, declared_style(socket, name, Theme.style(theme, name))}
+            else: {:noreply, declared_style(socket, to_string(name), Theme.style(theme, name))}
       end
     end
 
@@ -345,11 +345,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # A source chosen from the pool takes the pool's fields when it declares none (§19.10).
     defp filled(%{source: body} = local, key, pool) when is_map(body) and key != nil do
-      case {Map.get(body, :fields, []), Map.get(pool, key)} do
-        {[], rows} when rows != nil ->
+      # The pool is the host's, keyed by its spelling; a field is named by its string (D-195).
+      case {Map.get(body, :fields, []), Names.fetch(pool, key)} do
+        {[], {:ok, rows}} when rows != nil ->
           case Visualize.Data.Table.rows(rows) do
             [first | _] when is_map(first) ->
-              %{local | source: Map.put(body, :fields, first |> Map.keys() |> Enum.sort())}
+              fields = first |> Map.keys() |> Enum.map(&Names.name/1) |> Enum.sort()
+              %{local | source: Map.put(body, :fields, fields)}
 
             _none ->
               local
@@ -370,7 +372,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       case Editor.locate(entry.kind, field) do
         %{path: [key], spec: %{type: {:list, _}}} ->
           ticked =
-            params |> Map.get(field <> ".pick", []) |> List.wrap() |> Enum.map(&String.to_atom/1)
+            params |> Map.get(field <> ".pick", []) |> List.wrap()
 
           vars = for %Var{} = v <- (is_map(node) && Map.get(node, key, [])) || [], do: v
           parsed = if ticked ++ vars == [], do: :error, else: {:ok, ticked ++ vars}

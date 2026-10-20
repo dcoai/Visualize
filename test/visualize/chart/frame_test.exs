@@ -353,7 +353,7 @@ defmodule Visualize.Chart.FrameTest do
 
       replaced = Scale.linear() |> Scale.domain([0, 50]) |> Scale.range([150, 0])
       frame = Frame.put_scale(frame, :y, replaced)
-      assert Frame.scales(frame) == %{y: replaced}
+      assert Frame.scales(frame) == %{"y" => replaced}
     end
 
     test "an axis's explicit tick values beat its count, which beats the derived count" do
@@ -397,7 +397,7 @@ defmodule Visualize.Chart.FrameTest do
       assert Frame.scale(frame, :y).range == [150, 0]
       assert Frame.scale(frame, :color).range == Enum.map(1..10, &:"series_#{&1}")
       assert Frame.scale(frame, :other).range == [150, 0]
-      assert Scale.apply(Frame.scale(frame, :color), :b) == :series_2
+      assert Scale.apply(Frame.scale(frame, :color), "b") == :series_2
       # A sequential scale's :auto range is the theme's sequential ramp (spec/14 §4.3, D-135).
       assert Scale.apply(Frame.scale(frame, :heat), 0) == "#e9f2fc"
       assert Scale.apply(Frame.scale(frame, :heat), 1) == "#004580"
@@ -419,31 +419,31 @@ defmodule Visualize.Chart.FrameTest do
     test "an unresolved variable, an unknown theme and a bad value are ArgumentErrors" do
       var = Chart.var(:unit)
 
-      assert_raise ArgumentError, ~r/variable :unit is unresolved/, fn ->
+      assert_raise ArgumentError, ~r/variable "unit" is unresolved/, fn ->
         chart(%{}, %{vars: %{unit: %{}}, labels: [%{anchor: :title, text: [var]}]})
         |> Frame.new(size: @size)
         |> Frame.generate()
       end
 
-      assert_raise ArgumentError, ~r/theme :house is neither built-in/, fn ->
+      assert_raise ArgumentError, ~r/theme "house" is neither built-in/, fn ->
         Frame.new(chart(%{}, %{theme: :house}), size: @size)
       end
 
-      assert %Frame{theme: %Theme{name: :house}} =
+      assert %Frame{theme: %Theme{name: "house"}} =
                Frame.new(chart(%{}, %{theme: :house}),
                  theme: Theme.new(name: :house),
                  size: @size
                )
 
-      assert_raise ArgumentError, ~r/scale :x \(time\) cannot take "soon"/, fn ->
+      assert_raise ArgumentError, ~r/scale "x" \(time\) cannot take "soon"/, fn ->
         frame(%{x: %{kind: :time}}, [line(%{x: :t, y: :v})], %{primary: [%{t: "soon", v: 1}]})
       end
 
-      assert_raise ArgumentError, ~r/scale :x \(log\) cannot take 0/, fn ->
+      assert_raise ArgumentError, ~r/scale "x" \(log\) cannot take 0/, fn ->
         frame(%{x: %{kind: :log}}, [line(%{x: :n, y: :v})])
       end
 
-      assert_raise ArgumentError, ~r/declares no scale :z/, fn ->
+      assert_raise ArgumentError, ~r/declares no scale "z"/, fn ->
         Frame.scale(Frame.new(chart(%{}), size: @size), :z)
       end
     end
@@ -559,7 +559,7 @@ defmodule Visualize.Chart.FrameTest do
       }
 
       assert Visualize.Chart.Validator.validate(design) ==
-               {:error, [{[:styles, :wash, :fill, :name], {:undeclared, :paint, :nope}}]}
+               {:error, [{[:styles, "wash", :fill, :name], {:undeclared, :paint, "nope"}}]}
     end
 
     test "a gradient of version 2's words reads as the paint it is (D-172)" do
@@ -583,7 +583,8 @@ defmodule Visualize.Chart.FrameTest do
         }
       }
 
-      assert painted(old).defs == @defs
+      assert painted(old).defs ==
+               Visualize.Chart.Migration.canonical(%{version: 3, defs: @defs}).defs
     end
 
     test "a gradient written inline is drawn from the frame's defs, keyed by what it draws" do
@@ -1112,13 +1113,13 @@ defmodule Visualize.Chart.FrameTest do
       [xa, xb | horizontal] = grid.children
 
       assert xa.attrs == %{
-               x1: Axis.tick_position(x_axis, :a),
+               x1: Axis.tick_position(x_axis, "a"),
                y1: 0,
-               x2: Axis.tick_position(x_axis, :a),
+               x2: Axis.tick_position(x_axis, "a"),
                y2: 150
              }
 
-      assert xb.attrs.x1 == Axis.tick_position(x_axis, :b)
+      assert xb.attrs.x1 == Axis.tick_position(x_axis, "b")
       assert Enum.map(horizontal, & &1.attrs.y1) == [150.0, 75.0, 0.0]
     end
   end
@@ -1416,12 +1417,12 @@ defmodule Visualize.Chart.FrameTest do
     test "every frame is realized by name, its plot its own box less its own margins" do
       applied = applied()
 
-      assert applied.frames |> Map.keys() |> Enum.sort() == [:history, :now]
+      assert applied.frames |> Map.keys() |> Enum.sort() == ["history", "now"]
       # 300 x 200: the history takes three quarters of the width, the gauge the last quarter.
-      assert applied.frames.history.plot == %{width: 0.75 * 300 - 50, height: 200 - 30}
-      assert applied.frames.now.plot == %{width: 0.25 * 300 - 20, height: 200 - 30}
+      assert applied.frames["history"].plot == %{width: 0.75 * 300 - 50, height: 200 - 30}
+      assert applied.frames["now"].plot == %{width: 0.25 * 300 - 20, height: 200 - 30}
       # `size` stays the render's: the box is a fraction of it, not a size of its own.
-      assert applied.frames.now.size == %{width: 300, height: 200}
+      assert applied.frames["now"].size == %{width: 300, height: 200}
     end
 
     test "each frame is one group at its own box, in z order, tagged with its name" do
@@ -1477,8 +1478,8 @@ defmodule Visualize.Chart.FrameTest do
       {:ok, applied} = Chart.apply(@two, sources: %{primary: @rows}, size: {600, 400})
 
       # The margins are pixels and do not scale (§4.2); the boxes are fractions and do.
-      assert applied.frames.history.margin == %{top: 10, right: 10, bottom: 20, left: 40}
-      assert applied.frames.history.plot == %{width: 0.75 * 600 - 50, height: 400 - 30}
+      assert applied.frames["history"].margin == %{top: 10, right: 10, bottom: 20, left: 40}
+      assert applied.frames["history"].plot == %{width: 0.75 * 600 - 50, height: 400 - 30}
 
       assert Chart.render(applied, paths: true) =~
                ~s|<g class="frame frame-now" data-node="frames.now" transform="translate(460,10)"|
@@ -1487,11 +1488,11 @@ defmodule Visualize.Chart.FrameTest do
     test "a mark draws in the frame it names, through that frame's scales" do
       applied = applied()
 
-      assert [%{type: :line}] = applied.frames.history.marks
-      assert [%{type: :symbol}] = applied.frames.now.marks
+      assert [%{type: :line}] = applied.frames["history"].marks
+      assert [%{type: :symbol}] = applied.frames["now"].marks
       # Both frames declare `x`; each mark reads its own frame's.
-      assert applied.frames.history.scales.x.__struct__ == Visualize.Scale.Time
-      assert applied.frames.now.scales.x.__struct__ == Visualize.Scale.Linear
+      assert applied.frames["history"].scales["x"].__struct__ == Visualize.Scale.Time
+      assert applied.frames["now"].scales["x"].__struct__ == Visualize.Scale.Linear
     end
 
     test "a mark says its frame when the design has more than one, and says one it declares" do
@@ -1501,7 +1502,7 @@ defmodule Visualize.Chart.FrameTest do
       assert {[:marks, 0, :frame], :required} in errors
 
       {:error, errors} = Chart.apply(put_in(@two.marks, [put_in(hd(@two.marks).frame, :nope)]))
-      assert {[:marks, 0, :frame], {:undeclared, :frame, :nope}} in errors
+      assert {[:marks, 0, :frame], {:undeclared, :frame, "nope"}} in errors
 
       # One frame, and the key is the frame's: a design need not repeat itself.
       one = %{@two | frames: %{history: @two.frames.history}, marks: [hd(@two.marks)]}
@@ -1516,22 +1517,22 @@ defmodule Visualize.Chart.FrameTest do
       sources = %{primary: @rows}
       {:ok, frames} = Chart.compile(@two, sources: sources, size: @size)
 
-      assert frames |> Map.keys() |> Enum.sort() == [:history, :now]
+      assert frames |> Map.keys() |> Enum.sort() == ["history", "now"]
 
       # Each is one plot: its own box in pixels, its own plot area, its own marks.
-      assert frames.history.box == %{x: 0, y: 0, width: 0.75 * 300, height: 200}
-      assert frames.now.box == %{x: 0.75 * 300, y: 0, width: 0.25 * 300, height: 200}
-      assert frames.history.plot == %{width: 0.75 * 300 - 50, height: 170}
-      assert Enum.map(frames.history.chart.marks, & &1.type) == [:line]
-      assert Enum.map(frames.now.chart.marks, & &1.type) == [:symbol]
-      assert Map.keys(frames.now.chart.frames) == [:now]
+      assert frames["history"].box == %{x: 0, y: 0, width: 0.75 * 300, height: 200}
+      assert frames["now"].box == %{x: 0.75 * 300, y: 0, width: 0.25 * 300, height: 200}
+      assert frames["history"].plot == %{width: 0.75 * 300 - 50, height: 170}
+      assert Enum.map(frames["history"].chart.marks, & &1.type) == [:line]
+      assert Enum.map(frames["now"].chart.marks, & &1.type) == [:symbol]
+      assert Map.keys(frames["now"].chart.frames) == ["now"]
 
       # And each draws what that frame draws alone, byte for byte.
       alone = %{@two | frames: %{history: @two.frames.history}, marks: [hd(@two.marks)]}
-      {:ok, %{history: only}} = Chart.compile(alone, sources: sources, size: @size)
+      {:ok, %{"history" => only}} = Chart.compile(alone, sources: sources, size: @size)
 
-      assert Compiled.svg(frames.history, sources) == Compiled.svg(only, sources)
-      assert Compiled.static(frames.history) == Compiled.static(only)
+      assert Compiled.svg(frames["history"], sources) == Compiled.svg(only, sources)
+      assert Compiled.static(frames["history"]) == Compiled.static(only)
     end
 
     test "a version 1 design migrates to one frame named main, without its size" do
@@ -1544,7 +1545,7 @@ defmodule Visualize.Chart.FrameTest do
 
       chart = Chart.from_map!(old)
       assert chart.version == 3
-      assert chart.frames == %{main: %{kind: :cartesian, margin: %{top: 1}}}
+      assert chart.frames == %{"main" => %{kind: :cartesian, margin: %{top: 1}}}
     end
   end
 
@@ -1582,14 +1583,14 @@ defmodule Visualize.Chart.FrameTest do
       {:ok, applied} = Chart.apply(@shared, sources: @both, size: @size)
 
       # The union of [1, 3] and [8, 20], drawn by both.
-      assert applied.frames.year.scales.y.domain == [1, 20]
-      assert applied.frames.day.scales.y.domain == [1, 20]
-      assert applied.frames.year.domains == %{y: [1, 20]}
+      assert applied.frames["year"].scales["y"].domain == [1, 20]
+      assert applied.frames["day"].scales["y"].domain == [1, 20]
+      assert applied.frames["year"].domains == %{"y" => [1, 20]}
 
       # The range is each frame's own pixels; here both halves are full height.
-      assert applied.frames.day.scales.y.range == applied.frames.year.scales.y.range
+      assert applied.frames["day"].scales["y"].range == applied.frames["year"].scales["y"].range
       # The adopting frame's x is its own and is not shared.
-      assert applied.frames.day.scales.x.domain == [0, 1]
+      assert applied.frames["day"].scales["x"].domain == [0, 1]
 
       # Both axes draw the same domain: the same tick labels in each frame's group.
       # `day` draws first, ties in `z` being broken by name (§4.2).
@@ -1616,23 +1617,23 @@ defmodule Visualize.Chart.FrameTest do
 
       {:ok, applied} = Chart.apply(chain, sources: @both, size: @size)
 
-      for name <- [:year, :day, :hour] do
-        assert applied.frames[name].scales.y.domain == [1, 20], "#{name}"
+      for name <- ["year", "day", "hour"] do
+        assert applied.frames[name].scales["y"].domain == [1, 20], "#{name}"
       end
     end
 
     test "a cycle, an unknown frame and an unknown scale are faults" do
       cycle = put_in(@shared, [:frames, :year, :scales, :y], {:frame, :day, :y})
       assert {:error, errors} = Chart.apply(cycle, sources: @both)
-      assert {[:frames, :day, :scales, :y], {:cycle, :scale, :y}} in errors
+      assert {[:frames, "day", :scales, "y"], {:cycle, :scale, "y"}} in errors
 
       nope = put_in(@shared, [:frames, :day, :scales, :y], {:frame, :nope, :y})
       assert {:error, errors} = Chart.apply(nope, sources: @both)
-      assert {[:frames, :day, :scales, :y], {:undeclared, :frame, :nope}} in errors
+      assert {[:frames, "day", :scales, "y"], {:undeclared, :frame, "nope"}} in errors
 
       missing = put_in(@shared, [:frames, :day, :scales, :y], {:frame, :year, :z})
       assert {:error, errors} = Chart.apply(missing, sources: @both)
-      assert {[:frames, :day, :scales, :y], {:undeclared, :scale, :z}} in errors
+      assert {[:frames, "day", :scales, "y"], {:undeclared, :scale, "z"}} in errors
     end
 
     test "a compiled chart per frame holds the shared domain, and a tick does not move it" do
@@ -1641,8 +1642,8 @@ defmodule Visualize.Chart.FrameTest do
 
       # Each compiled chart is one frame and reaches for no other: the adoption is the
       # owner's node at the resolved domain, and the owner's own is fixed at it too.
-      for name <- [:year, :day] do
-        assert frames[name].chart.frames[name].scales.y == %{kind: :linear, domain: [1, 20]},
+      for name <- ["year", "day"] do
+        assert frames[name].chart.frames[name].scales["y"] == %{kind: :linear, domain: [1, 20]},
                "#{name}"
 
         # A given domain does not move, so the axis is static furniture.
@@ -1652,7 +1653,7 @@ defmodule Visualize.Chart.FrameTest do
       # And a tick over other rows keeps it: the shared extent is the binding's, not the
       # frame's own (spec/14 §12.1).
       other = %{low: [%{t: 0, v: 0.5}], high: [%{t: 0, v: 0.5}]}
-      {_payload, ticked} = Compiled.tick(frames.day, other)
+      {_payload, ticked} = Compiled.tick(frames["day"], other)
       assert Compiled.svg(ticked, other) =~ "20"
     end
   end
@@ -1683,7 +1684,7 @@ defmodule Visualize.Chart.FrameTest do
           right: %{cell: [1, 0]}
         })
 
-      assert cells == %{left: [0.0, 0.0, 0.5, 1.0], right: [0.5, 0.0, 0.5, 1.0]}
+      assert cells == %{"left" => [0.0, 0.0, 0.5, 1.0], "right" => [0.5, 0.0, 0.5, 1.0]}
     end
 
     test "a weight is not a fraction: two layouts in the same proportions are one layout" do
@@ -1694,15 +1695,15 @@ defmodule Visualize.Chart.FrameTest do
     test "a span covers its cells and the gap between them" do
       # Two columns of one row each, and a frame over both: its box is the pair's.
       pair = grid(%{columns: [1, 1]}, %{both: %{cell: [0, 0], span: [2, 1]}})
-      assert pair == %{both: [0.0, 0.0, 1.0, 1.0]}
+      assert pair == %{"both" => [0.0, 0.0, 1.0, 1.0]}
 
       # With a gap, the spanning frame keeps the gap that falls inside it.
       gapped = grid(%{columns: [1, 1], gap: 30}, %{both: %{cell: [0, 0], span: [2, 1]}})
-      assert gapped == %{both: [0.0, 0.0, 1.0, 1.0]}
+      assert gapped == %{"both" => [0.0, 0.0, 1.0, 1.0]}
 
       # And a frame in one cell gives up half the gap at the edge it shares (300 wide).
       halves = grid(%{columns: [1, 1], gap: 30}, %{a: %{cell: [0, 0]}, b: %{cell: [1, 0]}})
-      assert halves == %{a: [0.0, 0.0, 0.45, 1.0], b: [0.55, 0.0, 0.45, 1.0]}
+      assert halves == %{"a" => [0.0, 0.0, 0.45, 1.0], "b" => [0.55, 0.0, 0.45, 1.0]}
     end
 
     test "rows and columns place a frame in both directions" do
@@ -1712,26 +1713,26 @@ defmodule Visualize.Chart.FrameTest do
           low: %{cell: [1, 1]}
         })
 
-      assert cells == %{top: [0.0, 0.0, 1.0, 0.75], low: [0.5, 0.75, 0.5, 0.25]}
+      assert cells == %{"top" => [0.0, 0.0, 1.0, 0.75], "low" => [0.5, 0.75, 0.5, 0.25]}
     end
 
     test "a frame says where it goes once, inside a grid of positive weights" do
       both = grid(%{columns: [1, 1]}, %{a: %{cell: [0, 0], box: [0, 0, 1, 1]}})
-      assert {[:frames, :a], :both} in both
+      assert {[:frames, "a"], :both} in both
 
       outside = grid(%{columns: [1, 1]}, %{a: %{cell: [2, 0]}})
-      assert {[:frames, :a, :cell], :outside} in outside
+      assert {[:frames, "a", :cell], :outside} in outside
 
       past = grid(%{columns: [1, 1]}, %{a: %{cell: [1, 0], span: [2, 1]}})
-      assert {[:frames, :a, :cell], :outside} in past
+      assert {[:frames, "a", :cell], :outside} in past
 
       zero = grid(%{columns: [1, 0]}, %{a: %{cell: [0, 0]}})
       assert {[:layout, :columns], {:weight, :columns}} in zero
     end
 
     test "a design with no layout, and a frame with no cell, are what they were" do
-      assert grid(%{}, %{a: %{box: [0, 0, 0.5, 1]}}) == %{a: [0, 0, 0.5, 1]}
-      assert grid(%{}, %{a: %{cell: [0, 0]}}) == %{a: [0.0, 0.0, 1.0, 1.0]}
+      assert grid(%{}, %{a: %{box: [0, 0, 0.5, 1]}}) == %{"a" => [0, 0, 0.5, 1]}
+      assert grid(%{}, %{a: %{cell: [0, 0]}}) == %{"a" => [0.0, 0.0, 1.0, 1.0]}
     end
   end
 end

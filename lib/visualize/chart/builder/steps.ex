@@ -27,11 +27,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         iex> Visualize.Chart.Builder.Steps.steps(%{frames: %{main: %{kind: :cartesian}}}) |> Enum.map(& &1.path)
         [[:sources], [:marks]]
-        iex> design = %{frames: %{main: %{kind: :cartesian}}, sources: %{s: %{fields: [:t, :v]}},
-        ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
+        iex> design = Visualize.Chart.Migration.names(%{frames: %{main: %{kind: :cartesian}},
+        ...>   sources: %{s: %{fields: [:t, :v]}}, marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]})
         iex> Visualize.Chart.Builder.Steps.steps(design) |> Enum.map(&{&1.path, &1.event})
-        [{[:frames, :main, :axes], "select_node"}]
-        iex> Visualize.Chart.Builder.Steps.steps(put_in(design, [:frames, :main, :axes], [%{scale: :x, side: :bottom}]))
+        [{[:frames, "main", :axes], "select_node"}]
+        iex> Visualize.Chart.Builder.Steps.steps(put_in(design, [:frames, "main", :axes], [%{scale: "x", side: :bottom}]))
         []
     """
     @spec steps(map()) :: [step()]

@@ -64,8 +64,8 @@ defmodule Visualize.Board.Codec do
     end)
   end
 
-  defp drill_var({name, {:datum, field}}) when is_atom(field),
-    do: {name(name), Tags.tag("$datum", Atom.to_string(field))}
+  defp drill_var({name, {:datum, field}}) when is_atom(field) or is_binary(field),
+    do: {name(name), Tags.tag("$datum", to_string(field))}
 
   defp drill_var({name, value}), do: {name(name), Codec.encode_term(value)}
 
@@ -105,7 +105,7 @@ defmodule Visualize.Board.Codec do
   end
 
   defp cells(cells) when is_map(cells),
-    do: Map.new(cells, fn {name, cell} -> {atom(name), read_cell(cell)} end)
+    do: Map.new(cells, fn {name, cell} -> {read_name(name), read_cell(cell)} end)
 
   defp cells(other), do: other
 
@@ -136,29 +136,29 @@ defmodule Visualize.Board.Codec do
 
   defp drill_vars(vars) when is_map(vars) do
     Map.new(vars, fn
-      # #778 class (b): a datum's field.
       {name, %{@datum => field} = v} when map_size(v) == 1 and is_binary(field) ->
-        {atom(name), {:datum, String.to_atom(field)}}
+        {read_name(name), {:datum, field}}
 
       {name, value} ->
-        {atom(name), Codec.decode_term(value)}
+        {read_name(name), Codec.decode_term(value)}
     end)
   end
 
   defp drill_vars(other), do: other
 
   defp read_sources(sources) when is_map(sources),
-    do: Map.new(sources, fn {id, source} -> {atom(id), VirtualSourceCodec.decode(source)} end)
+    do:
+      Map.new(sources, fn {id, source} -> {read_name(id), VirtualSourceCodec.decode(source)} end)
 
   defp read_sources(other), do: other
 
   defp links(links) when is_map(links),
-    do: Map.new(links, fn {from, to} -> {atom(from), atom(to)} end)
+    do: Map.new(links, fn {from, to} -> {read_name(from), read_name(to)} end)
 
   defp links(other), do: other
 
   defp names(map) when is_map(map),
-    do: Map.new(map, fn {name, value} -> {atom(name), Codec.decode_term(value)} end)
+    do: Map.new(map, fn {name, value} -> {read_name(name), Codec.decode_term(value)} end)
 
   defp names(other), do: other
 
@@ -177,7 +177,7 @@ defmodule Visualize.Board.Codec do
 
   defp known(key, _keys), do: key
 
-  # #778 class (b): a cell's, a variable's, a link's or a virtual source's name.
-  defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
-  defp atom(key), do: key
+  # A cell's, a variable's, a link's or a virtual source's name is its string (D-195).
+  defp read_name(key) when is_binary(key), do: Tags.unescape(key)
+  defp read_name(key), do: key
 end

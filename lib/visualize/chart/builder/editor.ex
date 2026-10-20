@@ -19,10 +19,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     use Phoenix.Component
 
     alias Visualize.Chart.Builder.{Chain, Fields, Store, StyleForm}
-    alias Visualize.Chart.{Fragment, Schema, Validator, Var}
+    alias Visualize.Chart.{Fragment, Migration, Schema, Validator, Var, Words}
     alias Visualize.Theme
 
     @typedoc "The control a key's type gets (spec/14 §18.6)."
@@ -36,7 +38,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @facets [:binding, :channel, :geometry, :style, :content]
 
     # Every type that reads as a plain atom naming something the design declares.
-    @atom_types [:name, :field, :slot]
+    @atom_types [:name, :field]
+    # The forms a literal spells by name: `%Visualize.Chart.Var{name: …}` and `~U[…]`.
+    @literal_forms Map.new([:Visualize, :Chart, :Var, :sigil_U, :name], &{Atom.to_string(&1), &1})
 
     # Every type whose control is a single-line text field (spec/14 §18.6).
     @text_types [:string, :name, :field, :size, :font, :slot, :text]
@@ -169,7 +173,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> Visualize.Chart.Builder.Editor.parse(:integer, "42")
         {:ok, 42}
         iex> Visualize.Chart.Builder.Editor.parse({:ref, :style}, "series")
-        {:ok, :series}
+        {:ok, "series"}
         iex> Visualize.Chart.Builder.Editor.parse(:color, "#3b6fa8")
         {:ok, "#3b6fa8"}
         iex> Visualize.Chart.Builder.Editor.parse(:extent, "[0, 100]")
@@ -195,13 +199,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A text is a string with interpolation (§7.1): kept as typed, and read by the
     # validator, so a hole that does not read is a fault under the field, not a refusal.
     defp read(:text, string), do: {:ok, string}
-    # #778 class (b): a name, a field or a slot the person typed.
-    defp read(type, string) when type in @atom_types, do: {:ok, atom(string)}
+    # A name or a field the person typed is its string (D-195); a slot is the library's
+    # word, else the string.
+    defp read(:slot, string), do: {:ok, string |> name_of() |> Words.word()}
+    defp read(type, string) when type in @atom_types, do: {:ok, name_of(string)}
     # A reference is a local name, or a library id spelled as the DOM carries one (§19.2).
     defp read({:ref, kind}, string) do
       case Store.decode_id(string) do
         {:ok, {^kind, _n} = id} -> {:ok, id}
-        _other -> {:ok, atom(string)}
+        _other -> {:ok, name_of(string)}
       end
     end
 
@@ -228,9 +234,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A channel: a number is the constant, a bare name the field, anything else a literal.
     defp read(:channel, string) do
       with :error <- number(string) do
-        # #778 class (b): a field's name the person typed.
-        if Regex.match?(~r/^[a-z_][a-zA-Z0-9_?!]*$/, string),
-          do: {:ok, String.to_atom(string)},
+        # A field's name the person typed is its string (D-195).
+        if Regex.match?(~r/^:?[a-z_][a-zA-Z0-9_?!]*$/, string),
+          do: {:ok, name_of(string)},
           else: literal(string)
       end
     end
@@ -284,14 +290,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    # #778 class (b): a name the person typed, until the builder keeps names as strings.
-    defp atom(":" <> rest), do: String.to_atom(rest)
-    defp atom(string), do: String.to_atom(string)
+    # A name the person typed, its string, a leading `:` taken off (D-195).
+    defp name_of(":" <> rest), do: rest
+    defp name_of(string), do: string
 
-    # What a person means by a bare word in a color, a size or a font: a leading `:` is an
-    # atom, a numeral is a number, and everything else is the string itself.
-    # #778 class (b): a slot or a color's name the person typed.
-    defp loose(":" <> rest), do: String.to_atom(rest)
+    # What a person means by a bare word in a color, a size or a font: a leading `:` is a
+    # word — the library's atom (a slot, a CSS color, a unit), else the string of a name a
+    # theme declares — a numeral is a number, and everything else is the string itself.
+    defp loose(":" <> rest), do: Words.word(rest)
 
     defp loose(string) do
       case number(string) do
@@ -302,12 +308,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # -- the literal reader (spec/14 §18.6, D-86) -----------------------------------------
 
-    # Read with existing atoms only (spec/14 §9.4, D-195): a literal naming an atom the node
-    # lacks is a parse fault, never a new atom, so typing cannot fill the atom table.
+    # Read with a static atoms encoder (spec/14 §9.4, D-195): an atom literal is the library's
+    # word or its string, a key the schema's, and the few names a literal's forms spell are
+    # the reader's own — nothing typed is made an atom, whatever the node has seen.
     defp literal(string) do
-      case Code.string_to_quoted(string, existing_atoms_only: true) do
+      case Code.string_to_quoted(string, static_atoms_encoder: &literal_word/2) do
         {:ok, quoted} -> term(quoted)
         {:error, _reason} -> :error
+      end
+    end
+
+    defp literal_word(name, _meta) do
+      case Map.fetch(@literal_forms, name) do
+        {:ok, atom} -> {:ok, atom}
+        :error -> {:ok, Words.word(name)}
       end
     end
 
@@ -343,7 +357,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # `Visualize.Chart.Var` carries one field and it is required, so a literal that gives
     # anything else is an error rather than a raise.
-    defp var(name: name) when is_atom(name), do: {:ok, %Var{name: name}}
+    defp var(name: name) when is_name(name), do: {:ok, %Var{name: name}}
     defp var(_fields), do: :error
 
     defp collect(list) do
@@ -375,7 +389,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `changes/3` (§18.7).
 
         iex> Visualize.Chart.Builder.Editor.change(:mark, %{"_target" => ["data"], "data" => "rows"})
-        {:data, {:ok, :rows}}
+        {:data, {:ok, "rows"}}
 
         iex> Visualize.Chart.Builder.Editor.change(:theme, %{"_target" => ["axis.slot"], "axis.slot" => ""})
         {:axis, :error}
@@ -387,10 +401,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def change(kind, %{"_target" => [target]} = params) do
       case String.split(target, ".", parts: 2) do
         [key, "slot"] -> with %{key: k} <- key_spec(kind, key), do: {k, slot_face(params[target])}
-        [key, "range"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
-        [key, "other"] -> with spec <- key_spec(kind, key), do: typed(spec, params[target])
+        [key, "range"] -> with spec <- key_spec(kind, key), do: typed(kind, spec, params[target])
+        [key, "other"] -> with spec <- key_spec(kind, key), do: typed(kind, spec, params[target])
         [_key, "add"] -> nil
-        [key] -> with spec <- key_spec(kind, key), do: typed(spec, params[key])
+        [key] -> with spec <- key_spec(kind, key), do: typed(kind, spec, params[key])
         _other -> nil
       end
     end
@@ -422,7 +436,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         [stroke: {:ok, %{type: :solid, color: "#111", width: 5}}]
 
         iex> Visualize.Chart.Builder.Editor.changes(:mark, %{"_target" => ["data"], "data" => "rows"}, %{})
-        [data: {:ok, :rows}]
+        [data: {:ok, "rows"}]
 
         iex> Visualize.Chart.Builder.Editor.changes(:style, %{"_target" => ["nonsense"], "nonsense" => "1"}, %{})
         []
@@ -571,8 +585,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.find(describe(kind), &(to_string(&1.key) == submitted))
     end
 
-    defp typed(nil, _value), do: nil
-    defp typed(spec, value), do: {spec.key, submitted(spec.type, value)}
+    defp typed(_kind, nil, _value), do: nil
+
+    # A name the person typed is its string, and a word of a vocabulary position — a theme, a
+    # scheme, a projection — the library's atom, as a document reads them (D-195).
+    defp typed(kind, spec, value) do
+      case submitted(spec.type, value) do
+        {:ok, v} -> {spec.key, {:ok, Migration.Named.named(kind, spec.key, spec.type, v)}}
+        other -> {spec.key, other}
+      end
+    end
 
     @doc """
     A submitted control's value read as a type, with the one rule `parse/2` cannot know: an
@@ -597,7 +619,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The name becomes an atom exactly as a typed reference does (spec/14 §18.6, §19.9).
 
         iex> Visualize.Chart.Builder.Editor.variable(":color_1")
-        {:ok, %Visualize.Chart.Var{name: :color_1}}
+        {:ok, %Visualize.Chart.Var{name: "color_1"}}
 
         iex> Visualize.Chart.Builder.Editor.variable("  ")
         :error
@@ -608,7 +630,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def variable(string) when is_binary(string) do
       case String.trim(string) do
         "" -> :error
-        name -> {:ok, %Var{name: atom(name)}}
+        name -> {:ok, %Var{name: name_of(name)}}
       end
     end
 

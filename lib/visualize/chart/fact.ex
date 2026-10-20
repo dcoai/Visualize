@@ -13,12 +13,12 @@ defmodule Visualize.Chart.Fact do
   ## Examples
 
       iex> Visualize.Chart.fact(:primary, :latency, :unit)
-      %Visualize.Chart.Fact{source: :primary, field: :latency, key: :unit}
+      %Visualize.Chart.Fact{source: "primary", field: "latency", key: :unit}
 
   """
 
   @enforce_keys [:source, :field, :key]
   defstruct [:source, :field, :key]
 
-  @type t :: %__MODULE__{source: atom(), field: atom(), key: atom()}
+  @type t :: %__MODULE__{source: String.t(), field: String.t(), key: atom()}
 end

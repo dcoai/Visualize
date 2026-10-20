@@ -9,7 +9,7 @@ defmodule Visualize.Chart.Template do
   # lookup, which that step reads a slot's feed and delivery with.
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Fact, Schema, Text, Validator, Var}
+  alias Visualize.Chart.{Fact, Names, Schema, Text, Validator, Var}
   alias Visualize.Data.{Delivery, Table}
 
   @doc false
@@ -173,22 +173,24 @@ defmodule Visualize.Chart.Template do
   # A slot's pool entry — under its own name, else its default — with the name it was
   # found under, which is the slot's feed (spec/14 §7.4).
   @spec entry(map(), atom(), map()) :: {:ok, term(), term()} | :error
+  # The pool is the host's, keyed as it keyed it: a slot's name or its default finds its
+  # entry by spelling (D-195), and the feed is the host's own key.
   def entry(pool, name, slot) do
-    case Map.fetch(pool, name) do
-      {:ok, source} ->
-        {:ok, name, source}
+    case Names.key(pool, name) do
+      {:ok, feed} ->
+        {:ok, feed, Map.fetch!(pool, feed)}
 
       :error ->
-        feed = default(slot)
-
-        case Map.fetch(pool, feed) do
-          {:ok, source} -> {:ok, feed, source}
-          :error -> :error
+        with feed when feed != nil <- default(slot),
+             {:ok, feed} <- Names.key(pool, feed) do
+          {:ok, feed, Map.fetch!(pool, feed)}
+        else
+          _none -> :error
         end
     end
   end
 
-  defp default(%{default: default}) when is_atom(default) and default != nil, do: default
+  defp default(%{default: default}) when is_binary(default), do: default
   defp default(_slot), do: nil
 
   # Every declared field is a key of some row, in either spelling (D-52); a source with
@@ -200,7 +202,7 @@ defmodule Visualize.Chart.Template do
 
       rows ->
         for field <- fields,
-            is_atom(field),
+            is_binary(field),
             not Enum.any?(rows, &has_field?(&1, field)),
             do: {[:sources, name], {:missing_field, field}}
     end
@@ -208,7 +210,5 @@ defmodule Visualize.Chart.Template do
 
   defp missing_fields(_slot, _source, _name), do: []
 
-  defp has_field?(row, field) do
-    Map.has_key?(row, field) or Map.has_key?(row, Atom.to_string(field))
-  end
+  defp has_field?(row, field), do: Visualize.Data.Table.key(row, field) != nil
 end

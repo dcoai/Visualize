@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Mark.Channels do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Channel resolution for a mark (spec/14 §5.2): every channel read from each row and
   # mapped through the scale it names in the frame kind's table, the band-edge rule for
   # `:band` scales, pixels for a channel that names no declared scale.
@@ -63,9 +65,11 @@ defmodule Visualize.Chart.Mark.Channels do
 
     with %Band{} = outer <- scale_named(frame, Scales.scale_for(frame.kind, mark, family)),
          %Band{} = inner <- scale_named(frame, Scales.offset_scale(mark, family)),
-         outer_start when is_number(outer_start) <- Scale.apply(outer, value),
+         outer_start when is_number(outer_start) <-
+           Scale.apply(outer, Visualize.Chart.Names.category(value)),
          inner_value when inner_value != nil <- Table.get(row, Map.fetch!(offsets, family)),
-         inner_start when is_number(inner_start) <- Scale.apply(inner, inner_value) do
+         inner_start when is_number(inner_start) <-
+           Scale.apply(inner, Visualize.Chart.Names.category(inner_value)) do
       outer_start + inner_start + Band.bandwidth(inner) * band_share(channel)
     else
       _ -> nil
@@ -147,7 +151,7 @@ defmodule Visualize.Chart.Mark.Channels do
     end
   end
 
-  defp read(field, row, _frame, _mark, _channel) when is_atom(field), do: Table.get(row, field)
+  defp read(field, row, _frame, _mark, _channel) when is_name(field), do: Table.get(row, field)
 
   # The ends of a domain: by value where it is numeric, by position where it is not — the
   # first and the last member, which is the only order a categorical domain has.
@@ -167,7 +171,9 @@ defmodule Visualize.Chart.Mark.Channels do
   defp map(frame, mark, channel, value) do
     case Scales.scale_for(frame.kind, mark, channel) do
       nil -> value
-      name -> place(Map.get(frame.scales, name), channel, value)
+      # A category is matched by its spelling (spec/14 §9.4, D-195): a row's atom and a
+      # domain's string are one value.
+      name -> place(Map.get(frame.scales, name), channel, Visualize.Chart.Names.category(value))
     end
   end
 

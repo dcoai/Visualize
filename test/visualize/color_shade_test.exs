@@ -96,7 +96,7 @@ defmodule Visualize.ColorShadeTest do
 
     test "pinned steps hold their contract" do
       assert_raise ArgumentError,
-                   ~r/color :brand breaks its contract: pinned steps must include 500/,
+                   ~r/color "brand" breaks its contract: pinned steps must include 500/,
                    fn ->
                      Theme.new(colors: %{brand: %{100 => "#fde8e8"}})
                    end
@@ -124,7 +124,7 @@ defmodule Visualize.ColorShadeTest do
       {:ok, json} = Chart.to_json(chart)
       assert json =~ ~s({"$shade":[{"$color":"red"},100]})
       assert {:ok, back} = Chart.from_json(json)
-      assert back.styles.pale.fill.color == shade(color(:red), 100)
+      assert back.styles["pale"].fill.color == shade(color(:red), 100)
     end
 
     test "a theme document carries its pinned steps as $steps" do

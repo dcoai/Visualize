@@ -40,7 +40,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     {polar, other} =
       frame.axes
       |> Enum.with_index()
-      |> Enum.split_with(fn {node, _i} -> node.scale in [:angle, :r] end)
+      |> Enum.split_with(fn {node, _i} -> node.scale in ["angle", "r"] end)
 
     rings =
       for {node, i} <- polar,
@@ -75,7 +75,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   @doc false
   # The axes on `angle` and `r`, then the others, of a polar frame (spec/14 §4.6).
   @spec polar_split(map()) :: {[map()], [map()]}
-  def polar_split(frame), do: Enum.split_with(frame.axes, &(&1.scale in [:angle, :r]))
+  def polar_split(frame), do: Enum.split_with(frame.axes, &(&1.scale in ["angle", "r"]))
 
   @doc false
   # The polar grid — spokes and rings — of the axes on `angle` and `r`, or nothing.
@@ -135,12 +135,12 @@ defmodule Visualize.Chart.Frame.Furniture do
   # The axis's length in pixels (§4.4): an `angle` axis's arc and an `r` axis's spoke in a
   # polar frame, else the span of its scale's range — the plot's side when the scale has
   # no two-ended numeric range.
-  defp axis_length(%{kind: :polar} = frame, %{scale: :angle} = node, _scale) do
+  defp axis_length(%{kind: :polar} = frame, %{scale: "angle"} = node, _scale) do
     {a0, a1} = sweep(frame)
     axis_radius(frame, node) * abs(a1 - a0)
   end
 
-  defp axis_length(%{kind: :polar} = frame, %{scale: :r}, _scale) do
+  defp axis_length(%{kind: :polar} = frame, %{scale: "r"}, _scale) do
     {r0, r1} = radii(frame)
     r1 - r0
   end
@@ -156,9 +156,9 @@ defmodule Visualize.Chart.Frame.Furniture do
   # Which way the axis's labels run, as the side `Visualize.Axis.tick_count/2` spaces them
   # by: a ring's labels sit side by side like a bottom axis's; a spoke's stack like a left
   # axis's when it runs more up and down than across.
-  defp run(%{kind: :polar}, %{scale: :angle}), do: :bottom
+  defp run(%{kind: :polar}, %{scale: "angle"}), do: :bottom
 
-  defp run(%{kind: :polar}, %{scale: :r} = node) do
+  defp run(%{kind: :polar}, %{scale: "r"} = node) do
     {ux, uy} = spoke_direction(node)
     if abs(uy) > abs(ux), do: :left, else: :bottom
   end
@@ -296,7 +296,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     name = Map.get(node, :style, Schema.default(:axis, :style))
     own = Map.get(node, :defaults)
 
-    if name == :axis and not Map.has_key?(frame.design_styles, :axis) and
+    if name == "axis" and not Map.has_key?(frame.design_styles, "axis") and
          Defaults.at(frame, own, nil).style == %{} do
       element
     else
@@ -394,7 +394,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   # The grid of a polar axis (spec/14 §4.6, #390): spokes over the radius band for the
   # angle scale, arcs over the sweep for the radius.
-  defp polar_grid(frame, %{grid: true, scale: :angle}, axis) do
+  defp polar_grid(frame, %{grid: true, scale: "angle"}, axis) do
     {r0, r1} = radii(frame)
 
     for v <- tick_values(axis), {ux, uy} = unit(Axis.tick_position(axis, v)) do
@@ -403,7 +403,7 @@ defmodule Visualize.Chart.Frame.Furniture do
     end
   end
 
-  defp polar_grid(frame, %{grid: true, scale: :r}, axis) do
+  defp polar_grid(frame, %{grid: true, scale: "r"}, axis) do
     {a0, a1} = sweep(frame)
 
     for v <- tick_values(axis), r = crisp(Scale.apply(axis.scale, v)), r > 0 do
@@ -416,7 +416,7 @@ defmodule Visualize.Chart.Frame.Furniture do
   # The angle scale's range: the sweep from its start, in radians (§4.3), the full turn
   # when the frame declares none.
   defp sweep(frame) do
-    case Map.get(frame.scales, :angle) do
+    case Map.get(frame.scales, "angle") do
       %{range: [a0, a1]} -> {a0, a1}
       _none -> {0, 2 * :math.pi()}
     end
@@ -424,7 +424,7 @@ defmodule Visualize.Chart.Frame.Furniture do
 
   # The r scale's range: the band the plot occupies, `[0, R]` when the frame declares none.
   defp radii(frame) do
-    case Map.get(frame.scales, :r) do
+    case Map.get(frame.scales, "r") do
       %{range: [r0, r1]} -> {min(r0, r1), max(r0, r1)}
       _none -> {0, outer_radius(frame)}
     end
@@ -480,7 +480,7 @@ defmodule Visualize.Chart.Frame.Furniture do
       style(frame, Map.get(node, :style, :axis), Map.get(node, :defaults), axis_path(frame, node))
 
     style = Style.resolve(style_node, frame.theme, mode)
-    text_anchor = if node.scale == :angle, do: :middle, else: spoke_anchor(spoke_direction(node))
+    text_anchor = if node.scale == "angle", do: :middle, else: spoke_anchor(spoke_direction(node))
 
     group_style =
       %{fill: :none, text_anchor: text_anchor} |> Map.merge(Map.take(style, @group_keys))
@@ -490,8 +490,8 @@ defmodule Visualize.Chart.Frame.Furniture do
 
     {domain, ticks} =
       case node.scale do
-        :angle -> ring(frame, node, axis, stroke, fill)
-        :r -> spoke(frame, node, axis, stroke, fill)
+        "angle" -> ring(frame, node, axis, stroke, fill)
+        "r" -> spoke(frame, node, axis, stroke, fill)
       end
 
     Element.group([domain | ticks],

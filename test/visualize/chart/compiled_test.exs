@@ -82,10 +82,10 @@ defmodule Visualize.Chart.CompiledTest do
       compiled = compile!(design(@inferred), sources: %{primary: rows(5)})
 
       assert Compiled.dynamic_regions(compiled) == [
-               {:grid, {:inferred, [:x]}},
+               {:grid, {:inferred, ["x"]}},
                {{:mark, 0}, :data},
-               {{:axis, 0}, {:inferred, [:x]}},
-               {{:axis, 1}, {:inferred, [:y]}}
+               {{:axis, 0}, {:inferred, ["x"]}},
+               {{:axis, 1}, {:inferred, ["y"]}}
              ]
     end
 
@@ -109,12 +109,12 @@ defmodule Visualize.Chart.CompiledTest do
 
       assert Compiled.dynamic_regions(compiled) == [
                {{:mark, 0}, :data},
-               {:legend, {:inferred, [:color]}}
+               {:legend, {:inferred, ["color"]}}
              ]
 
       inferred = put_in(extra, [:frames, :main, :scales, :y], %{kind: :linear})
       compiled = compile!(design(scales, inferred), sources: %{primary: rows(3)})
-      assert {:labels, {:inferred, [:y]}} in Compiled.dynamic_regions(compiled)
+      assert {:labels, {:inferred, ["y"]}} in Compiled.dynamic_regions(compiled)
     end
 
     test "a facet's panels are one dynamic region" do
@@ -203,7 +203,7 @@ defmodule Visualize.Chart.CompiledTest do
     end
 
     test "the errors of application are the compiler's" do
-      assert {:error, [{[:sources, :primary], {:unbound, :source, :primary}}]} =
+      assert {:error, [{[:sources, "primary"], {:unbound, :source, "primary"}}]} =
                Chart.compile(design(@fixed), size: {300, 200})
     end
   end
@@ -335,7 +335,7 @@ defmodule Visualize.Chart.CompiledTest do
     test "every stored design reassembles to Chart.render byte for byte" do
       for name <- Designs.names() do
         applied = Designs.apply(name)
-        {:ok, %{main: compiled}} = Chart.compile(applied)
+        {:ok, %{"main" => compiled}} = Chart.compile(applied)
         assert Enum.all?(Compiled.targets(compiled), &match?({:svg, _}, &1)), "#{name}"
         assert Compiled.svg(compiled, applied.sources) == Chart.render(applied), "#{name}"
       end
@@ -407,20 +407,20 @@ defmodule Visualize.Chart.CompiledTest do
 
       for design <- [polar, geo, facet] do
         {:ok, applied} = Chart.apply(design, sources: sources, size: {300, 200})
-        {:ok, %{main: compiled}} = Chart.compile(applied)
+        {:ok, %{"main" => compiled}} = Chart.compile(applied)
         assert Compiled.svg(compiled, sources) == Chart.render(applied)
       end
 
-      {:ok, %{main: compiled}} = Chart.compile(polar, sources: sources, size: {300, 200})
+      {:ok, %{"main" => compiled}} = Chart.compile(polar, sources: sources, size: {300, 200})
 
       assert Compiled.regions(compiled) == [
-               {:grid, {:dynamic, {:inferred, [:r]}}},
+               {:grid, {:dynamic, {:inferred, ["r"]}}},
                {{:mark, 0}, {:dynamic, :data}},
                {{:axis, 0}, :static},
-               {{:axis, 1}, {:dynamic, {:inferred, [:r]}}},
+               {{:axis, 1}, {:dynamic, {:inferred, ["r"]}}},
                {{:grid, :outer}, :static},
                {{:axis, 2}, :static},
-               {:labels, {:dynamic, {:inferred, [:r]}}}
+               {:labels, {:dynamic, {:inferred, ["r"]}}}
              ]
 
       map = Compiled.render(compiled, sources)
@@ -507,12 +507,12 @@ defmodule Visualize.Chart.CompiledTest do
       compiled = compile!(eased(), sources: peak(10), ceiling: 100)
       {first, compiled} = Compiled.tick(compiled, peak(10), at: 0)
       assert first.svg =~ ">10</text>"
-      assert compiled.eased.y.shown == [0.0, 10.0]
+      assert compiled.eased["y"].shown == [0.0, 10.0]
 
       # The extent doubles: a grow retargets at once and starts from where it was.
       {_, compiled} = Compiled.tick(compiled, peak(20), at: 0)
 
-      assert compiled.eased.y == %{
+      assert compiled.eased["y"] == %{
                from: [0.0, 10.0],
                target: [0.0, 20.0],
                since: 0,
@@ -521,19 +521,19 @@ defmodule Visualize.Chart.CompiledTest do
              }
 
       {mid, compiled} = Compiled.tick(compiled, peak(20), at: 50)
-      assert compiled.eased.y.shown == [0.0, 15.0]
+      assert compiled.eased["y"].shown == [0.0, 15.0]
       # The axis is drawn at the shown domain: its top tick is below 20.
       assert shown_max(mid) < 20
 
       {done, compiled} = Compiled.tick(compiled, peak(20), at: 100)
-      assert compiled.eased.y.shown == [0.0, 20.0]
+      assert compiled.eased["y"].shown == [0.0, 20.0]
       assert done.svg =~ ">20</text>"
 
       # A shrink eases the same way, and without shrink_after it is taken at once.
       {_, compiled} = Compiled.tick(compiled, peak(10), at: 200)
-      assert compiled.eased.y.target == [0.0, 10.0] and compiled.eased.y.from == [0.0, 20.0]
+      assert compiled.eased["y"].target == [0.0, 10.0] and compiled.eased["y"].from == [0.0, 20.0]
       {_, compiled} = Compiled.tick(compiled, peak(10), at: 250)
-      assert compiled.eased.y.shown == [0.0, 15.0]
+      assert compiled.eased["y"].shown == [0.0, 15.0]
     end
 
     test "the marks and the axis agree at an intermediate frame" do
@@ -560,18 +560,18 @@ defmodule Visualize.Chart.CompiledTest do
 
       # A shrink is seen and held: the target stays.
       {_, compiled} = Compiled.tick(compiled, peak(5), at: 100)
-      assert compiled.eased.y.target == [0.0, 10.0] and compiled.eased.y.pending == 100
+      assert compiled.eased["y"].target == [0.0, 10.0] and compiled.eased["y"].pending == 100
       {_, compiled} = Compiled.tick(compiled, peak(5), at: 400)
-      assert compiled.eased.y.target == [0.0, 10.0]
+      assert compiled.eased["y"].target == [0.0, 10.0]
 
       # A grow in the meantime is taken at once and clears the pending shrink.
       {_, compiled} = Compiled.tick(compiled, peak(30), at: 450)
-      assert compiled.eased.y.target == [0.0, 30.0] and compiled.eased.y.pending == nil
+      assert compiled.eased["y"].target == [0.0, 30.0] and compiled.eased["y"].pending == nil
 
       # A shrink that lasts is taken once shrink_after has passed.
       {_, compiled} = Compiled.tick(compiled, peak(5), at: 600)
       {_, compiled} = Compiled.tick(compiled, peak(5), at: 1100)
-      assert compiled.eased.y.target == [0.0, 5.0]
+      assert compiled.eased["y"].target == [0.0, 5.0]
     end
 
     test "a scale without a transition jumps as before, and step/3 is the one-string form eased" do
@@ -589,7 +589,7 @@ defmodule Visualize.Chart.CompiledTest do
       assert group.type == :group and group.style.class == "frame"
       {_, compiled} = Compiled.step(compiled, peak(20), at: 0)
       {group, compiled} = Compiled.step(compiled, peak(20), at: 50)
-      assert compiled.eased.y.shown == [0.0, 15.0]
+      assert compiled.eased["y"].shown == [0.0, 15.0]
       assert Visualize.Render.to_string(group, backend: :svg) =~ ~s(class="mark mark-line")
     end
   end
@@ -617,24 +617,24 @@ defmodule Visualize.Chart.CompiledTest do
 
       # A value seen for the first time is shown as it is.
       {first, compiled} = Compiled.tick(compiled, pair(0), at: 0)
-      assert compiled.moving[0][{1, :v}].shown == 0.0
+      assert compiled.moving[0][{1, "v"}].shown == 0.0
       assert moved(first) =~ "L240,150"
 
       # It changes: the easing is retargeted and starts from where it stands.
       {_, compiled} = Compiled.tick(compiled, pair(10), at: 0)
-      assert compiled.moving[0][{1, :v}] == %{from: 0.0, target: 10.0, since: 0, shown: 0.0}
+      assert compiled.moving[0][{1, "v"}] == %{from: 0.0, target: 10.0, since: 0, shown: 0.0}
 
       {mid, compiled} = Compiled.tick(compiled, pair(10), at: 50)
-      assert compiled.moving[0][{1, :v}].shown == 5.0
+      assert compiled.moving[0][{1, "v"}].shown == 5.0
       assert moved(mid) =~ "L240,75"
 
       {done, compiled} = Compiled.tick(compiled, pair(10), at: 100)
-      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert compiled.moving[0][{1, "v"}].shown == 10.0
       assert moved(done) =~ "L240,0"
 
       # A row whose value has not changed stays where it is.
       {_, compiled} = Compiled.tick(compiled, pair(10), at: 200)
-      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert compiled.moving[0][{1, "v"}].shown == 10.0
     end
 
     test "identity is the row's position: an arrival starts at its value, a departure is forgotten" do
@@ -643,7 +643,7 @@ defmodule Visualize.Chart.CompiledTest do
 
       third = %{primary: [%{t: 0, v: 0}, %{t: 100, v: 0}, %{t: 50, v: 8}]}
       {_, compiled} = Compiled.tick(compiled, third, at: 10)
-      assert compiled.moving[0][{2, :v}] == %{from: 8.0, target: 8.0, since: 10, shown: 8.0}
+      assert compiled.moving[0][{2, "v"}] == %{from: 8.0, target: 8.0, since: 10, shown: 8.0}
 
       {_, compiled} = Compiled.tick(compiled, pair(0), at: 20)
       refute Map.has_key?(compiled.moving[0], {2, :v})
@@ -657,7 +657,7 @@ defmodule Visualize.Chart.CompiledTest do
 
       compiled = compile!(grouped, sources: %{primary: [%{t: 0, v: 0, g: 1}]}, ceiling: 100)
 
-      assert compiled.motions[0].fields == [:t, :v]
+      assert compiled.motions[0].fields == ["t", "v"]
     end
 
     test "a mark without a transition jumps as before, and render/2 is unchanged" do
@@ -682,7 +682,7 @@ defmodule Visualize.Chart.CompiledTest do
       {_, compiled} = Compiled.step(compiled, pair(10), at: 0)
       {group, compiled} = Compiled.step(compiled, pair(10), at: 50)
 
-      assert compiled.moving[0][{1, :v}].shown == 5.0
+      assert compiled.moving[0][{1, "v"}].shown == 5.0
       assert Visualize.Render.to_string(group, backend: :svg) =~ "L240,75"
     end
   end
@@ -694,20 +694,20 @@ defmodule Visualize.Chart.CompiledTest do
       {_, compiled} = Compiled.tick(compiled, peak(10), at: 0)
 
       {grown, compiled} = Compiled.tick(compiled, peak(20), at: 0)
-      assert compiled.eased.y.shown == [0.0, 20.0]
+      assert compiled.eased["y"].shown == [0.0, 20.0]
       assert grown.svg =~ ">20</text>"
       # The states run as ever: the target and the clock are kept.
-      assert compiled.eased.y.target == [0.0, 20.0] and compiled.eased.y.since == 0
+      assert compiled.eased["y"].target == [0.0, 20.0] and compiled.eased["y"].since == 0
 
       {_, compiled} = Compiled.tick(compiled, peak(10), at: 10)
-      assert compiled.eased.y.shown == [0.0, 10.0]
+      assert compiled.eased["y"].shown == [0.0, 10.0]
     end
 
     test "a mark's reading is its target on the tick it changes" do
       compiled = compile!(moving(), sources: pair(0), ceiling: 100, motion: :reduce)
       {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
       {moved_now, compiled} = Compiled.tick(compiled, pair(10), at: 0)
-      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert compiled.moving[0][{1, "v"}].shown == 10.0
       assert moved(moved_now) =~ "L240,0"
     end
 
@@ -716,15 +716,15 @@ defmodule Visualize.Chart.CompiledTest do
       assert compiled.motion == :full
       {_, compiled} = Compiled.tick(compiled, pair(0), at: 0)
       {_, compiled} = Compiled.tick(compiled, pair(10), at: 0, motion: :reduce)
-      assert compiled.moving[0][{1, :v}].shown == 10.0
+      assert compiled.moving[0][{1, "v"}].shown == 10.0
 
       # Back to full motion, a new reading eases from 10 toward 0.
       {_, compiled} = Compiled.tick(compiled, pair(0), at: 100)
       {_, compiled} = Compiled.tick(compiled, pair(0), at: 150)
-      assert compiled.moving[0][{1, :v}].shown == 5.0
+      assert compiled.moving[0][{1, "v"}].shown == 5.0
 
       {_group, stepped} = Compiled.step(compiled, pair(20), at: 150, motion: :reduce)
-      assert stepped.moving[0][{1, :v}].shown == 20.0
+      assert stepped.moving[0][{1, "v"}].shown == 20.0
     end
 
     test "motion: must be :full or :reduce" do
@@ -778,7 +778,7 @@ defmodule Visualize.Chart.CompiledTest do
 
       assert Compiled.dynamic_regions(compiled) == [
                {{:mark, 0}, :data},
-               {{:axis, 0}, {:inferred, [:x]}}
+               {{:axis, 0}, {:inferred, ["x"]}}
              ]
 
       assert Compiled.targets(compiled) == [{:binary, 30}]
@@ -1095,7 +1095,7 @@ defmodule Visualize.Chart.CompiledTest do
       compiled = compile!(design, size: {140, 100}, sources: sources)
 
       # The windowed scale is named, as an inferred one beside the window is.
-      assert {{:axis, 0}, {:inferred, [:x]}} in Compiled.dynamic_regions(compiled)
+      assert {{:axis, 0}, {:inferred, ["x"]}} in Compiled.dynamic_regions(compiled)
       assert compiled.viewport.full
 
       {payloads, _compiled} =
@@ -1226,7 +1226,7 @@ defmodule Visualize.Chart.CompiledTest do
       first = fn svg -> ~r/<text[^>]*>([^<]*)<\/text>/ |> Regex.run(svg) |> List.last() end
 
       compiled = compile!(design, size: {600, 200}, sources: %{primary: rows.(2)})
-      assert {{:axis, 0}, {:inferred, [:x]}} in Compiled.dynamic_regions(compiled)
+      assert {{:axis, 0}, {:inferred, ["x"]}} in Compiled.dynamic_regions(compiled)
 
       {two_hours, compiled} = Compiled.tick(compiled, %{primary: rows.(2)})
       {four_days, compiled} = Compiled.tick(compiled, %{primary: rows.(96)})
@@ -1296,7 +1296,7 @@ defmodule Visualize.Chart.CompiledSyncTest do
     }
 
     rows = %{s: [%{t: 0, v: 1}, %{t: 10, v: 4}]}
-    {:ok, %{main: compiled}} = Chart.compile(design, sources: rows, size: {300, 200})
+    {:ok, %{"main" => compiled}} = Chart.compile(design, sources: rows, size: {300, 200})
     {:ok, applied} = Chart.apply(design, sources: rows, size: {300, 200})
     expected = Map.merge(Frame.sync_attrs(applied.frame), Frame.brush_attrs(applied.frame))
 

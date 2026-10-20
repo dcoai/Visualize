@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Validator.Context do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The context a validator walk runs in (spec/14 §10): what the design declares — frames,
   # scales, styles, paints, sources and their fields, variables, theme slots and colors — and
   # how a node narrows it as the walk enters it.
@@ -88,7 +90,7 @@ defmodule Visualize.Chart.Validator.Context do
   # valid — a variable in it is resolved at application, and an invalid one is already
   # reported on its keys. Its slots and its palette names are what references are checked
   # against (spec/14 §2.5, §3.2, §3.3); any other theme is `:unknown`.
-  defp known_theme(name) when is_atom(name) and name not in @not_names,
+  defp known_theme(name) when is_binary(name) or (is_atom(name) and name not in @not_names),
     do: Theme.builtin(name) || :unknown
 
   defp known_theme(map) when is_map(map) and not is_struct(map) do
@@ -193,7 +195,7 @@ defmodule Visualize.Chart.Validator.Context do
 
   defp in_frame(ctx, _name), do: ctx
 
-  defp mark_fields(name, ctx) when is_atom(name), do: fields_of(name, ctx)
+  defp mark_fields(name, ctx) when is_name(name), do: fields_of(name, ctx)
 
   defp mark_fields(%{source: name} = data, ctx) when is_map(data) do
     case Map.get(data, :transforms, []) do

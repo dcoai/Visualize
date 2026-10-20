@@ -74,14 +74,14 @@ defmodule ExamplesWeb.BoardLiveTest do
     for state <- ~w(good warning bad), do: assert(view.svg =~ ~s(data-series="#{state}"))
 
     sources = Server.info(board).virtual_sources
-    assert %{state: :live, fault: nil} = sources[[:health]]
-    assert %{state: :live, fault: nil} = sources[[:trend]]
+    assert %{state: :live, fault: nil} = sources[["health"]]
+    assert %{state: :live, fault: nil} = sources[["trend"]]
 
-    %{delivery: delivery} = Server.snapshot(board).cells.hosts.slots.hosts
+    %{delivery: delivery} = Server.snapshot(board).cells["hosts"].slots["hosts"]
 
     for row <- delivery.rows do
-      assert row[:"health.state"] in [:good, :warning, :bad]
-      assert row[:"trend.trend"] in [:increasing, :decreasing, :neutral]
+      assert row["health.state"] in ["good", "warning", "bad"]
+      assert row["trend.trend"] in [:increasing, :decreasing, :neutral]
     end
 
     Server.unsubscribe(board, self())
@@ -98,7 +98,7 @@ defmodule ExamplesWeb.BoardLiveTest do
   # their pulse comes after the board's debounce, so a live view with none may precede it.
   defp hosts_view do
     receive do
-      {:visualize_board, _board, {:cell, :hosts, %{state: :live, svg: svg} = view}}
+      {:visualize_board, _board, {:cell, "hosts", %{state: :live, svg: svg} = view}}
       when is_binary(svg) ->
         if svg =~ ~s(mark-choose"><g class="mark mark-), do: view, else: hosts_view()
 
@@ -297,11 +297,11 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:live, :patch, %{to: url}} = patched.redirected
     assert URI.decode_query(URI.parse(url).query)["select"] == "service:web"
     {:noreply, socket} = BoardLive.handle_params(%{"select" => "service:web"}, url, socket)
-    assert Server.info(board).selection == {:service, "web"}
+    assert Server.info(board).selection == {"service", "web"}
 
     # A field the board does not select by is not made an atom: the URL is ignored.
     {:noreply, socket} = BoardLive.handle_params(%{"select" => "nope:web"}, url, socket)
-    assert Server.info(board).selection == {:service, "web"}
+    assert Server.info(board).selection == {"service", "web"}
     :ok = Server.select(board, nil)
 
     # Reset window: the board's own window again, and the URL loses the brushed one.
@@ -336,7 +336,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(colored errors hosts latency load memory offline queue requests services status wave weather)a
+             ~w(colored errors hosts latency load memory offline queue requests services status wave weather)
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 
@@ -355,7 +355,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     views(%{}, ~w(requests errors services)a)
 
     # The first series of Requests is `api`; its first point is picked.
-    assert {:ok, %{identity: {:service, "api"}}} = Server.pick(board, :requests, 0, 0)
+    assert {:ok, %{identity: {"service", "api"}}} = Server.pick(board, :requests, 0, 0)
     :ok = Server.select(board, {:service, "api"})
 
     # Errors dims web and db; Services, whose field is `name`, dims their bars.
@@ -485,6 +485,8 @@ defmodule ExamplesWeb.BoardLiveTest do
 
   # The first crashed view of a board's cell; the test's own timeout bounds the wait.
   defp crashed(board, cell) do
+    cell = to_string(cell)
+
     receive do
       {:visualize_board, ^board, {:cell, ^cell, %{state: {:crashed, reason}}}} ->
         {:crashed, reason}
@@ -496,8 +498,10 @@ defmodule ExamplesWeb.BoardLiveTest do
 
   # The first live view of a board's cell after a crash, the backoff waited out.
   defp live_again(board, cell) do
+    name = to_string(cell)
+
     receive do
-      {:visualize_board, ^board, {:cell, ^cell, %{state: :live} = view}} -> %{cell => view}
+      {:visualize_board, ^board, {:cell, ^name, %{state: :live} = view}} -> %{cell => view}
       {:visualize_board, _board, _other} -> live_again(board, cell)
     end
   end
@@ -507,8 +511,10 @@ defmodule ExamplesWeb.BoardLiveTest do
 
   defp dimmed(seen, waiting) do
     receive do
-      {:visualize_board, _board, {:cell, cell, %{svg: svg}}} when is_binary(svg) ->
-        if cell in waiting and svg =~ ~s(opacity="0.25"),
+      {:visualize_board, _board, {:cell, name, %{svg: svg}}} when is_binary(svg) ->
+        cell = Enum.find(waiting, &(to_string(&1) == name))
+
+        if cell != nil and svg =~ ~s(opacity="0.25"),
           do: dimmed(Map.put(seen, cell, svg), List.delete(waiting, cell)),
           else: dimmed(seen, waiting)
 
@@ -525,10 +531,17 @@ defmodule ExamplesWeb.BoardLiveTest do
 
   defp drawn_of(board, seen, waiting) do
     receive do
-      {:visualize_board, ^board, {:cell, cell, %{svg: svg} = view}} when is_binary(svg) ->
-        if cell in waiting and svg =~ ~s(class="mark mark-),
-          do: drawn_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
-          else: drawn_of(board, seen, waiting)
+      {:visualize_board, ^board, {:cell, name, %{svg: svg} = view}} when is_binary(svg) ->
+        # A cell is named by its string (D-195); the views are keyed as the test asked.
+        case Enum.find(waiting, &(to_string(&1) == name)) do
+          cell when cell != nil ->
+            if svg =~ ~s(class="mark mark-),
+              do: drawn_of(board, Map.put(seen, cell, view), List.delete(waiting, cell)),
+              else: drawn_of(board, seen, waiting)
+
+          nil ->
+            drawn_of(board, seen, waiting)
+        end
 
       {:visualize_board, _board, _other} ->
         drawn_of(board, seen, waiting)
@@ -542,9 +555,10 @@ defmodule ExamplesWeb.BoardLiveTest do
   defp views(seen, waiting) do
     receive do
       {:visualize_board, _board, {:cell, cell, %{state: state} = view}} when state != :loading ->
-        if cell in waiting,
-          do: views(Map.put(seen, cell, view), List.delete(waiting, cell)),
-          else: views(seen, waiting)
+        case Enum.find(waiting, &(to_string(&1) == cell)) do
+          nil -> views(seen, waiting)
+          asked -> views(Map.put(seen, asked, view), List.delete(waiting, asked))
+        end
 
       {:visualize_board, _board, _other} ->
         views(seen, waiting)

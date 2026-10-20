@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Style.Generated do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Generators at render (spec/14 §3.13, D-177): the runtime a frame carries — the registry
   # of `Visualize.Generators.registry/1`, the design's variables and the host's assigns —
   # and what the frame does with a stored `{:generate, name, args}`.
@@ -51,7 +53,7 @@ defmodule Visualize.Chart.Style.Generated do
   @doc false
   # Whether a term is a stored generator call.
   @spec call?(term()) :: boolean()
-  def call?({:generate, name, args}), do: is_atom(name) and is_list(args)
+  def call?({:generate, name, args}), do: is_name(name) and is_list(args)
   def call?(_term), do: false
 
   @doc false
@@ -90,7 +92,7 @@ defmodule Visualize.Chart.Style.Generated do
     under ++ Enum.map(leaves(Map.delete(node, :extends)), &{:leaf, &1})
   end
 
-  defp reach(styles, name, picked, seen) when is_atom(name),
+  defp reach(styles, name, picked, seen) when is_name(name),
     do: named(styles, name, picked, seen)
 
   defp reach(_styles, _other, _picked, _seen), do: []
@@ -177,9 +179,9 @@ defmodule Visualize.Chart.Style.Generated do
   defp call(registry, runtime, theme, {name, args}) do
     arity = length(args) + 1
 
-    case Map.fetch(registry, {name, arity}) do
-      {:ok, module} ->
-        apply(module, name, args ++ [context(runtime, theme)])
+    case Visualize.Generators.lookup(registry, name, arity) do
+      {:ok, {function, module}} ->
+        apply(module, function, args ++ [context(runtime, theme)])
 
       :error ->
         raise ArgumentError,
@@ -257,6 +259,8 @@ defmodule Visualize.Chart.Style.Generated do
     do: Migration.canonical(node, :style)
 
   defp style(list) when is_list(list), do: Enum.map(list, &style/1)
+  # A style's name is its string, whichever spelling the host's generator returned (D-195).
+  defp style(name) when is_atom(name) and name not in [nil, true, false], do: Atom.to_string(name)
   defp style(other), do: other
 
   # Whether a style result writes a gradient or a hatch in place.

@@ -27,7 +27,8 @@ defmodule Visualize.Board.VirtualSourcesTest do
 
   @load %{
     from: [
-      {"vm.load", %{ranges: %{t: [~U[2026-10-16 00:00:00Z], nil]}, latest: false}},
+      # A feed's own name, which no virtual source shadows (spec/08 §10.5.6, D-195).
+      {{:feed, "vm.load"}, %{ranges: %{t: [~U[2026-10-16 00:00:00Z], nil]}, latest: false}},
       {[:health], nil}
     ],
     schema: %{"load" => %{type: :number}, trend: %{type: :category}},
@@ -56,22 +57,22 @@ defmodule Visualize.Board.VirtualSourcesTest do
   test "a board and its cells hold virtual sources, kept in their canonical form" do
     assert {:ok, board} = Board.from_map(board())
 
-    assert board.virtual_sources.health.from == [{:hosts, %{last: 20}}]
-    assert board.virtual_sources.health.function == nil
-    assert board.cells.fleet.virtual_sources.health.per == :identity
+    assert board.virtual_sources["health"].from == [{"hosts", %{last: 20}}]
+    assert board.virtual_sources["health"].function == nil
+    assert board.cells["fleet"].virtual_sources["health"].per == :identity
     assert {:ok, ^board} = board |> Board.to_map() |> Board.from_map()
   end
 
   test "virtual_sources/1: every source by path" do
     sources = Board.virtual_sources(Board.from_map!(board()))
 
-    assert Map.keys(sources) |> Enum.sort() == [[:fleet, :health], [:health], [:load]]
-    assert %VirtualSource{id: :health} = sources[[:fleet, :health]]
-    assert %VirtualSource{id: :load, function: :load} = sources[[:load]]
+    assert Map.keys(sources) |> Enum.sort() == [["fleet", "health"], ["health"], ["load"]]
+    assert %VirtualSource{id: "health"} = sources[["fleet", "health"]]
+    assert %VirtualSource{id: "load", function: "load"} = sources[["load"]]
 
     # From the cell, its own definition shadows the board's.
-    assert VirtualSource.resolve(sources, [:fleet], :health) == {:ok, [:fleet, :health]}
-    assert VirtualSource.resolve(sources, [:fleet], :load) == {:ok, [:load]}
+    assert VirtualSource.resolve(sources, [:fleet], :health) == {:ok, ["fleet", "health"]}
+    assert VirtualSource.resolve(sources, [:fleet], :load) == {:ok, ["load"]}
   end
 
   test "every fault, under its id" do
@@ -80,7 +81,7 @@ defmodule Visualize.Board.VirtualSourcesTest do
     assert {:error, errors} =
              Board.from_map(
                board(%{
-                 virtual_sources: %{"x" => %{}, health: bad, three: 3},
+                 virtual_sources: %{1 => %{}, health: bad, three: 3},
                  cells: %{
                    fleet: %{x: 0, y: 0, w: 6, h: 2, ref: {:composite, 1}, virtual_sources: 4}
                  }
@@ -88,10 +89,10 @@ defmodule Visualize.Board.VirtualSourcesTest do
              )
 
     assert errors == [
-             {[:cells, :fleet, :virtual_sources], {:type, {:map, {:node, :virtual_source}}}},
-             {[:virtual_sources, :health, :per], {:enum, [:identity]}},
-             {[:virtual_sources, :three], {:type, {:node, :virtual_source}}},
-             {[:virtual_sources, "x"], {:type, :name}}
+             {[:cells, "fleet", :virtual_sources], {:type, {:map, {:node, :virtual_source}}}},
+             {[:virtual_sources, 1], {:type, :name}},
+             {[:virtual_sources, "health", :per], {:enum, [:identity]}},
+             {[:virtual_sources, "three"], {:type, {:node, :virtual_source}}}
            ]
 
     for error <- errors, do: assert(is_binary(Board.format_error(error)))
@@ -119,7 +120,8 @@ defmodule Visualize.Board.VirtualSourcesTest do
            ] = load["from"]
 
     assert load["function"] == "load"
-    assert ["load", %{"type" => %{"$atom" => "number"}}] in load["schema"]
+    # A field is a name, its string, written as an atom was whichever spelling gave it (D-195).
+    assert [%{"$atom" => "load"}, %{"type" => %{"$atom" => "number"}}] in load["schema"]
   end
 
   test "a JSON key a virtual source does not know stays a string and is refused" do
@@ -130,7 +132,7 @@ defmodule Visualize.Board.VirtualSourcesTest do
       |> Jason.decode!()
       |> put_in(["virtual_sources", "health", "frm"], 1)
 
-    assert {:error, [{[:virtual_sources, :health, "frm"], :unknown_key}]} =
+    assert {:error, [{[:virtual_sources, "health", "frm"], :unknown_key}]} =
              Board.from_json(Jason.encode!(document))
   end
 end

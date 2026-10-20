@@ -107,7 +107,7 @@ defmodule Visualize.Chart.Schema.Frame do
         :style,
         style_stack(),
         :style,
-        default: :axis
+        default: "axis"
       ),
       # The defaults of the layers and groups it was placed from (spec/14 §3.8, #651).
       spec(:defaults, {:node, :defaults}, :style)
@@ -148,7 +148,7 @@ defmodule Visualize.Chart.Schema.Frame do
         :style,
         style_stack(),
         :style,
-        default: :label
+        default: "label"
       ),
       # A top or bottom legend wraps to the plot's width, and a label can be cut to a
       # count of characters, the full text kept (§4.5, D-169).

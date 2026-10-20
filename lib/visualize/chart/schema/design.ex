@@ -300,7 +300,7 @@ defmodule Visualize.Chart.Schema.Design do
         :style,
         style_stack(),
         :style,
-        default: :label
+        default: "label"
       ),
       spec(:dx, :number, :geometry, default: 0),
       spec(:dy, :number, :geometry, default: 0),

@@ -129,8 +129,11 @@ defmodule Visualize.Board.InteractionTest do
   defp views_until(cells, test, seen) do
     receive do
       {:visualize_board, _board, {:cell, cell, %View{} = view}} ->
-        if cell in cells and test.(view),
-          do: views_until(List.delete(cells, cell), test, Map.put(seen, cell, view)),
+        # A cell's name is its string (D-195); the views are keyed as the test asked.
+        asked = Enum.find(cells, &(to_string(&1) == cell))
+
+        if asked != nil and test.(view),
+          do: views_until(List.delete(cells, asked), test, Map.put(seen, asked, view)),
           else: views_until(cells, test, seen)
     end
   end
@@ -144,8 +147,10 @@ defmodule Visualize.Board.InteractionTest do
 
   # Views of a cell until the row behind its first point starts at `from`.
   defp follows(board, cell, from) do
+    name = to_string(cell)
+
     receive do
-      {:visualize_board, _board, {:cell, ^cell, %View{}}} ->
+      {:visualize_board, _board, {:cell, ^name, %View{}}} ->
         case Server.pick(board, cell, 0, 0) do
           {:ok, %{row: %{t: ^from}}} -> :ok
           _before -> follows(board, cell, from)
@@ -194,24 +199,24 @@ defmodule Visualize.Board.InteractionTest do
 
       assert {:error, errors} =
                Board.validate(
-                 Map.merge(cell.(%{vars: %{s: {:datum, "k"}}, extra: 1}), %{links: %{"a" => :b}})
+                 Map.merge(cell.(%{vars: %{s: {:datum, 1}}, extra: 1}), %{links: %{1 => :b}})
                )
 
-      assert {[:cells, :a, :drill, :board], :required} in errors
-      assert {[:cells, :a, :drill, :extra], :unknown_key} in errors
-      assert {[:cells, :a, :drill, :vars, :s], {:type, :field}} in errors
-      assert {[:links, "a"], {:type, :name}} in errors
+      assert {[:cells, "a", :drill, :board], :required} in errors
+      assert {[:cells, "a", :drill, :extra], :unknown_key} in errors
+      assert {[:cells, "a", :drill, :vars, "s"], {:type, :field}} in errors
+      assert {[:links, 1], {:type, :name}} in errors
 
       assert Board.validate(cell.(%{board: {:board, 1}})) ==
-               {:error, [{[:cells, :a, :drill, :board], {:type, :board_ref}}]}
+               {:error, [{[:cells, "a", :drill, :board], {:type, :board_ref}}]}
 
       assert Board.validate(cell.(:detail)) ==
-               {:error, [{[:cells, :a, :drill], {:type, {:node, :drill}}}]}
+               {:error, [{[:cells, "a", :drill], {:type, {:node, :drill}}}]}
 
       for ref <- [:self, :detail, "detail", 7],
           do: assert(Board.validate(cell.(%{board: ref})) == :ok)
 
-      assert Board.format_error({[:cells, :a, :drill, :board], {:no_board, :detail}}) ==
+      assert Board.format_error({[:cells, "a", :drill, :board], {:no_board, :detail}}) ==
                "cells.a.drill.board: names the board :detail, which the host does not hold"
     end
 
@@ -233,7 +238,7 @@ defmodule Visualize.Board.InteractionTest do
 
       # A target the host does not hold.
       assert Board.validate(good, @store, boards: %{}) ==
-               {:error, [{[:cells, :a, :drill, :board], {:no_board, :detail}}]}
+               {:error, [{[:cells, "a", :drill, :board], {:no_board, :detail}}]}
 
       # A variable the target does not declare, and a field the component has not.
       bad = drilled.(%{board: :detail, vars: %{region: "eu", service: {:datum, :host}}})
@@ -241,15 +246,16 @@ defmodule Visualize.Board.InteractionTest do
       assert Board.validate(bad, @store, boards: fn :detail -> {:ok, detail} end) ==
                {:error,
                 [
-                  {[:cells, :a, :drill, :vars, :region], {:undeclared, :var, :region}},
-                  {[:cells, :a, :drill, :vars, :service], {:undeclared, :field, :host}}
+                  {[:cells, "a", :drill, :vars, "region"], {:undeclared, :var, "region"}},
+                  {[:cells, "a", :drill, :vars, "service"], {:undeclared, :field, "host"}}
                 ]}
 
       # `:self` is the board itself, checked with or without `boards:`.
       assert Board.validate(drilled.(%{board: :self, vars: %{range: "5m"}}), @store) == :ok
 
       assert Board.validate(drilled.(%{board: :self, vars: %{service: "db"}}), @store) ==
-               {:error, [{[:cells, :a, :drill, :vars, :service], {:undeclared, :var, :service}}]}
+               {:error,
+                [{[:cells, "a", :drill, :vars, "service"], {:undeclared, :var, "service"}}]}
 
       # Without `boards:` another board's ref is the host's to check; the runtime is given
       # them, and refuses a board whose drill cannot be met.
@@ -257,7 +263,7 @@ defmodule Visualize.Board.InteractionTest do
 
       sup = start_supervised!(Supervisor.child_spec(Visualize.Board.Supervisor, id: make_ref()))
 
-      assert {:error, {:board, [{[:cells, :a, :drill, :board], {:no_board, :detail}}]}} =
+      assert {:error, {:board, [{[:cells, "a", :drill, :board], {:no_board, :detail}}]}} =
                Server.start(sup, board: good, store: @store, tick: nil)
     end
 
@@ -278,19 +284,19 @@ defmodule Visualize.Board.InteractionTest do
           }
         })
 
-      assert Board.link(board, :svc) == :service
-      assert Board.link(board, :service) == :service
-      assert Board.linked(board, :svc) == [:name, :service, :svc]
-      assert Board.linked(board, :host) == [:host]
+      assert Board.link(board, :svc) == "service"
+      assert Board.link(board, :service) == "service"
+      assert Board.linked(board, :svc) == ["name", "service", "svc"]
+      assert Board.linked(board, :host) == ["host"]
 
       # Typed values from the datum: a DateTime stays one.
       assert Board.drill(board, :a, %{name: "db", t: @t0}) ==
-               {:ok, %{board: "detail", vars: %{service: "db", at: @t0}}}
+               {:ok, %{board: "detail", vars: %{"service" => "db", "at" => @t0}}}
 
       assert Board.drill(board, :b, %{name: "db"}) == :none
 
       assert Board.drill(board, :a, %{name: "db"}) ==
-               {:error, [{[:cells, :a, :drill, :vars, :at], {:missing, :datum, :t}}]}
+               {:error, [{[:cells, "a", :drill, :vars, "at"], {:missing, :datum, "t"}}]}
     end
   end
 
@@ -360,7 +366,7 @@ defmodule Visualize.Board.InteractionTest do
       for {_cell, view} <- seen, do: assert(dims(view.svg) == 0)
 
       assert Server.select(board, {:k, "p"}) == :ok
-      assert board_info_until(&(&1.selection == {:k, "p"})).selection == {:k, "p"}
+      assert board_info_until(&(&1.selection == {"k", "p"})).selection == {"k", "p"}
 
       dimmed = views_until([:a, :b, :c], &(&1.svg != nil and dims(&1.svg) > 0))
 
@@ -378,7 +384,7 @@ defmodule Visualize.Board.InteractionTest do
 
       # d shows neither p nor its links: drawn as it was.
       assert Server.select(board, {:name, "p"}) == :ok
-      assert Server.info(board).selection == {:k, "p"}
+      assert Server.info(board).selection == {"k", "p"}
       d = Map.fetch!(seen, :d)
       # A synchronizing call on d: the selections reached it before the pick did.
       {:ok, _row} = Server.pick(board, :d, 0, 0)
@@ -445,13 +451,13 @@ defmodule Visualize.Board.InteractionTest do
       views_until([:a, :c], live())
 
       # Series "q" is the keyboard's second series of cell a; its third point.
-      assert {:ok, %{row: row, identity: {:k, "q"}, item: {:line, "q"}, frame: :main}} =
+      assert {:ok, %{row: row, identity: {"k", "q"}, item: {:line, "q"}, frame: "main"}} =
                Server.pick(board, :a, 1, 2)
 
       assert %{k: "q", v: 3, t: %DateTime{}} = row
 
       # A bar names no series: the schema's category field is its identity.
-      assert {:ok, %{row: %{name: "r", v: 6}, identity: {:name, "r"}}} =
+      assert {:ok, %{row: %{name: "r", v: 6}, identity: {"name", "r"}}} =
                Server.pick(board, :c, 0, 1)
 
       assert Server.pick(board, :a, 9, 0) == :error
@@ -495,7 +501,7 @@ defmodule Visualize.Board.InteractionTest do
       end
 
       Cell.handle_event("pick", %{"series" => 0, "index" => 1}, cell.(:a))
-      assert Server.info(board).selection == {:k, "p"}
+      assert Server.info(board).selection == {"k", "p"}
 
       Cell.handle_event("pick", %{"series" => 0, "index" => 1}, cell.(:c))
 
@@ -503,19 +509,19 @@ defmodule Visualize.Board.InteractionTest do
       assert_received {:visualize_event, "ops",
                        %Visualize.Event{
                          event: :drill,
-                         cell: :c,
-                         frame: :main,
+                         cell: "c",
+                         frame: "main",
                          item: {:rect, "r"},
                          path: [{:rect, "r"}],
                          row: %{name: "r", v: 6},
-                         value: %{board: :detail, vars: %{service: "r"}}
+                         value: %{board: :detail, vars: %{"service" => "r"}}
                        }}
 
       # None of the old messages is sent.
       refute_received {:visualize_board_drill, _, _}
 
       # The drill did not select.
-      assert Server.info(board).selection == {:k, "p"}
+      assert Server.info(board).selection == {"k", "p"}
 
       # Escape's event clears it.
       socket = %Phoenix.LiveView.Socket{assigns: %{__changed__: %{}, server: board}}
@@ -634,12 +640,12 @@ defmodule Visualize.Board.InteractionTest do
       board = start_identified(Schema.new!(put_in(@fields, [:host, :identity], true)))
 
       # Series 0 is "mx1/eth0"; inference would have said `{:s, "mx1/eth0"}`.
-      assert {:ok, %{identity: {:host, "mx1"}}} = Server.pick(board, :a, 0, 0)
+      assert {:ok, %{identity: {"host", "mx1"}}} = Server.pick(board, :a, 0, 0)
     end
 
     test "with no declared identity, inference picks as before" do
       board = start_identified(Schema.new!(@fields))
-      assert {:ok, %{identity: {:s, "mx1/eth0"}}} = Server.pick(board, :a, 0, 0)
+      assert {:ok, %{identity: {"s", "mx1/eth0"}}} = Server.pick(board, :a, 0, 0)
     end
 
     test "a composite identity is picked as a map, and selects only the rows holding all of it" do
@@ -652,7 +658,7 @@ defmodule Visualize.Board.InteractionTest do
       board = start_identified(schema)
 
       assert {:ok, %{row: row, identity: identity}} = Server.pick(board, :a, 0, 0)
-      assert identity == %{host: "mx1", iface: "eth0"}
+      assert identity == %{"host" => "mx1", "iface" => "eth0"}
       assert %{host: "mx1", iface: "eth0"} = row
 
       assert Server.select(board, identity) == :ok
@@ -672,10 +678,10 @@ defmodule Visualize.Board.InteractionTest do
       board = start_identified(Schema.new!(@fields))
 
       assert Server.select(board, %{host: "mx1"}) == :ok
-      assert Server.info(board).selection == {:host, "mx1"}
+      assert Server.info(board).selection == {"host", "mx1"}
 
       assert Server.select(board, %{node: "mx2", iface: "eth1"}) == :ok
-      assert Server.info(board).selection == %{host: "mx2", iface: "eth1"}
+      assert Server.info(board).selection == %{"host" => "mx2", "iface" => "eth1"}
     end
 
     test "the header reads a composite selection field by field" do

@@ -79,7 +79,7 @@ defmodule Visualize.Chart.Validator.Frames do
   # The kind of a frame's `x`, read through any adoption to the node that declares it
   # (spec/14 §4.3); `nil` for none, and for a cycle, which is reported where it closes.
   defp sync_x_kind(frame, frames, seen) do
-    case declared(nested(frame, [:scales, :x]), frames, seen) do
+    case declared(nested(frame, [:scales, "x"]), frames, seen) do
       %{kind: kind} -> kind
       _other -> nil
     end

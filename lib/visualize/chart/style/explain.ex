@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Style.Explain do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # Where each part of an element's style came from (spec/14 §17.3, #661, D-172): the
   # defaults its containers lay — the theme's root first, every part defined (§3.8, D-174)
   # — then the stack the element is drawn with, entry by entry, each entry's style laid by
@@ -65,7 +67,11 @@ defmodule Visualize.Chart.Style.Explain do
         ) :: {%{atom() => map()}, [map()]}
   def parts(styles, declared, stack, kind, datum, series, containers, frame) do
     names = names(styles)
-    field = fn {:field, field} -> datum && Map.get(names, Table.get(datum, field)) end
+
+    field = fn {:field, field} ->
+      datum && Map.get(names, Visualize.Chart.Names.category(Table.get(datum, field)))
+    end
+
     memo = memo(styles, stack, field, datum, frame)
 
     pick = fn
@@ -129,7 +135,7 @@ defmodule Visualize.Chart.Style.Explain do
       nil ->
         [{link(:generator, nil, [], nil, nil), %{}}]
 
-      name when is_atom(name) ->
+      name when is_name(name) ->
         [{link(:generator, name, via(styles, name), nil, name), lay(styles, name, pick)}]
 
       style ->
@@ -144,7 +150,7 @@ defmodule Visualize.Chart.Style.Explain do
     [{link(layer, nil, via, nil, nil), lay(styles, inline, pick)}]
   end
 
-  defp contribution(name, _last?, styles, declared, pick, _datum) when is_atom(name) do
+  defp contribution(name, _last?, styles, declared, pick, _datum) when is_name(name) do
     layer =
       cond do
         name in Palette.states() -> :state
@@ -235,7 +241,7 @@ defmodule Visualize.Chart.Style.Explain do
     under ++ calls(Parts.normalize(Map.delete(node, :extends)), [])
   end
 
-  defp leaves(styles, name, _at, seen) when is_atom(name) and name not in [nil, true, false] do
+  defp leaves(styles, name, _at, seen) when is_name(name) and name not in [nil, true, false] do
     if name in seen, do: [], else: leaves(styles, Map.get(styles, name), [], [name | seen])
   end
 
@@ -300,7 +306,7 @@ defmodule Visualize.Chart.Style.Explain do
   defp refs(%{extends: parent} = node, styles, seen) when not is_struct(node),
     do: refs(parent, styles, seen)
 
-  defp refs(name, styles, seen) when is_atom(name) and name not in [nil, true, false] do
+  defp refs(name, styles, seen) when is_name(name) and name not in [nil, true, false] do
     if name in seen, do: [], else: [name | via_of(styles, name, [name | seen])]
   end
 
@@ -310,7 +316,7 @@ defmodule Visualize.Chart.Style.Explain do
 
   defp names(styles) do
     Enum.reduce(Map.keys(styles), %{}, fn name, names ->
-      names |> Map.put(name, name) |> Map.put(Atom.to_string(name), name)
+      names |> Map.put(name, name) |> Map.put(to_string(name), name)
     end)
   end
 

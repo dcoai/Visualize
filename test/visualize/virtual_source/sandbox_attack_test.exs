@@ -28,36 +28,41 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
     Sandbox.run(compiled, args, opts)
   end
 
+  # A name the node never saw is read as its string — a variable one of the sandbox's own —
+  # so the check passes and no atom is made (D-195); a module named by a string names none.
+  @strings [
+    "fn x -> :never_made_before_by_any_attack end",
+    "fn x -> never_made_variable_q9 = x end",
+    "fn x -> %{never_made_key_q9: x} end",
+    "fn x -> x.never_made_field_q9 end",
+    ~S|fn x -> Map.put(x, :k, :"Elixir.File.Stream") end|
+  ]
+
   @atoms [
-    {"fn x -> :never_made_before_by_any_attack end",
-     {:unknown_atom, "never_made_before_by_any_attack"}},
-    {"fn x -> never_made_variable_q9 = x end", {:unknown_atom, "never_made_variable_q9"}},
-    {"fn x -> %{never_made_key_q9: x} end", {:unknown_atom, "never_made_key_q9"}},
-    {"fn x -> x.never_made_field_q9 end", {:unknown_atom, "never_made_field_q9"}},
     {"fn x -> String.to_atom(x) end", {:restricted, {String, :to_atom, 1}}},
     {"fn x -> String.to_existing_atom(x) end", {:restricted, {String, :to_existing_atom, 1}}},
     # Interpolation is allowed (#769); an atom written with it is `:erlang.binary_to_existing_atom/2`.
     {~S|fn x -> :"a#{x}" end|, {:restricted, {:erlang, :binary_to_existing_atom, 2}}},
-    {"fn x -> List.to_atom(x) end", {:restricted, {"List", :to_atom, 1}}}
+    {"fn x -> List.to_atom(x) end", {:restricted, {"List", "to_atom", 1}}}
   ]
 
   @calls [
-    {"fn m -> m.halt() end", {:dynamic_call, :halt}},
-    {"fn m -> m.cmd(1) end", {:dynamic_call, :cmd}},
+    {"fn m -> m.halt() end", {:dynamic_call, "halt"}},
+    {"fn m -> m.cmd(1) end", {:dynamic_call, "cmd"}},
     {"fn x -> apply(Enum, :count, [x]) end", {:restricted, {:apply, 3}}},
     {"fn f -> apply(f, []) end", {:restricted, {:apply, 2}}},
     {"fn x -> :erlang.halt() end", {:restricted, {:erlang, :halt, 0}}},
     {"fn x -> :os.cmd(x) end", {:restricted, {:os, :cmd, 1}}},
     {"fn x -> :ets.new(x, []) end", {:restricted, {:ets, :new, 2}}},
     {"fn x -> :code.purge(x) end", {:restricted, {:code, :purge, 1}}},
-    {"fn x -> Code.eval_string(x) end", {:restricted, {"Code", :eval_string, 1}}},
-    {"fn x -> System.cmd(x, []) end", {:restricted, {"System", :cmd, 2}}},
-    {"fn x -> File.read(x) end", {:restricted, {"File", :read, 1}}},
-    {"fn x -> Process.exit(x, :kill) end", {:restricted, {"Process", :exit, 2}}},
+    {"fn x -> Code.eval_string(x) end", {:restricted, {"Code", "eval_string", 1}}},
+    {"fn x -> System.cmd(x, []) end", {:restricted, {"System", "cmd", 2}}},
+    {"fn x -> File.read(x) end", {:restricted, {"File", "read", 1}}},
+    {"fn x -> Process.exit(x, :kill) end", {:restricted, {"Process", "exit", 2}}},
     {"fn x -> Node.list() end",
-     {:any, [{:restricted, {"Node", :list, 0}}, {:unknown_atom, "Node"}]}},
-    {"fn x -> Port.open(x, []) end", {:restricted, {"Port", :open, 2}}},
-    {"fn x -> IO.puts(x) end", {:restricted, {"IO", :puts, 1}}},
+     {:any, [{:restricted, {"Node", "list", 0}}, {:unknown_atom, "Node"}]}},
+    {"fn x -> Port.open(x, []) end", {:restricted, {"Port", "open", 2}}},
+    {"fn x -> IO.puts(x) end", {:restricted, {"IO", "puts", 1}}},
     {"fn x -> &String.to_atom/1 end", {:restricted, {String, :to_atom, 1}}},
     {"fn x -> &:os.cmd/1 end", {:restricted, {:os, :cmd, 1}}},
     {"fn x -> &apply/2 end", {:restricted, {:apply, 2}}},
@@ -100,7 +105,6 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
     {"fn x -> %File.Stream{path: x} end", {:restricted, :struct}},
     {"fn x -> Map.put(x, :__struct__, File.Stream) end", {:restricted_atom, :__struct__}},
     {"fn x -> Map.put(x, :k, File.Stream) end", {:restricted_atom, "File.Stream"}},
-    {~S|fn x -> Map.put(x, :k, :"Elixir.File.Stream") end|, {:restricted_atom, File.Stream}},
     {"fn %File.Stream{} -> 1 end", {:restricted, :struct}}
   ]
 
@@ -130,10 +134,20 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
       case unquote(Macro.escape(reason)) do
         # A name the node may or may not have seen is refused either way.
         {:any, alternatives} -> assert Enum.any?(alternatives, &(&1 in reasons))
-        reason -> assert reason in reasons
+        reason -> assert Enum.any?(reasons, &(spelled(&1) == spelled(reason)))
       end
     end
   end
+
+  test "a name never seen is read as a string: the check passes" do
+    for source <- @strings, do: assert({:ok, _} = Sandbox.check(source))
+  end
+
+  # A fault names a call by the atom the checker knows it by, or by its string when the
+  # checker does not know the name; an attack is refused either way.
+  defp spelled(atom) when is_atom(atom) and atom not in [nil, true, false], do: to_string(atom)
+  defp spelled(tuple) when is_tuple(tuple), do: tuple |> Tuple.to_list() |> Enum.map(&spelled/1)
+  defp spelled(other), do: other
 
   test "every decided exclusion is refused when called, captured or piped into" do
     for module <- Allowlist.modules(), {{name, arity}, _reason} <- Allowlist.excluded(module) do
@@ -202,7 +216,8 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
 
   test "the node makes no atom from any attack" do
     sources =
-      Enum.map(@atoms ++ @calls ++ @processes ++ @code ++ @structs ++ @collectables, &elem(&1, 0))
+      Enum.map(@atoms ++ @calls ++ @processes ++ @code ++ @structs ++ @collectables, &elem(&1, 0)) ++
+        @strings
 
     run = fn ->
       for source <- sources, do: Sandbox.check(source)

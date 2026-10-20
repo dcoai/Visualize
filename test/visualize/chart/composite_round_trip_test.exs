@@ -43,13 +43,13 @@ defmodule Visualize.Chart.CompositeRoundTripTest do
     {flat, canonical} = round_trip(design)
     assert flat == canonical
     assert flat.defaults == canonical.defaults
-    assert flat.styles.warn == [:warning, :outline]
+    assert flat.styles["warn"] == ["warning", "outline"]
 
     {uses, labels} = Composite.decompose(Migration.canonical(design))
     assert "defaults" in Map.values(labels)
 
-    assert %{key: :warn, local: %{style: [:warning, :outline]}} =
-             Enum.find(uses, &(&1.key == :warn))
+    assert %{key: "warn", local: %{style: style}} = Enum.find(uses, &(&1.key == "warn"))
+    assert Enum.map(style, &to_string/1) == ["warning", "outline"]
   end
 
   test "the builder imports such a design and draws it with every site selected" do

@@ -74,7 +74,7 @@ defmodule Visualize.Hooks.ExecutedBoardBuilderHookTest do
     for %{"kind" => "push", "name" => name, "payload" => p} <- log, do: {name, p}
   end
 
-  defp rect(s, cell), do: Map.take(s.assigns.board.cells[cell], [:x, :y, :w, :h])
+  defp rect(s, cell), do: Map.take(s.assigns.board.cells[to_string(cell)], [:x, :y, :w, :h])
 
   defp placed(s, {"board_place", payload}) do
     {:noreply, s} = Builder.handle_event("board_place", payload, s)

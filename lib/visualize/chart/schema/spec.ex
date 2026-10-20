@@ -30,4 +30,12 @@ defmodule Visualize.Chart.Schema.Spec do
     entry = [{:node, :style}, {:ref, :style}]
     {:one_of, entry ++ [{:list, {:one_of, Enum.reverse(entry)}}]}
   end
+
+  @doc false
+  # The members of every enumeration inside a type.
+  def enum_members({:enum, members}), do: members
+  def enum_members({:list, t}), do: enum_members(t)
+  def enum_members({:map, t}), do: enum_members(t)
+  def enum_members({:one_of, types}), do: Enum.flat_map(types, &enum_members/1)
+  def enum_members(_type), do: []
 end

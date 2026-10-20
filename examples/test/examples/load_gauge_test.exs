@@ -20,7 +20,7 @@ defmodule Examples.LoadGaugeTest do
     [{_index, rows}] = Map.to_list(compiled.moving)
 
     rows
-    |> Enum.filter(&match?({{_position, :load}, _state}, &1))
+    |> Enum.filter(&match?({{_position, "load"}, _state}, &1))
     |> Enum.sort_by(fn {{position, _field}, _state} -> position end)
     |> Enum.map(fn {_key, state} -> state.shown end)
   end

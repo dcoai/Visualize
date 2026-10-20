@@ -190,7 +190,7 @@ defmodule Visualize.Chart.BuilderThemeTest do
       theme = Themes.effective(theme_node(socket), nil)
       assert theme.axis == "#aa0000"
       assert Enum.at(theme.series, 2) == "#00aa00"
-      assert theme.name == :night
+      assert theme.name == "night"
       assert theme.font_family == "Georgia, serif"
       assert theme.title_size == 20
     end
@@ -240,13 +240,13 @@ defmodule Visualize.Chart.BuilderThemeTest do
 
       theme = Themes.effective(theme_node(socket), nil)
 
-      assert theme.name == :night
+      assert theme.name == "night"
       assert theme.background == Theme.dark().background
       assert theme.ramps == Theme.dark().ramps
 
       socket = event(socket, "theme_derive", %{"from" => "theme:1"})
       assert Themes.effective(theme_node(socket), nil).axis == Looks.house().axis
-      assert Themes.effective(theme_node(socket), nil).name == :night
+      assert Themes.effective(theme_node(socket), nil).name == "night"
 
       socket = event(socket, "theme_derive", %{"from" => "builtin:nonsense"})
       assert socket.assigns.notice =~ "not a built-in theme"

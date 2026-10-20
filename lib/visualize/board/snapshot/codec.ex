@@ -245,7 +245,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp read_status(other), do: other
 
   defp names(map, read) when is_map(map),
-    do: Map.new(map, fn {name, value} -> {atom(name), read.(value)} end)
+    do: Map.new(map, fn {name, value} -> {read_name(name), read.(value)} end)
 
   defp names(other, _read), do: other
 
@@ -255,9 +255,9 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp known(key, _keys), do: key
 
   # A name that starts with `$` is written with one more and read with one fewer (D-182).
-  defp name(key), do: key |> Atom.to_string() |> Tags.escape()
+  defp name(key), do: key |> to_string() |> Tags.escape()
 
-  # #778 class (b): a cell's, a variable's or a slot's name.
-  defp atom(key) when is_binary(key), do: key |> Tags.unescape() |> String.to_atom()
-  defp atom(key), do: key
+  # A cell's, a variable's or a slot's name is its string (D-195).
+  defp read_name(key) when is_binary(key), do: Tags.unescape(key)
+  defp read_name(key), do: key
 end

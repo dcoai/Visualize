@@ -286,7 +286,7 @@ defmodule Visualize.Chart.OverlaysTest do
       end
 
       assert {:error, errors} = Chart.apply(design, sources: sources, describe: describe)
-      assert {[:marks, 4, :channels, :y], {:missing_attribute, :primary, :v, :target}} in errors
+      assert {[:marks, 4, :channels, :y], {:missing_attribute, "primary", "v", :target}} in errors
     end
   end
 
@@ -397,7 +397,7 @@ defmodule Visualize.Chart.OverlaysTest do
             Enum.map(marks, &Map.put(&1, :render, render))
           end)
 
-        {:ok, %{main: compiled}} =
+        {:ok, %{"main" => compiled}} =
           Chart.compile(design, sources: sources(), describe: &describe/1, size: @size)
 
         map = Compiled.render(compiled, sources())
@@ -445,8 +445,8 @@ defmodule Visualize.Chart.OverlaysTest do
         })
 
       assert {:error, errors} = Validator.validate(design)
-      assert {[:frames, :main, :scales, :severity, :range], {:color_map, :linear}} in errors
-      assert {[:frames, :main, :scales, :worth, :polarity], {:polarity, :range}} in errors
+      assert {[:frames, "main", :scales, "severity", :range], {:color_map, :linear}} in errors
+      assert {[:frames, "main", :scales, "worth", :polarity], {:polarity, :range}} in errors
 
       formatted = Enum.map(errors, &Validator.format/1)
       assert Enum.any?(formatted, &(&1 =~ "a map pins categories"))
@@ -456,7 +456,7 @@ defmodule Visualize.Chart.OverlaysTest do
     test "a color in a map is checked as a style's color is, at the category's path" do
       design = put_in(design(), [:frames, :main, :scales, :severity, :range], %{"x" => 7})
       assert {:error, errors} = Validator.validate(design)
-      assert {[:frames, :main, :scales, :severity, :range, "x"], {:type, :color}} in errors
+      assert {[:frames, "main", :scales, "severity", :range, "x"], {:type, :color}} in errors
     end
 
     test "polarity on a sequential scale's own ramp is accepted" do
@@ -486,8 +486,15 @@ defmodule Visualize.Chart.OverlaysTest do
       chart = Chart.from_map!(design)
       {:ok, json} = Chart.to_json(chart)
 
+      # A category is its string (D-195): Elixir's `:warn` is written as `"warn"`, and a document
+      # that wrote `{"$atom": "warn"}` reads as the same map.
       assert json =~
-               ~s("$colors":[[3,"#123456"],[{"$atom":"warn"},{"$ramp":["status",0.5]}],["critical",{"$color":"bad"}]])
+               ~s("$colors":[[3,"#123456"],["critical",{"$color":"bad"}],["warn",{"$ramp":["status",0.5]}]])
+
+      assert {:ok, ^chart} =
+               json
+               |> String.replace(~s(["warn",), ~s([{"$atom":"warn"},))
+               |> Chart.from_json()
 
       assert {:ok, ^chart} = Chart.from_json(json)
     end

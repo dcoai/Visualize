@@ -55,10 +55,10 @@ defmodule Visualize.Chart.ExplainTest do
                overrode: [:theme]
              }
 
-      assert entry(entries, [:frames, :main, :margin, :top]).layer == :panel
-      assert entry(entries, [:frames, :main, :margin, :top]).overrode == [:frame]
-      assert entry(entries, [:frames, :main, :margin, :bottom]).layer == :frame
-      assert entry(entries, [:frames, :main, :margin, :bottom]).overrode == []
+      assert entry(entries, [:frames, "main", :margin, :top]).layer == :panel
+      assert entry(entries, [:frames, "main", :margin, :top]).overrode == [:frame]
+      assert entry(entries, [:frames, "main", :margin, :bottom]).layer == :frame
+      assert entry(entries, [:frames, "main", :margin, :bottom]).overrode == []
       assert entry(entries, [:version]).layer == :theme
     end
 
@@ -79,14 +79,14 @@ defmodule Visualize.Chart.ExplainTest do
     test "a union name declared twice reports the layer it overrode" do
       entries = Chart.explain(@layers)
 
-      assert entry(entries, [:styles, :series, :stroke_width]) == %{
-               path: [:styles, :series, :stroke_width],
+      assert entry(entries, [:styles, "series", :stroke_width]) == %{
+               path: [:styles, "series", :stroke_width],
                value: 2,
                layer: :house,
                overrode: [:theme]
              }
 
-      assert entry(entries, [:styles, :series, :stroke]).overrode == []
+      assert entry(entries, [:styles, "series", :stroke]).overrode == []
     end
 
     test "a value a whole replacement discarded has no path and so no entry" do
@@ -94,9 +94,9 @@ defmodule Visualize.Chart.ExplainTest do
       higher = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true}]}}}
       entries = Chart.explain([lower, higher])
 
-      assert entry(entries, [:frames, :main, :axes, 0, :ticks]) == nil
-      assert entry(entries, [:frames, :main, :axes, 0, :grid]).layer == 1
-      assert entry(entries, [:frames, :main, :axes, 0, :scale]).overrode == [0]
+      assert entry(entries, [:frames, "main", :axes, 0, :ticks]) == nil
+      assert entry(entries, [:frames, "main", :axes, 0, :grid]).layer == 1
+      assert entry(entries, [:frames, "main", :axes, 0, :scale]).overrode == [0]
     end
   end
 
@@ -116,7 +116,7 @@ defmodule Visualize.Chart.ExplainTest do
       chart = Chart.from_map!(%{version: 2, frames: %{main: %{kind: :cartesian}}})
 
       assert Chart.explain([chart]) == Chart.explain([{0, chart}])
-      assert entry(Chart.explain([chart]), [:frames, :main, :kind]).value == :cartesian
+      assert entry(Chart.explain([chart]), [:frames, "main", :kind]).value == :cartesian
     end
 
     test "no layers is no entries" do

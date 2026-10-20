@@ -14,15 +14,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     alias Visualize.Chart
-    alias Visualize.Chart.Fragment
+    alias Visualize.Chart.{Fragment, Names}
     alias Visualize.Chart.Frame.Scales, as: FrameScales
     alias Visualize.Data.Table
 
     @typedoc "The types the pool's rows suggest, by source name."
     @type pool_types :: %{atom() => %{atom() => atom()}}
 
-    @position [:x, :y, :angle, :r]
+    # A scale is named by its string (D-195).
+    @position ["x", "y", "angle", "r"]
     @sample 200
 
     @doc """
@@ -33,13 +36,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     a number → `:sequential`. A channel with no evidence derives nothing; a scale already
     declared is never in the result.
 
-        iex> design = %{frames: %{main: %{kind: :cartesian}},
+        iex> design = Visualize.Chart.Migration.names(%{frames: %{main: %{kind: :cartesian}},
         ...>   sources: %{s: %{fields: [:t, :v, :k], types: %{t: :time, v: :number, k: :category}}},
         ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}},
-        ...>           %{type: :rect, data: :s, channels: %{x0: :k, x1: :k, y0: 0, y1: :v, value: :k}}]}
+        ...>           %{type: :rect, data: :s, channels: %{x0: :k, x1: :k, y0: 0, y1: :v, value: :k}}]})
         iex> Visualize.Chart.Builder.Scales.derive(design, %{})
-        %{x: %{kind: :time, domain: :auto}, y: %{kind: :linear, domain: :auto}, color: %{kind: :ordinal, domain: :auto}}
-        iex> Visualize.Chart.Builder.Scales.derive(%{frames: %{main: %{kind: :cartesian}}}, %{})
+        %{"x" => %{kind: :time, domain: :auto}, "y" => %{kind: :linear, domain: :auto}, "color" => %{kind: :ordinal, domain: :auto}}
+        iex> Visualize.Chart.Builder.Scales.derive(%{frames: %{"main" => %{kind: :cartesian}}}, %{})
         %{}
     """
     @spec derive(map(), pool_types()) :: %{atom() => map()}
@@ -52,11 +55,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     derives each frame's from its own marks, since a scale name belongs to its frame
     (§4.3).
 
-        iex> design = %{frames: %{a: %{kind: :cartesian}, b: %{kind: :cartesian, scales: %{x: %{kind: :linear}}}},
+        iex> design = Visualize.Chart.Migration.names(%{frames: %{a: %{kind: :cartesian}, b: %{kind: :cartesian, scales: %{x: %{kind: :linear}}}},
         ...>   sources: %{s: %{fields: [:t, :v], types: %{t: :number, v: :number}}},
-        ...>   marks: [%{type: :line, frame: :b, data: :s, channels: %{x: :t, y: :v}}]}
-        iex> {Visualize.Chart.Builder.Scales.derive(design, %{}, :a), Visualize.Chart.Builder.Scales.derive(design, %{}, :b)}
-        {%{}, %{y: %{kind: :linear, domain: :auto}}}
+        ...>   marks: [%{type: :line, frame: :b, data: :s, channels: %{x: :t, y: :v}}]})
+        iex> {Visualize.Chart.Builder.Scales.derive(design, %{}, "a"), Visualize.Chart.Builder.Scales.derive(design, %{}, "b")}
+        {%{}, %{"y" => %{kind: :linear, domain: :auto}}}
     """
     @spec derive(map(), pool_types(), atom()) :: %{atom() => map()}
     def derive(design, pool_types, frame) when is_map(design) do
@@ -79,10 +82,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     could be read for: `{[:marks, i, :channels, ch], {:unscaled, field}}` each, the
     builder's needs (spec/14 §18.16).
 
-        iex> design = %{frames: %{main: %{kind: :cartesian}}, sources: %{s: %{fields: [:t, :v]}},
-        ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
+        iex> design = Visualize.Chart.Migration.names(%{frames: %{main: %{kind: :cartesian}}, sources: %{s: %{fields: [:t, :v]}},
+        ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]})
         iex> Visualize.Chart.Builder.Scales.unscaled(design, %{})
-        [{[:marks, 0, :channels, :x], {:unscaled, :t}}, {[:marks, 0, :channels, :y], {:unscaled, :v}}]
+        [{[:marks, 0, :channels, :x], {:unscaled, "t"}}, {[:marks, 0, :channels, :y], {:unscaled, "v"}}]
         iex> Visualize.Chart.Builder.Scales.unscaled(design, %{s: %{t: :number, v: :number}})
         []
     """
@@ -91,7 +94,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       for {frame, name, nil, {path, field}} <- evidence(design, pool_types),
           name in @position,
           name not in declared(design, frame),
-          is_atom(field),
+          is_name(field),
           do: {path, {:unscaled, field}}
     end
 
@@ -114,10 +117,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     #371): the source's declared `fields` and the pool's columns for it, sorted, each with
     its type — the design's, else the rows' — keyed by the channels node's path.
 
-        iex> design = %{sources: %{s: %{fields: [:t, :v], types: %{t: :time}}},
-        ...>   marks: [%{type: :line, data: :s}, %{type: :line}]}
+        iex> design = Visualize.Chart.Migration.names(%{sources: %{s: %{fields: [:t, :v], types: %{t: :time}}},
+        ...>   marks: [%{type: :line, data: :s}, %{type: :line}]})
         iex> Visualize.Chart.Builder.Scales.columns(design, %{s: [%{t: 1, v: 2, extra: "x"}]})
-        %{[:marks, 0, :channels] => [%{name: :extra, type: :text}, %{name: :t, type: :time}, %{name: :v, type: :number}]}
+        %{[:marks, 0, :channels] => [%{name: "extra", type: :text}, %{name: "t", type: :time}, %{name: "v", type: :number}]}
     """
     @spec columns(map(), map()) :: %{[term()] => [%{name: atom(), type: atom() | nil}]}
     def columns(design, pool) when is_map(design) and is_map(pool),
@@ -138,11 +141,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
           into: %{} do
         declared =
           case get_in(design, [:sources, source, :fields]) do
-            fields when is_list(fields) -> Enum.filter(fields, &is_atom/1)
+            fields when is_list(fields) -> Enum.filter(fields, &is_name/1)
             _none -> []
           end
 
-        names = Enum.uniq(declared ++ Map.keys(Map.get(pool_types, source, %{}))) |> Enum.sort()
+        # The pool is the host's, keyed by its spelling; a column is named by its string.
+        pooled = (pooled(pool_types, source) || %{}) |> Map.keys() |> Enum.map(&Names.name/1)
+        names = Enum.uniq(declared ++ pooled) |> Enum.sort()
 
         {[:marks, i, :channels],
          Enum.map(names, &%{name: &1, type: column_type(design, pool_types, source, &1)})}
@@ -153,11 +158,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The position scales a mark reads — `x`, `y`, `angle`, `r` — through its channels and
     its `scales` renames, in channel order (spec/14 §18.16, #373).
 
-        iex> design = %{frames: %{main: %{kind: :cartesian}}}
-        iex> Visualize.Chart.Builder.Scales.position_scales(design, %{type: :line, channels: %{y: :v, x: :t, series: :k}})
-        [:x, :y]
-        iex> Visualize.Chart.Builder.Scales.position_scales(%{frames: %{main: %{kind: :polar}}}, %{type: :rose, channels: %{angle: :k, value: :v}})
-        [:angle, :r]
+        iex> design = %{frames: %{"main" => %{kind: :cartesian}}}
+        iex> Visualize.Chart.Builder.Scales.position_scales(design, %{type: :line, channels: %{y: "v", x: "t", series: "k"}})
+        ["x", "y"]
+        iex> Visualize.Chart.Builder.Scales.position_scales(%{frames: %{"main" => %{kind: :polar}}}, %{type: :rose, channels: %{angle: "k", value: "v"}})
+        ["angle", "r"]
     """
     @spec position_scales(map(), map()) :: [atom()]
     def position_scales(design, mark) when is_map(mark) do
@@ -173,8 +178,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @doc "The type the design declares for a source's field, else the type its rows suggest."
     @spec column_type(map(), pool_types(), atom(), atom()) :: atom() | nil
     def column_type(design, pool_types, source, field) do
-      Chart.column_type(design, source, field) || get_in(pool_types, [source, field])
+      Chart.column_type(design, source, field) || pool_types |> pooled(source) |> pooled(field)
     end
+
+    # A host's entry by the spelling of a name (D-195): the pool's source, a source's column.
+    defp pooled(map, name) when is_map(map) do
+      case Names.fetch(map, name) do
+        {:ok, value} -> value
+        :error -> nil
+      end
+    end
+
+    defp pooled(_other, _name), do: nil
 
     # Every channel of every mark that names a scale: `{frame, scale, type or nil, {path,
     # value}}`, the frame the mark is drawn in, in mark and channel order.
@@ -195,21 +210,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp frame_kind(design, frame), do: get_in(design, [:frames, frame, :kind]) || :cartesian
 
-    defp source_of(%{data: name}) when is_atom(name), do: name
-    defp source_of(%{data: %{source: name}}) when is_atom(name), do: name
+    defp source_of(%{data: name}) when is_name(name), do: name
+    defp source_of(%{data: %{source: name}}) when is_name(name), do: name
     defp source_of(_mark), do: nil
 
     defp value_type(_design, _pool, _source, n) when is_number(n), do: :number
     defp value_type(_design, _pool, nil, _value), do: nil
 
-    defp value_type(design, pool_types, source, field) when is_atom(field) and field != nil,
+    defp value_type(design, pool_types, source, field) when is_name(field),
       do: column_type(design, pool_types, source, field)
 
     defp value_type(_design, _pool, _source, _other), do: nil
 
-    defp kind(:color, type) when type in [:category, :text], do: :ordinal
-    defp kind(:color, :number), do: :sequential
-    defp kind(:color, _type), do: nil
+    defp kind("color", type) when type in [:category, :text], do: :ordinal
+    defp kind("color", :number), do: :sequential
+    defp kind("color", _type), do: nil
     defp kind(_name, :time), do: :time
     defp kind(_name, :number), do: :linear
     defp kind(_name, type) when type in [:category, :text], do: :band

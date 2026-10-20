@@ -71,9 +71,14 @@ defmodule Visualize.Chart.Mark.Series do
   # The color scale's value for the series, else the theme's color for its position
   # (spec/14 §5.6).
   defp color(%{frame: frame, mode: mode, series: index}, value) do
-    case Map.get(frame.scales, :color) do
-      nil -> Theme.resolve(frame.theme, {:series, Map.fetch!(index, value)}, mode)
-      scale -> scale |> Scale.apply(value) |> color_or_slot(frame, mode, index, value)
+    case Map.get(frame.scales, "color") do
+      nil ->
+        Theme.resolve(frame.theme, {:series, Map.fetch!(index, value)}, mode)
+
+      scale ->
+        scale
+        |> Scale.apply(Visualize.Chart.Names.category(value))
+        |> color_or_slot(frame, mode, index, value)
     end
   end
 

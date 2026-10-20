@@ -688,17 +688,18 @@ defmodule Visualize.Color do
           | {:contrast, value() | :under}
 
   @doc """
-  The color `name` of the theme's color table (spec/08 §1.9, §7.1).
+  The color `name` of the theme's color table (spec/08 §1.9, §7.1): the library's names are
+  atoms, and a color a theme declares may be named by its string (D-195).
 
       iex> Visualize.Color.color(:red)
       {:color, :red}
 
   """
-  @spec color(atom()) :: value()
+  @spec color(atom() | String.t()) :: value()
   def color(name) do
     if Typed.name?(name),
       do: {:color, name},
-      else: raise(ArgumentError, "a color name is an atom, got: #{inspect(name)}")
+      else: raise(ArgumentError, "a color name is an atom or a string, got: #{inspect(name)}")
   end
 
   @doc """

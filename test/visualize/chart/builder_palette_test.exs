@@ -227,9 +227,9 @@ defmodule Visualize.Chart.BuilderPaletteTest do
       # A style site keyed by the name, holding the theme's entry; no layer changed.
       assert Enum.take(BuilderFixture.layers(s), length(before)) == before
       site = Stack.get(s.assigns.uses, s.assigns.selected)
-      assert %Use{ref: nil, key: :warning} = site
+      assert %Use{ref: nil, key: "warning"} = site
       assert site.local == %{style: Theme.style(Theme.default(), :warning)}
-      assert BuilderFixture.design(s).styles.warning == Theme.style(Theme.default(), :warning)
+      assert BuilderFixture.design(s).styles["warning"] == Theme.style(Theme.default(), :warning)
       assert s.assigns.node_label == "styles.warning"
       assert s.assigns.palette_chosen == nil
       assert s.assigns.notice == nil
@@ -243,7 +243,7 @@ defmodule Visualize.Chart.BuilderPaletteTest do
     test "a state is overridden as the theme gives it, and a name the design declares is opened" do
       s = socket()
       {:noreply, s} = Builder.handle_event("override_style", %{"name" => "selected"}, s)
-      assert BuilderFixture.design(s).styles.selected == %{stroke: %{width: 2}}
+      assert BuilderFixture.design(s).styles["selected"] == %{stroke: %{width: 2}}
 
       count = length(s.assigns.uses)
       {:noreply, again} = Builder.handle_event("override_style", %{"name" => "selected"}, s)

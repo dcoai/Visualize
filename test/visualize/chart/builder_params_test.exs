@@ -56,7 +56,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
     end
 
     test "a variable a higher layer writes over disappears, and one it opens appears" do
-      base = %{version: 2, frames: %{main: %{kind: :cartesian}}}
+      base = %{version: 2, frames: %{"main" => %{kind: :cartesian}}}
 
       titled = %{
         vars: %{unit: %{}},
@@ -64,7 +64,7 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       }
 
       literal = %{labels: [%{id: :title, anchor: :title, text: ["Uptime"]}]}
-      widened = %{vars: %{wide: %{}}, frames: %{main: %{margin: %{top: Chart.var(:wide)}}}}
+      widened = %{vars: %{wide: %{}}, frames: %{"main" => %{margin: %{top: Chart.var(:wide)}}}}
 
       open = render_component(&Params.panel/1, %{layers: [base, titled]})
       closed = render_component(&Params.panel/1, %{layers: [base, titled, literal]})
@@ -92,8 +92,8 @@ defmodule Visualize.Chart.Builder.ParamsTest do
       params = %{"_target" => ["ticks"], "ticks" => "6"}
       {:noreply, bound} = Builder.handle_event("set_var", params, socket)
 
-      assert bound.assigns.bindings == %{ticks: 6}
-      refute bound.assigns.bindings == %{ticks: "6"}
+      assert bound.assigns.bindings == %{"ticks" => 6}
+      refute bound.assigns.bindings == %{"ticks" => "6"}
     end
 
     test "a blank control removes the binding and the declared default returns" do
@@ -183,7 +183,9 @@ defmodule Visualize.Chart.Builder.ParamsTest do
 
       assert {:noreply, %{assigns: %{notice: "design: " <> _}}} = broken
       assert {:noreply, %{assigns: %{notice: "version: is required"}}} = invalid
-      assert BuilderFixture.layers(elem(broken, 1)) == BuilderFixture.parameterized()
+
+      assert BuilderFixture.layers(elem(broken, 1)) ==
+               BuilderFixture.named(BuilderFixture.parameterized())
     end
 
     test "without Jason the panel says so rather than raising" do

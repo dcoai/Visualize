@@ -386,11 +386,11 @@ defmodule Visualize.Chart.MarkTest do
 
       frame = Frame.new(chart, sources: %{primary: rows}, size: {300, 200})
       # The offset scale's domain is the offset field's values, its range the outer bandwidth.
-      assert frame.scales.x_offset.domain == ["s0", "s1"]
+      assert frame.scales["x_offset"].domain == ["s0", "s1"]
 
-      assert frame.scales.x_offset.range == [
+      assert frame.scales["x_offset"].range == [
                0,
-               Visualize.Scale.Band.bandwidth(frame.scales.x)
+               Visualize.Scale.Band.bandwidth(frame.scales["x"])
              ]
 
       rects = Mark.generate(frame, hd(chart.marks), sources: %{primary: rows}).children
@@ -677,7 +677,7 @@ defmodule Visualize.Chart.MarkTest do
 
       # The domain is the rows' extent alone: the y0 channel is read from it, never into
       # it, so it neither widens it nor raises on a value it has no column for.
-      assert Frame.new(chart, sources: %{primary: rows}, size: {300, 200}).scales.y.domain ==
+      assert Frame.new(chart, sources: %{primary: rows}, size: {300, 200}).scales["y"].domain ==
                Enum.min_max(Enum.map(rows, & &1.v)) |> Tuple.to_list()
     end
 
@@ -1021,11 +1021,15 @@ defmodule Visualize.Chart.MarkTest do
         ]
       }
 
-      assert {:error, [{[:marks, 0, :tooltip, :fields, 1], {:undeclared, :field, :w}}]} =
+      assert {:error, [{[:marks, 0, :tooltip, :fields, 1], {:undeclared, :field, "w"}}]} =
                Chart.from_map(design)
 
       ok = put_in(design, [:marks, Access.at(0), :tooltip], %{fields: [:t], event: :pick})
-      assert hd(Chart.to_map(Chart.from_map!(ok)).marks).tooltip == %{fields: [:t], event: :pick}
+
+      assert hd(Chart.to_map(Chart.from_map!(ok)).marks).tooltip == %{
+               fields: ["t"],
+               event: "pick"
+             }
     end
   end
 
@@ -1466,7 +1470,7 @@ defmodule Visualize.Chart.MarkTest do
       {:ok, json} = Chart.to_json(chart)
       assert json =~ ~s("fill":{"color":{"$contrast":"under"},"type":"solid"})
       assert {:ok, back} = Chart.from_json(json)
-      assert back.styles.ink.fill == %{type: :solid, color: {:contrast, :under}}
+      assert back.styles["ink"].fill == %{type: :solid, color: {:contrast, :under}}
 
       # A built-in theme, whose slots the validator checks, accepts it: it is not a slot.
       on_dark = fn fill ->
@@ -1551,7 +1555,7 @@ defmodule Visualize.Chart.MarkTest do
 
       frame = Frame.new(chart)
 
-      assert_raise ArgumentError, ~r/variable :unit is unresolved/, fn ->
+      assert_raise ArgumentError, ~r/variable "unit" is unresolved/, fn ->
         Mark.generate(frame, hd(chart.marks), sources: @sources)
       end
     end

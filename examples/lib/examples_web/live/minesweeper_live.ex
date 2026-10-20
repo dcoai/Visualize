@@ -186,7 +186,11 @@ defmodule ExamplesWeb.MinesweeperLive do
   @impl true
   def handle_info(
         {:visualize_event, "mines-chart",
-         %Event{event: "cell_click", item: {_mark, %{row: r, col: c}}, modifiers: modifiers}},
+         %Event{
+           event: "cell_click",
+           item: {_mark, %{"row" => r, "col" => c}},
+           modifiers: modifiers
+         }},
         socket
       ) do
     %{game: game, mode: mode} = socket.assigns
@@ -359,7 +363,7 @@ defmodule ExamplesWeb.MinesweeperLive do
     """
 
     def handle_info({:visualize_event, "mines-chart",
-                     %Visualize.Event{event: "cell_click", item: {_mark, %{row: r, col: c}}}}, socket) do
+                     %Visualize.Event{event: "cell_click", item: {_mark, %{"row" => r, "col" => c}}}}, socket) do
       game = Minesweeper.reveal(socket.assigns.game, {r, c})
       {:noreply, assign(socket, game: game, chart: applied(game))}
     end

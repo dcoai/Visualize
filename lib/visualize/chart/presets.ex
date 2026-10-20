@@ -18,10 +18,10 @@ defmodule Visualize.Chart.Presets do
       ...>     x: & &1.name,
       ...>     y: & &1.value
       ...>   })
-      iex> design.frames.main.scales
-      %{x: %{kind: :band, padding: 0.1}, y: %{kind: :linear, domain: [0, :auto]}}
+      iex> design.frames["main"].scales
+      %{"x" => %{kind: :band, padding: 0.1}, "y" => %{kind: :linear, domain: [0, :auto]}}
       iex> hd(design.marks).channels
-      %{x0: :x, x1: :x, y0: 0, y1: :y}
+      %{x0: "x", x1: "x", y0: 0, y1: "y"}
       iex> {:ok, _chart} = Visualize.Chart.from_map(design)
       iex> Visualize.Chart.Presets.sources(
       ...>   :bar_chart,

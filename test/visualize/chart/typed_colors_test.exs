@@ -82,9 +82,9 @@ defmodule Visualize.Chart.TypedColorsTest do
       }
 
       assert {:ok, v3} = Migration.migrate(v2)
-      assert v3.frames.main.scales.c.range == %{"down" => {:color, :bad}}
-      assert hd(v3.defs.fade.stops).color == {:color, :series_1}
-      assert v3.styles.s.stroke.color == {:color, :good}
+      assert v3.frames["main"].scales["c"].range == %{"down" => {:color, :bad}}
+      assert hd(v3.defs["fade"].stops).color == {:color, :series_1}
+      assert v3.styles["s"].stroke.color == {:color, :good}
     end
 
     test "every stored design is typed: no bare atom but :none in a color position" do
@@ -135,7 +135,7 @@ defmodule Visualize.Chart.TypedColorsTest do
 
   describe "the validator" do
     test "a name the theme's table lacks is undeclared, at every depth" do
-      assert {:error, [{[:styles, :s, :fill, :color], {:undeclared, :color, :brand}}]} =
+      assert {:error, [{[:styles, "s", :fill, :color], {:undeclared, :color, "brand"}}]} =
                Validator.validate(design(%{fill: alpha(color(:brand), 0.5)}))
 
       assert :ok = Validator.validate(design(%{fill: color(:steelblue)}))
@@ -150,7 +150,7 @@ defmodule Visualize.Chart.TypedColorsTest do
 
     test "a transform of the wrong shape or an unreadable literal operand is no color" do
       for bad <- [{:alpha, color(:red), 2}, {:blend, []}, alpha("currentColor", 0.5)] do
-        assert {:error, [{[:styles, :s, :fill, :color], {:type, :color}}]} =
+        assert {:error, [{[:styles, "s", :fill, :color], {:type, :color}}]} =
                  Validator.validate(design(%{fill: bad}))
       end
 
@@ -178,7 +178,7 @@ defmodule Visualize.Chart.TypedColorsTest do
       for value <- values do
         {:ok, json} = Chart.to_json(Chart.from_map!(design(%{fill: value})))
         assert {:ok, back} = Chart.from_json(json)
-        assert back.styles.s.fill.color == value, inspect(value)
+        assert back.styles["s"].fill.color == value, inspect(value)
       end
 
       {:ok, json} = Chart.to_json(Chart.from_map!(design(%{fill: intensity(color(:blue), 0.65)})))
@@ -191,13 +191,13 @@ defmodule Visualize.Chart.TypedColorsTest do
       for {old, typed} <- [{~s("bad"), color(:bad)}, {~s("contrast"), contrast()}] do
         legacy = String.replace(json, ~s("color":"#000"), ~s("color":) <> old)
         assert {:ok, back} = Chart.from_json(legacy)
-        assert back.styles.s.fill.color == typed
+        assert back.styles["s"].fill.color == typed
       end
 
       # Any other string is a literal: "red" stays CSS's red, never the theme's.
       legacy = String.replace(json, ~s("color":"#000"), ~s("color":"red"))
       assert {:ok, back} = Chart.from_json(legacy)
-      assert back.styles.s.fill.color == "red"
+      assert back.styles["s"].fill.color == "red"
     end
 
     test "an unknown tag in a color position is refused, and a name that is not plain words is no atom" do
@@ -217,7 +217,7 @@ defmodule Visualize.Chart.TypedColorsTest do
       # A known tag whose name is not plain words is no atom, and no color.
       bad = String.replace(json, ~s("color":"#000"), ~s("color":{"$color":"a b"}))
 
-      assert {:error, [{[:styles, :s, :fill, :color], {:type, :color}}]} =
+      assert {:error, [{[:styles, "s", :fill, :color], {:type, :color}}]} =
                Chart.from_json(bad)
     end
   end

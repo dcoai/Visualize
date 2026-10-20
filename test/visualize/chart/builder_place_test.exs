@@ -12,9 +12,11 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
   # A *geometry*, not a design frame: the preview's box and the design's margin.
   @frame %{size: %{width: 400, height: 200}, margin: %{top: 20, right: 20, bottom: 30, left: 40}}
+  # A design as the builder holds one, its names strings (D-195).
   @design %{
     frames: %{
-      main: Map.merge(@frame, %{scales: %{x: %{kind: :linear}, color: %{kind: :ordinal}}})
+      "main" =>
+        Map.merge(@frame, %{scales: %{"x" => %{kind: :linear}, "color" => %{kind: :ordinal}}})
     }
   }
 
@@ -37,16 +39,16 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
   describe "node/4" do
     test "an axis takes the side of its band and the scale that side reads, bringing it when missing" do
-      assert {:sites, [%{kind: :axis, body: %{scale: :x, side: :top}}]} =
+      assert {:sites, [%{kind: :axis, body: %{scale: "x", side: :top}}]} =
                Place.node(:axis, :top, @design, {0, 0})
 
-      assert {:sites, [%{kind: :axis, body: %{scale: :x, side: :bottom}}]} =
+      assert {:sites, [%{kind: :axis, body: %{scale: "x", side: :bottom}}]} =
                Place.node(:axis, :plot, @design, {0, 0})
 
       assert {:sites,
               [
-                %{kind: :scale, body: %{kind: :linear, domain: :auto}, key: :y},
-                %{kind: :axis, body: %{scale: :y, side: :right}, key: nil}
+                %{kind: :scale, body: %{kind: :linear, domain: :auto}, key: "y"},
+                %{kind: :axis, body: %{scale: "y", side: :right}, key: nil}
               ]} = Place.node(:axis, :right, @design, {0, 0})
     end
 
@@ -67,7 +69,7 @@ defmodule Visualize.Chart.Builder.PlaceTest do
           anchor
         end
 
-      assert anchors == [:subtitle, {:axis, :x}, {:axis, :y}, {:frame, :top_right}]
+      assert anchors == [:subtitle, {:axis, "x"}, {:axis, "y"}, {:frame, :top_right}]
 
       assert {:sites, [%{body: %{anchor: {:frame, :top_left}}}]} =
                Place.node(:label, :plot, @design, {56, 43})
@@ -78,27 +80,27 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
     test "a legend takes the first ordinal scale and the nearest of the eight positions" do
       assert Place.node(:legend, :top, @design, {0, 0}) ==
-               {:legend, %{scale: :color, position: :top}}
+               {:legend, %{scale: "color", position: :top}}
 
       assert Place.node(:legend, :left, @design, {0, 0}) ==
-               {:legend, %{scale: :color, position: :left}}
+               {:legend, %{scale: "color", position: :left}}
 
       assert Place.node(:legend, :plot, @design, {56, 43}) ==
-               {:legend, %{scale: :color, position: :top_left}}
+               {:legend, %{scale: "color", position: :top_left}}
 
       assert Place.node(:legend, :plot, @design, {310, 43}) ==
-               {:legend, %{scale: :color, position: :top}}
+               {:legend, %{scale: "color", position: :top}}
 
       assert Place.node(:legend, :plot, @design, {564, 195}) ==
-               {:legend, %{scale: :color, position: :right}}
+               {:legend, %{scale: "color", position: :right}}
 
       assert Place.node(:legend, :plot, @design, {564, 358}) ==
-               {:legend, %{scale: :color, position: :bottom_right}}
+               {:legend, %{scale: "color", position: :bottom_right}}
 
       assert Place.node(
                :legend,
                :plot,
-               %{frames: %{main: %{scales: %{x: %{kind: :linear}}}}},
+               %{frames: %{"main" => %{scales: %{x: %{kind: :linear}}}}},
                {0, 0}
              ) ==
                {:error, :no_scale}
@@ -151,26 +153,26 @@ defmodule Visualize.Chart.Builder.PlaceTest do
   test "geometry/1 is the design's size and margin over the schema's defaults" do
     assert Place.geometry(@design) == %{@frame | size: %{width: 600, height: 400}}
 
-    assert Place.geometry(%{frames: %{main: %{margin: %{top: 900}}}}).size == %{
+    assert Place.geometry(%{frames: %{"main" => %{margin: %{top: 900}}}}).size == %{
              width: 600,
              height: 400
            }
 
-    assert Place.geometry(%{frames: %{main: %{margin: %{top: 5}}}}).margin.top == 5
+    assert Place.geometry(%{frames: %{"main" => %{margin: %{top: 5}}}}).margin.top == 5
   end
 
   describe "the graph is the box (spec/14 §18.4, §18.16, #613)" do
     @two %{
       frames: %{
-        history: %{kind: :cartesian, box: [0, 0, 0.5, 1]},
-        now: %{kind: :cartesian, box: [0.5, 0, 0.5, 1], margin: %{left: 10}},
-        inset: %{kind: :polar, box: [0.6, 0.1, 0.3, 0.3], z: 1}
+        "history" => %{kind: :cartesian, box: [0, 0, 0.5, 1]},
+        "now" => %{kind: :cartesian, box: [0.5, 0, 0.5, 1], margin: %{left: 10}},
+        "inset" => %{kind: :polar, box: [0.6, 0.1, 0.3, 0.3], z: 1}
       }
     }
 
     test "frames/2 is every frame's pixel box at the measured size, in drawing order" do
       frames = Place.frames(@two, {1000, 500})
-      assert Enum.map(frames, & &1.name) == [:history, :now, :inset]
+      assert Enum.map(frames, & &1.name) == ["history", "now", "inset"]
 
       assert %{x: 500.0, y: +0.0, size: %{width: 500.0, height: 500.0}, margin: %{left: 10}} =
                Enum.at(frames, 1)
@@ -193,17 +195,17 @@ defmodule Visualize.Chart.Builder.PlaceTest do
 
     test "spot/3 reads a point in the topmost frame under it, else the nearest" do
       # Over the inset, which is drawn last, though `now` is under it too.
-      assert %{frame: :inset, point: {50.0, 20.0}} = Place.spot(@two, {1000, 500}, {650, 70})
-      assert %{frame: :history} = Place.spot(@two, {1000, 500}, {100, 100})
+      assert %{frame: "inset", point: {50.0, 20.0}} = Place.spot(@two, {1000, 500}, {650, 70})
+      assert %{frame: "history"} = Place.spot(@two, {1000, 500}, {100, 100})
 
       # The second frame's own margin: its left band, at its own 10 px.
       spot = Place.spot(@two, {1000, 500}, {505, 250})
-      assert spot.frame == :now
+      assert spot.frame == "now"
       assert Place.region(spot.point, spot.geometry) == :left
       assert Place.region({spot.point |> elem(0) |> Kernel.+(10), 250}, spot.geometry) == :plot
 
       # Outside every box, the nearest frame.
-      assert %{frame: :now} = Place.spot(@two, {1000, 500}, {1100, 250})
+      assert %{frame: "now"} = Place.spot(@two, {1000, 500}, {1100, 250})
     end
 
     test "a label dropped in a frame's plot takes the corner nearest in that frame" do

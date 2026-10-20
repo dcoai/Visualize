@@ -14,6 +14,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     alias Visualize.Chart.Fragment
 
     alias Visualize.Chart.{Frame, Schema}
@@ -52,7 +54,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec component(String.t()) :: {:ok, component()} | :error
     def component("mark:" <> type) do
-      case Enum.find(Schema.mark_types(), &(Atom.to_string(&1) == type)) do
+      case Enum.find(Schema.mark_types(), &(to_string(&1) == type)) do
         nil -> :error
         found -> {:ok, {:mark, found}}
       end
@@ -293,14 +295,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     kept inside, as fractions rounded to four places. `:center` is the graph's center,
     where the keyboard twin and *+ frame* place one.
 
-        iex> design = %{frames: %{main: %{}, frame_2: %{}}}
+        iex> design = %{frames: %{"main" => %{}, "frame_2" => %{}}}
         iex> Visualize.Chart.Builder.Place.new_frame(design, {800, 400}, {700, 100})
-        {:frame_3, [0.5, 0, 0.5, 0.5]}
+        {"frame_3", [0.5, 0, 0.5, 0.5]}
         iex> Visualize.Chart.Builder.Place.new_frame(%{}, {800, 400}, :center)
-        {:main, [0.25, 0.25, 0.5, 0.5]}
+        {"main", [0.25, 0.25, 0.5, 0.5]}
     """
     @spec new_frame(map(), {number(), number()}, {number(), number()} | :center) ::
-            {atom(), [number()]}
+            {String.t(), [number()]}
     def new_frame(design, {width, height}, :center),
       do: new_frame(design, {width, height}, {width / 2, height / 2})
 
@@ -365,13 +367,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
           _none -> []
         end
 
+      # A frame is named by its string (D-195).
       if taken == [] do
-        :main
+        "main"
       else
         2
         |> Stream.iterate(&(&1 + 1))
         |> Enum.find(&("frame_#{&1}" not in taken))
-        |> then(&String.to_atom("frame_#{&1}"))
+        |> then(&"frame_#{&1}")
       end
     end
 
@@ -395,11 +398,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     design with no ordinal scale. The point is a `spot/3` — read in the frame under it —
     or a bare point, read in the design's frame at the render's default size.
 
-        iex> design = %{frames: %{main: %{scales: %{x: %{kind: :linear}}}}}
+        iex> design = %{frames: %{"main" => %{scales: %{"x" => %{kind: :linear}}}}}
         iex> Visualize.Chart.Builder.Place.node(:axis, :bottom, design, {0, 0})
-        {:sites, [%{kind: :axis, body: %{scale: :x, side: :bottom}, key: nil}]}
+        {:sites, [%{kind: :axis, body: %{scale: "x", side: :bottom}, key: nil}]}
         iex> Visualize.Chart.Builder.Place.node(:axis, :left, design, {0, 0})
-        {:sites, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: :y}, %{kind: :axis, body: %{scale: :y, side: :left}, key: nil}]}
+        {:sites, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: "y"}, %{kind: :axis, body: %{scale: "y", side: :left}, key: nil}]}
         iex> Visualize.Chart.Builder.Place.node(:legend, :plot, design, {0, 0})
         {:error, :no_scale}
     """
@@ -413,10 +416,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       {scale, side} =
         case region do
-          :top -> {:x, :top}
-          :left -> {:y, :left}
-          :right -> {:y, :right}
-          _bottom_or_plot -> {:x, :bottom}
+          :top -> {"x", :top}
+          :left -> {"y", :left}
+          :right -> {"y", :right}
+          _bottom_or_plot -> {"x", :bottom}
         end
 
       declared? = scale_declared?(design, frame, scale)
@@ -444,8 +447,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       anchor =
         case region do
           :top -> :subtitle
-          :bottom -> {:axis, :x}
-          :left -> {:axis, :y}
+          :bottom -> {:axis, "x"}
+          :left -> {:axis, "y"}
           :right -> {:frame, :top_right}
           :plot -> {:frame, at(point, design, &corner/2)}
         end
@@ -532,13 +535,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       name =
         cond do
-          is_atom(bound) and bound != nil and Map.has_key?(sources, bound) -> bound
+          is_name(bound) and Map.has_key?(sources, bound) -> bound
           map_size(sources) > 0 -> sources |> Map.keys() |> Enum.sort() |> List.first()
           true -> nil
         end
 
       case name && Map.get(sources, name) do
-        %{fields: fields} when is_list(fields) -> {name, Enum.filter(fields, &is_atom/1)}
+        %{fields: fields} when is_list(fields) -> {name, Enum.filter(fields, &is_name/1)}
         _other -> nil
       end
     end
@@ -562,8 +565,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       anchor =
         case region do
           :top -> :title
-          :bottom -> {:axis, :x}
-          :left -> {:axis, :y}
+          :bottom -> {:axis, "x"}
+          :left -> {:axis, "y"}
           :right -> {:frame, :top_right}
         end
 
@@ -601,10 +604,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :top, {0, 0})
         {:ok, %{scale: :x, side: :top}}
-        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0}, %{frames: %{main: %{scales: %{x: %{}, y: %{}}}}})
-        {:ok, %{scale: :y, side: :left}}
+        iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0}, %{frames: %{"main" => %{scales: %{"x" => %{}, "y" => %{}}}}})
+        {:ok, %{scale: "y", side: :left}}
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :left, {0, 0})
-        {:ok, %{scale: :y, side: :left}, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: :y}]}
+        {:ok, %{scale: "y", side: :left}, [%{kind: :scale, body: %{kind: :linear, domain: :auto}, key: "y"}]}
         iex> Visualize.Chart.Builder.Place.moved(:axis, %{scale: :x, side: :bottom}, :bottom, {0, 0})
         :same
         iex> Visualize.Chart.Builder.Place.moved(:mark, %{type: :line}, :top, {0, 0})
@@ -653,8 +656,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       anchor =
         case region do
           :top -> if current in [:title, :subtitle], do: current, else: :title
-          :bottom -> if current in [:title, :subtitle, :caption], do: :caption, else: {:axis, :x}
-          :left -> {:axis, :y}
+          :bottom -> if current in [:title, :subtitle, :caption], do: :caption, else: {:axis, "x"}
+          :left -> {:axis, "y"}
           :right -> {:frame, :top_right}
         end
 
@@ -681,7 +684,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.find_value(axes, fn axis ->
         is_map(axis) and orientation(Map.get(axis, :side)) == wanted and
           Map.get(axis, :scale) != own and Map.get(axis, :scale)
-      end) || if(wanted == :horizontal, do: :x, else: :y)
+      end) || if(wanted == :horizontal, do: "x", else: "y")
     end
 
     defp rewritten(body, key, value) do

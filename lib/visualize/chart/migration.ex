@@ -11,7 +11,7 @@ defmodule Visualize.Chart.Migration do
   `Visualize.Chart.from_map/1`, which migrates before it validates.
   """
 
-  alias Visualize.Chart.Migration.FilledLines
+  alias Visualize.Chart.Migration.{FilledLines, Named}
   alias Visualize.Chart.{Schema, Text, Validator}
   alias Visualize.Chart.Style.{Defaults, Parts}
 
@@ -180,10 +180,61 @@ defmodule Visualize.Chart.Migration do
   are reported at.
 
       iex> Visualize.Chart.Migration.parts(%{styles: %{s: %{stroke_width: 2}}}, :design)
-      %{styles: %{s: %{stroke: %{width: 2}}}}
+      %{styles: %{"s" => %{stroke: %{width: 2}}}}
   """
   @spec parts(map(), Schema.kind()) :: map()
   def parts(map, kind) when is_map(map), do: node(kind, map, false)
+
+  @doc false
+  # A node of `kind` with its names read as strings and nothing else rewritten (spec/14 §1.4,
+  # D-195): the one step of `canonical/1` a reader that keeps a map's shape takes — a
+  # fragment as a store holds it, a document compared with what it was written from.
+  @spec names(map(), Schema.kind()) :: map()
+  def names(map, kind \\ :design)
+
+  def names(map, kind) when is_map(map) and not is_struct(map) do
+    Map.new(map, fn {k, v} ->
+      type = names_type(kind, k)
+      {k, Named.named(kind, k, type, named_value(type, v))}
+    end)
+  end
+
+  def names(value, _kind), do: value
+
+  # A key's type, a fragment's singular wrapper (`%{mark: …}`, spec/14 §19.2) its node's.
+  defp names_type(kind, k) do
+    case Schema.key(kind, k) do
+      %{type: type} ->
+        type
+
+      nil ->
+        case kind == :design && Visualize.Chart.Fragment.singular(k) do
+          :gradient ->
+            {:node, :paint}
+
+          wrapped when wrapped in [:style, :scale, :source, :axis, :mark, :label, :var] ->
+            {:node, wrapped}
+
+          _other ->
+            :term
+        end
+    end
+  end
+
+  defp named_value({:node, kind}, v) when is_map(v) and not is_struct(v), do: names(v, kind)
+  defp named_value({:list, t}, v) when is_list(v), do: Enum.map(v, &named_value(t, &1))
+
+  defp named_value({:map, t}, v) when is_map(v) and not is_struct(v),
+    do: Map.new(v, fn {k, e} -> {k, named_value(t, e)} end)
+
+  defp named_value({:one_of, types}, v) do
+    case Schema.select(types, v) do
+      nil -> v
+      type -> named_value(type, v)
+    end
+  end
+
+  defp named_value(_type, v), do: v
 
   # A style's flat keys and shorthands become its parts, and a paint's gradient words its
   # own (spec/14 §3.1, §9, D-172), before the node is walked by its schema.
@@ -223,7 +274,8 @@ defmodule Visualize.Chart.Migration do
     |> renamed_themes(kind)
     |> Map.new(fn {k, v} ->
       type = if spec = Schema.key(kind, k), do: spec.type, else: :term
-      {k, value(type, v, text?)}
+      # A name is a string (spec/14 §1.4, D-195), read after the nodes under it are walked.
+      {k, Named.named(kind, k, type, value(type, v, text?))}
     end)
   end
 
@@ -232,8 +284,9 @@ defmodule Visualize.Chart.Migration do
   # A built-in theme spelled in British English before #642 is read by its American name
   # (spec/14 §9, D-183), wherever a theme is named: a design's or a theme document's
   # `theme`, an inline theme's own `name` and its counterparts.
+  # A document names a theme it no longer holds by the string it read (D-195).
   # spelling: allow — the old name a stored document holds.
-  @renamed_themes %{colour_safe: :color_safe}
+  @renamed_themes %{:colour_safe => :color_safe, "colour_safe" => :color_safe}
 
   defp renamed_themes(map, :design), do: rename_values(map, [:theme])
   defp renamed_themes(map, :theme), do: rename_values(map, [:name, :dark, :light])

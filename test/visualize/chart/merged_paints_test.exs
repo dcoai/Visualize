@@ -162,7 +162,7 @@ defmodule Visualize.Chart.MergedPaintsTest do
   @later %{cells: [%{x: 0.1, look: :c}, %{x: 0.3, look: :b}]}
 
   defp compiled(design, sources) do
-    {:ok, %{main: compiled}} = Chart.compile(design, sources: sources)
+    {:ok, %{"main" => compiled}} = Chart.compile(design, sources: sources)
     compiled
   end
 

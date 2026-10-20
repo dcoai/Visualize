@@ -473,7 +473,8 @@ defmodule Visualize.Chart.Validator do
 
       # A list of palette names and nodes, or one name (#658): its names are the
       # contract's to hold, its nodes style nodes.
-      {name, entries} when is_list(entries) or (is_atom(entries) and entries != nil) ->
+      {name, entries}
+      when is_list(entries) or is_binary(entries) or (is_atom(entries) and entries != nil) ->
         entries
         |> List.wrap()
         |> Enum.with_index()
@@ -481,7 +482,7 @@ defmodule Visualize.Chart.Validator do
           {entry, i} when is_map(entry) and not is_struct(entry) ->
             node(:style, Palette.entry(entry), path ++ [name, i], ctx)
 
-          {entry, _i} when is_atom(entry) ->
+          {entry, _i} when is_atom(entry) or is_binary(entry) ->
             []
 
           {_entry, i} ->

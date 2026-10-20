@@ -19,8 +19,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @typedoc "One row: the scale, its sides with the axis standing there, and its grid."
     @type row :: %{
-            scale: atom(),
-            frame: atom(),
+            scale: String.t(),
+            frame: String.t(),
             sides: [%{side: atom(), word: String.t(), index: non_neg_integer() | nil}],
             grid: boolean(),
             first: non_neg_integer() | nil
@@ -82,15 +82,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     those of `frame` — the mark's or the scale's own (#615) — and of the design's frame
     when none is given.
 
-        iex> design = %{frames: %{main: %{axes: [%{scale: :x, side: :bottom, grid: true}, %{scale: :y, side: :left}]}}}
-        iex> [x, y] = Visualize.Chart.Builder.Axes.rows(design, [:x, :y])
+        iex> design = %{frames: %{"main" => %{axes: [%{scale: "x", side: :bottom, grid: true}, %{scale: "y", side: :left}]}}}
+        iex> [x, y] = Visualize.Chart.Builder.Axes.rows(design, ["x", "y"])
         iex> {x.grid, Enum.map(x.sides, &{&1.side, &1.index}), y.grid, Enum.map(y.sides, &{&1.side, &1.index})}
         {true, [bottom: 0, top: nil], false, [left: 1, right: nil]}
-        iex> [r] = Visualize.Chart.Builder.Axes.rows(design, [:r])
+        iex> [r] = Visualize.Chart.Builder.Axes.rows(design, ["r"])
         iex> {r.first, r.sides}
         {nil, [%{side: :top, word: "shown", index: nil}]}
     """
-    @spec rows(map(), [atom()], atom() | nil) :: [row()]
+    @spec rows(map(), [String.t()], String.t() | nil) :: [row()]
     def rows(design, scales, frame \\ nil) do
       frame = frame || Fragment.frame_of(design, nil)
 
@@ -122,9 +122,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
-    defp sides(:x), do: Enum.map(@sides.x, &{&1, to_string(&1)})
-    defp sides(:y), do: Enum.map(@sides.y, &{&1, to_string(&1)})
-    defp sides(:angle), do: [{:bottom, "shown"}]
+    # A scale is named by its string (D-195).
+    defp sides("x"), do: Enum.map(@sides.x, &{&1, to_string(&1)})
+    defp sides("y"), do: Enum.map(@sides.y, &{&1, to_string(&1)})
+    defp sides("angle"), do: [{:bottom, "shown"}]
     defp sides(_r), do: [{:top, "shown"}]
   end
 end

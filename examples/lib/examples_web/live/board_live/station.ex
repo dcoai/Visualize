@@ -63,7 +63,7 @@ defmodule ExamplesWeb.BoardLive.Station do
   defp compiled(station, %{station: delivery} = sources, before) do
     {:ok, schema} = Cache.fetch(Monitor.cache(station.monitor), :station, delivery.schema)
 
-    {:ok, %{main: fresh}} =
+    {:ok, %{"main" => fresh}} =
       Chart.compile(design(),
         sources: sources,
         schemas: Monitor.cache(station.monitor),

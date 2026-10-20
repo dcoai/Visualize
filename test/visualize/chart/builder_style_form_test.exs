@@ -22,7 +22,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
     %{socket: s}
   end
 
-  defp series(s), do: get_in(hd(s.assigns.uses).local, [:styles, :series])
+  defp series(s), do: get_in(hd(s.assigns.uses).local, [:styles, "series"])
 
   defp edit(s, name, value) do
     {:noreply, s} = Builder.handle_event("edit", %{"_target" => [name], name => value}, s)
@@ -177,7 +177,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       socket: s
     } do
       edits = [
-        {"extends", "axis", [:extends], :axis},
+        {"extends", "axis", [:extends], "axis"},
         {"opacity", "0.5", [:opacity], 0.5},
         {"blend", "multiply", [:blend], :multiply},
         {"class", "callout", [:class], "callout"},
@@ -224,7 +224,7 @@ defmodule Visualize.Chart.Builder.StyleFormTest do
       refute Visualize.Chart.Style.Parts.flat?(series(s))
 
       design = BuilderFixture.design(s)
-      assert design.styles.series == series(s)
+      assert design.styles["series"] == series(s)
       assert {:ok, _applied} = Chart.apply(design, sources: BuilderFixture.sources())
     end
 

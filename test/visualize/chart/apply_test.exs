@@ -77,12 +77,13 @@ defmodule Visualize.Chart.ApplyTest do
         )
 
       assert %Applied{chart: %Chart{vars: %{}}, frame: %Frame{}} = a
-      assert a.sources == %{primary: idle(), deploys: deploys()}
-      assert b.sources.primary == other
+      # The bound sources are by the design's slot names, strings (D-195).
+      assert a.sources == %{"primary" => idle(), "deploys" => deploys()}
+      assert b.sources["primary"] == other
 
       assert Enum.at(a.chart.labels, 0).text == "Uptime — mg/hr"
       assert Enum.at(b.chart.labels, 0).text == "Uptime — %"
-      assert a.chart.styles.series.stroke.color == :series_1
+      assert a.chart.styles["series"].stroke.color == :series_1
       assert a.chart.meta.description == "Uptime in mg/hr"
 
       svg_a = Chart.render(a)
@@ -92,8 +93,8 @@ defmodule Visualize.Chart.ApplyTest do
       assert svg_b =~ ~s(class="mark mark-line") and svg_b =~ "Uptime — %"
       refute svg_a == svg_b
 
-      assert Frame.scale(a.frames.main, :y).domain == [0.0, 100.0]
-      assert Frame.scale(b.frames.main, :y).domain == [0.0, 90.0]
+      assert Frame.scale(a.frames["main"], :y).domain == [0.0, 100.0]
+      assert Frame.scale(b.frames["main"], :y).domain == [0.0, 90.0]
 
       canvas = Chart.render(b, backend: :canvas)
       assert canvas =~ "ctx." and not (canvas =~ "var(")
@@ -106,15 +107,15 @@ defmodule Visualize.Chart.ApplyTest do
           size: {300, 200}
         )
 
-      assert applied.sources == %{primary: @rows}
-      assert Frame.scale(applied.frames.main, :y).domain == [0, 9]
+      assert applied.sources == %{"primary" => @rows}
+      assert Frame.scale(applied.frames["main"], :y).domain == [0, 9]
     end
 
     test "pool entries no slot names are ignored" do
       {:ok, applied} =
         Chart.apply(design(), sources: %{uptime: @rows, other: %{q: [1]}}, size: {300, 200})
 
-      assert Map.keys(applied.sources) == [:primary]
+      assert Map.keys(applied.sources) == ["primary"]
     end
 
     test "a chart struct and a design map apply alike" do
@@ -135,25 +136,25 @@ defmodule Visualize.Chart.ApplyTest do
     test "a bound source is kept as the pool gave it" do
       rows = Enum.map([1, 2], &%{"t" => &1, "v" => &1 * 2})
       {:ok, applied} = Chart.apply(design(), sources: %{primary: rows}, size: {300, 200})
-      assert applied.sources.primary == rows
-      assert Frame.scale(applied.frames.main, :y).domain == [0, 4]
+      assert applied.sources["primary"] == rows
+      assert Frame.scale(applied.frames["main"], :y).domain == [0, 4]
     end
   end
 
   describe "binding faults" do
     test "a missing field is reported at the slot's path, one per field" do
       assert Chart.apply(design(), sources: %{primary: %{t: [1]}}, size: {300, 200}) ==
-               {:error, [{[:sources, :primary], {:missing_field, :v}}]}
+               {:error, [{[:sources, "primary"], {:missing_field, "v"}}]}
 
       assert Chart.apply(design(), sources: %{primary: [%{w: 1}]}, size: {300, 200}) ==
                {:error,
                 [
-                  {[:sources, :primary], {:missing_field, :t}},
-                  {[:sources, :primary], {:missing_field, :v}}
+                  {[:sources, "primary"], {:missing_field, "t"}},
+                  {[:sources, "primary"], {:missing_field, "v"}}
                 ]}
 
-      assert Validator.format({[:sources, :primary], {:missing_field, :v}}) ==
-               "sources.primary: has no field :v"
+      assert Validator.format({[:sources, "primary"], {:missing_field, "v"}}) ==
+               "sources.primary: has no field \"v\""
     end
 
     test "a field carried by any row, in either spelling, is present" do
@@ -166,19 +167,19 @@ defmodule Visualize.Chart.ApplyTest do
 
     test "an empty source binds without a check" do
       assert {:ok, applied} = Chart.apply(design(), sources: %{primary: []}, size: {300, 200})
-      assert Frame.scale(applied.frames.main, :y).domain == [0, 1]
+      assert Frame.scale(applied.frames["main"], :y).domain == [0, 1]
       assert Chart.render(applied) =~ ~s(class="mark mark-line")
     end
 
     test "an unbound slot is reported at its path" do
       assert Chart.apply(design(), size: {300, 200}) ==
-               {:error, [{[:sources, :primary], {:unbound, :source, :primary}}]}
+               {:error, [{[:sources, "primary"], {:unbound, :source, "primary"}}]}
 
       assert Chart.apply(design(), sources: %{other: @rows}, size: {300, 200}) ==
-               {:error, [{[:sources, :primary], {:unbound, :source, :primary}}]}
+               {:error, [{[:sources, "primary"], {:unbound, :source, "primary"}}]}
 
-      assert Validator.format({[:sources, :primary], {:unbound, :source, :primary}}) =~
-               "slot :primary has no source in the pool"
+      assert Validator.format({[:sources, "primary"], {:unbound, :source, "primary"}}) =~
+               "slot \"primary\" has no source in the pool"
     end
 
     test "every binding fault is reported together, ordered by path" do
@@ -189,8 +190,8 @@ defmodule Visualize.Chart.ApplyTest do
       assert Chart.apply(design, sources: %{b: [%{y: 1}]}, size: {300, 200}) ==
                {:error,
                 [
-                  {[:sources, :a], {:unbound, :source, :a}},
-                  {[:sources, :b], {:missing_field, :z}}
+                  {[:sources, "a"], {:unbound, :source, "a"}},
+                  {[:sources, "b"], {:missing_field, "z"}}
                 ]}
     end
 
@@ -227,19 +228,19 @@ defmodule Visualize.Chart.ApplyTest do
       assert Chart.apply(design, size: {300, 200}) ==
                {:error,
                 [
-                  {[:labels, 0, :text], {:unresolved, :var, :unit}},
-                  {[:labels, 1, :text], {:unresolved, :var, :unit}}
+                  {[:labels, 0, :text], {:unresolved, :var, "unit"}},
+                  {[:labels, 1, :text], {:unresolved, :var, "unit"}}
                 ]}
 
-      assert Validator.format({[:labels, 1, :text], {:unresolved, :var, :unit}}) ==
-               "labels[1].text: variable :unit has no value at application and no default"
+      assert Validator.format({[:labels, 1, :text], {:unresolved, :var, "unit"}}) ==
+               "labels[1].text: variable \"unit\" has no value at application and no default"
     end
 
     test "a declared default of nil is no default" do
       design = design(%{vars: %{unit: %{default: nil}}})
 
       assert Chart.apply(design, sources: %{uptime: @rows}, size: {300, 200}) ==
-               {:error, [{[:labels, 0, :text], {:unresolved, :var, :unit}}]}
+               {:error, [{[:labels, 0, :text], {:unresolved, :var, "unit"}}]}
 
       assert {:ok, _} =
                Chart.apply(design,
@@ -255,7 +256,7 @@ defmodule Visualize.Chart.ApplyTest do
                vars: %{unti: "kg"},
                size: {300, 200}
              ) ==
-               {:error, [{[:vars, :unti], {:undeclared, :var, :unti}}]}
+               {:error, [{[:vars, "unti"], {:undeclared, :var, "unti"}}]}
     end
 
     test "a number or an atom in a text is written as a string" do
@@ -293,8 +294,8 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} =
         Chart.apply(design, sources: %{uptime: @rows}, vars: vars, size: {300, 200})
 
-      assert applied.chart.styles.series == %{stroke: "red", stroke_width: 4}
-      assert applied.frames.main.plot == %{width: 290, height: 190}
+      assert applied.chart.styles["series"] == %{stroke: "red", stroke_width: 4}
+      assert applied.frames["main"].plot == %{width: 290, height: 190}
       assert Chart.render(applied) =~ ~s(stroke="red")
     end
 
@@ -306,7 +307,7 @@ defmodule Visualize.Chart.ApplyTest do
                vars: %{unit: "%", w: "thick"},
                size: {300, 200}
              ) ==
-               {:error, [{[:styles, :series, :stroke, :width], {:type, :size}}]}
+               {:error, [{[:styles, "series", :stroke, :width], {:type, :size}}]}
     end
 
     test "a variable in a transform, a channel, a slot and an option resolves" do
@@ -328,8 +329,8 @@ defmodule Visualize.Chart.ApplyTest do
 
       {:ok, applied} = Chart.apply(design, sources: %{primary: @rows}, size: {300, 200})
       [mark] = applied.chart.marks
-      assert mark.data.transforms == [%{op: :bin, field: :v, thresholds: 4}]
-      assert applied.chart.sources.primary.fields == [:t, :v]
+      assert mark.data.transforms == [%{op: :bin, field: "v", thresholds: 4}]
+      assert applied.chart.sources["primary"].fields == ["t", "v"]
       assert Chart.render(applied) =~ ~s(class="mark mark-rect")
     end
   end
@@ -363,7 +364,7 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, whole} =
         Chart.apply(windowed(%{op: :window, field: :t}), sources: rows(), size: {300, 200})
 
-      assert Frame.scale(whole.frames.main, :y).domain == [0, 10]
+      assert Frame.scale(whole.frames["main"], :y).domain == [0, 10]
 
       {:ok, recent} =
         Chart.apply(windowed(%{op: :window, field: :t, from: [2, :minute]}),
@@ -372,24 +373,28 @@ defmodule Visualize.Chart.ApplyTest do
         )
 
       # The last two minutes are v = 8, 9, 10 — the extent the axis is drawn at.
-      assert Frame.scale(recent.frames.main, :y).domain == [0, 10]
-      assert Frame.scale(recent.frames.main, :x).domain == [480, 600]
+      assert Frame.scale(recent.frames["main"], :y).domain == [0, 10]
+      assert Frame.scale(recent.frames["main"], :x).domain == [480, 600]
     end
 
     test "now: reaches the step, and without it the step takes the column's newest reading" do
       design = windowed(%{op: :window, field: :t, from: [2, :minute]})
 
       {:ok, derived} = Chart.apply(design, sources: rows(), size: {300, 200})
-      assert Frame.scale(derived.frames.main, :x).domain == [480, 600]
+      assert Frame.scale(derived.frames["main"], :x).domain == [480, 600]
 
       {:ok, given} = Chart.apply(design, sources: rows(), now: 300, size: {300, 200})
-      assert Frame.scale(given.frames.main, :x).domain == [180, 300]
+      assert Frame.scale(given.frames["main"], :x).domain == [180, 300]
 
       # The frame carries it, so a mark's own pipeline sees the same instant.
-      assert given.frames.main.now == 300
+      assert given.frames["main"].now == 300
 
       assert Enum.map(
-               Visualize.Chart.Mark.rows(given.frames.main, hd(given.chart.marks), given.sources),
+               Visualize.Chart.Mark.rows(
+                 given.frames["main"],
+                 hd(given.chart.marks),
+                 given.sources
+               ),
                & &1.t
              ) ==
                [180, 240, 300]
@@ -400,7 +405,7 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} = Chart.apply(design, sources: rows(), size: {300, 200})
 
       assert Visualize.Chart.Mark.rows(
-               applied.frames.main,
+               applied.frames["main"],
                hd(applied.chart.marks),
                applied.sources
              ) ==
@@ -420,7 +425,7 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} =
         Chart.apply(design, sources: %{uptime: @rows}, theme: theme, size: {300, 200})
 
-      assert applied.frames.main.theme.name == :house
+      assert applied.frames["main"].theme.name == "house"
       assert Chart.render(applied, resolve: :literal) =~ "#123456"
     end
 
@@ -430,7 +435,7 @@ defmodule Visualize.Chart.ApplyTest do
           frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}}
         })
 
-      assert_raise ArgumentError, ~r/scale :x \(time\) cannot take 1/, fn ->
+      assert_raise ArgumentError, ~r/scale "x" \(time\) cannot take 1/, fn ->
         Chart.apply(design, sources: %{uptime: @rows}, size: {300, 200})
       end
     end
@@ -439,10 +444,10 @@ defmodule Visualize.Chart.ApplyTest do
       {:ok, applied} = Chart.apply(design(), sources: %{uptime: @rows}, size: {300, 200})
 
       assert Chart.render(applied) ==
-               Frame.render(applied.frames.main, sources: %{primary: @rows})
+               Frame.render(applied.frames["main"], sources: %{primary: @rows})
 
       assert Chart.render(applied, backend: :canvas) ==
-               Frame.render(applied.frames.main, sources: %{primary: @rows}, backend: :canvas)
+               Frame.render(applied.frames["main"], sources: %{primary: @rows}, backend: :canvas)
     end
   end
 end

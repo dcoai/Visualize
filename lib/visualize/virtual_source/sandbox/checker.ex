@@ -9,7 +9,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   # walked, the fields a map read may name and the line last seen. A construct that opens
   # a scope (a clause, a comprehension) walks inside it and restores the outer variables.
 
-  alias Visualize.VirtualSource.Sandbox.Allowlist
+  alias Visualize.VirtualSource.Sandbox.{Allowlist, Names}
 
   @special_vars [:__MODULE__, :__ENV__, :__CALLER__, :__DIR__, :__STACKTRACE__]
 
@@ -45,10 +45,22 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     if byte_size(source) > max do
       {:error, [{nil, {:too_long, max, byte_size(source)}}]}
     else
-      case Code.string_to_quoted(source, existing_atoms_only: true) do
-        {:ok, quoted} -> function(quoted, arity, fields)
+      # Every name is read without an atom made (D-195): `Sandbox.Names` gives each its
+      # meaning, and an interpolated atom is still held to existing atoms.
+      case Code.string_to_quoted(source,
+             static_atoms_encoder: Names.encoder(),
+             existing_atoms_only: true
+           ) do
+        {:ok, quoted} -> read(quoted, arity, fields)
         {:error, {meta, message, token}} -> {:error, [parse_fault(meta, message, token)]}
       end
+    end
+  end
+
+  defp read(quoted, arity, fields) do
+    case Names.read(quoted) do
+      {:ok, read} -> function(read, arity, fields)
+      {:error, reason} -> {:error, [{nil, reason}]}
     end
   end
 
@@ -223,7 +235,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   defp expr({:^, meta, [_var]}, state), do: fault(at(state, meta), {:pattern, :^})
 
   defp expr({{:., meta, [receiver, name]}, call_meta, args}, state)
-       when is_atom(name) and is_list(args),
+       when (is_atom(name) or is_binary(name)) and is_list(args),
        do: remote(receiver, name, call_meta, args, at(at(state, meta), call_meta))
 
   defp expr({{:., meta, [fun]}, _call_meta, args}, state) when is_list(args),
@@ -235,14 +247,19 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     # A refused form's arguments are not walked: `receive`'s clauses, `quote`'s body.
     if Allowlist.local?(name, length(args)),
       do: exprs(args, state),
-      else: fault(state, {:restricted, {name, length(args)}})
+      else: fault(state, {:restricted, {shown(name, meta), length(args)}})
   end
 
   defp expr(other, state), do: malformed(state, :expression, other)
 
   defp malformed(state, form, _quoted), do: fault(state, {:syntax, "malformed #{form}"})
 
-  defp var_name({name, _meta, _context}), do: name
+  defp var_name(var), do: Names.written(var)
+
+  # A name as the source wrote it: a call the checker does not know keeps its string.
+  defp shown(name, meta) do
+    if name == Names.unknown(), do: Keyword.get(meta, :sandbox, name), else: name
+  end
 
   defp atom(atom, state) when atom in [nil, true, false], do: state
   defp atom(:__struct__, state), do: fault(state, {:restricted_atom, :__struct__})
@@ -254,8 +271,8 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   end
 
   defp alias_name(parts) do
-    if Enum.all?(parts, &is_atom/1) do
-      parts |> Enum.reject(&(&1 == Elixir)) |> Enum.map_join(".", &Atom.to_string/1)
+    if Enum.all?(parts, &(is_atom(&1) or is_binary(&1))) do
+      parts |> Enum.reject(&(&1 == Elixir)) |> Enum.map_join(".", &to_string/1)
     else
       "__MODULE__"
     end
@@ -272,7 +289,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
         state =
           cond do
             not Allowlist.remote?(module, name, arity) ->
-              fault(state, {:restricted, {module, name, arity}})
+              fault(state, {:restricted, {module, shown(name, meta), arity}})
 
             module == Enum and name == :into and not literal_target?(Enum.at(args, 1)) ->
               fault(state, {:into, :literal})
@@ -284,15 +301,15 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
         exprs(args, state)
 
       {:unknown, written} ->
-        exprs(args, fault(state, {:restricted, {written, name, length(args)}}))
+        exprs(args, fault(state, {:restricted, {written, shown(name, meta), length(args)}}))
 
       :value when args == [] ->
         if meta[:no_parens],
           do: expr(receiver, field(name, state)),
-          else: expr(receiver, fault(state, {:dynamic_call, name}))
+          else: expr(receiver, fault(state, {:dynamic_call, shown(name, meta)}))
 
       :value ->
-        exprs(args, expr(receiver, fault(state, {:dynamic_call, name})))
+        exprs(args, expr(receiver, fault(state, {:dynamic_call, shown(name, meta)})))
     end
   end
 
@@ -309,10 +326,11 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
 
   defp module(_value), do: :value
 
+  defp field(name, %{fields: nil} = state) when is_binary(name), do: state
   defp field(name, %{fields: nil} = state), do: atom(name, state)
 
   defp field(name, state) do
-    if MapSet.member?(state.fields, Atom.to_string(name)),
+    if MapSet.member?(state.fields, to_string(name)),
       do: state,
       else: fault(state, {:unknown_field, name})
   end
@@ -325,8 +343,10 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   # `&Mod.fun/n`, `&fun/n`, or `&(expression)` over `&1`, `&2`, ….
   defp capture(n, state) when is_integer(n), do: state
 
-  defp capture({:/, _meta, [{{:., _m, [receiver, name]}, _cm, []}, arity]}, state)
+  defp capture({:/, _meta, [{{:., _m, [receiver, name]}, cm, []}, arity]}, state)
        when is_atom(name) and is_integer(arity) do
+    name = shown(name, cm)
+
     case module(receiver) do
       {:module, Enum} when name == :into ->
         fault(state, {:into, :literal})
@@ -344,11 +364,11 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     end
   end
 
-  defp capture({:/, _meta, [{name, _m, context}, arity]}, state)
+  defp capture({:/, _meta, [{name, m, context}, arity]}, state)
        when is_atom(name) and is_atom(context) and is_integer(arity) do
     if Allowlist.local?(name, arity),
       do: state,
-      else: fault(state, {:restricted, {name, arity}})
+      else: fault(state, {:restricted, {shown(name, m), arity}})
   end
 
   defp capture(body, state), do: expr(body, state)
@@ -490,13 +510,13 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     end
   end
 
-  defp pattern({:^, meta, [{name, _m, context}]}, state, outer)
+  defp pattern({:^, meta, [{name, _m, context} = var]}, state, outer)
        when is_atom(name) and is_atom(context) do
     state = at(state, meta)
 
     if MapSet.member?(outer, name),
       do: state,
-      else: fault(state, {:undefined_variable, name})
+      else: fault(state, {:undefined_variable, var_name(var)})
   end
 
   defp pattern({:=, meta, [left, right]}, state, outer),
@@ -606,7 +626,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     do: Enum.reduce(entries, at(state, meta), &guard/2)
 
   defp guard({{:., meta, [receiver, name]}, call_meta, args} = call, state)
-       when is_atom(name) and is_list(args) do
+       when (is_atom(name) or is_binary(name)) and is_list(args) do
     state = at(at(state, meta), call_meta)
 
     case module(receiver) do
@@ -631,7 +651,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     cond do
       Allowlist.guard?(name, arity) -> Enum.reduce(args, state, &guard/2)
       Allowlist.local?(name, arity) -> fault(state, {:guard, {name, arity}})
-      true -> fault(state, {:restricted, {name, arity}})
+      true -> fault(state, {:restricted, {shown(name, meta), arity}})
     end
   end
 

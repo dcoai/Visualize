@@ -130,7 +130,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
             assert theme.name == :print
             assert %{type: :hatch, color: {:color, :bad}} = node
             frame = applied(design(%{style: :bad}), theme: theme).frame
-            assert frame.defs[Visualize.Chart.Style.Parts.paint_name(node)] == node
+            assert frame.defs[{:inline, Visualize.Chart.Style.Parts.paint_name(node)}] == node
 
           fill ->
             assert fill == lit(theme, :bad), inspect(theme.name)
@@ -146,12 +146,12 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     test "an unknown name is undeclared, checked against the theme's palette" do
       assert Validator.validate(design(%{style: [:style_10, :muted, :annotation]})) == :ok
 
-      assert {[:marks, 0, :style], {:undeclared, :style, :nope}} in errors(
+      assert {[:marks, 0, :style], {:undeclared, :style, "nope"}} in errors(
                design(%{style: :nope})
              )
 
       # The default theme has ten style series, and an inline theme its own palette's.
-      assert {[:marks, 0, :style], {:undeclared, :style, :style_11}} in errors(
+      assert {[:marks, 0, :style], {:undeclared, :style, "style_11"}} in errors(
                design(%{style: :style_11})
              )
 
@@ -163,7 +163,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     test "under a theme only the host knows, every style series is accepted, no other name" do
       assert Validator.validate(design(%{style: :style_14}, %{theme: :house})) == :ok
       errors = errors(design(%{style: :nope}, %{theme: :house}))
-      assert {[:marks, 0, :style], {:undeclared, :style, :nope}} in errors
+      assert {[:marks, 0, :style], {:undeclared, :style, "nope"}} in errors
     end
   end
 
@@ -216,6 +216,8 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
           }
         )
 
+      # A theme the host names is named by its string once read (D-195).
+      house = %{house | name: "house"}
       assert Document.from_map(Document.to_map(house)) == {:ok, house}
       {:ok, json} = Document.to_json(house)
       assert Document.from_json(json) == {:ok, house}
@@ -406,17 +408,17 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
     end
 
     test "a field the mark's source does not declare is undeclared at the entry" do
-      assert {[:marks, 0, :style, 1], {:undeclared, :field, :mood}} in errors(
+      assert {[:marks, 0, :style, 1], {:undeclared, :field, "mood"}} in errors(
                design(%{style: [:base, {:field, :mood}]}, %{styles: %{base: %{}}})
              )
 
-      assert {[:marks, 0, :style], {:undeclared, :field, :mood}} in errors(
+      assert {[:marks, 0, :style], {:undeclared, :field, "mood"}} in errors(
                design(%{style: {:field, :mood}})
              )
     end
 
-    test "a field that is not a name is a type fault" do
-      assert [{[:marks, 0, :style], {:type, _}}] = errors(design(%{style: {:field, "health"}}))
+    test "a field that is not a name — not a string, not an atom — is a type fault" do
+      assert [{[:marks, 0, :style], {:type, _}}] = errors(design(%{style: {:field, 42}}))
     end
   end
 
@@ -438,7 +440,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
             range: {:styles, set}
           })
 
-        assert [{[:frames, :main, :scales, :health, :range], {:type, _}}] = errors(design)
+        assert [{[:frames, "main", :scales, "health", :range], {:type, _}}] = errors(design)
       end
     end
 
@@ -447,7 +449,7 @@ defmodule Visualize.Chart.PaletteAssignmentTest do
       design = put_in(design(%{}), [:frames, :main, :scales, :health], node)
 
       assert errors(design) == [
-               {[:frames, :main, :scales, :health, :range, "maint"],
+               {[:frames, "main", :scales, "health", :range, "maint"],
                 {:undeclared, :color, :muted}}
              ]
     end

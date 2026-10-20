@@ -13,15 +13,17 @@ defmodule Visualize.Chart.Validator.Palette do
   # The palette names a reference may take under a theme: the theme's own when the
   # validator can see it, built-in or inline; else the fixed names of the roles, the states
   # and the furniture, the style series being the host theme's to say (`open?/1`).
-  @spec names(Theme.t() | :unknown) :: [atom()]
-  def names(%Theme{} = theme), do: Theme.style_names(theme)
-  def names(:unknown), do: Palette.names([])
+  # A design names a style by its string (spec/14 §1.4, D-195), so the palette's are spelled.
+  @spec names(Theme.t() | :unknown) :: [String.t()]
+  def names(%Theme{} = theme), do: theme |> Theme.style_names() |> Enum.map(&Atom.to_string/1)
+  def names(:unknown), do: [] |> Palette.names() |> Enum.map(&Atom.to_string/1)
 
   @doc false
   # Whether a name is one of a style series, `:style_k`: accepted under a theme the
   # validator cannot see, which may hold any number of them (spec/14 §3.3).
   @spec series?(term()) :: boolean()
   def series?(name) when is_atom(name), do: Regex.match?(@series, Atom.to_string(name))
+  def series?(name) when is_binary(name), do: Regex.match?(@series, name)
   def series?(_name), do: false
 
   @doc false

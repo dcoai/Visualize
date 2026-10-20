@@ -35,9 +35,9 @@ release it merely follows.
   (`row.field`, `row[:key]`) and explicit lists of `Enum`, `Map`, `Keyword`, `String`,
   `Integer`, `Float` and `:math` functions (no random, atom-making or deprecated ones);
   `send`, `receive`, `spawn`, `try`, `raise`, `apply`, other modules, sigils and structs
-  are refused (string interpolation is allowed since #769, above). A name the node has
-  never seen is refused at parse, so a function makes no atoms; a variable name
-  must already exist as an atom. `compile/2` compiles a checked function once into a closure, and
+  are refused (string interpolation is allowed since #769, above). A function makes no
+  atoms: its names are read as the library's words or as strings (#780, below).
+  `compile/2` compiles a checked function once into a closure, and
   `Visualize.VirtualSource.Sandbox.Cache` keeps compiled functions by source hash as a
   value. `run/3` calls any function — stored or your own — in a process with a heap
   limit and a timeout, and answers `{:ok, value}` or `{:error, :timeout | :memory |
@@ -396,6 +396,59 @@ release it merely follows.
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **The builder's board mode draws only the cells an edit touched** (#723, D-191). Every
   event and render in board mode drew every cell's preview and validated the whole board —
   about 2.1 million reductions a pass on an eight-cell board. Each preview is now kept by
@@ -608,11 +661,11 @@ release it merely follows.
   - **Nothing that was accepted is refused now.** Every such key and value was already
     refused by the validator, as `:unknown_key`, `{:enum, …}` or `{:type, …}`; the reader
     made an atom of it first. It is refused the same way now, without the atom.
-  - **The builder's literal reader** now reads typed text with existing atoms only, so a
-    literal such as `:brand_new` typed into a field is a parse fault, not a new atom.
-  - **Still to come.** The names a document declares (sources, fields, variables, frames,
-    styles, cells) are still made atoms, one per distinct name. The next work items of
-    #778 make them strings in the map form, a breaking change for 0.7.0.
+  - **The builder's literal reader** reads typed text without making an atom: a literal
+    such as `:brand_new` typed into a field is the string `"brand_new"` unless the library
+    has the word (#780, below).
+  - **The names a document declares** no longer make atoms either: see *Names a document
+    declares are strings* under *Changed*.
   - **A new gate.** `mix vis.atoms` fails on any atom made from a string in `lib/` outside
     `audit/atoms_allowlist.exs`, which gives each remaining site its class and bound.
 - **A board cell whose mark keeps each identity's latest row no longer crashes** (#752).
@@ -873,6 +926,59 @@ under *Changed*), and give a board page a catch-all clause for the events it ign
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **Breaking: every interaction is one `Visualize.Event`** (#627, D-170). The four shapes a
   host used to handle are removed, not sent beside the new one, and `TooltipHook` no longer
   pushes a mark's declared event with the datum's strings: it pushes one wire event,
@@ -994,6 +1100,59 @@ frame is laid out on it by dragging, by its corner handles or, on a layout, by c
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **The builder's chart carries `data-builder-frames`**, every frame's pixel box and
   margins, in place of the one frame's `data-builder-frame` (spec/10 §16.2). A host that
   read the old attribute from the builder's markup reads the new one.
@@ -1049,6 +1208,59 @@ its live feed describes.
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **Every `Visualize.Feed.Telemetry` schema now says its `value`'s `metric_kind`, so every
   such schema has a new version** (#608, D-160). *Affects* code that pinned or stored a
   Telemetry feed's schema version, and code that matched its `value` description exactly.
@@ -1064,6 +1276,59 @@ Pressure is shown in its own convention under a unit system: barometric readings
 mercury for US viewers, blood pressure in mm[Hg] everywhere.
 
 ### Changed
+
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
 
 - **A unit system picks a pressure's unit within its convention** (#598, D-158). Pressure
   is read as gauge (`Pa`, `kPa`, `MPa`, `bar`, `[psi]`), barometric (`hPa`, `mbar`,
@@ -1782,6 +2047,59 @@ theme, and a chart's accessible markup changes, so read **Breaking** before you 
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **A component with `animate` carries the class `vis-animated`** and a `<style>` that stops
   its transition under `prefers-reduced-motion: reduce` (#559).
 - **A canvas names itself, and a hybrid chart's SVG layers are hidden** (#557). The root
@@ -1881,6 +2199,59 @@ theme, and a chart's accessible markup changes, so read **Breaking** before you 
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **The documentation is the README, the guides and the changelog** (#529, D-133). The
   specification, `API_SURFACE.md` and `usage-rules.md` are no longer hexdocs pages; they still
   ship in the package and are read on GitHub. Every link to them from the README, the guides
@@ -1906,6 +2277,59 @@ theme, and a chart's accessible markup changes, so read **Breaking** before you 
   compiled chart carries between ticks.
 
 ### Changed
+
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
 
 - **The cheatsheet links open its rendered page on HexDocs** (#528). `guides/cheatsheet.cheatmd`
   is ExDoc's cheatsheet format, so GitHub and GitLab show it as plain text. The README and
@@ -1942,6 +2366,59 @@ theme, and a chart's accessible markup changes, so read **Breaking** before you 
 ## [0.2.4] — 2026-10-10
 
 ### Changed
+
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
 
 - **Visualize is on Hex** (#516): depend on `{:visualize, "~> 0.2"}` rather than a git tag.
   The documentation is on [HexDocs](https://hexdocs.pm/visualize). The source, and issues
@@ -2258,6 +2735,59 @@ the same input. Read those if you draw globes, rotate projections, or stack `:in
 
 ### Changed
 
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
+
 - **A colour outside its domain is the scale's `unknown`** (#487, D-122). A `color` ordinal
   scale that gives no `unknown` now takes the theme's `:axis` colour. In 0.1.0 its `unknown`
   was `nil`, so the element got no fill: SVG painted it black and a canvas drew nothing. A
@@ -2481,6 +3011,59 @@ the meaning of a patch.
   licence was unstated to anyone who received the package.
 
 ### Changed
+
+- **Names a document declares are strings** (#780, #778, D-195). **Breaking.** Reading a
+  design, a board, a snapshot or a virtual source made one atom per distinct name it
+  declared — 7,000 atoms for a thousand designs of seven names — and atoms are never
+  collected. Now every name a document declares is a string in the map form, whichever
+  spelling it was written in, and reading any number of documents makes no atom: a
+  source, a field, a variable, a frame, a scale, a style, a paint, a Use key, a mark's
+  `id`; a board's cell, variable, link and virtual source; a virtual source's id, inputs
+  and fields. **The JSON on disk is unchanged**, and a stored document reads as it did,
+  with no migration. Elixir input written with atoms is still accepted: every reader turns
+  an atom in a name position into its string, so `%{frames: %{main: …}}`, `{:field, :v}`
+  and `Visualize.Chart.var(:unit)` read as the design JSON gives. The library's own
+  words stay atoms: node keys, enumerations, mark types, theme slots and palette names,
+  CSS colors, units, built-in themes. A category value (`{"$atom": "ok"}`, a fact's
+  `values`, a `:choose` mark's cases, a style by field) is matched by spelling, so `:ok`
+  and `"ok"` are one value. Field reads from your rows still work for atom-keyed and
+  string-keyed rows alike (`Visualize.Data.Table.get/2`), and no row is copied.
+
+  **What you change**, where your code reads a value the library hands back:
+
+  | You read | Before | Now |
+  |---|---|---|
+  | a design's maps | `design.frames.main`, `chart.styles.series`, `scales.x` | `design.frames["main"]`, `chart.styles["series"]`, `scales["x"]` |
+  | a reference | `{:field, :v}`, `%Var{name: :unit}`, `mark.data == :primary` | `{:field, "v"}`, `%Var{name: "unit"}`, `mark.data == "primary"` |
+  | a fault's path and reason | `{[:frames, :main, :axes, 0], …}`, `{:undeclared, :source, :s}` | `{[:frames, "main", :axes, 0], …}`, `{:undeclared, :source, "s"}` |
+  | `Chart.compile/2` | `{:ok, %{main: compiled}}` | `{:ok, %{"main" => compiled}}` |
+  | `Chart.apply/2` | `applied.frames.main`, `applied.sources.primary`, `applied.schemas.cells` | `applied.frames["main"]`, `applied.sources["primary"]`, `applied.schemas["cells"]` |
+  | a board | `board.cells.latency`, `board.vars.unit` | `board.cells["latency"]`, `board.vars["unit"]` |
+  | a board's process | `{:cell, :latency, view}`, `view.cell == :latency`, `Server.info(b).cells.a` | `{:cell, "latency", view}`, `view.cell == "latency"`, `Server.info(b).cells["a"]` |
+  | a binding | `binding.slots == %{{:a, :primary} => :cpu}` | `%{{"a", "primary"} => :cpu}`; a feed stays your term |
+  | a selection, an identity, an event | `{:service, "api"}`, `%Event{cell: :a, frame: :main}`, `item: {:dot, %{row: r}}` | `{"service", "api"}`, `%Event{cell: "a", frame: "main"}`, `item: {"dot", %{"row" => r}}` |
+  | `Board.realize/4`, `components/3`, `required_sources/3` | keys `:a`, `{:a, :primary}` | keys `"a"`, `{"a", "primary"}` |
+  | a snapshot | `snapshot.cells.a.slots.primary`; rows read back keyed `:t` | `snapshot.cells["a"].slots["primary"]`; rows read back keyed `"t"` |
+  | a host theme | `Theme.new(name: :house).name == :house`, a color `:brand` | `"house"`, `"brand"`; a built-in theme and the library's colors stay atoms |
+  | a virtual source | `source.id == :health`, paths `[:ops, :health]`, output rows `%{n: 1}` | `"health"`, `["ops", "health"]`, `%{"n" => 1}` |
+  | a feed-only input | `{"vm.load", window}` (a string named only a feed) | `{{:feed, "vm.load"}, window}`; a plain string is a short id, resolved to a virtual source first, else the feed |
+  | a `defsource` function | `inputs.hosts` | `inputs["hosts"]`; its rows are your feed's, as before |
+
+  Arguments that name a name take either spelling: `Server.pick(board, :a, …)`,
+  `Server.select(board, {:service, "api"})`, `Chart.explain(applied, at: [:frames, :main,
+  :axes, 0])`, `Binding.new(%{{:a, :primary} => :cpu})`, `vars:`, `sources:` and
+  `schemas:` maps keyed by atoms all still work. **A stored function** (a virtual source's
+  `elixir`) reads its inputs, its rows' fields and their category values as it reads its
+  own literals: a word Elixir's functions take (`:ok`, `:desc`, `:second`, `:day`, …) is
+  that atom, any other name its string — `%{hosts: rows}`, `row.cpu` and `row.state ==
+  :ok` work as before, and `:warning` in a function and a row's `:warning` are both
+  `"warning"`. It no longer needs its names to exist as atoms beforehand: a variable,
+  a field or an atom literal the node has never seen is accepted.
+  - **What JSON a writer produces.** A name is written as before. A category value an
+    Elixir design gave as an atom the library has no word for (`:warn` in a color map)
+    is now written as its plain string, `"warn"`, where it was `{"$atom": "warn"}`; both
+    read as the same map. A gradient declared under `defs` draws under a new opaque id
+    prefix (the prefix is a hash of the defs, whose names are now strings).
 
 - **`Visualize.Render.with_backend/2` is removed** (D-2). It set a backend in the process
   dictionary for the duration of a function, so any render inside that function silently

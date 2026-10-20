@@ -116,6 +116,12 @@ defmodule Visualize.Data.Schema do
   def attributes, do: @attributes
 
   @doc false
+  # The words a description's values take: its types, polarities and metric kinds — what a
+  # document's `{"$atom": …}` value reads as the atom of (spec/14 §9.4, D-195).
+  @spec words() :: [atom(), ...]
+  def words, do: @types ++ @polarities ++ @metric_kinds
+
+  @doc false
   # The three polarities, which a color scale over a ramp reads too (spec/14 §4.3, D-143).
   @spec polarities() :: [atom(), ...]
   def polarities, do: @polarities

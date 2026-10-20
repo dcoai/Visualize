@@ -54,7 +54,8 @@ defmodule Visualize.ChartTest do
     test "nested nodes are stored as written, without defaults filled in" do
       frame = %{kind: :cartesian, scales: %{x: %{kind: :linear}}}
       {:ok, chart} = Chart.from_map(%{version: 2, frames: %{main: frame}})
-      assert chart.frames.main == frame
+      # Names are strings in the map form (spec/14 §1.4, D-195).
+      assert chart.frames["main"] == %{kind: :cartesian, scales: %{"x" => %{kind: :linear}}}
     end
 
     test "an invalid design is every error by path" do
@@ -254,7 +255,8 @@ defmodule Visualize.ChartTest do
     end
   end
 
-  test "var/1 is the name-only term" do
-    assert Chart.var(:unit) == %Var{name: :unit}
+  test "var/1 is the name-only term, its name the string" do
+    assert Chart.var(:unit) == %Var{name: "unit"}
+    assert Chart.var("unit") == %Var{name: "unit"}
   end
 end

@@ -48,17 +48,17 @@ defmodule Visualize.Chart.ExplainStyleTest do
     # datum's `health` names, the view state, then the local edit (spec/14 §3.7).
     assert chain(parts, :stroke) == [
              {:theme, nil},
-             {:palette, :style_2},
-             {:style, :heavy},
-             {:field, :warning},
+             {:palette, "style_2"},
+             {:style, "heavy"},
+             {:field, "warning"},
              {:state, :selected},
              {:local, nil}
            ]
 
     [_root, _palette, heavy, field, state, local] = parts.stroke.chain
-    assert heavy.via == [:bad]
+    assert heavy.via == ["bad"]
     assert heavy.set.width == 4
-    assert field.field == {:field, :health} and field.value == "warning"
+    assert field.field == {:field, "health"} and field.value == "warning"
     assert state.set == %{width: 2}
     assert local.set == %{width: 1}
 
@@ -96,14 +96,14 @@ defmodule Visualize.Chart.ExplainStyleTest do
     applied = applied(marks, %{}, labels)
 
     %{kind: :text, parts: parts} = Chart.explain(applied, at: [:marks, 0, :label])
-    assert chain(parts, :font) == [{:theme, nil}, {:palette, :label}, {:palette, :bold}]
+    assert chain(parts, :font) == [{:theme, nil}, {:palette, "label"}, {:palette, "bold"}]
     assert parts.font.value.weight == :bold
 
     %{kind: :text, parts: title} = Chart.explain(applied, at: [:labels, 0])
     assert chain(title, :font) == [{:theme, nil}, {:palette, :title}]
 
     %{kind: :axis, parts: axis} = Chart.explain(applied, at: [:frames, :main, :axes, 0])
-    assert chain(axis, :stroke) == [{:theme, nil}, {:palette, :axis}]
+    assert chain(axis, :stroke) == [{:theme, nil}, {:palette, "axis"}]
     assert axis.stroke.drawn
   end
 end

@@ -103,7 +103,8 @@ defmodule Examples.Charts.Templates do
   end
 
   defp template(slug, title, description, design, sources) do
-    renames = Map.new(Map.keys(sources), &{&1, :"#{slug}_#{&1}"})
+    # A design names its sources by their strings (D-195); the pool keys them as the rows do.
+    renames = Map.new(Map.keys(sources), &{to_string(&1), "#{slug}_#{&1}"})
 
     %{
       name: "Charts::#{title}",
@@ -112,7 +113,8 @@ defmodule Examples.Charts.Templates do
         design
         |> Map.put(:meta, %{name: title, description: description})
         |> rename_sources(renames),
-      sources: Map.new(sources, fn {name, rows} -> {Map.fetch!(renames, name), rows} end)
+      sources:
+        Map.new(sources, fn {name, rows} -> {Map.fetch!(renames, to_string(name)), rows} end)
     }
   end
 
@@ -132,7 +134,7 @@ defmodule Examples.Charts.Templates do
     design
     |> Map.update(:sources, %{}, fn slots ->
       Map.new(slots, fn {name, slot} ->
-        {Map.fetch!(renames, name), Map.delete(slot, :default)}
+        {Map.fetch!(renames, to_string(name)), Map.delete(slot, :default)}
       end)
     end)
     |> Map.update(:marks, [], fn marks -> Enum.map(marks, &rename_data(&1, renames)) end)
@@ -142,25 +144,26 @@ defmodule Examples.Charts.Templates do
   end
 
   defp rename_fit(%{projection: %{fit: %{data: name} = fit} = projection} = node, renames)
-       when is_atom(name) do
-    fit = %{fit | data: Map.get(renames, name, name)}
+       when is_atom(name) or is_binary(name) do
+    fit = %{fit | data: Map.get(renames, to_string(name), name)}
     %{node | projection: %{projection | fit: fit}}
   end
 
   defp rename_fit(node, _renames), do: node
 
-  defp rename_data(%{data: name} = mark, renames) when is_atom(name),
-    do: %{mark | data: Map.get(renames, name, name)}
+  defp rename_data(%{data: name} = mark, renames) when is_atom(name) or is_binary(name),
+    do: %{mark | data: Map.get(renames, to_string(name), name)}
 
   # A data node names its source, and a graph step in it may name a second — its node
   # table under `nodes` (spec/14 §5.4.3) — which is renamed the same way.
-  defp rename_data(%{data: %{source: name} = data} = mark, renames) when is_atom(name) do
-    data = %{data | source: Map.get(renames, name, name)}
+  defp rename_data(%{data: %{source: name} = data} = mark, renames)
+       when is_atom(name) or is_binary(name) do
+    data = %{data | source: Map.get(renames, to_string(name), name)}
 
     data =
       Map.update(data, :transforms, [], fn steps ->
         Enum.map(steps, fn
-          %{nodes: nodes} = step -> %{step | nodes: Map.get(renames, nodes, nodes)}
+          %{nodes: nodes} = step -> %{step | nodes: Map.get(renames, to_string(nodes), nodes)}
           step -> step
         end)
       end)

@@ -202,16 +202,16 @@ defmodule Visualize.BoardTest do
       assert Board.validate(%{cells: cells}) ==
                {:error,
                 [
-                  {[:cells, :b], {:overlap, :a}},
-                  {[:cells, :c], {:overlap, :a}},
-                  {[:cells, :c], {:overlap, :b}},
-                  {[:cells, :d], {:off_grid, 12}},
-                  {[:cells, :e, :color], :unknown_key},
-                  {[:cells, :e, :h], :required},
-                  {[:cells, :e, :ref], {:type, {:id, :composite}}},
-                  {[:cells, :e, :sync], {:type, :boolean}},
-                  {[:cells, :e, :w], {:type, :pos_integer}},
-                  {[:cells, :e, :x], {:type, :non_neg_integer}}
+                  {[:cells, "b"], {:overlap, "a"}},
+                  {[:cells, "c"], {:overlap, "a"}},
+                  {[:cells, "c"], {:overlap, "b"}},
+                  {[:cells, "d"], {:off_grid, 12}},
+                  {[:cells, "e", :color], :unknown_key},
+                  {[:cells, "e", :h], :required},
+                  {[:cells, "e", :ref], {:type, {:id, :composite}}},
+                  {[:cells, "e", :sync], {:type, :boolean}},
+                  {[:cells, "e", :w], {:type, :pos_integer}},
+                  {[:cells, "e", :x], {:type, :non_neg_integer}}
                 ]}
     end
 
@@ -228,7 +228,7 @@ defmodule Visualize.BoardTest do
 
     test "a component reference of another kind is refused by its tag" do
       assert Board.validate(%{cells: %{a: %{x: 0, y: 0, w: 1, h: 1, ref: {:style, 3}}}}) ==
-               {:error, [{[:cells, :a, :ref], {:ref_kind, :composite, :style}}]}
+               {:error, [{[:cells, "a", :ref], {:ref_kind, :composite, :style}}]}
     end
 
     test "the window: one of the two forms, in UTC, from before to" do
@@ -257,7 +257,7 @@ defmodule Visualize.BoardTest do
                Board.validate(%{zone: "Mars/Olympus"})
 
       assert Board.validate(%{
-               vars: %{:a => var(:b), "s" => 1},
+               vars: %{:a => var(:b), 7 => 1},
                sync: "",
                meta: %{name: :api, owner: "me"},
                layout: %{gap: -1, row_height: 0, columns: 24}
@@ -270,8 +270,8 @@ defmodule Visualize.BoardTest do
                   {[:meta, :name], {:type, :string}},
                   {[:meta, :owner], :unknown_key},
                   {[:sync], {:type, :string}},
-                  {[:vars, :a], {:var_binding, :a}},
-                  {[:vars, "s"], {:type, :name}}
+                  {[:vars, 7], {:type, :name}},
+                  {[:vars, "a"], {:var_binding, "a"}}
                 ]}
     end
 
@@ -281,13 +281,13 @@ defmodule Visualize.BoardTest do
     end
 
     test "a board's faults read as a person reads them" do
-      assert Board.format_error({[:cells, :d], {:off_grid, 12}}) ==
+      assert Board.format_error({[:cells, "d"], {:off_grid, 12}}) ==
                "cells.d: runs past the board's 12 columns"
 
       assert Board.format_error({[:window], {:window, :inverted}}) ==
                "window: has a from that is not before its to"
 
-      assert Board.format_error({[:cells, :a, :ref], {:dangling, {:composite, 9}}}) ==
+      assert Board.format_error({[:cells, "a", :ref], {:dangling, {:composite, 9}}}) ==
                "cells.a.ref: refers to {:composite, 9}, which the store does not hold"
     end
   end
@@ -309,13 +309,13 @@ defmodule Visualize.BoardTest do
 
       assert {:error, errors} = Board.validate(%{cells: cells, sync: "api"}, store())
 
-      assert {[:cells, :dangling, :ref], {:dangling, {:composite, 99}}} in errors
+      assert {[:cells, "dangling", :ref], {:dangling, {:composite, 99}}} in errors
 
-      assert {[:cells, :loop, :ref], {:cycle, [{:composite, 3}, {:composite, 3}]}} in errors
+      assert {[:cells, "loop", :ref], {:cycle, [{:composite, 3}, {:composite, 3}]}} in errors
 
-      assert {[:cells, :partial, :ref, :frames], :required} in errors
-      assert {[:cells, :stranger, :vars, :color], {:undeclared, :var, :color}} in errors
-      assert {[:cells, :dial, :sync], {:sync, :frame_kind, :polar}} in errors
+      assert {[:cells, "partial", :ref, :frames], :required} in errors
+      assert {[:cells, "stranger", :vars, "color"], {:undeclared, :var, "color"}} in errors
+      assert {[:cells, "dial", :sync], {:sync, :frame_kind, :polar}} in errors
     end
 
     test "a store's v1 design migrates where the board reads it" do
@@ -324,13 +324,13 @@ defmodule Visualize.BoardTest do
 
       assert Board.validate(board, %{{:composite, 7} => v1}) == :ok
 
-      assert {:ok, %{{:dial, :reading} => %{fields: [:n, :v]}}} =
+      assert {:ok, %{{"dial", "reading"} => %{fields: ["n", "v"]}}} =
                Board.required_sources(Board.from_map!(board), %{{:composite, 7} => v1})
     end
 
     test "components are read under the board reader's limits" do
       assert {:error, errors} = Board.validate(board(), store(), limits: [items: 2])
-      assert {[:cells, :latency, :ref, :marks, 0], {:limit, :items, 2, 3}} in errors
+      assert {[:cells, "latency", :ref, :marks, 0], {:limit, :items, 2, 3}} in errors
     end
 
     test "a board variable no component declares is not a fault" do
@@ -343,29 +343,29 @@ defmodule Visualize.BoardTest do
       {:ok, required} = Board.required_sources(Board.from_map!(board()), store())
 
       line = %{
-        fields: [:t, :v],
-        types: %{t: :number, v: :number},
-        requires: %{v: [:unit, :label]},
+        fields: ["t", "v"],
+        types: %{"t" => :number, "v" => :number},
+        requires: %{"v" => [:unit, :label]},
         reads: [
-          {[:marks, 0, :channels, :x], :t, :number},
-          {[:marks, 0, :channels, :y], :v, :number}
+          {[:marks, 0, :channels, :x], "t", :number},
+          {[:marks, 0, :channels, :y], "v", :number}
         ]
       }
 
       gauge = %{
-        fields: [:n, :v],
+        fields: ["n", "v"],
         types: %{},
         requires: %{},
         reads: [
-          {[:marks, 0, :channels, :angle], :n, :number},
-          {[:marks, 0, :channels, :value], :v, :number}
+          {[:marks, 0, :channels, :angle], "n", :number},
+          {[:marks, 0, :channels, :value], "v", :number}
         ]
       }
 
       assert required == %{
-               {:latency, :primary} => line,
-               {:eu, :primary} => line,
-               {:gauge, :reading} => gauge
+               {"latency", "primary"} => line,
+               {"eu", "primary"} => line,
+               {"gauge", "reading"} => gauge
              }
     end
 
@@ -389,15 +389,15 @@ defmodule Visualize.BoardTest do
       {:ok, applied, _cache} =
         Board.realize(board, store(), pools, schemas: Schema.Cache.new([{:primary, schema()}]))
 
-      assert Visualize.Chart.Frame.scale(applied.latency.frame, :y).domain == [10, 20]
-      assert Visualize.Chart.Frame.scale(applied.eu.frame, :y).domain == [300, 400]
+      assert Visualize.Chart.Frame.scale(applied["latency"].frame, :y).domain == [10, 20]
+      assert Visualize.Chart.Frame.scale(applied["eu"].frame, :y).domain == [300, 400]
     end
 
     test "a component that cannot be read is the fault" do
       board = Board.from_map!(%{cells: %{a: %{x: 0, y: 0, w: 1, h: 1, ref: {:composite, 99}}}})
 
       assert Board.required_sources(board, store()) ==
-               {:error, [{[:cells, :a, :ref], {:dangling, {:composite, 99}}}]}
+               {:error, [{[:cells, "a", :ref], {:dangling, {:composite, 99}}}]}
     end
   end
 
@@ -406,9 +406,9 @@ defmodule Visualize.BoardTest do
       board = Board.from_map!(board())
 
       assert Board.arrange(board, 640) == [
-               latency: %{x: 0, y: 0, w: 8, h: 4},
-               gauge: %{x: 8, y: 0, w: 4, h: 4},
-               eu: %{x: 0, y: 4, w: 8, h: 4}
+               {"latency", %{x: 0, y: 0, w: 8, h: 4}},
+               {"gauge", %{x: 8, y: 0, w: 4, h: 4}},
+               {"eu", %{x: 0, y: 4, w: 8, h: 4}}
              ]
     end
 
@@ -421,10 +421,10 @@ defmodule Visualize.BoardTest do
         )
 
       assert Board.arrange(board, 639) == [
-               latency: %{x: 0, y: 0, w: 12, h: 4},
-               gauge: %{x: 0, y: 4, w: 12, h: 4},
-               eu: %{x: 0, y: 8, w: 12, h: 4},
-               tall: %{x: 0, y: 12, w: 12, h: 6}
+               {"latency", %{x: 0, y: 0, w: 12, h: 4}},
+               {"gauge", %{x: 0, y: 4, w: 12, h: 4}},
+               {"eu", %{x: 0, y: 8, w: 12, h: 4}},
+               {"tall", %{x: 0, y: 12, w: 12, h: 6}}
              ]
     end
 
@@ -432,16 +432,16 @@ defmodule Visualize.BoardTest do
       board = Board.from_map!(board(%{layout: %{breakpoint: 640, gap: 10, row_height: 50}}))
       # (1210 - 11 × 10) / 12 = 91.666… per column.
       boxes = Board.boxes(board, 1210)
-      {x, y, w, h} = boxes.gauge
+      {x, y, w, h} = boxes["gauge"]
 
       assert_in_delta x, 8 * (1100 / 12 + 10), 1.0e-9
       assert y == 0
       assert_in_delta w, 4 * (1100 / 12) + 30, 1.0e-9
       assert h == 4 * 50 + 30
-      assert boxes.eu == {0.0, 4 * 60, 8 * (1100 / 12) + 70, 230}
+      assert boxes["eu"] == {0.0, 4 * 60, 8 * (1100 / 12) + 70, 230}
 
       narrow = Board.boxes(board, 400)
-      assert narrow.eu == {0.0, 8 * 60, 400.0, 230}
+      assert narrow["eu"] == {0.0, 8 * 60, 400.0, 230}
     end
   end
 
@@ -472,11 +472,11 @@ defmodule Visualize.BoardTest do
 
       {:ok, applied, _cache} = Board.realize(board, store, pools)
 
-      assert [%{text: "Latency for api-us"}] = applied.latency.chart.labels
-      assert [%{text: "Latency for api-eu"}] = applied.eu.chart.labels
+      assert [%{text: "Latency for api-us"}] = applied["latency"].chart.labels
+      assert [%{text: "Latency for api-eu"}] = applied["eu"].chart.labels
 
       {:ok, applied, _cache} = Board.realize(%{board | vars: %{}}, store, pools)
-      assert [%{text: "Latency for api"}] = applied.latency.chart.labels
+      assert [%{text: "Latency for api"}] = applied["latency"].chart.labels
     end
   end
 
@@ -499,9 +499,9 @@ defmodule Visualize.BoardTest do
 
       {:ok, applied, _cache} = Board.realize(board, store, pools, width: 1288)
 
-      assert applied.latency.chart.interaction.sync == "api"
-      refute Map.get(applied.gauge.chart.interaction, :sync)
-      assert applied.latency.frame.sync == "api"
+      assert applied["latency"].chart.interaction.sync == "api"
+      refute Map.get(applied["gauge"].chart.interaction, :sync)
+      assert applied["latency"].frame.sync == "api"
     end
 
     test "faults are reported under their cells; an unbound slot where the binding check puts it" do
@@ -509,16 +509,16 @@ defmodule Visualize.BoardTest do
       pools = %{latency: %{primary: [%{t: 1, v: 1}]}}
 
       assert {:error, errors} = Board.realize(board, store(), pools)
-      assert {[:cells, :eu, :sources, :primary], {:unbound, :source, :primary}} in errors
-      assert {[:cells, :gauge, :sources, :reading], {:unbound, :source, :reading}} in errors
-      assert {[:cells, :latency, :sources, :primary], {:no_schema, :primary}} in errors
+      assert {[:cells, "eu", :sources, "primary"], {:unbound, :source, "primary"}} in errors
+      assert {[:cells, "gauge", :sources, "reading"], {:unbound, :source, "reading"}} in errors
+      assert {[:cells, "latency", :sources, "primary"], {:no_schema, "primary"}} in errors
     end
 
     test "the board's own faults come before any cell is applied" do
       board = Board.from_map!(%{cells: %{a: %{x: 0, y: 0, w: 1, h: 1, ref: {:composite, 99}}}})
 
       assert Board.realize(board, store(), %{}) ==
-               {:error, [{[:cells, :a, :ref], {:dangling, {:composite, 99}}}]}
+               {:error, [{[:cells, "a", :ref], {:dangling, {:composite, 99}}}]}
     end
 
     test "describe is asked with the cell's slot, and the cache is threaded across cells" do
@@ -541,9 +541,9 @@ defmodule Visualize.BoardTest do
 
       {:ok, applied, cache} = Board.realize(board, store(), pools, describe: describe)
 
-      assert_received {:described, {:eu, :primary}}
+      assert_received {:described, {"eu", :primary}}
       refute_received {:described, {:latency, :primary}}
-      assert [%{text: "Request time"}] = Enum.drop(applied.latency.chart.labels, 1)
+      assert [%{text: "Request time"}] = Enum.drop(applied["latency"].chart.labels, 1)
       assert {:ok, _} = Schema.Cache.fetch(cache, :primary, version)
     end
   end

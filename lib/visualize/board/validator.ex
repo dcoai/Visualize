@@ -115,7 +115,8 @@ defmodule Visualize.Board.Validator do
   defp cells(cells) when is_map(cells) and not is_struct(cells) do
     each =
       Enum.flat_map(cells, fn
-        {name, cell} when is_atom(name) and not is_boolean(name) and not is_nil(name) ->
+        {name, cell}
+        when is_binary(name) or (is_atom(name) and not is_boolean(name) and not is_nil(name)) ->
           cell(name, cell)
 
         {name, _cell} ->
@@ -162,7 +163,7 @@ defmodule Visualize.Board.Validator do
 
   defp placement(cells) do
     rects =
-      for {name, cell} <- cells, is_atom(name), rect = rect(cell), into: %{}, do: {name, rect}
+      for {name, cell} <- cells, name?(name), rect = rect(cell), into: %{}, do: {name, rect}
 
     off =
       for {name, %{x: x, w: w}} <- rects,
@@ -243,7 +244,8 @@ defmodule Visualize.Board.Validator do
   # resolution is single level (spec/14 §7.1).
   defp vars(vars, path) when is_map(vars) and not is_struct(vars) do
     Enum.flat_map(vars, fn
-      {name, _value} when not is_atom(name) or is_boolean(name) or is_nil(name) ->
+      {name, _value}
+      when not (is_binary(name) or is_atom(name)) or is_boolean(name) or is_nil(name) ->
         [{path ++ [name], {:type, :name}}]
 
       {name, %Var{}} ->
@@ -275,13 +277,14 @@ defmodule Visualize.Board.Validator do
   # the board starts, where its feeds are known.
   defp virtual_sources(sources, path) when is_map(sources) and not is_struct(sources) do
     Enum.flat_map(sources, fn
-      {id, source} when is_atom(id) and id not in [nil, true, false] and is_map(source) ->
+      {id, source}
+      when (is_binary(id) or (is_atom(id) and id not in [nil, true, false])) and is_map(source) ->
         case VirtualSource.new(Map.put(source, :id, id)) do
           {:ok, _source} -> []
           {:error, errors} -> for {at, reason} <- errors, do: {path ++ [id | at], reason}
         end
 
-      {id, _source} when is_atom(id) and id not in [nil, true, false] ->
+      {id, _source} when is_binary(id) or (is_atom(id) and id not in [nil, true, false]) ->
         [{path ++ [id], {:type, {:node, :virtual_source}}}]
 
       {id, _source} ->
@@ -291,7 +294,7 @@ defmodule Visualize.Board.Validator do
 
   defp virtual_sources(_sources, path), do: [{path, {:type, {:map, {:node, :virtual_source}}}}]
 
-  defp name?(name), do: is_atom(name) and not is_boolean(name) and not is_nil(name)
+  defp name?(name), do: Visualize.Chart.Names.name?(name)
 
   # A cell's drill target (spec/15 §13.3): a board ref and the variables it is opened
   # with, each a field of the datum or a value.
@@ -469,7 +472,7 @@ defmodule Visualize.Board.Validator do
     fields =
       for {_slot, node} <- sources || %{},
           field <- Map.get(node, :fields, []),
-          is_atom(field),
+          name?(field),
           uniq: true,
           do: field
 

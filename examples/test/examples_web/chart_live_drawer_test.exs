@@ -237,11 +237,11 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     plots = s.assigns.run_frame.plots
     # In the order the frames draw: `z`, ties broken by name (spec/14 §4.2).
-    assert Enum.map(plots, & &1.name) == [:day, :hour, :recent, :year]
+    assert Enum.map(plots, & &1.name) == ["day", "hour", "recent", "year"]
     # Each plot draws its own window, so no two streams are the same.
     assert plots |> Enum.map(& &1.canvas) |> Enum.uniq() |> length() == 4
     # And each sits at its own cell of the design's grid, left to right (#384).
-    assert %{year: +0.0, day: day, hour: hour, recent: recent} =
+    assert %{"year" => +0.0, "day" => day, "hour" => hour, "recent" => recent} =
              Map.new(plots, &{&1.name, &1.box.x})
 
     assert day < hour and hour < recent
@@ -250,10 +250,10 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     events = for([n, p] <- Phoenix.LiveView.Utils.get_push_events(s), do: {n, p[:frame], p[:seq]})
 
     assert events == [
-             {"canvas_update", :day, 1},
-             {"canvas_update", :hour, 1},
-             {"canvas_update", :recent, 1},
-             {"canvas_update", :year, 1}
+             {"canvas_update", "day", 1},
+             {"canvas_update", "hour", 1},
+             {"canvas_update", "recent", 1},
+             {"canvas_update", "year", 1}
            ]
 
     h = html(s)
@@ -630,7 +630,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
 
     # The easing lives in the run's renderer, which holds a compiled chart per frame
     # (#413, #385); this design has one.
-    assert [{_name, %{eased: %{y: %{shown: [+0.0, _] = shown}}}}] =
+    assert [{_name, %{eased: %{"y" => %{shown: [+0.0, _] = shown}}}}] =
              Examples.Renderer.state(s.assigns.run.renderer).compiled
 
     # A resize recompiles at the new width and **carries the easing** (#434): the scale
@@ -638,7 +638,7 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     {:noreply, s} = ChartLive.handle_event("resize", %{"width" => 520, "height" => 300}, s)
     [{_name, resized}] = Examples.Renderer.state(s.assigns.run.renderer).compiled
     assert resized.size.width == 520
-    assert resized.eased.y.shown == shown
+    assert resized.eased["y"].shown == shown
 
     {:noreply, s} = ChartLive.handle_event("run_stop", %{}, s)
     refute s.assigns.run.running

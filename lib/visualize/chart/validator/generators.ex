@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Validator.Generators do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # The validator's view of a generator call (spec/14 §3.13, D-177): its shape, its name
   # against the registry the read was given, and its arguments.
   #
@@ -35,7 +37,7 @@ defmodule Visualize.Chart.Validator.Generators do
   @spec faults(term(), list(), map() | :unknown, (term(), list() -> [{list(), term()}])) ::
           [{list(), term()}]
   def faults({:generate, name, args}, path, registry, arg)
-      when is_atom(name) and name not in [nil, true, false] and is_list(args) do
+      when is_name(name) and name not in [nil, true, false] and is_list(args) do
     named = name(name, length(args), path, registry)
 
     arguments =
@@ -52,10 +54,10 @@ defmodule Visualize.Chart.Validator.Generators do
 
   defp name(name, n, path, registry) when is_map(registry) do
     cond do
-      Map.has_key?(registry, {name, n + 1}) ->
+      Visualize.Generators.lookup(registry, name, n + 1) != :error ->
         []
 
-      Enum.any?(Map.keys(registry), &match?({^name, _}, &1)) ->
+      Visualize.Generators.defines?(registry, name) ->
         [{path, {:arity, :generator, name, n}}]
 
       true ->

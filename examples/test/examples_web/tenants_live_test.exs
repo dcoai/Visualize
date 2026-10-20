@@ -76,10 +76,12 @@ defmodule ExamplesWeb.TenantsLiveTest do
 
   defp views(seen, waiting) do
     receive do
-      {:visualize_board, _board, {:cell, cell, %{state: state} = view}} when state != :loading ->
-        if cell in waiting,
-          do: views(Map.put(seen, cell, view), List.delete(waiting, cell)),
-          else: views(seen, waiting)
+      {:visualize_board, _board, {:cell, name, %{state: state} = view}} when state != :loading ->
+        # A cell is named by its string (D-195); the views are keyed as the test asked.
+        case Enum.find(waiting, &(to_string(&1) == name)) do
+          nil -> views(seen, waiting)
+          cell -> views(Map.put(seen, cell, view), List.delete(waiting, cell))
+        end
 
       {:visualize_board, _board, _other} ->
         views(seen, waiting)

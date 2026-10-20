@@ -68,11 +68,12 @@ defmodule Visualize.BuilderFixture do
 
   @doc false
   # Two frames side by side, neither of them `main` — the shape the gallery's *Load* and
-  # *Context* templates have (spec/14 §18.4, #386) — over the fixture's pool.
+  # *Context* templates have (spec/14 §18.4, #386) — over the fixture's pool. Its names are
+  # strings, as the builder holds a seeded layer's (D-195).
   def two_frames do
     scales = %{x: %{kind: :linear, domain: :auto}, y: %{kind: :linear, domain: :auto}}
 
-    [
+    named([
       {:two,
        %{
          version: 2,
@@ -91,7 +92,7 @@ defmodule Visualize.BuilderFixture do
            %{type: :line, frame: :now, data: :primary, channels: %{x: :t, y: :v}}
          ]
        }}
-    ]
+    ])
   end
 
   @doc false
@@ -104,10 +105,10 @@ defmodule Visualize.BuilderFixture do
       layer
       |> Map.put(:layout, %{columns: [1, 1, 1], rows: [1, 1]})
       |> update_in(
-        [:frames, :history],
+        [:frames, "history"],
         &(&1 |> Map.delete(:box) |> Map.merge(%{cell: [0, 0], span: [2, 2]}))
       )
-      |> update_in([:frames, :now], &(&1 |> Map.delete(:box) |> Map.put(:cell, [2, 0])))
+      |> update_in([:frames, "now"], &(&1 |> Map.delete(:box) |> Map.put(:cell, [2, 0])))
 
     [{name, layer}]
   end
@@ -444,6 +445,13 @@ defmodule Visualize.BuilderFixture do
         Phoenix.Component.assign(socket, key, value)
     end)
   end
+
+  @doc """
+  The layers as the builder holds them once seeded: each fragment's names as strings
+  (D-195), as `layers/1` reads them back.
+  """
+  def named(layers),
+    do: for({name, fragment} <- layers, do: {name, Visualize.Chart.Migration.names(fragment)})
 
   @doc "The resolved layers as `{name, fragment}`, the name an atom where one exists."
   def layers(%Socket{assigns: assigns}) do

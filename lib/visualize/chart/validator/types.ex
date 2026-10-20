@@ -68,7 +68,7 @@ defmodule Visualize.Chart.Validator.Types do
     if v in allowed, do: [], else: [{path, {:enum, allowed}}]
   end
 
-  def check({:ref, kind}, v, path, ctx) when is_atom(v) do
+  def check({:ref, kind}, v, path, ctx) when is_atom(v) or is_binary(v) do
     if name?(v), do: ref(kind, v, path, ctx), else: [{path, {:type, {:ref, kind}}}]
   end
 
@@ -80,11 +80,11 @@ defmodule Visualize.Chart.Validator.Types do
   def check({:ref, kind}, {other, n}, path, _ctx) when is_atom(other) and is_integer(n),
     do: [{path, {:ref_kind, kind, other}}]
 
-  def check(:field, v, path, ctx) when is_atom(v) do
+  def check(:field, v, path, ctx) when is_atom(v) or is_binary(v) do
     if name?(v), do: ref(:field, v, path, ctx), else: [{path, {:type, :field}}]
   end
 
-  def check(:field_ref, {:field, f}, path, ctx) when is_atom(f) do
+  def check(:field_ref, {:field, f}, path, ctx) when is_atom(f) or is_binary(f) do
     if name?(f), do: ref(:field, f, path, ctx), else: [{path, {:type, :field_ref}}]
   end
 
@@ -92,7 +92,10 @@ defmodule Visualize.Chart.Validator.Types do
   def check(:generator, v, path, ctx), do: generator(v, path, ctx, :generator)
 
   def check(:channel, v, _path, _ctx) when is_number(v), do: []
-  def check(:channel, v, path, ctx) when is_atom(v), do: check(:field, v, path, ctx)
+
+  def check(:channel, v, path, ctx) when is_atom(v) or is_binary(v),
+    do: check(:field, v, path, ctx)
+
   def check(:channel, {:field, _} = v, path, ctx), do: check(:field_ref, v, path, ctx)
 
   # A channel naming its scale's own end (spec/14 §5.2, #420); any other `:scale` tuple is
@@ -157,7 +160,7 @@ defmodule Visualize.Chart.Validator.Types do
 
   def check(:anchor, v, _path, _ctx) when v in @frame_anchors, do: []
 
-  def check(:anchor, {:axis, s}, path, ctx) when is_atom(s) do
+  def check(:anchor, {:axis, s}, path, ctx) when is_atom(s) or is_binary(s) do
     if name?(s), do: ref(:scale, s, path, ctx), else: [{path, {:type, :anchor}}]
   end
 
@@ -169,7 +172,7 @@ defmodule Visualize.Chart.Validator.Types do
 
   def check(:color, v, _path, _ctx) when is_binary(v) or v in [:none, :contrast], do: []
   # A paint names a gradient of `defs` (spec/14 §2.7, §3.2).
-  def check(:color, {:paint, name}, path, ctx) when is_atom(name),
+  def check(:color, {:paint, name}, path, ctx) when is_atom(name) or is_binary(name),
     do: ref(:paint, name, path, ctx)
 
   # A ramp position is a meaning the theme renders (spec/14 §3.2, D-135).
@@ -191,8 +194,9 @@ defmodule Visualize.Chart.Validator.Types do
   end
 
   # A theme's counterpart in a color scheme (spec/08 §7.3, #668): a name, or `nil` for none.
-  def check(:counterpart, v, _path, _ctx) when v == nil or (is_atom(v) and not is_boolean(v)),
-    do: []
+  def check(:counterpart, v, _path, _ctx)
+      when v == nil or is_binary(v) or (is_atom(v) and not is_boolean(v)),
+      do: []
 
   def check(:counterpart, _v, path, _ctx), do: [{path, {:type, :counterpart}}]
 
@@ -220,6 +224,7 @@ defmodule Visualize.Chart.Validator.Types do
     if term?(v), do: [], else: [{path, {:type, :term}}]
   end
 
+  def check(:name, v, _path, _ctx) when is_binary(v) and v != "", do: []
   def check(:name, v, _path, _ctx) when is_atom(v) and v not in @not_names, do: []
   def check(:integer, v, _path, _ctx) when is_integer(v), do: []
   def check(:number, v, _path, _ctx) when is_number(v), do: []
@@ -321,12 +326,12 @@ defmodule Visualize.Chart.Validator.Types do
   end
 
   defp slot?({:series, i}), do: is_integer(i) and i >= 1
-  defp slot?(v), do: name?(v)
+  defp slot?(v), do: is_atom(v) and v not in @not_names
 
   @doc false
-  # A name: an atom other than `nil`, `true` and `false`.
+  # A name: a non-empty string (D-195), or an atom other than `nil`, `true` and `false`.
   @spec name?(term()) :: boolean()
-  def name?(v), do: is_atom(v) and v not in @not_names
+  defdelegate name?(v), to: Visualize.Chart.Names
 
   # `:auto` is a bound, so only a two-element list may carry it (spec/14 §1.4).
   defp extent?(list) do
@@ -359,9 +364,9 @@ defmodule Visualize.Chart.Validator.Types do
 
   # Where an adoption stands: the frame it is written in and the name it is written
   # under, so a scale adopting itself is a cycle and not an unknown name.
-  defp source([:frames, frame | rest], _value) when is_atom(frame) do
+  defp source([:frames, frame | rest], _value) when is_binary(frame) or is_atom(frame) do
     case List.last(rest) do
-      name when is_atom(name) -> {frame, name}
+      name when is_binary(name) or is_atom(name) -> {frame, name}
       _other -> nil
     end
   end

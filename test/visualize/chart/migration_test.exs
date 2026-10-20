@@ -7,7 +7,8 @@ defmodule Visualize.Chart.MigrationTest do
   alias Visualize.Chart.Migration
 
   test "the current version passes through unchanged" do
-    design = %{version: Migration.current(), frames: %{main: %{kind: :cartesian}}}
+    # A name the design declares is a string (D-195): the canonical form passes unchanged.
+    design = %{version: Migration.current(), frames: %{"main" => %{kind: :cartesian}}}
     assert Migration.migrate(design) == {:ok, design}
   end
 
@@ -38,9 +39,9 @@ defmodule Visualize.Chart.MigrationTest do
     test "decodes typed and migrates: the frame is frames.main, its values atoms, its size gone" do
       assert {:ok, chart} = Visualize.Chart.from_json(Jason.encode!(@v1))
       assert chart.version == 3
-      assert %{kind: :cartesian, scales: %{x: %{kind: :time}}} = chart.frames.main
-      assert [%{scale: :x, side: :bottom, ticks: 5}] = chart.frames.main.axes
-      refute Map.has_key?(chart.frames.main, :size)
+      assert %{kind: :cartesian, scales: %{"x" => %{kind: :time}}} = chart.frames["main"]
+      assert [%{scale: "x", side: :bottom, ticks: 5}] = chart.frames["main"].axes
+      refute Map.has_key?(chart.frames["main"], :size)
     end
 
     test "a fragment read from v1 JSON is typed the same way" do

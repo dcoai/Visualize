@@ -51,9 +51,9 @@ defmodule Visualize.Chart.NoAtomsTest do
         end)
 
       assert made == 0
-      assert {:error, [{[:frames, :main, "wdth"], :unknown_key}]} = result
+      assert {:error, [{[:frames, "main", "wdth"], :unknown_key}]} = result
 
-      assert Chart.Validator.format({[:frames, :main, "wdth"], :unknown_key}) ==
+      assert Chart.Validator.format({[:frames, "main", "wdth"], :unknown_key}) ==
                "frames.main.wdth: is not a key of this node"
     end
 
@@ -122,17 +122,17 @@ defmodule Visualize.Chart.NoAtomsTest do
       }
 
     test "an enumeration's member" do
-      assert {:error, [{[:frames, :main, :kind], {:enum, _}}]} =
+      assert {:error, [{[:frames, "main", :kind], {:enum, _}}]} =
                refused(["frames", "main", "kind"], &fresh/0)
     end
 
     test "a slot, where a size may name one" do
-      assert {:error, [{[:styles, :s, :stroke, :width], {:type, :size}}]} =
+      assert {:error, [{[:styles, "s", :stroke, :width], {:type, :size}}]} =
                refused(["styles"], fn -> %{"s" => %{"stroke" => %{"width" => fresh()}}} end)
     end
 
     test "a series slot past the bound" do
-      assert {:error, [{[:styles, :s, :stroke, :width], {:type, :size}}]} =
+      assert {:error, [{[:styles, "s", :stroke, :width], {:type, :size}}]} =
                refused(["styles"], fn ->
                  %{
                    "s" => %{
@@ -180,15 +180,141 @@ defmodule Visualize.Chart.NoAtomsTest do
     end
   end
 
-  describe "the builder's literal reader" do
-    test "a literal naming an atom the node lacks is a fault, never a new atom" do
-      {made, result} = atoms_made(fn -> Editor.parse(:term, ":#{fresh()}") end)
-      assert made == 0
-      assert result == :error
+  describe "an accepted document makes no atom from its names (#780)" do
+    # A design whose every name is fresh: a source and its fields, a frame, its scales, a
+    # style, a variable, a mark's id.
+    defp named_design do
+      [source, t, v, frame, x, y, style, var, id] = for _ <- 1..9, do: fresh()
 
-      {made, result} = atoms_made(fn -> Editor.parse(:term, "[#{fresh()}: 1]") end)
+      %{
+        "version" => 3,
+        "sources" => %{source => %{"fields" => [t, v]}},
+        "vars" => %{var => %{"default" => 2}},
+        "styles" => %{style => %{"stroke" => %{"width" => %{"$var" => var}}}},
+        "frames" => %{
+          frame => %{
+            "kind" => "cartesian",
+            "scales" => %{x => %{"kind" => "linear"}, y => %{"kind" => "linear"}},
+            "axes" => [%{"scale" => x, "side" => "bottom"}, %{"scale" => y, "side" => "left"}]
+          }
+        },
+        "marks" => [
+          %{
+            "id" => id,
+            "type" => "line",
+            "data" => source,
+            "style" => style,
+            "channels" => %{"x" => t, "y" => v},
+            "scales" => %{"x" => x, "y" => y}
+          }
+        ]
+      }
+      |> then(&{&1, source, t, v})
+    end
+
+    test "N fresh designs read, apply and draw, and the node's atom table is unchanged" do
+      for n <- [1, 10, 100] do
+        {made, results} =
+          atoms_made(fn ->
+            for _ <- 1..n do
+              {design, source, t, v} = named_design()
+              {:ok, chart} = from_json(design)
+              rows = for i <- 1..5, do: %{t => i, v => i * i}
+              {:ok, applied} = Chart.apply(chart, sources: %{source => rows})
+              Chart.render(applied)
+            end
+          end)
+
+        assert made == 0, "#{n} fresh designs made #{made} atoms"
+        assert length(results) == n
+      end
+    end
+
+    test "N fresh boards and fragments read" do
+      {made, _} =
+        atoms_made(fn ->
+          for _ <- 1..50 do
+            {design, _source, _t, _v} = named_design()
+            {:ok, _} = Fragment.from_json(Jason.encode!(Map.put(design, "$version", 3)))
+
+            cells =
+              Map.new(1..5, fn _ ->
+                {fresh(),
+                 %{"x" => 0, "y" => 0, "w" => 1, "h" => 1, "ref" => %{"$id" => ["composite", 1]}}}
+              end)
+
+            Board.from_json(
+              Jason.encode!(%{"$version" => 3, "cells" => cells, "vars" => %{fresh() => 1}})
+            )
+          end
+        end)
+
       assert made == 0
-      assert result == :error
+    end
+
+    test "a virtual source and its stored function, every name fresh" do
+      {made, _} =
+        atoms_made(fn ->
+          for _ <- 1..20 do
+            [id, input, field, out, var, word] = for _ <- 1..6, do: fresh()
+
+            elixir =
+              "fn %{#{input}: rows} -> " <>
+                "[%{#{out}: Enum.count(rows, fn #{var} -> #{var}.#{field} == :#{word} end)}] end"
+
+            {:ok, source} =
+              Visualize.VirtualSource.new(%{
+                id: id,
+                from: [{input, nil}],
+                schema: %{out => %{type: :number}},
+                elixir: elixir
+              })
+
+            {:ok, compiled} = Visualize.VirtualSource.Sandbox.compile(source.elixir)
+            rows = [%{field => word}, %{field => "other"}]
+            {:ok, [answer]} = Visualize.VirtualSource.Sandbox.run(compiled, [%{input => rows}])
+            1 = answer[out]
+          end
+        end)
+
+      assert made == 0
+    end
+
+    test "N builder events naming fresh names" do
+      socket = Visualize.BuilderFixture.socket(Visualize.BuilderFixture.layers())
+
+      event = fn s, name, params ->
+        elem(Visualize.Chart.Builder.handle_event(name, params, s), 1)
+      end
+
+      {made, _} =
+        atoms_made(fn ->
+          Enum.reduce(1..20, socket, fn _, s ->
+            s
+            |> event.("remove_source", %{"source" => fresh()})
+            |> event.("add_column", %{"source" => "primary", "name" => fresh()})
+            |> event.("add_style", %{"name" => fresh()})
+            |> event.("create_variable", %{"name" => fresh(), "default" => ""})
+            |> event.("toggle_axis", %{"scale" => fresh(), "side" => "bottom"})
+            |> event.("toggle_axis", %{"scale" => "x", "side" => fresh()})
+          end)
+        end)
+
+      assert made == 0
+    end
+  end
+
+  describe "the builder's literal reader" do
+    test "a literal naming a word the library lacks is its string, never a new atom" do
+      name = fresh()
+      {made, result} = atoms_made(fn -> Editor.parse(:term, ":#{name}") end)
+      assert made == 0
+      assert result == {:ok, name}
+
+      name = fresh()
+      {made, result} = atoms_made(fn -> Editor.parse(:term, "[#{name}: 1]") end)
+      assert made == 0
+      assert result == {:ok, [{name, 1}]}
     end
 
     test "a literal of atoms that exist still reads" do

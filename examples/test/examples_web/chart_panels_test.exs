@@ -154,7 +154,7 @@ defmodule ExamplesWeb.ChartPanelsTest do
     s = event(s, "chart_panel", %{"panel" => "explain", "datum" => "2"})
     [explain] = for {:explain, state} <- s.assigns.panels, do: state
 
-    assert [%{layer: :theme}, %{layer: :kind}, %{layer: :field, style: :down, via: [:bad]}] =
+    assert [%{layer: :theme}, %{layer: :kind}, %{layer: :field, style: "down", via: ["bad"]}] =
              explain.look.parts.stroke.chain
 
     assert html(s) =~ "via bad"
@@ -165,7 +165,7 @@ defmodule ExamplesWeb.ChartPanelsTest do
     assert explain.data == []
 
     assert Enum.map(explain.look.parts.stroke.chain, &{&1.layer, &1.style}) ==
-             [theme: nil, kind: nil, kind: nil, palette: :style_3, palette: :thick]
+             [theme: nil, kind: nil, kind: nil, palette: "style_3", palette: "thick"]
 
     # A frame's own group, and a frame the design lacks, explain nothing.
     for node <- ["frames.status", "frames.nope.legend"] do

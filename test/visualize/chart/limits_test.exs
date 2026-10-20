@@ -179,12 +179,12 @@ defmodule Visualize.Chart.LimitsTest do
       assert Chart.from_map(many) ==
                {:error,
                 [
-                  {[:frames, :main, :axes, 0, :ticks], {:limit, :ticks, 1000, 5000}},
-                  {[:frames, :main, :axes, 1, :ticks, :count], {:limit, :ticks, 1000, 2000}}
+                  {[:frames, "main", :axes, 0, :ticks], {:limit, :ticks, 1000, 5000}},
+                  {[:frames, "main", :axes, 1, :ticks, :count], {:limit, :ticks, 1000, 2000}}
                 ]}
 
       assert Chart.from_map(@design, limits: [ticks: 4]) ==
-               {:error, [{[:frames, :main, :axes, 0, :ticks], {:limit, :ticks, 4, 5}}]}
+               {:error, [{[:frames, "main", :axes, 0, :ticks], {:limit, :ticks, 4, 5}}]}
     end
 
     test "iterations bounds a force step's ticks" do
@@ -263,7 +263,7 @@ defmodule Visualize.Chart.LimitsTest do
       {:ok, json} = @design |> Chart.from_map!() |> Chart.to_json()
 
       assert Chart.from_json(json, limits: [ticks: 4]) ==
-               {:error, [{[:frames, :main, :axes, 0, :ticks], {:limit, :ticks, 4, 5}}]}
+               {:error, [{[:frames, "main", :axes, 0, :ticks], {:limit, :ticks, 4, 5}}]}
 
       assert {:ok, %Chart{}} = Chart.from_json(json)
     end

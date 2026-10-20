@@ -18,7 +18,7 @@ defmodule Examples.Charts.ScrollingSeriesTest do
     assert ScrollingSeries.plot() == {60, 40, 810, 410}
 
     {design, rows} = ScrollingSeries.design(samples_per_px: 2, origin: 100)
-    assert design.frames.main.viewport == %{scale: :x, span: 1620}
+    assert design.frames["main"].viewport == %{scale: "x", span: 1620}
     assert Map.keys(rows) |> Enum.sort() == [:area, :line_1, :line_2, :line_3, :line_4]
     assert length(rows.area) == 1621
     assert hd(rows.area).t == 100 and List.last(rows.area).t == 1720

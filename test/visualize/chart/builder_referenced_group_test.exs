@@ -24,7 +24,10 @@ defmodule Visualize.Chart.BuilderReferencedGroupTest do
 
     @entries %{
       {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
-      {:frame, 1} => %{name: "Frame::wide", fragment: %{frames: %{main: %{margin: %{top: 9}}}}},
+      {:frame, 1} => %{
+        name: "Frame::wide",
+        fragment: %{frames: %{"main" => %{margin: %{top: 9}}}}
+      },
       {:composite, 1} => %{
         name: "Charts::pair",
         fragment: %{

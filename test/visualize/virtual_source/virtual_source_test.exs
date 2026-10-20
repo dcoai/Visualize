@@ -44,7 +44,7 @@ defmodule Visualize.VirtualSourceTest do
       {:ok, source} =
         VirtualSource.new(health(elixir: "fn rows -> %{state: :ok} end"))
 
-      assert source.from == [{:hosts, %{last: 20}}]
+      assert source.from == [{"hosts", %{last: 20}}]
       assert %Schema{} = source.schema
       assert {:ok, ^source} = source |> VirtualSource.to_map() |> VirtualSource.new()
     end
@@ -64,12 +64,13 @@ defmodule Visualize.VirtualSourceTest do
                {[:elixir], {:type, :string}},
                {[:extra], :unknown_key},
                {[:from, 0, :window, :last], {:type, :pos_integer}},
+               {[:from, 1], {:duplicate_input, "a"}},
                {[:from, 2], {:type, :input}},
                {[:from, 3], {:type, :input_name}},
                {[:from, 4, :window], {:type, :input_window}},
                {[:id], {:type, :name}},
                {[:per], {:enum, [:identity]}},
-               {[:schema, :state, :values], {:type, :values}}
+               {[:schema, "state", :values], {:type, :values}}
              ]
 
       for fault <- faults, do: assert(is_binary(VirtualSource.format_error(fault)))
@@ -86,7 +87,7 @@ defmodule Visualize.VirtualSourceTest do
                VirtualSource.new(health(elixir: "fn rows -> rows end", function: :health))
 
       # A path is read under its last atom; an atom and a string are two keys.
-      assert {:error, [{[:from, 1], {:duplicate_input, :hosts}}]} =
+      assert {:error, [{[:from, 1], {:duplicate_input, "hosts"}}]} =
                VirtualSource.new(
                  health(
                    per: nil,
@@ -95,7 +96,8 @@ defmodule Visualize.VirtualSourceTest do
                  )
                )
 
-      assert {:ok, _source} =
+      # An atom and a string of one spelling are one key (D-195).
+      assert {:error, [{[:from, 1], {:duplicate_input, "hosts"}}]} =
                VirtualSource.new(
                  health(per: nil, from: [{:hosts, nil}, {"hosts", nil}], elixir: "fn x -> [] end")
                )
@@ -105,7 +107,7 @@ defmodule Visualize.VirtualSourceTest do
       assert {:error, [{[:per], {:per, :ambiguous}}]} =
                VirtualSource.new(health(from: [hosts: nil, load: nil], elixir: "fn x -> x end"))
 
-      assert {:error, [{[:per], {:per, {:unknown_input, :mem}}}]} =
+      assert {:error, [{[:per], {:per, {:unknown_input, "mem"}}}]} =
                VirtualSource.new(
                  health(
                    from: [hosts: nil, load: nil],
@@ -141,7 +143,7 @@ defmodule Visualize.VirtualSourceTest do
 
       reads_mem = %{source | elixir: "fn rows -> %{state: Enum.at(rows, 0).mem} end"}
 
-      assert {:error, [{[:elixir], {:check, 1, {:unknown_field, :mem}}}]} =
+      assert {:error, [{[:elixir], {:check, 1, {:unknown_field, "mem"}}}]} =
                VirtualSource.validate(reads_mem, inputs: %{hosts: @hosts})
 
       # An input whose schema is not known leaves the fields unchecked.
@@ -180,7 +182,7 @@ defmodule Visualize.VirtualSourceTest do
 
       numbered = Schema.new!(%{host: %{type: :number, identity: true}, cpu: %{type: :number}})
 
-      assert {:error, [{[:schema, :host], {:per, {:identity_type, :host, :number, :category}}}]} =
+      assert {:error, [{[:schema, "host"], {:per, {:identity_type, "host", :number, :category}}}]} =
                VirtualSource.validate(source, inputs: %{hosts: numbered})
     end
   end
@@ -217,24 +219,24 @@ defmodule Visualize.VirtualSourceTest do
       assert {:error, {nil, nil, :not_a_list}} = VirtualSource.conform(source, %{})
       assert {:error, {1, nil, :not_a_row}} = VirtualSource.conform(source, [%{host: "a"}, 3])
 
-      assert {:error, {0, :cpu, :undescribed}} =
+      assert {:error, {0, "cpu", :undescribed}} =
                VirtualSource.conform(source, [%{host: "a", cpu: 1}])
 
-      assert {:error, {0, :host, :no_identity}} = VirtualSource.conform(source, [%{state: :ok}])
+      assert {:error, {0, "host", :no_identity}} = VirtualSource.conform(source, [%{state: :ok}])
 
-      assert {:error, {0, :load, {:type, :number}}} =
+      assert {:error, {0, "load", {:type, :number}}} =
                VirtualSource.conform(source, [%{host: "a", load: "1"}])
 
-      assert {:error, {0, :t, {:type, :time}}} =
+      assert {:error, {0, "t", {:type, :time}}} =
                VirtualSource.conform(source, [%{host: "a", t: 3}])
 
       assert {:error, {0, "region", {:type, :text}}} =
                VirtualSource.conform(source, [%{host: "a", region: :eu}])
 
-      assert {:error, {0, :state, :not_in_values}} =
+      assert {:error, {0, "state", :not_in_values}} =
                VirtualSource.conform(source, [%{host: "a", state: :warning}])
 
-      assert {:error, {0, :host, {:type, :category}}} =
+      assert {:error, {0, "host", {:type, :category}}} =
                VirtualSource.conform(source, [%{host: true}])
     end
   end
@@ -246,7 +248,7 @@ defmodule Visualize.VirtualSourceTest do
     assert VirtualSource.key(3) == nil
 
     one = VirtualSource.new!(health(elixir: "fn x -> x end"))
-    assert VirtualSource.identity_input(one) == :hosts
+    assert VirtualSource.identity_input(one) == "hosts"
     assert VirtualSource.identity_input(%{one | per: nil}) == nil
     assert VirtualSource.identity_input(%{one | per: {:identity, :load}}) == :load
   end
@@ -255,20 +257,22 @@ defmodule Visualize.VirtualSourceTest do
     @paths [[:health], [:ops, :health], [:ops, :box, :load], [:other, :health]]
 
     test "the nearest definition wins, and an inner one shadows an outer one" do
-      assert VirtualSource.resolve(@paths, [:ops, :box], :health) == {:ok, [:ops, :health]}
-      assert VirtualSource.resolve(@paths, [:ops, :box], :load) == {:ok, [:ops, :box, :load]}
-      assert VirtualSource.resolve(@paths, [:elsewhere], :health) == {:ok, [:health]}
-      assert VirtualSource.resolve(@paths, [], :health) == {:ok, [:health]}
+      assert VirtualSource.resolve(@paths, [:ops, :box], :health) == {:ok, ["ops", "health"]}
+      assert VirtualSource.resolve(@paths, [:ops, :box], :load) == {:ok, ["ops", "box", "load"]}
+      assert VirtualSource.resolve(@paths, [:elsewhere], :health) == {:ok, ["health"]}
+      assert VirtualSource.resolve(@paths, [], :health) == {:ok, ["health"]}
       assert VirtualSource.resolve(@paths, [:ops], :load) == :error
     end
 
     test "a full path names one exactly, from any scope; a string is never resolved" do
-      assert VirtualSource.resolve(@paths, [:ops], [:other, :health]) == {:ok, [:other, :health]}
+      assert VirtualSource.resolve(@paths, [:ops], [:other, :health]) ==
+               {:ok, ["other", "health"]}
+
       assert VirtualSource.resolve(@paths, [:ops], [:ops, :nope]) == :error
-      assert VirtualSource.resolve(@paths, [:ops], "health") == :error
+      assert VirtualSource.resolve(@paths, [:ops], {:feed, "health"}) == :error
 
       assert VirtualSource.resolve(Map.new(@paths, &{&1, nil}), [:ops], :health) ==
-               {:ok, [:ops, :health]}
+               {:ok, ["ops", "health"]}
     end
 
     test "dotted/1" do

@@ -224,7 +224,7 @@ defmodule Visualize.Chart.DefaultsTest do
       [rect, line] = flat.marks
       assert rect.defaults == %{stroke: %{width: 2, cap: :round}}
       assert line.defaults == %{stroke: %{width: 4, cap: :round}}
-      refute Map.has_key?(flat.frames.main, :defaults)
+      refute Map.has_key?(flat.frames["main"], :defaults)
 
       elements = drawn(flat)
       assert mark_style(elements, "mark-line", :path).stroke_width == 4
@@ -305,7 +305,7 @@ defmodule Visualize.Chart.DefaultsTest do
                {:theme, :theme},
                {:defaults, :design},
                {:kind, :design},
-               {:defaults, {:frame, :main}},
+               {:defaults, {:frame, "main"}},
                {:palette, nil}
              ]
 

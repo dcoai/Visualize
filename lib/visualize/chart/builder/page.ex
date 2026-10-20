@@ -480,7 +480,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       [c0, r0] = cell || [0, 0]
 
       %{
-        frame: Atom.to_string(frame),
+        frame: to_string(frame),
         cell: cell && pair(cell),
         span: pair(span),
         cells:

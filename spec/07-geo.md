@@ -82,6 +82,7 @@ A point is clipped when its angular distance `c` from the projection center — 
 |---|---|
 | `Visualize.Geo.Projection.new/0` | `new(:mercator)`. |
 | `Visualize.Geo.Projection.new/1` | Creates a projection of the given type with the defaults of 1.1 and the type's default clip angle (1.5). |
+| `Visualize.Geo.Projection.types/0` | Every projection type `new/1` takes, in the order of `t:projection_type/0`: the table a document's projection type is read by without making an atom (D-195). |
 | `Visualize.Geo.Projection.scale/2` | Sets `scale`. |
 | `Visualize.Geo.Projection.translate/3` | Sets `translate` to `{x, y}`. |
 | `Visualize.Geo.Projection.center/3` | Sets `center` to `{lon, lat}` degrees. |

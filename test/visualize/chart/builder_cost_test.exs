@@ -179,7 +179,7 @@ defmodule Visualize.Chart.Builder.CostTest do
     {_kept, computed} =
       Visualize.Chart.Builder.BoardMode.kept(%{edited.assigns | board_kept: s.assigns.board_kept})
 
-    assert computed.previews == [:a]
+    assert computed.previews == ["a"]
 
     assert work <= @budget.one_cell,
            "a one-cell edit spent #{work} reductions, over #{@budget.one_cell}"

@@ -46,7 +46,7 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
   defmodule Host do
     @moduledoc false
     use Visualize.VirtualSources
-    defsource(tripled(inputs), do: Enum.map(inputs.feed_1, &%{v: &1.v * 3}))
+    defsource(tripled(inputs), do: Enum.map(inputs["feed_1"], &%{v: &1.v * 3}))
   end
 
   @t0 ~U[2026-10-16 00:00:00Z]
@@ -127,7 +127,7 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
     assert doubled.text == "fn x -> send(x, 1) end"
     assert ["line 1: send/2 is not allowed in a virtual source"] = doubled.faults
     assert doubled.cells == [["2"], ["4"], ["6"], ["8"], ["10"]]
-    assert s.assigns.board.virtual_sources.doubled.elixir == @doubled
+    assert s.assigns.board.virtual_sources["doubled"].elixir == @doubled
 
     # A field no input has is named, in context.
     {:noreply, s} =
@@ -151,7 +151,7 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
       Builder.handle_event("board_source", %{"source" => "doubled", "elixir" => tenfold}, s)
 
     s = BoardMode.keep(s)
-    assert s.assigns.board.virtual_sources.doubled.elixir == tenfold
+    assert s.assigns.board.virtual_sources["doubled"].elixir == tenfold
     doubled = source(s, "doubled")
     refute doubled.draft?
     assert doubled.cells == [["10"], ["20"], ["30"], ["40"], ["50"]]

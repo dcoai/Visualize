@@ -13,6 +13,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     use Phoenix.Component
 
     alias Visualize.Chart.Builder.Stack
@@ -224,8 +226,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     The paths a site's contribution can mask: every top-level key, and the keys of each
     node under one, as `Visualize.Chart.Use.mask/2` takes them (spec/14 §19.5).
 
-        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frames: %{main: %{legend: %{}, margin: %{}}}})
-        [[:frames], [:frames, :main], [:frames, :main, :legend], [:frames, :main, :margin], [:theme]]
+        iex> Visualize.Chart.Builder.Masks.paths(%{theme: :dark, frames: %{"main" => %{legend: %{}, margin: %{}}}})
+        [[:frames], [:frames, "main"], [:frames, "main", :legend], [:frames, "main", :margin], [:theme]]
     """
     @spec paths(map()) :: [[atom()]]
     def paths(fragment) when is_map(fragment) do
@@ -237,7 +239,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           inner =
             Enum.flat_map(value, fn {name, node} ->
               parts =
-                if is_map(node), do: for({p, _} <- node, is_atom(p), do: [key, name, p]), else: []
+                if is_map(node), do: for({p, _} <- node, is_name(p), do: [key, name, p]), else: []
 
               [[key, name] | parts]
             end)
@@ -245,12 +247,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
           [[key] | inner]
 
         {key, value} when is_map(value) and not is_struct(value) ->
-          [[key] | for({inner, _} <- value, is_atom(inner), do: [key, inner])]
+          [[key] | for({inner, _} <- value, is_name(inner), do: [key, inner])]
 
         {key, _value} ->
           [[key]]
       end)
-      |> Enum.filter(fn path -> Enum.all?(path, &is_atom/1) end)
+      |> Enum.filter(fn path -> Enum.all?(path, &is_name/1) end)
       |> Enum.sort()
     end
 
@@ -260,14 +262,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     """
     @spec toggle(Use.t(), String.t(), boolean()) :: Use.t()
     def toggle(%Use{mask: mask} = use, name, checked) when is_list(mask) do
-      path = name |> String.split(".") |> Enum.map(&String.to_existing_atom/1)
+      # A key is the schema's atom, a name its string (D-195): nothing is made of the text.
+      path = name |> String.split(".") |> Enum.map(&Visualize.Chart.Words.key/1)
       without = Enum.reject(mask, &(normal(&1) == path))
       %{use | mask: if(checked, do: without ++ [path], else: without)}
     end
 
     def toggle(%Use{} = use, _name, _checked), do: use
 
-    defp normal(key) when is_atom(key), do: [key]
+    defp normal(key) when is_name(key), do: [key]
     defp normal(path) when is_list(path), do: path
 
     @doc """

@@ -29,11 +29,13 @@ defmodule Visualize.Board.BindingTest do
     })
   end
 
-  test "new/1 and put/4 take pairs of atoms, and nothing else" do
+  test "new/1 and put/4 take pairs of names, atoms or strings, and nothing else" do
     assert Binding.new([{{:a, :s}, :feed}]) == Binding.new() |> Binding.put(:a, :s, :feed)
+    # A name is its string (D-195): one spelling is one key.
+    assert Binding.new([{{"a", :s}, :feed}]) == Binding.new([{{:a, "s"}, :feed}])
     assert Binding.fetch(Binding.new(), :a, :s) == :error
 
-    assert_raise ArgumentError, ~r/two atoms/, fn -> Binding.new(%{{"a", :s} => :feed}) end
+    assert_raise ArgumentError, ~r/two names/, fn -> Binding.new(%{{1, :s} => :feed}) end
     assert_raise ArgumentError, ~r/pair/, fn -> Binding.new([:a]) end
   end
 
@@ -61,15 +63,15 @@ defmodule Visualize.Board.BindingTest do
     assert Binding.check(binding, @required, %{thin: thin}) ==
              {:error,
               [
-                {[:cells, :eu, :sources, :primary], {:undescribed, :nowhere}},
-                {[:cells, :gauge, :sources, :reading], {:unbound, :binding, :reading}},
-                {[:cells, :latency, :sources, :primary, :requires, :state],
-                 {:missing_attribute, :primary, :state, :order}},
-                {[:cells, :latency, :sources, :primary, :requires, :v],
-                 {:missing_attribute, :primary, :v, :unit}},
-                {[:cells, :latency, :sources, :primary, :types, :v],
-                 {:schema_type, :v, :number, :category}},
-                {[:cells, :removed, :sources, :primary], :not_required}
+                {[:cells, "eu", :sources, "primary"], {:undescribed, :nowhere}},
+                {[:cells, "gauge", :sources, "reading"], {:unbound, :binding, "reading"}},
+                {[:cells, "latency", :sources, "primary", :requires, "state"],
+                 {:missing_attribute, "primary", "state", :order}},
+                {[:cells, "latency", :sources, "primary", :requires, "v"],
+                 {:missing_attribute, "primary", "v", :unit}},
+                {[:cells, "latency", :sources, "primary", :types, "v"],
+                 {:schema_type, "v", :number, :category}},
+                {[:cells, "removed", :sources, "primary"], :not_required}
               ]}
   end
 
@@ -102,18 +104,18 @@ defmodule Visualize.Board.BindingTest do
     assert Binding.check(binding, @required, fn feed -> {:error, {:down, feed}} end) ==
              {:error,
               [
-                {[:cells, :eu, :sources, :primary], {:describe, :us, {:down, :us}}},
-                {[:cells, :latency, :sources, :primary], {:describe, :us, {:down, :us}}}
+                {[:cells, "eu", :sources, "primary"], {:describe, :us, {:down, :us}}},
+                {[:cells, "latency", :sources, "primary"], {:describe, :us, {:down, :us}}}
               ]}
   end
 
   test "the faults read in the words apply/2 uses" do
     assert Visualize.Board.format_error(
-             {[:cells, :gauge, :sources, :reading], {:unbound, :binding, :reading}}
+             {[:cells, "gauge", :sources, "reading"], {:unbound, :binding, "reading"}}
            ) ==
-             "cells.gauge.sources.reading: slot :reading is bound to no feed: the binding names none for it"
+             "cells.gauge.sources.reading: slot \"reading\" is bound to no feed: the binding names none for it"
 
-    assert Visualize.Board.format_error({[:cells, :x, :sources, :s], :not_required}) ==
+    assert Visualize.Board.format_error({[:cells, "x", :sources, "s"], :not_required}) ==
              "cells.x.sources.s: binds a slot that no cell's component declares"
   end
 
@@ -121,8 +123,8 @@ defmodule Visualize.Board.BindingTest do
     binding = Binding.new(%{{:a, :primary} => :cpu, {:a, :extra} => :mem, {:b, :primary} => :cpu})
 
     assert Binding.pools(binding, %{cpu: [%{v: 1}]}) == %{
-             a: %{primary: [%{v: 1}]},
-             b: %{primary: [%{v: 1}]}
+             "a" => %{"primary" => [%{v: 1}]},
+             "b" => %{"primary" => [%{v: 1}]}
            }
   end
 end

@@ -162,7 +162,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> layers = [{"a", %{vars: %{unit: %{default: "%"}}, labels: [%{anchor: :title, text: ["u ", Visualize.Chart.var(:unit)]}]}}]
         iex> [unit] = Visualize.Chart.Builder.Variables.list(layers, Visualize.Chart.stack(layers))
         iex> {unit.name, unit.type, unit.default, length(unit.uses)}
-        {:unit, :text, "%", 1}
+        {"unit", :text, "%", 1}
     """
     @spec list([{term(), map()}], map()) :: [map()]
     def list(layers, design) do
@@ -193,7 +193,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         iex> layers = [{"a", %{labels: [%{anchor: :title, text: ["u ", Visualize.Chart.var(:unit)]}]}}]
         iex> design = Visualize.Chart.stack(layers)
         iex> Visualize.Chart.Builder.Variables.unbound(layers, design, %{}) |> Enum.map(& &1.name)
-        [:unit]
+        ["unit"]
         iex> Visualize.Chart.Builder.Variables.unbound(layers, design, %{unit: "%"})
         []
     """
@@ -201,7 +201,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def unbound(layers, design, bindings) do
       for var <- list(layers, design),
           var.default == nil,
-          not Map.has_key?(bindings, var.name),
+          # A host binds by either spelling (D-195).
+          Visualize.Chart.Names.key(bindings, var.name) == :error,
           do: var
     end
 

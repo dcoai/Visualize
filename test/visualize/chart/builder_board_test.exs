@@ -116,7 +116,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
     s
   end
 
-  defp rect(s, cell), do: Map.take(s.assigns.board.cells[cell], [:x, :y, :w, :h])
+  defp rect(s, cell), do: Map.take(s.assigns.board.cells[to_string(cell)], [:x, :y, :w, :h])
 
   describe "a board is a library entry (§22.1)" do
     test "a board fragment is the kind :board, and per-kind validity is its reader" do
@@ -127,10 +127,10 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert Store.decode_id("board:3") == {:ok, {:board, 3}}
       assert Validator.validate(fragment, :board) == :ok
 
-      overlapping = put_in(fragment, [:board, :cells, :errors, :x], 4)
+      overlapping = put_in(fragment, [:board, :cells, "errors", :x], 4)
 
       assert Validator.validate(overlapping, :board) ==
-               {:error, [{[:board, :cells, :latency], {:overlap, :errors}}]}
+               {:error, [{[:board, :cells, "latency"], {:overlap, "errors"}}]}
 
       assert Validator.validate(%{board: %{version: 9}}, :board) ==
                {:error, [{[:board, :version], {:newer_schema, 9, 3}}]}
@@ -190,7 +190,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       {:ok, imported} = Memory.get(Map.fetch!(ids, {:board, 1}), target)
       new = Map.fetch!(ids, {:composite, 1})
       assert new == {:composite, 3}
-      assert imported.fragment.board.cells.latency.ref == new
+      assert imported.fragment.board.cells["latency"].ref == new
     end
 
     test "New offers a board, which opens empty in the mode" do
@@ -246,7 +246,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
         })
 
       assert rect(s, :latency) == %{x: 0, y: 3, w: 4, h: 2}
-      assert s.assigns.board_cell == :latency
+      assert s.assigns.board_cell == "latency"
       assert s.assigns.notice == nil
     end
 
@@ -263,7 +263,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
         })
 
       assert rect(s, :latency) == %{x: 0, y: 0, w: 6, h: 3}
-      assert s.assigns.notice =~ "overlaps cell :errors"
+      assert s.assigns.notice =~ "overlaps cell \"errors\""
     end
 
     test "a cell off the grid, or a rectangle that is not integers, is refused" do
@@ -322,7 +322,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
 
     test "a new cell takes the first free place, named cell_<n>" do
       s = event(opened(), "board_add", %{"ref" => "composite:1"})
-      assert s.assigns.board_cell == :cell_1
+      assert s.assigns.board_cell == "cell_1"
       assert rect(s, :cell_1) == %{x: 0, y: 3, w: 4, h: 2}
 
       s = event(s, "board_add", %{"ref" => "composite:1"})
@@ -365,21 +365,21 @@ defmodule Visualize.Chart.BuilderBoardTest do
       s = event(s, "board_cell", %{"_target" => ["title"], "title" => "Errors"})
       s = event(s, "board_cell", %{"_target" => ["sync"], "sync" => "false"})
 
-      assert s.assigns.board.cells.errors.title == "Errors"
-      assert s.assigns.board.cells.errors.sync == false
+      assert s.assigns.board.cells["errors"].title == "Errors"
+      assert s.assigns.board.cells["errors"].sync == false
 
       s = event(s, "board_cell", %{"_target" => ["ref"], "ref" => "style:3"})
-      assert s.assigns.board.cells.errors.ref == {:composite, 1}
+      assert s.assigns.board.cells["errors"].ref == {:composite, 1}
       assert s.assigns.notice =~ "composite"
     end
 
     test "a cell's variables are the ones its component declares; empty removes one" do
       s = event(opened(), "board_select", %{"cell" => "latency"})
       s = event(s, "board_cell_var", %{"_target" => ["var.unit"], "var.unit" => "%"})
-      assert s.assigns.board.cells.latency.vars == %{unit: "%"}
+      assert s.assigns.board.cells["latency"].vars == %{"unit" => "%"}
 
       s = event(s, "board_cell_var", %{"_target" => ["var.unit"], "var.unit" => ""})
-      refute Map.has_key?(s.assigns.board.cells.latency, :vars)
+      refute Map.has_key?(s.assigns.board.cells["latency"], :vars)
 
       before = s.assigns.board
       s = event(s, "board_cell_var", %{"_target" => ["var.nothing"], "var.nothing" => "1"})
@@ -401,7 +401,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert board.sync == "ops"
       assert board.stale_after == 30
       assert board.layout == %{gap: 4}
-      assert board.vars == %{unit: 12.5}
+      assert board.vars == %{"unit" => 12.5}
 
       s = event(s, "board_edit", %{"_target" => ["window"], "window" => "fixed"})
       %{from: from, to: to} = s.assigns.board.window
@@ -463,9 +463,9 @@ defmodule Visualize.Chart.BuilderBoardTest do
       pools = Map.new(s.assigns.board.cells, fn {name, _} -> {name, BuilderFixture.sources()} end)
       previews = Boards.preview(s.assigns.board, fetch, pools: pools)
 
-      assert {:error, [line]} = previews.cell_1
+      assert {:error, [line]} = previews["cell_1"]
       assert line =~ "composite:9" or line =~ "{:composite, 9}"
-      assert {:ok, "<svg" <> _} = previews.latency
+      assert {:ok, "<svg" <> _} = previews["latency"]
     end
   end
 
@@ -485,7 +485,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert s.assigns.chart == board_chart
       assert s.assigns.open.kind == :board
       assert length(s.assigns.charts) == charts
-      assert s.assigns.board_cell == :latency
+      assert s.assigns.board_cell == "latency"
     end
 
     test "a component saved before returning shows in the board, and its chart closes" do
@@ -530,7 +530,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       [{:house, house}, {:shared, shared}, panel] = BuilderFixture.layers()
 
       shared =
-        put_in(shared, [:sources, :primary], %{
+        put_in(shared, [:sources, "primary"], %{
           fields: [:t, :v],
           types: %{t: :number},
           requires: %{v: [:unit]}
@@ -568,8 +568,8 @@ defmodule Visualize.Chart.BuilderBoardTest do
       s = event(opened(), "board_select", %{"cell" => "latency"})
 
       assert s.assigns.binding.slots == %{
-               {:latency, :primary} => :primary,
-               {:errors, :primary} => :primary
+               {"latency", "primary"} => :primary,
+               {"errors", "primary"} => :primary
              }
 
       html = BuilderFixture.render(s)
@@ -577,7 +577,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert html =~ ~s(<select name="slot.primary">)
 
       s = event(s, "board_bind", %{"_target" => ["slot.primary"], "slot.primary" => ""})
-      assert s.assigns.binding.slots == %{{:errors, :primary} => :primary}
+      assert s.assigns.binding.slots == %{{"errors", "primary"} => :primary}
       binding = s.assigns.binding
       assert_received {:visualize_board_bound, "b", {:board, 1}, ^binding}
 
@@ -641,7 +641,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
     test "removing a cell removes its bindings, and adding one binds its slots by name" do
       s = opened()
       s = event(s, "board_remove", %{"cell" => "latency"})
-      assert s.assigns.binding.slots == %{{:errors, :primary} => :primary}
+      assert s.assigns.binding.slots == %{{"errors", "primary"} => :primary}
       assert_received {:visualize_board_bound, "b", {:board, 1}, %Binding{slots: slots}}
       assert map_size(slots) == 1
 
@@ -684,7 +684,10 @@ defmodule Visualize.Chart.BuilderBoardTest do
 
       assert html =~ ~s(<div class="vis-builder-fault">)
       assert html =~ ~s(data-vis-state="invalid")
-      assert html =~ "Wrong binding: marks[0].channels.x: field :t of slot :primary is a time"
+
+      assert html =~
+               "Wrong binding: marks[0].channels.x: field \"t\" of slot \"primary\" is a time"
+
       refute html =~ ~s(class="vis-builder-chart")
     end
 
@@ -701,7 +704,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
         })
 
       assert html =~ "vis-builder-fault"
-      assert html =~ "field :t of slot :primary is a category"
+      assert html =~ "field \"t\" of slot \"primary\" is a category"
 
       html = render_component(&Preview.panel/1, %{design: design, sources: %{primary: rows}})
       assert html =~ ~s(class="vis-builder-chart")
@@ -723,7 +726,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert html =~ "vis-builder-fault"
 
       assert html =~
-               "field :t of slot :primary is a time, and the scale it is read through needs a number"
+               "field \"t\" of slot \"primary\" is a time, and the scale it is read through needs a number"
 
       html =
         render_component(&Preview.panel/1, %{
@@ -750,7 +753,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert latency =~ ~r/<svg[^>]* class="vis-cell-state"[^>]* id="vis-builder-board-latency"/
 
       assert latency =~
-               "cells.latency.marks[0].channels.x: field :t of slot :primary is a category"
+               "cells.latency.marks[0].channels.x: field \"t\" of slot \"primary\" is a category"
 
       assert body(html, "errors") =~ "<svg"
       refute body(html, "errors") =~ "vis-builder-fault"
@@ -790,7 +793,7 @@ defmodule Visualize.Chart.BuilderBoardTest do
       assert Binding.fetch(s.assigns.binding, :latency, :primary) == {:ok, :stamps}
       latency = s |> BuilderFixture.render() |> body("latency")
       assert latency =~ "vis-builder-fault"
-      assert latency =~ "field :t of slot :primary is a time"
+      assert latency =~ "field \"t\" of slot \"primary\" is a time"
     end
   end
 end

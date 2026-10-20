@@ -12,6 +12,8 @@ defmodule Visualize.VirtualSource.Codec do
 
   alias Visualize.Board.Snapshot.Codec, as: SnapshotCodec
   alias Visualize.Chart.Codec
+  alias Visualize.Chart.Codec.Tags
+  require Tags
 
   # The source's own keys, looked up and never made atoms of (spec/14 §9.4, D-195).
   @keys Visualize.Vocabulary.table([:id, :from, :schema, :elixir, :function, :per])
@@ -23,9 +25,9 @@ defmodule Visualize.VirtualSource.Codec do
   def encode(source) when is_map(source) do
     Map.new(source, fn
       {:from, inputs} -> {"from", Enum.map(inputs, &input/1)}
-      {:schema, fields} -> {"schema", SnapshotCodec.schema_json(fields)}
+      {:schema, fields} -> {"schema", fields |> SnapshotCodec.schema_json() |> spelled_schema()}
       {:elixir, text} -> {"elixir", text}
-      {:function, name} -> {"function", name && Atom.to_string(name)}
+      {:function, name} -> {"function", name && to_string(name)}
       {:per, per} -> {"per", per(per)}
       {key, value} -> {Atom.to_string(key), Codec.encode_term(value)}
     end)
@@ -33,8 +35,15 @@ defmodule Visualize.VirtualSource.Codec do
 
   defp input({name, window}), do: [name(name), window(window)]
 
-  defp name(path) when is_list(path), do: Enum.map(path, &Codec.encode_term/1)
+  # A short id and a path's names are written as atoms were, `{"$atom": name}`, and a
+  # feed's own name as its string, so the JSON on disk is what it was (D-195).
+  defp name(path) when is_list(path), do: Enum.map(path, &id/1)
+  defp name({:feed, name}), do: to_string(name)
+  defp name(name) when is_binary(name), do: id(name)
   defp name(name), do: Codec.encode_term(name)
+
+  defp id(name) when is_binary(name), do: Tags.tag("$atom", name)
+  defp id(name), do: Codec.encode_term(name)
 
   defp window(nil), do: nil
   defp window(%{last: n}), do: %{"last" => n}
@@ -44,13 +53,38 @@ defmodule Visualize.VirtualSource.Codec do
       {:ranges, ranges} ->
         {"ranges",
          Enum.map(ranges, fn {field, range} ->
-           [Codec.encode_term(field), Enum.map(range, &Codec.encode_term/1)]
+           [id(field), Enum.map(range, &Codec.encode_term/1)]
          end)}
 
       {:latest, latest} ->
         {"latest", latest}
     end)
   end
+
+  # The output's fields, and a category field's values, are written as atoms were — the
+  # source holds them as strings (D-195) — so the JSON on disk is what it was.
+  defp spelled_schema(pairs) when is_list(pairs) do
+    Enum.map(pairs, fn [name, description] -> [atom_term(name), spelled(description)] end)
+  end
+
+  defp spelled_schema(other), do: other
+
+  defp spelled(description) do
+    Map.new(description, fn
+      {key, values} when key in ["values", "order"] and is_list(values) ->
+        {key, Enum.map(values, &atom_term/1)}
+
+      {"status", pairs} when is_list(pairs) ->
+        {"status", Enum.map(pairs, fn [k, v] -> [atom_term(k), v] end)}
+
+      attribute ->
+        attribute
+    end)
+  end
+
+  # A name held as a string, written as the atom it was.
+  defp atom_term(name) when is_binary(name), do: Tags.tag("$atom", name)
+  defp atom_term(other), do: other
 
   defp per(nil), do: nil
   defp per(:identity), do: "identity"
@@ -65,8 +99,9 @@ defmodule Visualize.VirtualSource.Codec do
       case known(key) do
         :from -> {:from, read_inputs(value)}
         :schema -> {:schema, SnapshotCodec.read_schema_json(value)}
-        # #778 class (a-host): a host function's name, looked up in the host's registry.
-        :function when is_binary(value) -> {:function, String.to_atom(value)}
+        # A host function's name is the host's vocabulary: kept as its string, found in the
+        # registry by spelling (spec/08 §10.5.8, D-195).
+        :function when is_binary(value) -> {:function, value}
         :per -> {:per, read_per(value)}
         other -> {other, value}
       end
@@ -84,8 +119,14 @@ defmodule Visualize.VirtualSource.Codec do
 
   defp read_inputs(other), do: other
 
-  defp read_name(path) when is_list(path), do: Enum.map(path, &Codec.decode_term/1)
-  defp read_name(name), do: Codec.decode_term(name)
+  # A name written as an atom is a short id or a path's name, its string; a plain string is
+  # a feed's own name (spec/08 §10.5.6, §10.5.10).
+  defp read_name(path) when is_list(path), do: Enum.map(path, &read_id/1)
+  defp read_name(name) when is_binary(name), do: {:feed, name}
+  defp read_name(name), do: read_id(name)
+
+  defp read_id(%{"$atom" => name} = term) when map_size(term) == 1 and is_binary(name), do: name
+  defp read_id(other), do: Codec.decode_term(other)
 
   defp read_window(nil), do: nil
   defp read_window(%{"last" => n} = window) when map_size(window) == 1, do: %{last: n}

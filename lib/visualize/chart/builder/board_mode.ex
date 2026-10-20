@@ -53,7 +53,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:noreply, socket}
 
         cell ->
-          rect = Map.new(~w(x y w h)a, &{&1, integer(Map.get(params, Atom.to_string(&1)))})
+          rect = Map.new(~w(x y w h)a, &{&1, integer(Map.get(params, to_string(&1)))})
 
           {:noreply,
            socket
@@ -420,8 +420,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
         cell = Map.fetch!(board.cells, name)
 
         Map.merge(rect, %{
-          name: Atom.to_string(name),
-          title: Map.get(cell, :title) || Atom.to_string(name),
+          name: to_string(name),
+          title: Map.get(cell, :title) || to_string(name),
           component: Map.get(names, cell.ref, Store.encode_id(cell.ref)),
           preview: Map.fetch!(previews, name),
           selected?: name == assigns.board_cell,
@@ -518,7 +518,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             end
 
           %{
-            name: Atom.to_string(slot),
+            name: to_string(slot),
             feed: feed,
             faults: for(fault <- faults, slot?(fault, cell, slot), do: Board.format_error(fault))
           }
@@ -540,7 +540,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           vars = Map.get(cell, :vars, %{})
 
           %{
-            name: Atom.to_string(name),
+            name: to_string(name),
             title: Map.get(cell, :title),
             ref: Store.encode_id(cell.ref),
             listed?: Map.has_key?(names, cell.ref),
@@ -548,7 +548,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             vars:
               for(
                 var <- declared(flat, cell.ref),
-                do: {Atom.to_string(var), shown(Map.get(vars, var))}
+                do: {to_string(var), shown(Map.get(vars, var))}
               )
           }
 
@@ -574,7 +574,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Enum.sort()
       |> Enum.map(fn name ->
         %{
-          name: Atom.to_string(name),
+          name: to_string(name),
           value: shown(Map.get(board.vars, name)),
           declared?: name in by_cells
         }
@@ -625,7 +625,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       for {{cell, slot}, _need} <- required(assigns),
           cell in cells,
           Binding.fetch(binding, cell, slot) == :error,
-          feed = Enum.find(feeds, &(Boards.feed_key(&1) == Atom.to_string(slot))),
+          feed = Enum.find(feeds, &(Boards.feed_key(&1) == to_string(slot))),
           feed != nil,
           reduce: binding do
         binding -> Binding.put(binding, cell, slot, feed)

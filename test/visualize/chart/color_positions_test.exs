@@ -231,7 +231,7 @@ defmodule Visualize.Chart.ColorPositionsTest do
     design = with_scale(design(%{fill: {:field, :k}}), %{kind: :ordinal, range: [:red, :nope]})
 
     assert {:error,
-            [{[:frames, :main, :scales, :color, :range, 1], {:undeclared, :color, :nope}}]} =
+            [{[:frames, "main", :scales, "color", :range, 1], {:undeclared, :color, :nope}}]} =
              Validator.validate(design)
   end
 
@@ -254,6 +254,6 @@ defmodule Visualize.Chart.ColorPositionsTest do
       ~s({"version": 3, "sources": {"cells": {"fields": ["k"]}}, "marks": [], "frames": {"main": {"kind": "cartesian", "scales": {"color": {"kind": "ordinal", "range": [{"$atom": "good"}, "#00ff00"]}}}}})
 
     assert {:ok, chart} = Chart.from_json(json)
-    assert chart.frames.main.scales.color.range == [{:color, :good}, "#00ff00"]
+    assert chart.frames["main"].scales["color"].range == [{:color, :good}, "#00ff00"]
   end
 end

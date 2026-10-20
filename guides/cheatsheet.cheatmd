@@ -359,7 +359,7 @@ Above about 1,000 points, prefer a canvas backend.
 ### Hybrid and live data
 
 ```elixir
-{:ok, %{main: compiled}} = Visualize.Chart.compile(applied)
+{:ok, %{"main" => compiled}} = Visualize.Chart.compile(applied)
 
 # Static furniture as SVG, dense marks on a canvas layer.
 hybrid = Visualize.Chart.Compiled.render(compiled, %{points: points})

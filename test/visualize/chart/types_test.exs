@@ -28,8 +28,9 @@ defmodule Visualize.Chart.TypesTest do
 
   defp schema(types), do: Schema.new!(Map.new(types, fn {f, t} -> {f, %{type: t}} end))
 
+  # A slot and a field are named by their strings (spec/14 §1.4, D-195).
   defp mismatch(path, field, expected, given),
-    do: {path, {:type_mismatch, :primary, field, expected, given}}
+    do: {path, {:type_mismatch, "primary", Atom.to_string(field), expected, given}}
 
   @x [:marks, 0, :channels, :x]
   @y [:marks, 0, :channels, :y]
@@ -274,11 +275,12 @@ defmodule Visualize.Chart.TypesTest do
 
       assert errors == [
                mismatch(@y, :v, :number, :category),
-               {[:sources, :primary, :requires, :v], {:missing_attribute, :primary, :v, :label}}
+               {[:sources, "primary", :requires, "v"],
+                {:missing_attribute, "primary", "v", :label}}
              ]
 
       assert Validator.format(hd(errors)) ==
-               "marks[0].channels.y: field :v of slot :primary is a category, and the scale " <>
+               ~s(marks[0].channels.y: field "v" of slot "primary" is a category, and the scale ) <>
                  "it is read through needs a number"
     end
 
@@ -314,7 +316,7 @@ defmodule Visualize.Chart.TypesTest do
     test "required sources carry each slot's reads" do
       {:ok, required} = Board.required_sources(board(), store())
 
-      assert required[{:a, :primary}].reads == [{@x, :t, :number}, {@y, :v, :number}]
+      assert required[{"a", "primary"}].reads == [{@x, "t", :number}, {@y, "v", :number}]
     end
 
     test "each bound slot's mismatches are reported under its cell" do
@@ -329,12 +331,12 @@ defmodule Visualize.Chart.TypesTest do
       assert Binding.check(binding, required, schemas) ==
                {:error,
                 [
-                  {[:cells, :a | @x], {:type_mismatch, :primary, :t, :number, :category}},
-                  {[:cells, :b | @x], {:type_mismatch, :primary, :t, :number, :time}}
+                  {[:cells, "a" | @x], {:type_mismatch, "primary", "t", :number, :category}},
+                  {[:cells, "b" | @x], {:type_mismatch, "primary", "t", :number, :time}}
                 ]}
 
       [error | _] = elem(Binding.check(binding, required, schemas), 1)
-      assert Board.format_error(error) =~ "cells.a.marks[0].channels.x: field :t of slot"
+      assert Board.format_error(error) =~ ~s(cells.a.marks[0].channels.x: field "t" of slot)
     end
 
     test "a schema wanted only for the type check is no fault where it cannot be had" do
@@ -352,20 +354,20 @@ defmodule Visualize.Chart.TypesTest do
       types = %{stamps: %{t: :time, v: :number}, numbers: %{t: :number, v: :number}}
 
       assert Binding.check_types(binding, required, types) ==
-               {:error, [{[:cells, :a | @x], {:type_mismatch, :primary, :t, :number, :time}}]}
+               {:error, [{[:cells, "a" | @x], {:type_mismatch, "primary", "t", :number, :time}}]}
 
       assert Binding.check_types(Binding.new(), required, types) == :ok
     end
   end
 
   describe "the invalid state (spec/15 §8.4)" do
-    @errors [{[:marks, 0, :channels, :x], {:type_mismatch, :primary, :t, :number, :category}}]
+    @errors [{[:marks, 0, :channels, :x], {:type_mismatch, "primary", "t", :number, :category}}]
 
     test "a wrong binding is a bad state, drawn with its first fault" do
       assert State.role({:invalid, @errors}) == :bad
 
       assert State.words({:invalid, @errors}) ==
-               "Wrong binding: marks[0].channels.x: field :t of slot :primary is a category, " <>
+               ~s(Wrong binding: marks[0].channels.x: field "t" of slot "primary" is a category, ) <>
                  "and the scale it is read through needs a number"
 
       svg = State.render({:invalid, @errors}, Visualize.Theme.default(), {400, 200})
@@ -376,7 +378,7 @@ defmodule Visualize.Chart.TypesTest do
     test "the runtime calls an application's type fault invalid, and any other down" do
       assert Draw.state({:apply, @errors}, nil, nil, nil) == {:invalid, @errors}
 
-      other = [{[:sources, :primary], {:no_schema, :primary}}]
+      other = [{[:sources, "primary"], {:no_schema, "primary"}}]
       assert Draw.state({:apply, other}, nil, nil, nil) == {:down, {:apply, other}}
     end
   end

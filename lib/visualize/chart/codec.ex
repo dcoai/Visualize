@@ -10,13 +10,12 @@ defmodule Visualize.Chart.Codec do
   # into one, so the walk cannot rebuild a struct as a plain map or a map as a struct.
 
   alias Visualize.Chart.Codec.Tags
-  alias Visualize.Chart.{Fact, Fragment, Limits, Migration, Schema, Use, Var}
+  alias Visualize.Chart.{Fact, Fragment, Limits, Migration, Schema, Use, Var, Words}
   alias Visualize.Chart.Validator.Types
   require Tags
   alias Visualize.{Theme, Vocabulary}
 
   @fixed_slots Theme.default() |> Theme.slots() |> Enum.reject(&(&1 in [:series_1]))
-  @series_slot ~r/^series_[1-9]\d*$/
   # A color name read from a document is made an atom only when it is plain words.
   @color_word ~r/^[a-z][a-z0-9_]*$/
   @unary Visualize.Color.Typed.ops()
@@ -26,7 +25,6 @@ defmodule Visualize.Chart.Codec do
   # singular wrapper, the theme's
   # fixed slots, a text's anchors, a frame's points, a fact's attributes, the units, the
   # ramps, a fragment's kinds and the color transforms.
-  @keys Vocabulary.table(Schema.key_names() ++ Migration.legacy_keys() ++ Fragment.wrapper_keys())
   @fixed_slot_names Vocabulary.table(@fixed_slots)
   @anchors Vocabulary.table(Types.anchors())
   @frame_points Vocabulary.table(Types.frame_points())
@@ -35,6 +33,13 @@ defmodule Visualize.Chart.Codec do
   @ramps Vocabulary.table(Theme.ramp_names())
   @kinds Vocabulary.table(Fragment.kinds())
   @unary_ops Vocabulary.table(@unary)
+  # A color name the library gives is its atom; any other is a name the theme declares, a
+  # string (spec/14 §9.4).
+  @color_names Vocabulary.table(Theme.library_color_names())
+  @theme_names Vocabulary.table(Theme.builtins())
+  @palette_names Vocabulary.table(Visualize.Theme.Palette.fixed_names())
+  @schemes Vocabulary.table(Visualize.Scale.Color.schemes())
+  @projections Vocabulary.table(Visualize.Geo.Projection.types())
   # A series slot is read up to the default `items` bound: a theme holds no more series than
   # a list holds entries, so `series_1` … `series_100000` is the whole set (class (d)).
   @series_bound Limits.defaults().items
@@ -72,20 +77,26 @@ defmodule Visualize.Chart.Codec do
 
   defp part?(v), do: is_map(v) and not is_struct(v)
 
+  # A name as it is written: an atom's spelling, a string as it is (spec/14 §1.4).
+  defguardp is_name(v) when is_binary(v) or (is_atom(v) and v not in [nil, true, false])
+
+  defp spell(v) when is_atom(v), do: Atom.to_string(v)
+  defp spell(v) when is_binary(v), do: v
+
   # A key that starts with `$` is written with one more, so data never spells a tag (D-182).
   defp key(k) when is_atom(k), do: k |> Atom.to_string() |> Tags.escape()
   defp key(k), do: k |> to_string() |> Tags.escape()
 
-  defp value(_type, %Var{name: name}), do: Tags.tag("$var", Atom.to_string(name))
+  defp value(_type, %Var{name: name}), do: Tags.tag("$var", spell(name))
   defp value(_type, %Fact{} = fact), do: term(fact)
-  defp value(_type, {:field, f}) when is_atom(f), do: Tags.tag("$field", Atom.to_string(f))
+  defp value(_type, {:field, f}) when is_name(f), do: Tags.tag("$field", spell(f))
 
   # A generator call (spec/14 §3.13, §11.2, #654): its name, then its arguments as terms.
-  defp value(_type, {:generate, name, args}) when is_atom(name) and is_list(args),
-    do: Tags.tag("$generate", [Atom.to_string(name), Enum.map(args, &term/1)])
+  defp value(_type, {:generate, name, args}) when is_name(name) and is_list(args),
+    do: Tags.tag("$generate", [spell(name), Enum.map(args, &term/1)])
 
-  defp value(:color, {:paint, name}) when is_atom(name),
-    do: Tags.tag("$paint", Atom.to_string(name))
+  defp value(:color, {:paint, name}) when is_name(name),
+    do: Tags.tag("$paint", spell(name))
 
   # A ramp position, and a whole ramp as a color scale's range (spec/14 §11.2, #533).
   defp value(:color, {:ramp, name, t}) when is_atom(name) and is_number(t),
@@ -95,8 +106,8 @@ defmodule Visualize.Chart.Codec do
 
   # A typed color (spec/14 §11.2, #664): a name, a transform with its color first, a blend's
   # list, the contrast ink over a color or over what is under.
-  defp value(:color, {:color, name}) when is_atom(name),
-    do: Tags.tag("$color", Atom.to_string(name))
+  defp value(:color, {:color, name}) when is_name(name),
+    do: Tags.tag("$color", spell(name))
 
   defp value(:color, {op, c, t}) when op in @unary and is_number(t),
     do: Tags.tag("$#{op}", [value(:color, c), t])
@@ -116,7 +127,7 @@ defmodule Visualize.Chart.Codec do
 
   # A theme's counterpart (spec/08 §7.3, #668): its name, or `null` for none.
   defp value(:counterpart, nil), do: nil
-  defp value(:counterpart, name) when is_atom(name), do: Atom.to_string(name)
+  defp value(:counterpart, name) when is_name(name), do: spell(name)
 
   defp value(:color, {:contrast, :under}), do: Tags.tag("$contrast", "under")
   defp value(:color, {:contrast, c}), do: Tags.tag("$contrast", value(:color, c))
@@ -150,7 +161,7 @@ defmodule Visualize.Chart.Codec do
     do: Atom.to_string(v)
 
   defp value({:enum, _}, v) when is_atom(v), do: Atom.to_string(v)
-  defp value({:ref, _}, v) when is_atom(v), do: Atom.to_string(v)
+  defp value({:ref, _}, v) when is_name(v), do: spell(v)
   defp value({:ref, _}, {kind, n} = id) when is_atom(kind) and is_integer(n), do: term(id)
   defp value(:slot, v) when is_atom(v), do: Atom.to_string(v)
   defp value(:slot, {:series, i}), do: Tags.tag("$series", i)
@@ -172,12 +183,12 @@ defmodule Visualize.Chart.Codec do
   defp value(:text, v) when is_binary(v), do: v
   defp value(:text, v) when is_list(v), do: Enum.map(v, &value(:term, &1))
   defp value(:anchor, v) when is_atom(v), do: Atom.to_string(v)
-  defp value(:anchor, {:axis, s}) when is_atom(s), do: Tags.tag("$axis", Atom.to_string(s))
+  defp value(:anchor, {:axis, s}) when is_name(s), do: Tags.tag("$axis", spell(s))
   defp value(:anchor, {:frame, c}) when is_atom(c), do: Tags.tag("$frame", Atom.to_string(c))
   defp value(:anchor, {:data, [x, y]}), do: Tags.tag("$data", [term(x), term(y)])
 
-  defp value(:adopted, {:frame, f, s}) when is_atom(f) and is_atom(s),
-    do: Tags.tag("$adopted", [Atom.to_string(f), Atom.to_string(s)])
+  defp value(:adopted, {:frame, f, s}) when is_name(f) and is_name(s),
+    do: Tags.tag("$adopted", [spell(f), spell(s)])
 
   defp value(:key_order, {:keys, keys}) when is_list(keys),
     do: Tags.tag("$keys", Enum.map(keys, &value(:name, &1)))
@@ -196,11 +207,11 @@ defmodule Visualize.Chart.Codec do
   defp category(:auto), do: "auto"
   defp category(v), do: term(v)
 
-  defp term(%Var{name: name}), do: Tags.tag("$var", Atom.to_string(name))
+  defp term(%Var{name: name}), do: Tags.tag("$var", spell(name))
 
   # A schema fact (spec/14 §7.4, §11.2): the slot, the field and the attribute.
   defp term(%Fact{source: s, field: f, key: k}),
-    do: Tags.tag("$fact", Enum.map([s, f, k], &Atom.to_string/1))
+    do: Tags.tag("$fact", Enum.map([s, f, k], &spell/1))
 
   defp term(%Use{id: {:use, n}} = use) do
     Tags.tag("$use", %{
@@ -209,7 +220,7 @@ defmodule Visualize.Chart.Codec do
       "mask" => if(use.mask == :all, do: "all", else: Enum.map(use.mask, &term/1)),
       "vars" => term(use.vars),
       "local" => term(use.local),
-      "key" => if(use.key, do: Atom.to_string(use.key)),
+      "key" => if(use.key, do: spell(use.key)),
       "origin" => if(use.origin, do: term(use.origin))
     })
   end
@@ -218,7 +229,7 @@ defmodule Visualize.Chart.Codec do
     if kind in Fragment.kinds(), do: Tags.tag("$id", [Atom.to_string(kind), n]), else: id
   end
 
-  defp term({:field, f}) when is_atom(f), do: Tags.tag("$field", Atom.to_string(f))
+  defp term({:field, f}) when is_name(f), do: Tags.tag("$field", spell(f))
   defp term(%DateTime{} = dt), do: Tags.tag("$time", DateTime.to_iso8601(dt))
   defp term(v) when is_number(v) or is_binary(v) or is_boolean(v) or is_nil(v), do: v
   defp term(v) when is_atom(v), do: Tags.tag("$atom", Atom.to_string(v))
@@ -256,7 +267,7 @@ defmodule Visualize.Chart.Codec do
         {:ok, k} ->
           case type_of(kind, k, flat?(kind, k, not json_part?(v))) do
             nil -> {k, unknown_value(kind, k, v)}
-            type -> {k, read(type, v)}
+            type -> {k, read_at(kind, k, type, v)}
           end
 
         :error ->
@@ -265,11 +276,54 @@ defmodule Visualize.Chart.Codec do
     end)
   end
 
-  defp schema_key(k) when is_binary(k), do: Vocabulary.fetch(@keys, k)
+  defp schema_key(k) when is_binary(k), do: Vocabulary.fetch(Words.keys(), k)
   defp schema_key(k), do: {:ok, k}
 
-  # #778 class (b): a fragment's body is read as a term, its keys made atoms until the
-  # names a document declares are strings.
+  # A theme's maps are keyed by the library's vocabularies (spec/08 §7.1, §7.7): a ramp, a
+  # palette name — the style series up to the bound — and a color, the library's or one the
+  # theme declares, which stays a string (spec/14 §9.4).
+  defp read_at(:theme, key, {:map, t}, v)
+       when key in [:ramps, :colors, :styles] and is_map(v) and not is_struct(v) do
+    Map.new(v, fn {name, e} -> {theme_key(key, name_key(name)), read(t, e)} end)
+  end
+
+  # A `:name` that holds a library's vocabulary, not a design's name (spec/14 §9.4): a
+  # design's built-in theme and a theme's own name, a color scheme, a projection's type.
+  defp read_at(kind, key, _type, v)
+       when {kind, key} in [{:design, :theme}, {:theme, :name}] and is_binary(v),
+       do: Vocabulary.read(@theme_names, v)
+
+  defp read_at(:scale, :range, type, "auto"), do: read(type, "auto")
+  defp read_at(:scale, :range, _type, v) when is_binary(v), do: Vocabulary.read(@schemes, v)
+
+  defp read_at(:projection, :type, _type, v) when is_binary(v),
+    do: Vocabulary.read(@projections, v)
+
+  defp read_at(_kind, _key, type, v), do: read(type, v)
+
+  defp theme_key(:ramps, name), do: Vocabulary.read(@ramps, name)
+  defp theme_key(:colors, name), do: Vocabulary.read(@color_names, name)
+
+  defp theme_key(:styles, name) do
+    case Vocabulary.fetch(@palette_names, name) do
+      {:ok, found} -> found
+      :error -> palette_series(name)
+    end
+  end
+
+  defp palette_series("style_" <> digits = name) do
+    case Integer.parse(digits) do
+      {k, ""} when k >= 1 and k <= @series_bound and binary_part(digits, 0, 1) != "0" ->
+        Visualize.Theme.Palette.series_name(k)
+
+      _other ->
+        name
+    end
+  end
+
+  defp palette_series(name), do: name
+
+  # A fragment's body is read as a term (spec/14 §19.7).
   defp unknown_value(:design, k, v) do
     if k == :composite or Fragment.singular(k), do: read_term(v), else: v
   end
@@ -283,33 +337,37 @@ defmodule Visualize.Chart.Codec do
 
   defp json_part?(v), do: is_map(v)
 
-  # #778 class (b): a name-keyed map's key — a source, frame, scale, style, variable, case.
-  defp atom(k) when is_binary(k), do: k |> Tags.unescape() |> String.to_atom()
-  defp atom(k), do: k
+  # A name-keyed map's key — a source, frame, scale, style, variable, case — is the name's
+  # string (spec/14 §1.4, D-195).
+  defp name_key(k) when is_binary(k), do: Tags.unescape(k)
+  defp name_key(k), do: k
 
-  # #778 class (b): a variable's name.
+  # A term's key: a schema key's atom where it spells one — a use site's local is a fragment —
+  # and otherwise the string, a row's field or a variable's (spec/14 §9.4).
+  defp term_key(k) when is_binary(k), do: k |> Tags.unescape() |> Words.key()
+
+  defp term_key(k), do: k
+
   defp read(_type, %{"$var" => name} = v) when map_size(v) == 1 and is_binary(name),
-    do: %Var{name: String.to_atom(name)}
+    do: %Var{name: name}
 
   defp read(_type, %{"$fact" => _} = v) when map_size(v) == 1, do: read_term(v)
 
-  # #778 class (b): a field's name.
   defp read(_type, %{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
-    do: {:field, String.to_atom(f)}
+    do: {:field, f}
 
-  # A generator's name is made an atom only when it is plain words; any other shape is left
-  # as the object it is, for the validator to refuse (#645's rule).
-  # #778 class (a-host): a generator registered by host code, looked up in its registry.
+  # A generator's name is plain words, or the object is left as it is for the validator to
+  # refuse (#645's rule). It is the host's vocabulary: the string, which the registry is
+  # read by (spec/14 §3.13, §9.4).
   defp read(_type, %{"$generate" => [name, args]} = v)
        when map_size(v) == 1 and is_binary(name) and is_list(args) do
     if Regex.match?(@color_word, name),
-      do: {:generate, String.to_atom(name), Enum.map(args, &read_term/1)},
+      do: {:generate, name, Enum.map(args, &read_term/1)},
       else: v
   end
 
-  # #778 class (b): a paint's name.
   defp read(:color, %{"$paint" => name} = v) when map_size(v) == 1 and is_binary(name),
-    do: {:paint, String.to_atom(name)}
+    do: {:paint, name}
 
   defp read(:color, %{"$ramp" => [name, t]} = v) when map_size(v) == 1 and is_number(t) do
     case ramp_name(name) do
@@ -326,12 +384,15 @@ defmodule Visualize.Chart.Codec do
 
   defp read(:theme_color, v), do: read(:color, v)
 
-  # #778 class (a-host): a theme's name — a built-in one, or one the host stores.
-  defp read(:counterpart, name) when is_binary(name), do: String.to_atom(name)
+  # A theme's counterpart: a built-in theme's atom, or the string naming one the host holds.
+  defp read(:counterpart, name) when is_binary(name), do: Vocabulary.read(@theme_names, name)
 
-  # #778 class (b): a color's name — a CSS name or a slot (a), or a theme's own color (b).
+  # A color's name: the library's atom — a CSS name, a slot, a role — or the string of a
+  # color the theme declares (spec/14 §9.4).
   defp read(:color, %{"$color" => name} = v) when map_size(v) == 1 and is_binary(name) do
-    if Regex.match?(@color_word, name), do: {:color, String.to_atom(name)}, else: v
+    if Regex.match?(@color_word, name),
+      do: {:color, color_name(name)},
+      else: v
   end
 
   defp read(:color, %{"$blend" => list} = v) when map_size(v) == 1 and is_list(list),
@@ -382,7 +443,7 @@ defmodule Visualize.Chart.Codec do
   defp read({:list, t}, v) when is_list(v), do: Enum.map(v, &read(t, &1))
 
   defp read({:map, t}, v) when is_map(v) and not is_struct(v) do
-    Map.new(v, fn {k, e} -> {atom(k), read(t, e)} end)
+    Map.new(v, fn {k, e} -> {name_key(k), read(t, e)} end)
   end
 
   # A string naming a member of an enumeration alternative is that member, whatever comes
@@ -395,17 +456,15 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  # #778 class (b): a name, a field, a channel's field.
-  defp read(type, v) when type in [:name, :field, :channel] and is_binary(v),
-    do: String.to_atom(v)
+  # A name, a field and a channel's field are the strings they are (spec/14 §1.4).
+  defp read(type, v) when type in [:name, :field, :channel] and is_binary(v), do: v
 
   # An enumeration's member is one of its list — or a palette role's `:cue`, which a theme's
   # entry gives a marker's shape (spec/14 §2.6) — and any other string stays one, refused
   # by type.
   defp read({:enum, _allowed}, "cue"), do: :cue
   defp read({:enum, allowed}, v) when is_binary(v), do: Vocabulary.read(allowed, v)
-  # #778 class (b): a reference to a declared name.
-  defp read({:ref, _}, v) when is_binary(v), do: String.to_atom(v)
+  defp read({:ref, _}, v) when is_binary(v), do: v
   defp read({:ref, _}, %{"$id" => _} = v), do: read_term(v)
   defp read(:slot, v) when is_binary(v), do: slot(v)
 
@@ -442,14 +501,12 @@ defmodule Visualize.Chart.Codec do
   defp read(:text, v) when is_list(v), do: Enum.map(v, &read_term/1)
   defp read(:anchor, v) when is_binary(v), do: Vocabulary.read(@anchors, v)
 
-  # #778 class (b): a frame's and a scale's names.
   defp read(:adopted, %{"$adopted" => [f, s]} = v)
        when map_size(v) == 1 and is_binary(f) and is_binary(s),
-       do: {:frame, String.to_atom(f), String.to_atom(s)}
+       do: {:frame, f, s}
 
-  # #778 class (b): a scale's name.
   defp read(:anchor, %{"$axis" => s} = v) when map_size(v) == 1 and is_binary(s),
-    do: {:axis, String.to_atom(s)}
+    do: {:axis, s}
 
   # A frame point is one of the plot's five; any other is left as the object it is.
   defp read(:anchor, %{"$frame" => c} = v) when map_size(v) == 1 and is_binary(c) do
@@ -483,16 +540,16 @@ defmodule Visualize.Chart.Codec do
     end
   end
 
-  defp series_slot("series_" <> digits = v) do
-    with true <- Regex.match?(@series_slot, v),
-         {k, ""} when k <= @series_bound <- Integer.parse(digits) do
-      Theme.series_atom(k)
-    else
-      _other -> v
+  defp series_slot(v), do: Words.series_slot(v)
+
+  # A color's name: the library's — a CSS name, a slot, a role, a series slot within the
+  # bound — or the string of one the theme declares.
+  defp color_name(name) do
+    case Vocabulary.fetch(@color_names, name) do
+      {:ok, found} -> found
+      :error -> series_slot(name)
     end
   end
-
-  defp series_slot(v), do: v
 
   # A ramp's name is one of the theme's four, so no atom is created from a document.
   defp ramp_name(name) when is_binary(name) do
@@ -520,9 +577,8 @@ defmodule Visualize.Chart.Codec do
   defp read_category("auto"), do: :auto
   defp read_category(v), do: read_term(v)
 
-  # #778 class (b): a variable's name.
   defp read_term(%{"$var" => name} = v) when map_size(v) == 1 and is_binary(name),
-    do: %Var{name: String.to_atom(name)}
+    do: %Var{name: name}
 
   # An id's kind must be one a fragment can have, so no atom is created from a document.
   defp read_term(%{"$id" => [kind, n]} = v) when map_size(v) == 1 and is_binary(kind) do
@@ -537,29 +593,28 @@ defmodule Visualize.Chart.Codec do
       id: {:use, n},
       ref: use |> Map.get("ref") |> read_ref(),
       mask: use |> Map.get("mask", []) |> read_mask(),
-      vars: use |> Map.get("vars", %{}) |> read_term(),
+      vars: use |> Map.get("vars", %{}) |> read_names(),
       local: use |> Map.get("local", %{}) |> read_term(),
       key: use |> Map.get("key") |> read_key(),
       origin: use |> Map.get("origin") |> read_ref()
     }
   end
 
-  # A fact's attribute is one of the feed schema's; its slot and field are #778 class (b).
+  # A fact's attribute is one of the feed schema's; its slot and field are names.
   defp read_term(%{"$fact" => [s, f, k]} = v)
        when map_size(v) == 1 and is_binary(s) and is_binary(f) and is_binary(k) do
     case Vocabulary.fetch(@attributes, k) do
-      {:ok, key} -> %Fact{source: String.to_atom(s), field: String.to_atom(f), key: key}
+      {:ok, key} -> %Fact{source: s, field: f, key: key}
       :error -> v
     end
   end
 
-  # #778 class (b): a field's name.
   defp read_term(%{"$field" => f} = v) when map_size(v) == 1 and is_binary(f),
-    do: {:field, String.to_atom(f)}
+    do: {:field, f}
 
-  # #778 class (b): a category value, a string matched by spelling once names are strings.
+  # A category value: the library's atom of its spelling, or the string (D-195).
   defp read_term(%{"$atom" => a} = v) when map_size(v) == 1 and is_binary(a),
-    do: String.to_atom(a)
+    do: Words.word(a)
 
   defp read_term(%{"$time" => iso} = v) when map_size(v) == 1 and is_binary(iso) do
     case DateTime.from_iso8601(iso) do
@@ -570,18 +625,22 @@ defmodule Visualize.Chart.Codec do
 
   defp read_term(v) when is_list(v), do: Enum.map(v, &read_term/1)
 
-  # #778 class (b): a term's keys — a row's fields, a variable's value, a use site's local.
   defp read_term(v) when is_map(v) and not is_struct(v),
-    do: Map.new(v, fn {k, e} -> {atom(k), read_term(e)} end)
+    do: Map.new(v, fn {k, e} -> {term_key(k), read_term(e)} end)
 
   defp read_term(v), do: v
+
+  # A use site binds variables by name: its keys are the names' strings (spec/14 §19.4).
+  defp read_names(vars) when is_map(vars),
+    do: Map.new(vars, fn {k, v} -> {name_key(k), read_term(v)} end)
+
+  defp read_names(other), do: read_term(other)
 
   defp read_ref(nil), do: nil
   defp read_ref(v), do: read_term(v)
 
   defp read_key(nil), do: nil
-  # #778 class (b): a use site's key.
-  defp read_key(key) when is_binary(key), do: String.to_atom(key)
+  defp read_key(key) when is_binary(key), do: key
 
   defp read_mask("all"), do: :all
   defp read_mask(paths) when is_list(paths), do: Enum.map(paths, &read_term/1)

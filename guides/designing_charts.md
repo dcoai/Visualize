@@ -42,8 +42,9 @@ readings = [
 design.marks
 ```
 
-The result is just a map (`design.frames.main.scales` is
-`%{x: %{kind: :time}, y: %{kind: :linear, domain: [:auto, 100]}}`). The builder adds
+The result is just a map (`design.frames["main"].scales` is
+`%{"x" => %{kind: :time}, "y" => %{kind: :linear, domain: [:auto, 100]}}`: a name the design
+declares is a string, whichever spelling it was written in). The builder adds
 only schema checks: a misspelled option raises `ArgumentError` at the call.
 
 A design becomes a picture in three steps:
@@ -107,7 +108,7 @@ columns = %{t: Enum.map(readings, & &1.t), v: Enum.map(readings, & &1.v)}
 {:ok, _} = Visualize.Chart.apply(typed, sources: %{gitlab: columns})
 
 # Every declared field must be in the rows.
-{:error, [{[:sources, :uptime], {:missing_field, :v}}]} =
+{:error, [{[:sources, "uptime"], {:missing_field, "v"}}]} =
   Visualize.Chart.apply(typed, sources: %{gitlab: [%{t: ~U[2026-10-01 00:00:00Z]}]})
 ```
 
@@ -487,8 +488,8 @@ import Visualize.Chart.Build
 {:ok, panel} = Visualize.Chart.compose([style(:series, stroke: %{width: 3}), axis(:x, :bottom, ticks: 8)])
 
 # The union refuses the second :series; the cascade takes the higher layer's word.
-{:error, [{[:styles, :series], :conflict}]} = Visualize.Chart.compose(house, panel)
-%{stroke: %{width: 3}} = Visualize.Chart.stack([house, panel]).styles.series
+{:error, [{[:styles, "series"], :conflict}]} = Visualize.Chart.compose(house, panel)
+%{stroke: %{width: 3}} = Visualize.Chart.stack([house, panel]).styles["series"]
 
 Visualize.Chart.explain([{:house, house}, {:panel, panel}])
 ```
@@ -525,7 +526,7 @@ uses = [Use.new({:design, 1}), %Use{id: {:use, 2}, ref: {:style, 1}}]
 composite = %{composite: %{uses: uses, vars: %{}}}
 
 {:ok, flat, %{missing: []}} = Visualize.Chart.flatten(composite, &Map.fetch(store, &1))
-flat.styles.series
+flat.styles["series"]
 ```
 
 **Validation** happens at `Visualize.Chart.from_map/1` and `apply/2`. It reports every

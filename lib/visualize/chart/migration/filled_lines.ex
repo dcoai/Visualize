@@ -108,7 +108,8 @@ defmodule Visualize.Chart.Migration.FilledLines do
   defp frame_of(mark) when is_map(mark), do: Map.get(mark, :frame)
   defp frame_of(_mark), do: nil
 
-  defp theme(name) when is_atom(name) and name != nil, do: Theme.builtin(name) || Theme.default()
+  defp theme(name) when is_binary(name) or (is_atom(name) and name != nil),
+    do: Theme.builtin(name) || Theme.default()
 
   defp theme(%{styles: styles}) when is_map(styles) and not is_struct(styles),
     do: Theme.build(Theme.default(), styles: styles)

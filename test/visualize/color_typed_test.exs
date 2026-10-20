@@ -149,13 +149,13 @@ defmodule Visualize.ColorTypedTest do
       assert_raise ArgumentError, ~r/write color\(:text\)/, fn -> contrast(:text) end
     end
 
-    test "every number is in 0..1, and a name is an atom" do
+    test "every number is in 0..1, and a name is an atom or a string" do
       for bad <- [-0.1, 1.5, :half, nil] do
         assert_raise ArgumentError, ~r/a number in 0\.\.1/, fn -> alpha(color(:red), bad) end
       end
 
       assert_raise ArgumentError, ~r/a color name is an atom/, fn -> color(nil) end
-      assert_raise ArgumentError, ~r/a color name is an atom/, fn -> color("red") end
+      assert_raise ArgumentError, ~r/a color name is an atom/, fn -> color(3) end
       assert_raise ArgumentError, ~r/a number in 0\.\.1/, fn -> ramp(:thermal, 2) end
       assert_raise ArgumentError, ~r/non-empty list/, fn -> blend([]) end
     end

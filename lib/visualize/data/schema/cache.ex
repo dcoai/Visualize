@@ -48,12 +48,19 @@ defmodule Visualize.Data.Schema.Cache do
   @doc "The cache with a feed's schema added under its version."
   @spec put(t(), feed(), Schema.t()) :: t()
   def put(%__MODULE__{entries: entries} = cache, feed, %Schema{version: version} = schema),
-    do: %{cache | entries: Map.put(entries, {feed, version}, schema)}
+    do: %{cache | entries: Map.put(entries, {spelled(feed), version}, schema)}
 
   @doc "A feed's schema at a version, or `:error` when the cache does not hold it."
   @spec fetch(t(), feed(), String.t()) :: {:ok, Schema.t()} | :error
   def fetch(%__MODULE__{entries: entries}, feed, version),
-    do: Map.fetch(entries, {feed, version})
+    do: Map.fetch(entries, {spelled(feed), version})
+
+  # A feed is one feed whichever spelling names it (spec/14 §9.4, D-195): a host keys its
+  # pool by atom or string, a design and a board name a slot by its string.
+  defp spelled(feed) when is_atom(feed) and feed not in [nil, true, false],
+    do: Atom.to_string(feed)
+
+  defp spelled(feed), do: feed
 
   @doc """
   A feed's schema at a version (spec/08 §10.3): the cached one without calling anything,

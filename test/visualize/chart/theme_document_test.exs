@@ -73,10 +73,10 @@ defmodule Visualize.Chart.ThemeDocumentTest do
       assert Document.from_map(%{theme: :color_safe}) == {:ok, Theme.color_safe()}
 
       assert Document.from_map(%{theme: :house}) ==
-               {:error, [{[:theme], {:unknown_theme, :house}}]}
+               {:error, [{[:theme], {:unknown_theme, "house"}}]}
 
-      assert Validator.format({[:theme], {:unknown_theme, :house}}) =~
-               "names the theme :house, which is not built-in"
+      assert Validator.format({[:theme], {:unknown_theme, "house"}}) =~
+               "names the theme \"house\", which is not built-in"
     end
 
     test "a partial node names only what it changes; the rest is the default's" do
@@ -135,7 +135,7 @@ defmodule Visualize.Chart.ThemeDocumentTest do
 
     test "a variable is not a theme's: nothing applies a theme document" do
       assert Document.from_map(%{theme: %{axis: Visualize.Chart.var(:ink)}}) ==
-               {:error, [{[:theme, :axis], {:unresolved, :var, :ink}}]}
+               {:error, [{[:theme, :axis], {:unresolved, :var, "ink"}}]}
     end
 
     test "an unknown key, a key beside the theme, and a map that is no theme are refused" do

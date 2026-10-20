@@ -153,7 +153,7 @@ defmodule Visualize.Theme do
   @type mode :: :css | :literal
 
   @type t :: %__MODULE__{
-          name: atom(),
+          name: atom() | String.t(),
           series: [String.t(), ...],
           axis: String.t(),
           grid: String.t(),
@@ -161,15 +161,15 @@ defmodule Visualize.Theme do
           background: String.t(),
           surface: String.t(),
           ramps: %{optional(ramp_name()) => [String.t()]},
-          colors: %{optional(atom()) => String.t() | Color.value()},
+          colors: %{optional(atom() | String.t()) => String.t() | Color.value()},
           styles: %{optional(atom()) => map()},
           defaults: map(),
           font_family: String.t(),
           font_size: number(),
           label_size: number(),
           title_size: number(),
-          dark: atom() | nil,
-          light: atom() | nil
+          dark: atom() | String.t() | nil,
+          light: atom() | String.t() | nil
         }
 
   @color_slots [:axis, :grid, :text, :background, :surface]
@@ -181,6 +181,19 @@ defmodule Visualize.Theme do
   @size_slots [:font_size, :label_size, :title_size]
   @fixed_slots @color_slots ++ @role_slots ++ [:font_family] ++ @size_slots
   @builtin [:default, :dark, :color_safe, :print]
+  # Every color name the library itself gives (spec/08 §7.1, spec/14 §9.4): a document's
+  # color name is read as one of these atoms, and any other as the string it is, a name the
+  # theme declares.
+  @library_color_names Enum.uniq(
+                         @fixed_slots ++
+                           Map.keys(@light_colors) ++ Map.keys(@dark_colors) ++ @css_names
+                       )
+
+  @library_spellings Map.new(@library_color_names, &{Atom.to_string(&1), true})
+
+  @doc false
+  @spec library_color_names() :: [atom(), ...]
+  def library_color_names, do: @library_color_names
 
   @doc "The light theme: dark text and axes on white (spec/08 §7.2)."
   @spec default() :: t()
@@ -244,7 +257,15 @@ defmodule Visualize.Theme do
       nil
 
   """
-  @spec builtin(atom()) :: t() | nil
+  @spec builtin(atom() | String.t()) :: t() | nil
+  # A document names a built-in theme by its string (spec/14 §9.4).
+  def builtin(name) when is_binary(name) do
+    case Enum.find(@builtin, &(Atom.to_string(&1) == name)) do
+      nil -> nil
+      found -> builtin(found)
+    end
+  end
+
   def builtin(:default), do: default()
   def builtin(:dark), do: dark()
   def builtin(:color_safe), do: color_safe()
@@ -331,6 +352,14 @@ defmodule Visualize.Theme do
   def style(%__MODULE__{} = theme, {:style, i}) when is_integer(i) and i >= 1 do
     series = theme |> own_styles() |> Palette.series()
     style(theme, Enum.at(series, rem(i - 1, length(series))))
+  end
+
+  # A design names a palette style by its string (spec/14 §1.4, D-195).
+  def style(%__MODULE__{} = theme, name) when is_binary(name) do
+    case Enum.find(style_names(theme), &(Atom.to_string(&1) == name)) do
+      nil -> style(theme, {:unknown, name})
+      found -> style(theme, found)
+    end
   end
 
   def style(%__MODULE__{} = theme, name) when is_atom(name) do
@@ -436,7 +465,7 @@ defmodule Visualize.Theme do
       iex> Visualize.Theme.style(theme, :muted)
       %{opacity: 0.4}
       iex> Visualize.Theme.new(name: :house, colors: %{warning: "#f5c242"})
-      ** (ArgumentError) theme :house: style :warning breaks its contract: fill {:color, :warning} is 1.65:1 against #ffffff; a role style's paint must reach 3:1 (WCAG 1.4.11, non-text contrast)
+      ** (ArgumentError) theme "house": style :warning breaks its contract: fill {:color, :warning} is 1.65:1 against #ffffff; a role style's paint must reach 3:1 (WCAG 1.4.11, non-text contrast)
 
   """
   @spec merge(t(), keyword() | map()) :: t()
@@ -469,12 +498,16 @@ defmodule Visualize.Theme do
     {roles, fields} = Map.pop(fields, :roles, %{})
     {colors, fields} = Map.pop(fields, :colors, %{})
     {styles, fields} = Map.pop(fields, :styles, %{})
-    theme = struct!(theme, fields)
+    # A theme's names as a document reads them (D-195).
+    theme = struct!(theme, Visualize.Theme.Names.fields(fields))
 
     %{
       theme
       | ramps: merged(theme.ramps, ramps, :ramps),
-        colors: theme.colors |> merged(roles, :roles) |> merged(colors, :colors),
+        colors:
+          theme.colors
+          |> merged(roles, :roles)
+          |> merged(Visualize.Theme.Names.colors(colors), :colors),
         styles: theme.styles |> merged(styles, :styles) |> normalized()
     }
   end
@@ -749,9 +782,14 @@ defmodule Visualize.Theme do
   @spec color_name?(t(), term()) :: boolean()
   def color_name?(%__MODULE__{} = theme, name) when is_atom(name) do
     name in @color_slots or name in @role_slots or Map.has_key?(@css_set, name) or
-      Map.has_key?(@light_colors, name) or Map.has_key?(own_colors(theme), name) or
+      Map.has_key?(@light_colors, name) or own_color(theme, name) != nil or
       series_slot?(theme, name)
   end
+
+  # A name a theme declares is a string when it came from a document (spec/14 §9.4, D-195);
+  # the library's own names are atoms, so a string of one names none.
+  def color_name?(%__MODULE__{} = theme, name) when is_binary(name),
+    do: not Map.has_key?(@library_spellings, name) and own_color(theme, name) != nil
 
   def color_name?(%__MODULE__{}, _name), do: false
 
@@ -798,12 +836,12 @@ defmodule Visualize.Theme do
 
   def resolve(%__MODULE__{} = theme, {:ramp, name, t}, _mode), do: ramp(theme, name, t)
 
-  def resolve(%__MODULE__{} = theme, slot, :literal) when is_atom(slot) do
+  def resolve(%__MODULE__{} = theme, slot, :literal) when is_atom(slot) or is_binary(slot) do
     {_kind, value} = value(theme, slot)
     value
   end
 
-  def resolve(%__MODULE__{} = theme, slot, :css) when is_atom(slot) do
+  def resolve(%__MODULE__{} = theme, slot, :css) when is_atom(slot) or is_binary(slot) do
     {kind, value} = value(theme, slot)
     "var(#{property(slot)}, #{css_value(kind, value)})"
   end
@@ -831,7 +869,7 @@ defmodule Visualize.Theme do
   defp property(slot) do
     cond do
       slot in @fixed_slots or series_index(slot) != nil -> css_name(slot)
-      Regex.match?(@css_word, Atom.to_string(slot)) -> "--vis-" <> hyphenated(slot)
+      Regex.match?(@css_word, to_string(slot)) -> "--vis-" <> hyphenated(slot)
       true -> raise ArgumentError, "a color name is lower-case words, got #{inspect(slot)}"
     end
   end
@@ -1022,8 +1060,23 @@ defmodule Visualize.Theme do
   # the default's, never a series color (§7.5) — or the CSS named color's hex; `nil` when
   # the table has no such name.
   defp lookup(theme, name) do
-    Map.get(own_colors(theme), name) || Map.get(@light_colors, name) ||
+    own_color(theme, name) || Map.get(@light_colors, name) ||
       if(Map.has_key?(@css_set, name), do: Color.named(Atom.to_string(name)))
+  end
+
+  # A theme's own color by either spelling of its name: a document's theme names its own
+  # colors by string, a host's may by atom, and a design reaches one by either (D-195).
+  defp own_color(theme, name) do
+    case own_colors(theme) do
+      %{^name => value} ->
+        value
+
+      own when is_atom(name) ->
+        Map.get(own, Atom.to_string(name))
+
+      own ->
+        Enum.find_value(own, fn {k, v} -> if is_atom(k) and Atom.to_string(k) == name, do: v end)
+    end
   end
 
   # A name's literal. `seen` carries the names on the way, so an entry that reaches itself
@@ -1078,7 +1131,7 @@ defmodule Visualize.Theme do
     value = Map.fetch!(own_colors(theme), name)
 
     cond do
-      not Regex.match?(@css_word, Atom.to_string(name)) ->
+      not Regex.match?(@css_word, to_string(name)) ->
         {:error, "a color name is lower-case letters, digits and _, starting with a letter"}
 
       is_binary(value) ->
@@ -1140,7 +1193,7 @@ defmodule Visualize.Theme do
   def series_atom(k) when is_integer(k) and k >= 1, do: :"series_#{k}"
 
   defp series_index(slot) do
-    case Atom.to_string(slot) do
+    case to_string(slot) do
       "series_" <> rest ->
         case Integer.parse(rest) do
           {k, ""} -> k
@@ -1152,5 +1205,5 @@ defmodule Visualize.Theme do
     end
   end
 
-  defp hyphenated(slot), do: slot |> Atom.to_string() |> String.replace("_", "-")
+  defp hyphenated(slot), do: slot |> to_string() |> String.replace("_", "-")
 end

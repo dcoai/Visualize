@@ -79,6 +79,8 @@ defmodule Visualize.Board.RuntimeTest do
 
   # The next view of a cell this process receives.
   defp view(cell) do
+    cell = to_string(cell)
+
     receive do
       {:visualize_board, _board, {:cell, ^cell, %View{} = view}} -> view
     end
@@ -106,7 +108,7 @@ defmodule Visualize.Board.RuntimeTest do
       {:ok, info} = Server.subscribe(board)
 
       assert info.zone == "Etc/UTC" and info.width == 1200
-      assert info.cells |> Map.keys() |> Enum.sort() == [:a, :b]
+      assert info.cells |> Map.keys() |> Enum.sort() == ["a", "b"]
 
       a = view_until(:a, &(&1.state == :live))
       assert a.title == "A" and a.note == nil and a.frames >= 1
@@ -118,7 +120,7 @@ defmodule Visualize.Board.RuntimeTest do
     end
 
     test "a board that does not validate, or whose binding names an absent feed, is not started" do
-      assert {:error, {:board, [{[:cells, :a, :ref], {:dangling, {:composite, 1}}} | _]}} =
+      assert {:error, {:board, [{[:cells, "a", :ref], {:dangling, {:composite, 1}}} | _]}} =
                start(store: %{})
 
       {feeds, binding, _a, _b} = two_feeds()
@@ -129,10 +131,10 @@ defmodule Visualize.Board.RuntimeTest do
       {:ok, components} =
         Board.components(board(%{sync: "ops", zone: "Europe/Oslo"}), %{{:composite, 1} => @line})
 
-      %{chart: chart, vars: vars} = components.a
+      %{chart: chart, vars: vars} = components["a"]
       assert chart.interaction.sync == "ops"
-      assert chart.frames.main.scales.x.zone == "Europe/Oslo"
-      refute Map.has_key?(chart.frames.main.scales.y, :zone)
+      assert chart.frames["main"].scales["x"].zone == "Europe/Oslo"
+      refute Map.has_key?(chart.frames["main"].scales["y"], :zone)
       assert vars == %{}
     end
 
@@ -156,7 +158,7 @@ defmodule Visualize.Board.RuntimeTest do
       first_b = view_until(:b, &(&1.frames == 1))
 
       # Cell a stops answering, as a cell stuck in a long render does.
-      slow = Server.info(board).cells.a.pid
+      slow = Server.info(board).cells["a"].pid
       :sys.suspend(slow)
 
       for shift <- 1..5 do
@@ -198,12 +200,12 @@ defmodule Visualize.Board.RuntimeTest do
       :ok = Server.tick(board)
       assert Process.alive?(board)
       info = Server.info(board)
-      assert info.cells.b.state == :live and is_pid(info.cells.b.pid)
+      assert info.cells["b"].state == :live and is_pid(info.cells["b"].pid)
 
       # Restarted after its backoff, and killed again on the same data.
       again = view_until(:a, &match?({:crashed, _}, &1.state))
       assert again.state == {:crashed, :killed}
-      assert Server.info(board).cells.a.restarts >= 2
+      assert Server.info(board).cells["a"].restarts >= 2
       assert b.frames >= 1
     end
 
@@ -256,7 +258,7 @@ defmodule Visualize.Board.RuntimeTest do
 
       Server.subscribe(board)
 
-      assert view_until(:unbound, &(&1.state != :loading)).state == {:down, {:unbound, :primary}}
+      assert view_until(:unbound, &(&1.state != :loading)).state == {:down, {:unbound, "primary"}}
       assert view_until(:down, &(&1.state != :loading)).state == {:down, :timeout}
       assert view_until(:empty, &(&1.state != :loading)).state == :no_data
 
@@ -269,7 +271,7 @@ defmodule Visualize.Board.RuntimeTest do
 
       # The board's now moves on; nothing new arrives, and the cell grows stale. The old
       # board's cell is gone before its views are dropped, so none of them is read below.
-      old_cell = Process.monitor(Server.info(board).cells.old.pid)
+      old_cell = Process.monitor(Server.info(board).cells["old"].pid)
       Server.stop(board)
       assert_receive {:DOWN, ^old_cell, :process, _, _}
       flush_views()
@@ -384,15 +386,17 @@ defmodule Visualize.Board.RuntimeTest do
 
       :ok = Server.tick(board)
       snapshot = Server.snapshot(board)
-      a = snapshot.cells.a.slots.primary
+      a = snapshot.cells["a"].slots["primary"]
       assert a.status == :live
       assert Enum.map(a.delivery.rows, & &1.t) == Enum.to_list(7..30)
-      assert snapshot.cells.b.slots.primary.status == :live
+      assert snapshot.cells["b"].slots["primary"].status == :live
 
       # A brush is a window of instants: it moves the stamped feed and leaves the ticks be.
       :ok = Server.window(board, %{from: DateTime.add(@t0, 600), to: DateTime.add(@t0, 900)})
       snapshot = Server.snapshot(board)
-      assert Enum.map(snapshot.cells.a.slots.primary.delivery.rows, & &1.t) == Enum.to_list(7..30)
+
+      assert Enum.map(snapshot.cells["a"].slots["primary"].delivery.rows, & &1.t) ==
+               Enum.to_list(7..30)
     end
 
     test "out-of-order rows land in order, and a gap beyond continuity breaks the line" do

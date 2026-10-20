@@ -34,7 +34,7 @@ defmodule Visualize.Chart.Compiled.Regions do
   @typedoc "The frame's drawing order: regions, and a centered group of regions (polar)."
   @type layout :: [region() | {:centered, [region()]}]
 
-  @polar_scales [:angle, :r]
+  @polar_scales ["angle", "r"]
 
   @doc false
   # The layout and the regions of a chart, given the name of its viewport scale or `nil`.
@@ -215,7 +215,7 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   defp position_scales(%{kind: :polar} = node), do: declared(node, @polar_scales)
   defp position_scales(%{kind: :geo}), do: []
-  defp position_scales(node), do: declared(node, [:x, :y])
+  defp position_scales(node), do: declared(node, ["x", "y"])
 
   defp declared(node, names),
     do: Enum.filter(names, &Map.has_key?(Map.get(node, :scales, %{}), &1))

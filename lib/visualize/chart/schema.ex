@@ -117,6 +117,12 @@ defmodule Visualize.Chart.Schema do
   @by_key Map.new(@tables, fn {kind, specs} -> {kind, Map.new(specs, &{&1.key, &1})} end)
   # Every key any node kind has: the vocabulary a document's keys are read in (spec/14 §9.4).
   @key_names @tables |> Map.values() |> List.flatten() |> Enum.map(& &1.key) |> Enum.uniq()
+  # Every member of every enumeration a key may take, nested types included.
+  @enum_members @tables
+                |> Map.values()
+                |> List.flatten()
+                |> Enum.flat_map(&Visualize.Chart.Schema.Spec.enum_members(&1.type))
+                |> Enum.uniq()
 
   @doc "Every node kind of spec/14 §1.2, the design first."
   @spec kinds() :: [kind(), ...]
@@ -148,6 +154,12 @@ defmodule Visualize.Chart.Schema do
   # Every key of every node kind, the hidden ones included, once each (spec/14 §9.4, D-195).
   @spec key_names() :: [atom(), ...]
   def key_names, do: @key_names
+
+  @doc false
+  # Every enumeration member of the schema (spec/14 §9.4): the words a category value read
+  # from a document may be the library's own atom of.
+  @spec enum_members() :: [atom()]
+  def enum_members, do: @enum_members
 
   @doc "Every `{kind, key}` pair carrying the facet, over every node kind (spec/14 §1.3)."
   @spec keys(facet()) :: [{kind(), atom()}]
@@ -250,7 +262,7 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:string, v), do: is_binary(v)
   defp shape?(:size, v), do: is_number(v) or is_atom(v) or is_tuple(v)
   defp shape?(:length, v), do: is_number(v) or is_tuple(v)
-  defp shape?(:channel, v), do: is_number(v) or is_atom(v) or is_tuple(v)
+  defp shape?(:channel, v), do: is_number(v) or is_atom(v) or is_binary(v) or is_tuple(v)
   defp shape?(:field_ref, v), do: is_tuple(v)
   defp shape?(:adopted, v), do: match?({:frame, _f, _s}, v)
   defp shape?(:key_order, v), do: match?({:keys, keys} when is_list(keys), v)
@@ -266,8 +278,8 @@ defmodule Visualize.Chart.Schema do
   defp shape?(:counterpart, v), do: is_atom(v)
   # An enumeration is atoms, so a tagged tuple beside one is never read as it (#492).
   defp shape?({:enum, _}, v), do: is_atom(v)
-  # A name is an atom, so a string beside one is read as the string it is (D-170).
-  defp shape?(:name, v), do: is_atom(v)
+  # A name is a string, or an atom Elixir input spells one with (D-195).
+  defp shape?(:name, v), do: is_atom(v) or is_binary(v)
   defp shape?(:term, _), do: true
   defp shape?(_atomic, v), do: is_atom(v) or is_tuple(v) or is_binary(v)
 end

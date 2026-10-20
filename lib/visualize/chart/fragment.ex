@@ -78,24 +78,25 @@ defmodule Visualize.Chart.Fragment do
   The path of a design's frame, and its name (spec/14 §2.1, #383): a design holds its
   frames by name, so the builder addresses `frames.<name>` where it used to address
   `frame`. A design with one frame gives that one, whatever it is called; an empty or
-  many-framed fragment gives `:main`, the name a migrated design takes (§9).
+  many-framed fragment gives `"main"`, the name a migrated design takes (§9). A name is
+  its string (§1.4, D-195).
 
       iex> Visualize.Chart.Fragment.frame_path(%{frames: %{history: %{kind: :cartesian}}})
       [:frames, :history]
 
       iex> Visualize.Chart.Fragment.frame_path(%{})
-      [:frames, :main]
+      [:frames, "main"]
   """
-  @spec frame_path(map()) :: [atom()]
+  @spec frame_path(map()) :: [atom() | String.t()]
   def frame_path(design), do: [:frames, frame_name(design)]
 
-  @doc "The name of a design's frame; `:main` when it has none or several."
-  @spec frame_name(term()) :: atom()
+  @doc "The name of a design's frame; `\"main\"` when it has none or several."
+  @spec frame_name(term()) :: String.t() | atom()
   def frame_name(%{frames: frames}) when is_map(frames) and map_size(frames) == 1 do
     frames |> Map.keys() |> hd()
   end
 
-  def frame_name(_design), do: :main
+  def frame_name(_design), do: "main"
 
   @doc """
   The frame a node of a design is drawn in (spec/14 §2.1, §18.16): a mark's or a label's
@@ -113,12 +114,14 @@ defmodule Visualize.Chart.Fragment do
       iex> Visualize.Chart.Fragment.frame_of(%{frames: %{history: %{}}}, nil)
       :history
   """
-  @spec frame_of(term(), term()) :: atom()
-  def frame_of(_design, %{frame: frame}) when is_atom(frame) and frame != nil, do: frame
+  @spec frame_of(term(), term()) :: String.t() | atom()
+  def frame_of(_design, %{frame: frame})
+      when is_binary(frame) or (is_atom(frame) and frame != nil),
+      do: frame
 
   def frame_of(%{frames: frames}, _node) when is_map(frames) and map_size(frames) > 1 do
-    if Map.has_key?(frames, :main),
-      do: :main,
+    if Map.has_key?(frames, "main"),
+      do: "main",
       else: frames |> Map.keys() |> Enum.min_by(&to_string/1)
   end
 

@@ -69,7 +69,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
         Builder.handle_event("place", %{"component" => "axis", "x" => 410, "y" => 200}, s)
 
       # In a design of two frames the axis is written into `now` itself (#615).
-      assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
+      assert Writes.composed(s).frames["now"].axes == [%{scale: "y", side: :left}]
     end
   end
 
@@ -113,7 +113,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
           s
         )
 
-      assert [%{now: %{box: [0.5, 0, 0.5, 0.5]}}] = boxes(s)
+      assert [%{"now" => %{box: [0.5, 0, 0.5, 0.5]}}] = boxes(s)
       assert s.assigns.node_label == "frames.now"
 
       assert BuilderFixture.render(s) =~
@@ -126,7 +126,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       {:noreply, s} =
         Builder.handle_event("frame_box", %{"frame" => "now", "box" => [0.9, -0.2, 0.5, 0.01]}, s)
 
-      assert [%{now: %{box: [0.5, 0, 0.5, 0.05]}}] = boxes(s)
+      assert [%{"now" => %{box: [0.5, 0, 0.5, 0.05]}}] = boxes(s)
     end
 
     test "a name that is no frame, or a box that does not read, changes nothing" do
@@ -150,7 +150,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
         layer
         |> Map.put(:layout, %{columns: [1, 1]})
         |> update_in(
-          [:frames, :now],
+          [:frames, "now"],
           &(&1 |> Map.delete(:box) |> Map.merge(%{cell: [1, 0], span: [1, 1]}))
         )
 
@@ -159,7 +159,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       {:noreply, s} =
         Builder.handle_event("frame_box", %{"frame" => "now", "box" => [0.25, 0, 0.5, 1]}, s)
 
-      assert [now] = for(frames <- boxes(s), do: frames.now)
+      assert [now] = for(frames <- boxes(s), do: frames["now"])
       assert now.box == [0.25, 0, 0.5, 1]
       refute Map.has_key?(now, :cell) or Map.has_key?(now, :span)
     end
@@ -176,10 +176,10 @@ defmodule Visualize.Chart.BuilderFramesTest do
 
       assert s.assigns.notice == nil
 
-      assert [%{frames: %{main: %{box: [0, 0, 0.5, 1]}}}] =
+      assert [%{frames: %{"main" => %{box: [0, 0, 0.5, 1]}}}] =
                for(%{ref: {:composite, 1}, local: local} <- s.assigns.uses, do: local)
 
-      assert Writes.composed(s).frames.main.box == [0, 0, 0.5, 1]
+      assert Writes.composed(s).frames["main"].box == [0, 0, 0.5, 1]
     end
 
     test "the frame's page has a place section: its box read, z and background its fields" do
@@ -216,45 +216,45 @@ defmodule Visualize.Chart.BuilderFramesTest do
 
       layer =
         layer
-        |> update_in([:frames, :now], &Map.delete(&1, :scales))
-        |> put_in([:sources, :primary, :types], %{t: :number, v: :number})
+        |> update_in([:frames, "now"], &Map.delete(&1, :scales))
+        |> put_in([:sources, "primary", :types], %{t: :number, v: :number})
 
       [{name, layer}]
     end
 
     test "a mark or a label dropped over the second frame says that frame" do
       s = measured(two()) |> place("mark:line", 600, 200) |> place("title", 600, 5)
-      assert [%{type: :line, frame: :now}] = sites(s, :mark)
-      assert [%{anchor: :title, frame: :now}] = sites(s, :label)
+      assert [%{type: :line, frame: "now"}] = sites(s, :mark)
+      assert [%{anchor: :title, frame: "now"}] = sites(s, :label)
 
       s = measured(two()) |> place("label", 100, 200)
-      assert [%{frame: :history}] = sites(s, :label)
+      assert [%{frame: "history"}] = sites(s, :label)
     end
 
     test "an axis dropped in a frame's margin is that frame's, its scale declared there" do
       s = measured(bare_now()) |> place("axis", 410, 200)
       design = Writes.composed(s)
-      assert design.frames.now.axes == [%{scale: :y, side: :left}]
-      assert design.frames.now.scales == %{y: %{kind: :linear, domain: :auto}}
+      assert design.frames["now"].axes == [%{scale: "y", side: :left}]
+      assert design.frames["now"].scales == %{"y" => %{kind: :linear, domain: :auto}}
       # `history` is untouched, and nothing landed in a frame called main.
-      assert design.frames.history.axes == [%{scale: :x, side: :bottom}]
+      assert design.frames["history"].axes == [%{scale: "x", side: :bottom}]
       refute Map.has_key?(design.frames, :main)
       assert s.assigns.node_label == "frames.now.axes[0]"
     end
 
     test "a legend dropped in a frame takes that frame's color scale" do
       [{name, layer}] = two()
-      layer = put_in(layer, [:frames, :now, :scales, :c], %{kind: :ordinal, domain: ["a"]})
+      layer = put_in(layer, [:frames, "now", :scales, "c"], %{kind: :ordinal, domain: ["a"]})
       s = measured([{name, layer}]) |> place("legend", 790, 20)
-      assert %{scale: :c} = Writes.composed(s).frames.now.legend
-      refute Map.has_key?(Writes.composed(s).frames.history, :legend)
+      assert %{scale: "c"} = Writes.composed(s).frames["now"].legend
+      refute Map.has_key?(Writes.composed(s).frames["history"], :legend)
     end
 
     test "a mark placed in a frame derives that frame's scales from its channels" do
       s = measured(bare_now()) |> place("mark:line", 600, 200)
       design = Writes.composed(s)
-      assert %{x: %{kind: :linear}, y: %{kind: :linear}} = design.frames.now.scales
-      assert Map.keys(design.frames.history.scales) == [:x, :y]
+      assert %{"x" => %{kind: :linear}, "y" => %{kind: :linear}} = design.frames["now"].scales
+      assert Map.keys(design.frames["history"].scales) == ["x", "y"]
     end
 
     test "the keyboard twin places in the open node's frame" do
@@ -264,7 +264,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
       {:noreply, s} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:area"}, s)
 
-      assert [%{type: :area, frame: :now}] = sites(s, :mark)
+      assert [%{type: :area, frame: "now"}] = sites(s, :mark)
     end
 
     test "a mark's axes section is its frame's, and a tick writes there" do
@@ -281,8 +281,8 @@ defmodule Visualize.Chart.BuilderFramesTest do
           s
         )
 
-      assert Writes.composed(s).frames.now.axes == [%{scale: :y, side: :left}]
-      assert Writes.composed(s).frames.history.axes == [%{scale: :x, side: :bottom}]
+      assert Writes.composed(s).frames["now"].axes == [%{scale: "y", side: :left}]
+      assert Writes.composed(s).frames["history"].axes == [%{scale: "x", side: :bottom}]
 
       # Unticked again, it leaves `now`; the grid of `history`'s x is its own.
       {:noreply, s} =
@@ -292,20 +292,20 @@ defmodule Visualize.Chart.BuilderFramesTest do
           s
         )
 
-      refute Map.has_key?(Writes.composed(s).frames.now, :axes)
+      refute Map.has_key?(Writes.composed(s).frames["now"], :axes)
 
       {:noreply, s} =
         Builder.handle_event("toggle_grid", %{"scale" => "x", "frame" => "history"}, s)
 
-      assert [%{grid: true}] = Writes.composed(s).frames.history.axes
+      assert [%{grid: true}] = Writes.composed(s).frames["history"].axes
     end
 
     test "the add-axes step names the frame the mark is drawn in" do
       [{name, layer}] = two()
-      layer = update_in(layer, [:frames, :history], &Map.delete(&1, :axes))
+      layer = update_in(layer, [:frames, "history"], &Map.delete(&1, :axes))
       design = Visualize.Chart.stack([{name, layer}])
       [step] = Visualize.Chart.Builder.Steps.steps(design)
-      assert step.path == [:frames, :history, :axes]
+      assert step.path == [:frames, "history", :axes]
     end
   end
 
@@ -326,7 +326,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
          id: @inset,
          name: "inset",
          kind: :frame,
-         fragment: %{frames: %{main: %{kind: :polar, margin: %{top: 4}}}}
+         fragment: %{frames: %{"main" => %{kind: :polar, margin: %{top: 4}}}}
        }}
     end
 
@@ -359,15 +359,15 @@ defmodule Visualize.Chart.BuilderFramesTest do
         )
 
       design = Writes.composed(s)
-      assert design.frames.frame_2 == %{kind: :cartesian, box: [0.5, 0, 0.5, 0.5]}
+      assert design.frames["frame_2"] == %{kind: :cartesian, box: [0.5, 0, 0.5, 0.5]}
       assert s.assigns.node_label == "frames.frame_2"
 
-      assert [%{frames: %{frame_2: _}}] =
-               for(%{ref: nil, local: %{frames: %{frame_2: _}} = l} <- s.assigns.uses, do: l)
+      assert [%{frames: %{"frame_2" => _}}] =
+               for(%{ref: nil, local: %{frames: %{"frame_2" => _}} = l} <- s.assigns.uses, do: l)
 
       # The one frame's mark and label now say it, so the design of two stays valid.
-      assert Enum.map(design.marks, & &1.frame) == [:main]
-      assert Enum.map(design.labels, & &1.frame) == [:main]
+      assert Enum.map(design.marks, & &1.frame) == ["main"]
+      assert Enum.map(design.labels, & &1.frame) == ["main"]
       assert {:ok, _} = Visualize.Chart.from_map(design)
     end
 
@@ -379,8 +379,8 @@ defmodule Visualize.Chart.BuilderFramesTest do
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "frame"}, s)
 
       frames = Writes.composed(s).frames
-      assert frames.frame_2.box == [0.25, 0.25, 0.5, 0.5]
-      assert frames.frame_3.box == [0.25, 0.25, 0.5, 0.5]
+      assert frames["frame_2"].box == [0.25, 0.25, 0.5, 0.5]
+      assert frames["frame_3"].box == [0.25, 0.25, 0.5, 0.5]
     end
 
     test "a library frame lands linked under a fresh key, its placement its own" do
@@ -390,11 +390,13 @@ defmodule Visualize.Chart.BuilderFramesTest do
         Builder.handle_event("place", %{"name" => "frame:1", "x" => 10, "y" => 390}, s)
 
       design = Writes.composed(s)
-      assert %{kind: :polar, margin: %{top: 4}, box: [0, 0.5, 0.5, 0.5]} = design.frames.frame_2
+
+      assert %{kind: :polar, margin: %{top: 4}, box: [0, 0.5, 0.5, 0.5]} =
+               design.frames["frame_2"]
 
       [use] = for %{ref: {:frame, 1}} = use <- s.assigns.uses, do: use
-      assert use.key == :frame_2
-      assert use.local == %{frames: %{main: %{box: [0, 0.5, 0.5, 0.5]}}}
+      assert use.key == "frame_2"
+      assert use.local == %{frames: %{"main" => %{box: [0, 0.5, 0.5, 0.5]}}}
       assert Visualize.Chart.Builder.Stack.linkage(use) == :edited
 
       # Dragged, it is written into the site's own local — not refused (D-165).
@@ -406,7 +408,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
         )
 
       assert s.assigns.notice == nil
-      assert Writes.composed(s).frames.frame_2.box == [0.5, 0.5, 0.5, 0.5]
+      assert Writes.composed(s).frames["frame_2"].box == [0.5, 0.5, 0.5, 0.5]
 
       # Anything else of it is still the library's.
       {:noreply, refused} =
@@ -419,7 +421,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
           refused
         )
 
-      assert Writes.composed(refused).frames.frame_2.kind == :polar
+      assert Writes.composed(refused).frames["frame_2"].kind == :polar
     end
 
     test "the frames root: each frame's select bar, axes over its scales, and what it draws" do
@@ -486,7 +488,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
           s
         )
 
-      assert %{cell: [2, 1]} = now = Writes.composed(s).frames.now
+      assert %{cell: [2, 1]} = now = Writes.composed(s).frames["now"]
       refute Map.has_key?(now, :span)
 
       # A span past the edge is kept to what fits.
@@ -497,7 +499,7 @@ defmodule Visualize.Chart.BuilderFramesTest do
           s
         )
 
-      assert %{cell: [1, 0], span: [2, 2]} = Writes.composed(s).frames.now
+      assert %{cell: [1, 0], span: [2, 2]} = Writes.composed(s).frames["now"]
 
       {:noreply, refused} =
         Builder.handle_event("frame_cell", %{"frame" => "now", "cell" => "3,0"}, s)
@@ -512,13 +514,13 @@ defmodule Visualize.Chart.BuilderFramesTest do
       layer =
         update_in(
           layer,
-          [:frames, :now],
+          [:frames, "now"],
           &(&1 |> Map.delete(:cell) |> Map.put(:box, [0.7, 0, 0.3, 0.5]))
         )
 
       s = BuilderFixture.socket([{name, layer}])
       {:noreply, s} = Builder.handle_event("frame_cell", %{"frame" => "now", "cell" => "2,1"}, s)
-      now = Writes.composed(s).frames.now
+      now = Writes.composed(s).frames["now"]
       assert now.cell == [2, 1]
       refute Map.has_key?(now, :box)
     end

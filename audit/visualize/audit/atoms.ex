@@ -10,11 +10,16 @@ defmodule Visualize.Audit.Atoms do
   whose count is not what the file holds fails too, so the list cannot go stale. A comment
   line makes no atom and is passed over. `String.to_existing_atom` is not matched: it makes
   none.
+
+  The classes are (a) a closed library vocabulary, (a-host) a vocabulary host code
+  registers and (d) a set the library bounds. A name a document or a client declares —
+  class (b) — and one derived from such names — class (c) — is a string (D-195), so an
+  entry of either fails.
   """
 
   @scanned "lib"
   @allowlist "audit/atoms_allowlist.exs"
-  @classes [:a, :"a-host", :b, :c, :d]
+  @classes [:a, :"a-host", :d]
   @pattern ~r/String\.to_atom|binary_to_atom|List\.to_atom|list_to_atom|:"[^"]*#\{|:'[^']*#\{/
 
   @doc "Every problem under `root`, one line each; `[]` when there is none."
@@ -66,6 +71,11 @@ defmodule Visualize.Audit.Atoms do
        when is_binary(file) and is_binary(match) and is_integer(count) and count > 0 and
               class in @classes and is_binary(reason) and reason != "",
        do: nil
+
+  defp malformed_entry(%{class: class} = entry) when class in [:b, :c],
+    do:
+      "#{@allowlist}: a name a document declares is a string (D-195), never an allowed " <>
+        "atom; got #{inspect(entry)}"
 
   defp malformed_entry(entry),
     do:

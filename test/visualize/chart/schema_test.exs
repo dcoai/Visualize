@@ -50,7 +50,7 @@ defmodule Visualize.Chart.SchemaTest do
     assert Schema.key(:mark, :render).default == :auto
     assert Schema.key(:mark, :nope) == nil
     assert Schema.default(:design, :version) == nil
-    assert Schema.default(:axis, :style) == :axis
+    assert Schema.default(:axis, :style) == "axis"
     assert Schema.default(:ticks, :size_inner) == 6
 
     assert_raise ArgumentError, fn -> Schema.describe(:nope) end

@@ -19,10 +19,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     use Phoenix.Component
 
     alias Visualize.Chart.Builder.{Palette, Store}
-    alias Visualize.Chart.Style
+    alias Visualize.Chart.{Names, Style}
     alias Visualize.Theme
 
     @typedoc "One row of the stack: what it is, what to call it, and where it sits."
@@ -98,9 +100,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `fields` of the source the node's `data` names, and the columns of `pool`'s rows for it,
     sorted; none where the node binds no source.
 
-        iex> design = %{sources: %{load: %{fields: [:t, :v]}}}
-        iex> Visualize.Chart.Builder.StyleStack.columns(design, %{data: :load}, %{load: [%{t: 0, v: 1, host: "a"}]})
-        [:host, :t, :v]
+        iex> design = %{sources: %{"load" => %{fields: ["t", "v"]}}}
+        iex> Visualize.Chart.Builder.StyleStack.columns(design, %{data: "load"}, %{load: [%{t: 0, v: 1, host: "a"}]})
+        ["host", "t", "v"]
 
         iex> Visualize.Chart.Builder.StyleStack.columns(%{}, %{}, %{})
         []
@@ -114,21 +116,28 @@ if Code.ensure_loaded?(Phoenix.Component) do
         source ->
           declared = get_in(design, [:sources, source, :fields]) || []
 
+          # The pool by the source's spelling; a column named by its string (D-195).
+          given =
+            case Names.fetch(pool, source) do
+              {:ok, given} -> given
+              :error -> []
+            end
+
           rows =
-            case Visualize.Data.Table.rows(Map.get(pool, source, [])) do
-              [first | _] when is_map(first) -> Map.keys(first)
+            case Visualize.Data.Table.rows(given) do
+              [first | _] when is_map(first) -> first |> Map.keys() |> Enum.map(&Names.name/1)
               _none -> []
             end
 
           (declared ++ rows)
-          |> Enum.filter(&is_atom/1)
+          |> Enum.filter(&is_name/1)
           |> Enum.uniq()
           |> Enum.sort()
       end
     end
 
-    defp source_of(%{data: source}) when is_atom(source) and source != nil, do: source
-    defp source_of(%{data: %{source: source}}) when is_atom(source), do: source
+    defp source_of(%{data: source}) when is_name(source), do: source
+    defp source_of(%{data: %{source: source}}) when is_name(source), do: source
     defp source_of(_node), do: nil
 
     @doc """

@@ -69,7 +69,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # (spec/14 §20.5); a value that names none is normal vision.
     def handle_event("theme_vision", %{"vision" => vision}, socket) do
       seen =
-        Enum.find(Visualize.Color.Vision.deficiencies(), :none, &(Atom.to_string(&1) == vision))
+        Enum.find(Visualize.Color.Vision.deficiencies(), :none, &(to_string(&1) == vision))
 
       {:noreply, assign(socket, :vision, seen)}
     end
@@ -110,8 +110,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           {:error, _cycle} -> :default
         end
 
+      # A host's theme is named by its string, a built-in by its atom (D-195).
       entry =
-        with name when is_atom(name) and name != nil <- value,
+        with name when is_binary(name) or (is_atom(name) and name != nil) <- value,
              nil <- Theme.builtin(name),
              true <- store != nil,
              {:ok, entry} <- Store.theme_entry(store, name) do

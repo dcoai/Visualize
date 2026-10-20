@@ -222,21 +222,21 @@ defmodule Visualize.Chart.StylePartsTest do
       assert {:ok, v3} = Migration.migrate(v2)
       assert v3.version == 3
 
-      assert v3.defs.fade == %{
+      assert v3.defs["fade"] == %{
                type: :radial,
                stops: [%{at: 0, color: {:color, :series_1}}, %{at: 1, color: "#fff"}],
                center: [0.4, 0.4]
              }
 
-      assert v3.styles.s == %{
+      assert v3.styles["s"] == %{
                stroke: %{type: :solid, color: {:color, :series_1}, width: 2},
-               fill: %{type: :paint, name: :fade}
+               fill: %{type: :paint, name: "fade"}
              }
 
       assert v3.theme.styles.muted == %{opacity: 0.3, stroke: %{dash: "2 2"}}
       # The line drew its fill as the area under it: an `:area` before it now (#659).
-      assert [%{type: :area, style: %{fill: %{type: :paint, name: :fade}}}, line] = v3.marks
-      assert line.style == [:s, %{marker: %{shape: :star}}]
+      assert [%{type: :area, style: %{fill: %{type: :paint, name: "fade"}}}, line] = v3.marks
+      assert line.style == ["s", %{marker: %{shape: :star}}]
     end
 
     test "a design built at version 3 in the flat keys is read in parts too" do
@@ -248,10 +248,10 @@ defmodule Visualize.Chart.StylePartsTest do
 
       assert Validator.validate(design) == :ok
       chart = Chart.from_map!(design)
-      assert chart.styles.s == %{stroke: %{type: :solid, color: {:color, :series_1}, width: 2}}
+      assert chart.styles["s"] == %{stroke: %{type: :solid, color: {:color, :series_1}, width: 2}}
 
       # A fault in a flat key is reported at the part it means.
-      assert {:error, [{[:styles, :s, :stroke, :width], {:type, :size}}]} =
+      assert {:error, [{[:styles, "s", :stroke, :width], {:type, :size}}]} =
                Validator.validate(put_in(design, [:styles, :s, :stroke_width], "thick"))
     end
 
@@ -269,15 +269,15 @@ defmodule Visualize.Chart.StylePartsTest do
 
       assert {:ok, chart} = Chart.from_json(json)
 
-      assert chart.styles.s == %{
+      assert chart.styles["s"] == %{
                stroke: %{type: :solid, color: {:series, 2}, width: 2},
                font: %{weight: :bold},
                curve: %{type: :step},
-               fill: %{type: :paint, name: :fade},
+               fill: %{type: :paint, name: "fade"},
                text: %{anchor: :end}
              }
 
-      assert chart.defs.fade.stops == [
+      assert chart.defs["fade"].stops == [
                %{at: 0, color: {:color, :series_1}},
                %{at: 1, color: "#fff"}
              ]
@@ -289,14 +289,14 @@ defmodule Visualize.Chart.StylePartsTest do
     test "a paint under defs is a gradient or a hatch" do
       design = %{version: 3, frames: %{main: %{kind: :cartesian}}}
 
-      assert {:error, [{[:defs, :p, :type], {:enum, [:linear, :radial, :hatch]}}]} =
+      assert {:error, [{[:defs, "p", :type], {:enum, [:linear, :radial, :hatch]}}]} =
                Validator.validate(
                  Map.put(design, :defs, %{p: %{type: :solid, color: "#f00", stops: []}})
                )
 
       assert {:error, errors} = Validator.validate(Map.put(design, :defs, %{p: %{angle: 90}}))
-      assert {[:defs, :p, :type], :required} in errors
-      assert {[:defs, :p, :stops], :required} in errors
+      assert {[:defs, "p", :type], :required} in errors
+      assert {[:defs, "p", :stops], :required} in errors
 
       gradient = %{type: :linear, color: [:series_1, "#fff"]}
       assert Validator.validate(Map.put(design, :defs, %{p: gradient})) == :ok

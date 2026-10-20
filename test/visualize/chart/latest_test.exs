@@ -109,7 +109,7 @@ defmodule Visualize.Chart.LatestTest do
                  describe: describe(@fleet)
                )
 
-      assert applied.schemas == %{cars: @fleet}
+      assert applied.schemas == %{"cars" => @fleet}
       [mark] = applied.frame.marks
 
       assert Mark.rows(applied.frame, mark, applied.sources) |> Enum.map(&{&1.car, &1.t}) == [
@@ -122,23 +122,23 @@ defmodule Visualize.Chart.LatestTest do
       assert Chart.apply(design(),
                sources: %{cars: delivery(rows(1..9), @anonymous)},
                describe: describe(@anonymous)
-             ) == {:error, [{[:marks, 0], {:identity_required, :cars}}]}
+             ) == {:error, [{[:marks, 0], {:identity_required, "cars"}}]}
     end
 
     test "refuses latest over rows, which have no schema and so declare nothing" do
       assert Chart.apply(design(), sources: %{cars: rows(1..9)}) ==
-               {:error, [{[:marks, 0], {:identity_required, :cars}}]}
+               {:error, [{[:marks, 0], {:identity_required, "cars"}}]}
 
       assert {:ok, _applied} = Chart.apply(design(false), sources: %{cars: rows(1..9)})
     end
 
     test "a version that does not resolve is its own fault, not the refusal" do
       assert Chart.apply(design(), sources: %{cars: delivery(rows(1..3))}) ==
-               {:error, [{[:sources, :cars], {:unknown_schema, :cars, Schema.version(@fleet)}}]}
+               {:error, [{[:sources, "cars"], {:unknown_schema, :cars, Schema.version(@fleet)}}]}
     end
 
     test "the refusal reads as a line a person reads" do
-      line = Validator.format({[:marks, 0], {:identity_required, :cars}})
+      line = Validator.format({[:marks, 0], {:identity_required, "cars"}})
       assert line =~ "marks[0]"
       assert line =~ "declares no identity"
     end
@@ -152,8 +152,8 @@ defmodule Visualize.Chart.LatestTest do
         size: {300, 200}
       )
 
-    compiled = frames.main
-    assert compiled.schemas == %{cars: @fleet}
+    compiled = frames["main"]
+    assert compiled.schemas == %{"cars" => @fleet}
 
     {payload, _compiled} = Compiled.tick(compiled, %{cars: delivery(rows(1..12))})
     assert payload.svg =~ "<circle"

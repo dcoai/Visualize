@@ -12,9 +12,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     This module compiles only when `Phoenix.Component` is loaded (spec/10 §1.1, D-45, D-85).
     """
 
+    import Visualize.Chart.Names, only: [is_name: 1]
+
     use Phoenix.Component
 
-    alias Visualize.Chart.{Schema, Var}
+    alias Visualize.Chart.{Names, Schema, Var}
     alias Visualize.Signals
 
     @numbers [:window, :period, :min, :max, :seed]
@@ -202,36 +204,37 @@ if Code.ensure_loaded?(Phoenix.Component) do
       for {name, node} <- Enum.sort_by(sources, fn {name, _} -> to_string(name) end),
           is_map(node) do
         fields = List.wrap(Map.get(node, :fields, []))
-        names = Enum.filter(fields, &is_atom/1)
+        names = fields |> Enum.filter(&is_name/1) |> Enum.map(&Names.name/1)
         types = Map.get(node, :types) || %{}
-        suggested = Map.get(pool_types, name, %{})
-        signal = Map.get(signals, name)
+        # The host's pool and its rows' types by the name's spelling (D-195).
+        suggested = spelled(pool_types, name) || %{}
+        signal = spelled(signals, name)
 
         %{
           name: to_string(name),
           layer: owners |> Map.get(name) |> then(&(&1 && to_string(&1))),
           columns:
-            for field <- fields, is_atom(field) or is_struct(field, Var) do
+            for field <- fields, is_name(field) or is_struct(field, Var) do
               case field do
                 %Var{name: var} ->
                   %{name: "var(:#{var})", var: to_string(var), type: nil, suggested: nil}
 
                 field ->
-                  type = Map.get(types, field)
+                  type = spelled(types, field)
 
                   %{
                     name: to_string(field),
                     var: nil,
                     type: type,
-                    suggested: if(type == nil and Map.get(suggested, field), do: suggested[field])
+                    suggested: if(type == nil, do: spelled(suggested, field))
                   }
               end
             end,
           picks:
             for(
-              column <- Map.keys(suggested) |> Enum.sort(),
+              column <- suggested |> Map.keys() |> Enum.map(&Names.name/1) |> Enum.sort(),
               column not in names,
-              do: to_string(column)
+              do: column
             ),
           signal:
             signal &&
@@ -242,8 +245,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    defp spelled(map, name) when is_map(map) do
+      case Names.fetch(map, name) do
+        {:ok, value} -> value
+        :error -> nil
+      end
+    end
+
+    defp spelled(_map, _name), do: nil
+
     defp host_rows(pool, name) do
-      case Map.get(pool, name) do
+      case spelled(pool, name) do
         nil -> 0
         source -> source |> Visualize.Data.Table.rows() |> length()
       end

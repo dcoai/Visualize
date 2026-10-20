@@ -145,6 +145,17 @@ defmodule Visualize.Geo.Projection do
           parallels: {number(), number()}
         }
 
+  @types ~w(mercator transverse_mercator equirectangular cylindrical_equal_area miller
+            gall_peters orthographic stereographic gnomonic azimuthal_equal_area
+            azimuthal_equidistant albers conic_conformal conic_equal_area conic_equidistant
+            bonne polyconic mollweide sinusoidal eckert1 eckert2 eckert3 eckert4 eckert5
+            eckert6 hammer kavrayskiy7 wagner4 wagner6 fahey collignon loximuthal
+            natural_earth equal_earth robinson winkel_tripel aitoff van_der_grinten)a
+
+  @doc "Every projection type `new/1` takes, in the order of `t:projection_type/0`."
+  @spec types() :: [projection_type(), ...]
+  def types, do: @types
+
   @doc "Creates a new projection of the specified type"
   @spec new(projection_type()) :: t()
   def new(type \\ :mercator) do

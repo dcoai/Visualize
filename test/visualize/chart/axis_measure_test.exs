@@ -123,14 +123,14 @@ defmodule Visualize.Chart.AxisMeasureTest do
     test "a code that does not read and a pair that disagrees are faults at their keys" do
       assert {:error,
               [
-                {[:frames, :main, :axes, 0, :measure, :unit],
+                {[:frames, "main", :axes, 0, :measure, :unit],
                  {:unit, "sec", {:unknown_atom, "sec"}}}
               ]} =
                Validator.validate(design(%{measure: %{unit: "sec"}}))
 
       assert {:error,
               [
-                {[:frames, :main, :axes, 0, :measure, :quantity], {:quantity, :duration, "By"}} =
+                {[:frames, "main", :axes, 0, :measure, :quantity], {:quantity, :duration, "By"}} =
                   error
               ]} =
                Validator.validate(design(%{measure: %{unit: "By", quantity: :duration}}))
@@ -139,7 +139,7 @@ defmodule Visualize.Chart.AxisMeasureTest do
     end
 
     test "a quantity not in the list is the enumeration's fault alone" do
-      assert {:error, [{[:frames, :main, :axes, 0, :measure, :quantity], {:enum, _}}]} =
+      assert {:error, [{[:frames, "main", :axes, 0, :measure, :quantity], {:enum, _}}]} =
                Validator.validate(design(%{measure: %{quantity: :weight}}))
     end
 

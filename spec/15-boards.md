@@ -26,6 +26,8 @@ A board, a binding and the providers behind it are three things, held by three o
 
 A board is data in the sense of spec/14 §1.1: a struct of maps, lists and atoms with no function in it. It is versioned (§2.3), encodable as a map and as JSON (§2.1, §2.2), and validated (§3).
 
+**A name a board declares is a string** (D-195), as a design's is (spec/14 §1.4): a cell's, a board's and a cell's variable's, a link's two fields, a virtual source's id, a drill's variables and the datum fields they read. Elixir input may spell one as an atom, which every reader — `from_map/2`, `new/2`, the board's process — reads as the string of the same spelling, making no atom. What the board holds and what it answers name them by their strings: a binding's `{cell, slot}`, the required sources' keys, `realize/4`'s and `components/3`'s maps, a snapshot's cells and slots, a view's and an event's `cell`, a selection's field (§13.2). An argument naming one — `Server.pick/4`'s and `event/3`'s cell, `select/2`'s field, `vars/2`'s keys — takes either spelling. A feed is the host's term (§4.2) and is never rewritten.
+
 ### 1.2 Keys
 
 `%Visualize.Board{}` holds one field per key. `Visualize.Board.from_map/2` and `Visualize.Board.to_map/1` are exact inverses, and nested nodes are stored as the author wrote them. A reader takes any default from this table, as a design's reader does (spec/14 §2.1, D-59).
@@ -34,15 +36,15 @@ A board is data in the sense of spec/14 §1.1: a struct of maps, lists and atoms
 |---|---|---|---|
 | `version` | a positive integer | `Visualize.Chart.Migration.current/0` | the schema version the board was written at (§2.3) |
 | `meta` | a node: `name`, a string; `description`, a string | `%{}` | what the board is; nothing renders from it |
-| `cells` | a map from a cell's name, an atom, to a cell (§1.3) | `%{}` | what is shown, and where |
+| `cells` | a map from a cell's name, its string, to a cell (§1.3) | `%{}` | what is shown, and where |
 | `window` | `nil`, `%{last: seconds}` or `%{from: t, to: t}` (§1.5) | `nil` | the time window every cell shows |
 | `zone` | a time-zone name | `"Etc/UTC"` | the zone the window is shown in |
-| `vars` | a map from a variable's name, an atom, to a value | `%{}` | the board's variables: the defaults of every cell's (§5) |
+| `vars` | a map from a variable's name, its string, to a value | `%{}` | the board's variables: the defaults of every cell's (§5) |
 | `sync` | a string, or `nil` | `nil` | the sync group the cells join (§1.5) |
 | `layout` | a node: `breakpoint`, `row_height` and `gap` (§1.6) | `%{}` | how the grid is drawn and when it reflows |
 | `stale_after` | a positive number, seconds, or `nil` | `nil` | how old a cell's newest reading may be before the cell shows it is stale (§8.4); `nil` is never |
-| `links` | a map from a field's name to the name it links to, both atoms | `%{}` | fields of different names that mean the same thing, so a selection in one cell finds its datum in another (§13.2) |
-| `virtual_sources` | a map from a virtual source's id, an atom, to its map form without the id (spec/08 §10.5.10) | `%{}` | sources computed from other sources by a function, defined at the board: each one's path is `[id]` (spec/08 §10.5.9, #643) |
+| `links` | a map from a field's name to the name it links to, both strings | `%{}` | fields of different names that mean the same thing, so a selection in one cell finds its datum in another (§13.2) |
+| `virtual_sources` | a map from a virtual source's id, its string, to its map form without the id (spec/08 §10.5.10) | `%{}` | sources computed from other sources by a function, defined at the board: each one's path is `[id]` (spec/08 §10.5.9, #643) |
 
 A key not in the table is `:unknown_key`, at the board's level and at every node's.
 
@@ -148,11 +150,11 @@ For the board and each of its nodes, in this order: unknown keys, required keys,
 - **The window.** A window that is neither `nil` nor one of the two forms is `{:type, :window}` at `[:window]`. `last` together with `from` or `to` is `{:window, :both}`. A `from` without a `to`, or a `to` without a `from`, is `:required` at the missing key. A `DateTime` not in `Etc/UTC`, or a value that is not a `DateTime`, is `{:type, :utc_datetime}` at its key. A `from` not before its `to` is `{:window, :inverted}` at `[:window]`. A `last` that is not a positive number is `{:type, :positive}`.
 - **The zone** is checked as §1.5 says.
 - **Staleness.** A `stale_after` that is neither `nil` nor a positive number is `{:type, :positive}`.
-- **Variables.** A board's or a cell's variable name that is not an atom is `{:type, :name}` at its path. A value that is itself a variable (`%Visualize.Chart.Var{}`) is `{:var_binding, name}`, because a board's variables are values, and resolution is single level (spec/14 §7.1).
+- **Variables.** A board's or a cell's variable name that is not a name (a string, or an atom) is `{:type, :name}` at its path. A value that is itself a variable (`%Visualize.Chart.Var{}`) is `{:var_binding, name}`, because a board's variables are values, and resolution is single level (spec/14 §7.1).
 - **A component reference** that is not an id `{kind, n}` is `{:type, {:id, :composite}}`. An id of another kind, `{:style, 3}`, is `{:ref_kind, :composite, :style}`, as the validator refuses a wrong-kind id before resolution (spec/14 §19.7).
-- **Links.** A `links` that is not a map is `{:type, {:map, :name}}` at `[:links]`. A key or a value that is not an atom is `{:type, :name}` at `[:links, key]`.
-- **Virtual sources** (spec/08 §10.5, #643). A `virtual_sources` that is not a map is `{:type, {:map, {:node, :virtual_source}}}` at its path; an id that is not an atom is `{:type, :name}` at `[:virtual_sources, id]`; each source is read by `Visualize.VirtualSource.new/1` with its id, and every fault of it is reported under its id, `[:virtual_sources, id | path]` for the board's and `[:cells, cell, :virtual_sources, id | path]` for a cell's. A board alone does not know its feeds, so what an input names, a cycle and a source's fields are checked when the board starts (§14.1).
-- **A drill node** (§13.3) that is not a map is `{:type, {:node, :drill}}` at the cell's `drill`. Its unknown keys are `:unknown_key`, a missing `board` is `:required`, and a `board` that is neither `:self`, an atom, a non-empty string nor a positive integer is `{:type, :board_ref}`. Its `vars` are checked as a board's variables are, and a `{:datum, field}` whose field is not an atom is `{:type, :field}` at the variable's path.
+- **Links.** A `links` that is not a map is `{:type, {:map, :name}}` at `[:links]`. A key or a value that is not a name is `{:type, :name}` at `[:links, key]`.
+- **Virtual sources** (spec/08 §10.5, #643). A `virtual_sources` that is not a map is `{:type, {:map, {:node, :virtual_source}}}` at its path; an id that is not a name is `{:type, :name}` at `[:virtual_sources, id]`; each source is read by `Visualize.VirtualSource.new/1` with its id, and every fault of it is reported under its id, `[:virtual_sources, id | path]` for the board's and `[:cells, cell, :virtual_sources, id | path]` for a cell's. A board alone does not know its feeds, so what an input names, a cycle and a source's fields are checked when the board starts (§14.1).
+- **A drill node** (§13.3) that is not a map is `{:type, {:node, :drill}}` at the cell's `drill`. Its unknown keys are `:unknown_key`, a missing `board` is `:required`, and a `board` that is neither `:self`, an atom, a non-empty string nor a positive integer is `{:type, :board_ref}`. Its `vars` are checked as a board's variables are, and a `{:datum, field}` whose field is not a name is `{:type, :field}` at the variable's path.
 
 ### 3.2 Given a store
 
@@ -211,7 +213,7 @@ The board's own reasons, beside those of spec/14 §10.1 it reuses (`:required`, 
 
 `%Visualize.Board.Binding{slots}` is the binding, a value separate from the board: `slots` maps a `{cell, slot}` to a **feed**, any term that names a feed or a pool entry, as the pool of spec/14 §7.2 names a source. A **connector** supplies it, and the board never holds it. A board travels between hosts and a binding does not, because the feeds it names are one host's (#531, further considerations §4).
 
-`Visualize.Board.Binding.new/0` is the empty binding. `Visualize.Board.Binding.new/1` takes a map or a list of `{{cell, slot}, feed}` pairs, and raises `ArgumentError` for a key that is not a pair of atoms. `Visualize.Board.Binding.put/4` binds one cell's slot, and `Visualize.Board.Binding.fetch/3` reads one back. One feed may fill many slots, in one cell or in several.
+`Visualize.Board.Binding.new/0` is the empty binding. `Visualize.Board.Binding.new/1` takes a map or a list of `{{cell, slot}, feed}` pairs, and raises `ArgumentError` for a key that is not a pair of names, atoms or strings, each held as its string (D-195). `Visualize.Board.Binding.put/4` binds one cell's slot, and `Visualize.Board.Binding.fetch/3` reads one back. One feed may fill many slots, in one cell or in several.
 
 ### 4.3 The check
 
@@ -301,7 +303,7 @@ Every fault of every cell is reported, each under its cell: `[:cells, name | pat
 | Function | Contract |
 |---|---|
 | `Visualize.Board.Binding.new/0` | The empty binding. |
-| `Visualize.Board.Binding.new/1` | A binding of a map or a list of `{{cell, slot}, feed}` pairs; `ArgumentError` for a key that is not a pair of atoms (§4.2). |
+| `Visualize.Board.Binding.new/1` | A binding of a map or a list of `{{cell, slot}, feed}` pairs; `ArgumentError` for a key that is not a pair of names (§4.2). |
 | `Visualize.Board.Binding.put/4` | The binding with one cell's slot bound to a feed. |
 | `Visualize.Board.Binding.fetch/3` | The feed a cell's slot is bound to, `{:ok, feed}`, or `:error`. |
 | `Visualize.Board.Binding.check/3` | `:ok`, or every unbound slot, every contract the bound schemas cannot meet and every binding to nothing, by path (§4.3). |
@@ -837,7 +839,7 @@ The functions are listed with their modules: `link/2`, `linked/2` and `drill/3` 
 
 When a board starts, its virtual sources — the board's and its cells', by path (§1.2, §1.3, `Visualize.Board.virtual_sources/1`) — are defined in three steps, each over all of them, and a board whose sources fail any step is **not started**: `Visualize.Board.Server.start/2` answers `{:error, {:virtual_sources, errors}}`, each `{path, reason}` at the source's path in the board, `[:virtual_sources, id | at]` or `[:cells, cell, :virtual_sources, id | at]`, as a board's faults are (§3).
 
-1. **References.** Every input's name resolves (spec/08 §10.5.9) from the scope the source is defined in: an atom to a virtual source from the inside out, else to a feed of the board's `feeds:`; a string to a feed; a list to a virtual source's full path. A name that resolves to nothing is `{:unknown_input, name}` at `[:from, i]`. A source naming a host `function` the registry (`virtual_sources:`, below) does not hold is `{:undeclared, :function, name}` at `[:function]`.
+1. **References.** Every input's name resolves (spec/08 §10.5.9) from the scope the source is defined in: a short id to a virtual source from the inside out, else to a feed of the board's `feeds:` by spelling; `{:feed, name}` to a feed; a list to a virtual source's full path. A name that resolves to nothing is `{:unknown_input, name}` at `[:from, i]`. A source naming a host `function` the registry (`virtual_sources:`, below) does not hold is `{:undeclared, :function, name}` at `[:function]`.
 2. **Cycles.** The sources and the sources they read are a directed graph; a cycle is refused, **named**: each strongly connected component that holds a cycle, by `:digraph_utils.cyclic_strong_components/1` — a source that reads itself included — is `{:cycle, paths}` at `[:from]` of the first of its members, `paths` every member's path, sorted. A count of what is left after a topological sort cannot name the cycle, since it also holds every source downstream of one (#643's prior-art review).
 3. **Ranks.** A source that reads only feeds has rank `0`; any other, one more than the greatest rank of the sources it reads. The engine runs sources in rank order, so a source always runs after its inputs.
 

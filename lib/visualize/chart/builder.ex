@@ -282,7 +282,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       # The parameters form edits the builder's own copy of the bindings: the host gives the
       # values the builder starts with and never hears of a change (spec/14 §18.11, D-88).
-      {:ok, assign_new(socket, :bindings, fn -> socket.assigns.vars end)}
+      # Keyed by each variable's string (D-195), whichever spelling the host gave.
+      {:ok,
+       assign_new(socket, :bindings, fn -> Visualize.Chart.Names.keys(socket.assigns.vars) end)}
     end
 
     # The host's data typed when it arrives, not on every pass (spec/14 §19.10, D-189): kept

@@ -85,7 +85,7 @@ defmodule Visualize.Chart.InteractionTest do
     # The right frame starts at 400; its plot is 400 - 40 - 20 = 340 wide.
     assert [_one] = Regex.scan(~r/data-vis-sync="dash-42"/, svg)
     assert svg =~ ~r/class="frame frame-right"[^>]*data-vis-sync-x="0,100,440,780,800"/
-    assert Frame.sync_attrs(applied.frames.left) == %{}
+    assert Frame.sync_attrs(applied.frames["left"]) == %{}
   end
 
   test "no sync, no attribute" do

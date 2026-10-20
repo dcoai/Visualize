@@ -37,7 +37,7 @@ defmodule Visualize.Scale.TimeZoneDatabaseTest do
   test "a design is refused with a fault naming the zone, not drawn in UTC" do
     {:ok, design} = Chart.compose([chart(), cartesian(), time_scale(:x, zone: "Europe/London")])
 
-    assert {:error, [{[:frames, :main, :scales, :x, :zone], reason} = error]} =
+    assert {:error, [{[:frames, "main", :scales, "x", :zone], reason} = error]} =
              Validator.validate(design)
 
     assert reason == {:zone, "Europe/London", :utc_only_time_zone_database}

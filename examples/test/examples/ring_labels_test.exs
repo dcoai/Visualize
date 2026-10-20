@@ -75,7 +75,7 @@ defmodule Examples.RingLabelsTest do
   describe "the ring leaves room for its labels (spec/14 §5.5)" do
     test "the Radial bar's ring is the plot's half less the longest day name's room" do
       {design, _sources} = RadialBarChart.design([])
-      [_inner, outer] = get_in(design, [:frames, :main, :scales, :r, :range])
+      [_inner, outer] = get_in(design, [:frames, "main", :scales, "r", :range])
 
       # 200 − (4 + dr 11 + "Wednesday" at 0.6 × 11 a character + 4).
       assert_in_delta outer,
@@ -128,7 +128,7 @@ defmodule Examples.RingLabelsTest do
       |> Design.applied([])
       |> Visualize.Chart.render(root: true, resolve: :literal)
 
-    margin = get_in(elem(module.design([]), 0), [:frames, :main, :margin])
+    margin = get_in(elem(module.design([]), 0), [:frames, "main", :margin])
     assert margin == %{top: 0, right: 0, bottom: 0, left: 0}
 
     {svg, contents} = with_text_ids(svg)

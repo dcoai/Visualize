@@ -1,5 +1,7 @@
 defmodule Visualize.Chart.Compiled.Motion do
   @moduledoc false
+
+  import Visualize.Chart.Names, only: [is_name: 1]
   # A mark's values easing toward the readings its rows carry, between the ticks of a
   # compiled chart (spec/14 §5.1, §12.5, #417). A scale's transition moves a *domain*
   # (`Visualize.Chart.Compiled.Transition`); this one moves the values themselves, which
@@ -70,11 +72,14 @@ defmodule Visualize.Chart.Compiled.Motion do
     |> Enum.with_index()
     |> Enum.map_reduce(%{}, fn {row, position}, kept ->
       Enum.reduce(fields, {row, kept}, fn field, {row, kept} ->
-        case Map.fetch(row, field) do
+        # The design names the field by its string; the row keeps its own key (D-195).
+        column = Visualize.Data.Table.key(row, field)
+
+        case column && Map.fetch(row, column) do
           {:ok, value} when is_number(value) ->
             key = {position, field}
             state = step(Map.get(state, key), value * 1.0, node, at)
-            {Map.put(row, field, state.shown), Map.put(kept, key, state)}
+            {Map.put(row, column, state.shown), Map.put(kept, key, state)}
 
           _absent_or_not_a_number ->
             {row, kept}
@@ -114,13 +119,13 @@ defmodule Visualize.Chart.Compiled.Motion do
     mark
     |> Map.get(:channels, %{})
     |> Enum.flat_map(fn
-      {channel, field} when is_atom(field) and channel not in @still -> [field]
+      {channel, field} when is_name(field) and channel not in @still -> [field]
       _constant_or_still -> []
     end)
     |> Enum.uniq()
   end
 
-  defp source(%{data: name}) when is_atom(name), do: name
-  defp source(%{data: %{source: name}}) when is_atom(name), do: name
+  defp source(%{data: name}) when is_name(name), do: name
+  defp source(%{data: %{source: name}}) when is_name(name), do: name
   defp source(_mark), do: nil
 end

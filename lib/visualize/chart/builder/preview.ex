@@ -257,7 +257,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def overlay(frames, selected, design \\ %{})
 
     def overlay(frames, "frames." <> name, design) do
-      case Enum.find(frames, fn {key, _frame} -> Atom.to_string(key) == name end) do
+      case Enum.find(frames, fn {key, _frame} -> to_string(key) == name end) do
         {key, %Frame{box: [x, y, w, h], size: size}} ->
           {px, py, pw, ph} = {x * size.width, y * size.height, w * size.width, h * size.height}
           half = @handle / 2
@@ -270,7 +270,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ]
 
           %{
-            name: Atom.to_string(key),
+            name: to_string(key),
             cell: cell_of(get_in(design, [:frames, key])),
             grid: grid_attribute(Place.grid(design, {size.width, size.height})),
             cells: grid_cells(Place.grid(design, {size.width, size.height}), size),
@@ -324,7 +324,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A handle kept on the chart, so one at its edge is not cut in half.
     defp inside(at, last), do: at |> max(0) |> min(last)
 
-    defp word(name) when is_atom(name), do: Atom.to_string(name)
+    defp word(name) when is_atom(name), do: to_string(name)
+    defp word(name) when is_binary(name), do: name
     defp word(n) when is_number(n), do: Path.format_number(n)
 
     # A binding the type check refuses, never applied: the cell-state panel and every

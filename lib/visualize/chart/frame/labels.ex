@@ -45,7 +45,7 @@ defmodule Visualize.Chart.Frame.Labels do
   end
 
   defp label(frame, node, mode) do
-    default_style = if node.anchor == :title, do: :title, else: Schema.default(:label, :style)
+    default_style = if node.anchor == :title, do: "title", else: Schema.default(:label, :style)
     base = Defaults.at(frame, Map.get(node, :defaults), :text)
     stack = Map.get(node, :style, default_style)
     pick = Generated.pick(frame, label_path(frame, node))
@@ -154,7 +154,7 @@ defmodule Visualize.Chart.Frame.Labels do
   defp axis_side(frame, scale) do
     case Enum.find(frame.axes, &(&1.scale == scale)) do
       %{side: side} -> side
-      nil -> if scale == :y, do: :left, else: :bottom
+      nil -> if scale == "y", do: :left, else: :bottom
     end
   end
 
@@ -203,7 +203,7 @@ defmodule Visualize.Chart.Frame.Labels do
   end
 
   defp scale!(frame, name) do
-    Map.get(frame.scales, name) ||
+    Map.get(frame.scales, Visualize.Chart.Names.name(name)) ||
       raise ArgumentError,
             "a {:data, [x, y]} anchor needs the frame to declare a scale named #{inspect(name)}"
   end

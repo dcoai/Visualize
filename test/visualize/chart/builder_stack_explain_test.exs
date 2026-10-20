@@ -46,7 +46,7 @@ defmodule Visualize.Chart.Builder.StackExplainTest do
       s = event(s, "edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"})
 
       assert BuilderFixture.style_at(s) ==
-               [:series, {:field, :v}, {:generate, :tone, [:warning]}, %{opacity: 0.5}]
+               ["series", {:field, "v"}, {:generate, "tone", [:warning]}, %{opacity: 0.5}]
 
       # Each row says what it is.
       html = BuilderFixture.render(s)
@@ -61,7 +61,7 @@ defmodule Visualize.Chart.Builder.StackExplainTest do
       design = BuilderFixture.design(s)
 
       assert hd(design.marks).style ==
-               [:series, {:field, :v}, {:generate, :tone, [:warning]}, %{opacity: 0.5}]
+               ["series", {:field, "v"}, {:generate, "tone", [:warning]}, %{opacity: 0.5}]
 
       assert {:ok, _applied} =
                Visualize.Chart.apply(design,
@@ -85,13 +85,13 @@ defmodule Visualize.Chart.Builder.StackExplainTest do
     test "entries move by key, and the local entry stays last", %{socket: s} do
       s = event(s, "add_style_entry", %{"name" => "warning"})
       s = event(s, "add_style_entry", %{"field" => "t"})
-      assert BuilderFixture.style_at(s) == [:series, :warning, {:field, :t}]
+      assert BuilderFixture.style_at(s) == ["series", "warning", {:field, "t"}]
 
       s = event(s, "style_entry_key", %{"key" => "ArrowUp", "index" => "2"})
-      assert BuilderFixture.style_at(s) == [:series, {:field, :t}, :warning]
+      assert BuilderFixture.style_at(s) == ["series", {:field, "t"}, "warning"]
 
       s = event(s, "style_entry_key", %{"key" => "ArrowDown", "index" => "0"})
-      assert BuilderFixture.style_at(s) == [{:field, :t}, :series, :warning]
+      assert BuilderFixture.style_at(s) == [{:field, "t"}, "series", "warning"]
 
       s = event(s, "edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"})
       refused = event(s, "style_entry_key", %{"key" => "ArrowDown", "index" => "2"})
@@ -103,10 +103,10 @@ defmodule Visualize.Chart.Builder.StackExplainTest do
       assert {:tone, 1} in StyleStack.generators([Looks])
 
       assert StyleStack.columns(
-               %{sources: %{primary: %{fields: [:t, :v]}}},
+               %{sources: %{primary: %{fields: ["t", "v"]}}},
                %{data: :primary},
                %{}
-             ) == [:t, :v]
+             ) == ["t", "v"]
     end
   end
 
@@ -133,7 +133,7 @@ defmodule Visualize.Chart.Builder.StackExplainTest do
       assert "style" in layers
       assert "generator" in layers
       assert List.last(layers) == "local"
-      assert stroke =~ "generate tone(:warning) → :warning"
+      assert stroke =~ "generate tone(:warning) → &quot;warning&quot;"
       assert stroke =~ "series"
 
       # A line draws no fill: the part is marked.

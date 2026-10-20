@@ -22,6 +22,8 @@ defmodule Examples.DownsamplingTest do
 
   # The rows a frame's line draws, and its caption's count, through the frame's own pipeline.
   defp drawn(applied, name) do
+    # A frame is named by its string (D-195).
+    name = to_string(name)
     frame = applied.frames[name]
     [line, caption] = Enum.filter(applied.chart.marks, &(&1.frame == name))
     {frame, Mark.rows(frame, line, applied.sources), Mark.rows(frame, caption, applied.sources)}
@@ -30,7 +32,7 @@ defmodule Examples.DownsamplingTest do
   test "the whole frame draws every row and says so", %{applied: applied} do
     {_frame, rows, [caption]} = drawn(applied, :whole)
     assert length(rows) == 50_000
-    assert caption.rows == 50_000
+    assert caption["rows"] == 50_000
   end
 
   test "the reduced frames bind to the plot width and caption what they draw", %{applied: applied} do
@@ -38,14 +40,14 @@ defmodule Examples.DownsamplingTest do
     {_frame, lttb, [lttb_caption]} = drawn(applied, :lttb)
     width = ceil(frame.plot.width)
 
-    assert m4_caption.rows == length(m4)
-    assert lttb_caption.rows == length(lttb)
+    assert m4_caption["rows"] == length(m4)
+    assert lttb_caption["rows"] == length(lttb)
     assert length(m4) <= 4 * width * 2 + 1
     assert abs(length(lttb) - width) <= 2
   end
 
   test "the dropout stays a gap in both reductions", %{applied: applied} do
-    for name <- [:m4, :lttb] do
+    for name <- ["m4", "lttb"] do
       {_frame, rows, _caption} = drawn(applied, name)
       gaps = Enum.filter(rows, &is_nil(&1.v))
       assert [%{t: 31_000}] = gaps, "#{name} kept #{length(gaps)} gap rows"
@@ -77,13 +79,13 @@ defmodule Examples.DownsamplingTest do
   end
 
   test "during a run every frame's x domain is the series' own extent and its line spans the plot" do
-    for tick <- @ticks, name <- [:whole, :m4, :lttb] do
+    for tick <- @ticks, name <- ["whole", "m4", "lttb"] do
       applied = at_tick(tick)
       frame = applied.frames[name]
       first = tick * 250
 
-      assert frame.scales.x.domain == [first, first + 49_999],
-             "tick #{tick}, #{name}: x domain #{inspect(frame.scales.x.domain)}"
+      assert frame.scales["x"].domain == [first, first + 49_999],
+             "tick #{tick}, #{name}: x domain #{inspect(frame.scales["x"].domain)}"
 
       xs = path_xs(applied, name)
       assert hd(xs) == 0.0, "tick #{tick}, #{name}: the line starts at #{hd(xs)} px"
@@ -93,9 +95,9 @@ defmodule Examples.DownsamplingTest do
   end
 
   test "the caption still counts what its frame draws during a run" do
-    for tick <- @ticks, name <- [:whole, :m4, :lttb] do
+    for tick <- @ticks, name <- ["whole", "m4", "lttb"] do
       {_frame, rows, [caption]} = drawn(at_tick(tick), name)
-      assert caption.rows == length(rows), "tick #{tick}, #{name}"
+      assert caption["rows"] == length(rows), "tick #{tick}, #{name}"
     end
   end
 
@@ -108,7 +110,10 @@ defmodule Examples.DownsamplingTest do
       {frame, m4, _caption} = drawn(applied, :m4)
       {_frame, whole, _caption} = drawn(applied, :whole)
       width = trunc(frame.plot.width)
-      column = fn %{t: t} -> min(width - 1, floor(Visualize.Scale.apply(frame.scales.x, t))) end
+
+      column = fn %{t: t} ->
+        min(width - 1, floor(Visualize.Scale.apply(frame.scales["x"], t)))
+      end
 
       extremes = fn rows ->
         rows

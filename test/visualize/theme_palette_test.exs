@@ -19,7 +19,9 @@ defmodule Visualize.ThemePaletteTest do
   @modifiers [:bold, :italic, :thin, :thick, :dashed, :dotted, :outline]
 
   # A palette entry holds its colors typed (spec/08 §7.7, #664): a name is `{:color, name}`.
-  defp solid(color) when is_atom(color), do: %{type: :solid, color: {:color, color}}
+  defp solid(color) when is_atom(color) or is_binary(color),
+    do: %{type: :solid, color: {:color, color}}
+
   defp solid(color), do: %{type: :solid, color: color}
 
   defp refusal(fields) do
@@ -196,7 +198,8 @@ defmodule Visualize.ThemePaletteTest do
       vermilion =
         Theme.new(colors: %{vermilion: "#d55e00"}, styles: %{bad: %{fill: {:color, :vermilion}}})
 
-      assert vermilion.styles.bad == %{fill: solid(:vermilion)}
+      # A color the theme declares is named by its string (D-195), its table's key by spelling.
+      assert vermilion.styles.bad == %{fill: solid("vermilion")}
 
       assert Theme.new(styles: %{info: %{stroke: %{color: "#3b6fa8", width: 2}}}).styles.info ==
                %{stroke: %{type: :solid, color: "#3b6fa8", width: 2}}
@@ -208,7 +211,7 @@ defmodule Visualize.ThemePaletteTest do
 
     test "a role style's paint reaches 3:1 against the background, its text 4.5:1 (WCAG)" do
       assert refusal(colors: %{warning: "#f5c242"}) ==
-               "theme :house: style :warning breaks its contract: fill {:color, :warning} is " <>
+               "theme \"house\": style :warning breaks its contract: fill {:color, :warning} is " <>
                  "1.65:1 against #ffffff; a role style's paint must reach 3:1 (WCAG 1.4.11, " <>
                  "non-text contrast)"
 
@@ -225,7 +228,7 @@ defmodule Visualize.ThemePaletteTest do
 
     test "the role styles' colors are distinct from each other" do
       assert refusal(styles: %{bad: %{fill: :good}}) ==
-               "theme :house: style :bad breaks its contract: the role styles' colors must be " <>
+               "theme \"house\": style :bad breaks its contract: the role styles' colors must be " <>
                  "distinct, but :good paints {:color, :good} and :bad {:color, :good}, 0.0 ΔEOK " <>
                  "apart, under the just-noticeable 0.02"
 
@@ -237,20 +240,20 @@ defmodule Visualize.ThemePaletteTest do
       look = fn role -> %{fill: role, stroke: %{color: role}, marker: %{shape: :circle}} end
 
       assert refusal(styles: %{good: look.(:good), warning: look.(:warning)}) ==
-               "theme :house: style :warning breaks its contract: role styles must differ in " <>
+               "theme \"house\": style :warning breaks its contract: role styles must differ in " <>
                  "something besides the colors of fill and stroke (a dash, a marker, a weight), " <>
                  "but :good and :warning differ only in hue"
     end
 
     test "every color name a palette entry paints with resolves" do
       assert refusal(styles: %{hover: %{stroke: %{color: {:color, :nope}, width: 2}}}) ==
-               "theme :house: style :hover breaks its contract: names :nope, not a color of the " <>
+               ~s(theme "house": style :hover breaks its contract: names "nope", not a color of the ) <>
                  "theme's color table"
     end
 
     test "a state style changes a non-hue key, never only a color" do
       message = refusal(styles: %{hover: %{stroke: :bad}})
-      assert message =~ "theme :house: style :hover breaks its contract"
+      assert message =~ "theme \"house\": style :hover breaks its contract"
       assert message =~ "a state style must read without hue"
       assert message =~ "got %{stroke: %{type: :solid, color: {:color, :bad}}}"
 
@@ -307,7 +310,7 @@ defmodule Visualize.ThemePaletteTest do
 
     test "a text furniture entry resolves a font family and a size" do
       assert refusal(styles: %{caption: %{fill: :text, font: %{size: :font_size}}}) ==
-               "theme :house: style :caption breaks its contract: a text style must resolve a " <>
+               "theme \"house\": style :caption breaks its contract: a text style must resolve a " <>
                  "font family, a string or :font_family; got font.family: nil"
 
       assert refusal(styles: %{value: %{font: %{family: "Inter", size: 0}}}) =~
@@ -322,7 +325,7 @@ defmodule Visualize.ThemePaletteTest do
 
     test ":grid resolves a stroke" do
       assert refusal(styles: %{grid: %{stroke: %{width: 1}}}) ==
-               "theme :house: style :grid breaks its contract: the grid must resolve a stroke, " <>
+               "theme \"house\": style :grid breaks its contract: the grid must resolve a stroke, " <>
                  "a color other than :none; got stroke.color: nil"
 
       assert refusal(styles: %{grid: %{stroke: :none}}) =~ "got stroke.color: :none"
@@ -333,8 +336,8 @@ defmodule Visualize.ThemePaletteTest do
 
     test "an entry is flat: no extends" do
       assert refusal(styles: %{emphasis: %{extends: :selected, stroke: %{width: 3}}}) ==
-               "theme :house: style :emphasis breaks its contract: a palette entry is flat and " <>
-                 "may not use extends, got extends: :selected"
+               "theme \"house\": style :emphasis breaks its contract: a palette entry is flat and " <>
+                 "may not use extends, got extends: \"selected\""
     end
 
     test "an entry is a style node" do
@@ -352,7 +355,7 @@ defmodule Visualize.ThemePaletteTest do
 
     test "no unknown names, and no gap in the style series" do
       assert refusal(styles: %{sparkle: %{opacity: 0.5}}) =~
-               ~r/^theme :house: style :sparkle breaks its contract: is not a name of the palette; a theme cannot add one/
+               ~r/^theme "house": style :sparkle breaks its contract: is not a name of the palette; a theme cannot add one/
 
       assert refusal(styles: %{style_12: %{marker: %{shape: :star}}}) =~
                "style :style_12 breaks its contract: the style series runs :style_1 to :style_n " <>
@@ -403,8 +406,16 @@ defmodule Visualize.ThemePaletteTest do
       assert Schema.builtin_styles() == [:axis, :grid, :label, :title]
       # Every palette name is a style reference (spec/14 §3.3, #637).
       names = Style.all(%{}) |> Map.keys() |> Enum.sort()
-      assert names == Enum.sort(Visualize.Theme.style_names(Visualize.Theme.default()))
-      assert Enum.all?(Schema.builtin_styles(), &(&1 in names))
+
+      assert names ==
+               Enum.sort(
+                 Enum.map(
+                   Visualize.Theme.style_names(Visualize.Theme.default()),
+                   &Atom.to_string/1
+                 )
+               )
+
+      assert Enum.all?(Schema.builtin_styles(), &(Atom.to_string(&1) in names))
     end
 
     test "the frame reads them from its theme, and every built-in theme's are today's" do
@@ -412,7 +423,8 @@ defmodule Visualize.ThemePaletteTest do
         frame = Frame.new(design(), size: @size, theme: theme)
 
         for name <- Schema.builtin_styles() do
-          assert frame.styles[name] == Style.builtin(name), "#{theme.name} #{name}"
+          assert frame.styles[Atom.to_string(name)] == Style.builtin(name),
+                 "#{theme.name} #{name}"
         end
       end
     end

@@ -64,10 +64,10 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<ul class="vis-builder-errors">)
 
       assert html =~
-               ~s(<li class="vis-builder-error">marks[0].data: source :primary is not declared</li>)
+               ~s(<li class="vis-builder-error">marks[0].data: source &quot;primary&quot; is not declared</li>)
 
       assert html =~
-               ~s(<li class="vis-builder-error">marks[0].style: style :series is not declared</li>)
+               ~s(<li class="vis-builder-error">marks[0].style: style &quot;series&quot; is not declared</li>)
 
       refute html =~ "<svg"
       refute html =~ "<path"
@@ -366,7 +366,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert s.assigns.node_label == "frames.main.margin"
       {_, house} = hd(BuilderFixture.layers(s))
-      assert house.frames.main.margin.top == 500
+      assert house.frames["main"].margin.top == 500
 
       {:noreply, s} =
         Builder.handle_event(
@@ -423,7 +423,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:ok, edited} = Builder.update(host, edited)
 
-      assert {_name, %{styles: %{series: %{stroke: %{width: 7}}}}} =
+      assert {_name, %{styles: %{"series" => %{stroke: %{width: 7}}}}} =
                hd(BuilderFixture.layers(edited))
     end
 
@@ -506,7 +506,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(<span class="vis-builder-palette-name">series</span>)
 
       # The list is read from the stacked design, so it is exactly Palette.names/1 of it.
-      assert Palette.names(Chart.stack(BuilderFixture.layers())) == [:series]
+      assert Palette.names(Chart.stack(BuilderFixture.layers())) == ["series"]
     end
 
     test "a style is declared in the design by a site keyed by its name, never in a layer (§18.14, D-178)",
@@ -519,9 +519,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert Enum.take(BuilderFixture.layers(s), length(before)) == before
       site = Stack.get(s.assigns.uses, s.assigns.selected)
       assert site == List.last(s.assigns.uses)
-      assert %Use{ref: nil, key: :callout, local: %{style: %{}}} = site
+      assert %Use{ref: nil, key: "callout", local: %{style: %{}}} = site
       assert s.assigns.labels[site.id] == "style callout"
-      assert BuilderFixture.design(s).styles.callout == %{}
+      assert BuilderFixture.design(s).styles["callout"] == %{}
 
       assert s.assigns.node_label == "styles.callout"
       assert s.assigns.notice == nil
@@ -712,12 +712,12 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "adding appends, and a bare reference stays bare until it is not one", %{socket: s} do
       {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
-      assert BuilderFixture.style_at(s) == [:series, :axis]
+      assert BuilderFixture.style_at(s) == ["series", "axis"]
 
       # One entry naming a style is written back as a bare reference, so an edit elsewhere
       # does not rewrite a document's shape.
       {:noreply, s} = Builder.handle_event("remove_style_entry", %{"index" => "1"}, s)
-      assert BuilderFixture.style_at(s) == :series
+      assert BuilderFixture.style_at(s) == "series"
     end
 
     test "a site carrying nothing keeps what it resolved as when something is added" do
@@ -728,7 +728,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.update(
           %{
             id: "b",
-            layers: [{:only, %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}]}}}}]
+            layers: [{:only, %{frames: %{"main" => %{axes: [%{scale: "x", side: :bottom}]}}}}]
           },
           socket
         )
@@ -739,19 +739,19 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, socket} = Builder.handle_event("add_style_entry", %{"name" => "grid"}, socket)
 
       {_name, layer} = hd(BuilderFixture.layers(socket))
-      assert hd(layer.frames.main.axes).style == [:axis, :grid]
+      assert hd(layer.frames["main"].axes).style == ["axis", "grid"]
     end
 
     test "reordering at scope style moves an entry and leaves the layers alone", %{socket: s} do
       {:noreply, s} = Builder.handle_event("add_style_entry", %{"name" => "axis"}, s)
-      assert BuilderFixture.style_at(s) == [:series, :axis]
+      assert BuilderFixture.style_at(s) == ["series", "axis"]
 
       before = Enum.map(BuilderFixture.layers(s), &elem(&1, 0))
 
       {:noreply, s} =
         Builder.handle_event("reorder", %{"scope" => "style", "from" => 1, "to" => 0}, s)
 
-      assert BuilderFixture.style_at(s) == [:axis, :series]
+      assert BuilderFixture.style_at(s) == ["axis", "series"]
       assert Enum.map(BuilderFixture.layers(s), &elem(&1, 0)) == before
     end
 
@@ -795,11 +795,11 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       # Only what was set, in its part: the stroke beneath still shows through (D-178).
-      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}}]
+      assert BuilderFixture.style_at(s) == ["series", %{stroke: %{width: 7}}]
 
       # The shared style is untouched, which is the whole reason the local one exists.
       {_name, house} = hd(BuilderFixture.layers(s))
-      assert house.styles.series.stroke_width == 2
+      assert house.styles["series"].stroke_width == 2
     end
 
     test "a second edit reuses the local style rather than making another", %{socket: s} do
@@ -813,7 +813,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("edit_style", %{"_target" => ["opacity"], "opacity" => "0.5"}, s)
 
-      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}, opacity: 0.5}]
+      assert BuilderFixture.style_at(s) == ["series", %{stroke: %{width: 7}, opacity: 0.5}]
     end
 
     test "blanking the last local key removes the local entry", %{socket: s} do
@@ -824,7 +824,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert BuilderFixture.style_at(s) == [:series, %{stroke: %{width: 7}}]
+      assert BuilderFixture.style_at(s) == ["series", %{stroke: %{width: 7}}]
 
       {:noreply, s} =
         Builder.handle_event(
@@ -834,7 +834,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       # An empty local is not worth keeping, and one entry naming a style is a bare reference.
-      assert BuilderFixture.style_at(s) == :series
+      assert BuilderFixture.style_at(s) == "series"
     end
 
     test "a key the style kind does not declare changes nothing", %{socket: s} do
@@ -863,7 +863,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert [:series, %{stroke: stroke}] = BuilderFixture.style_at(s)
+      assert ["series", %{stroke: stroke}] = BuilderFixture.style_at(s)
       assert stroke.type == :linear
 
       assert stroke.stops == [
@@ -879,7 +879,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert [:series, %{stroke: %{stops: [_first, %{opacity: 0.4}]}}] =
+      assert ["series", %{stroke: %{stops: [_first, %{opacity: 0.4}]}}] =
                BuilderFixture.style_at(s)
 
       # A stop added and removed at the site, through the rows' + and ×.
@@ -890,7 +890,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert [:series, %{stroke: %{stops: [_, _, %{at: 1}]}}] = BuilderFixture.style_at(s)
+      assert ["series", %{stroke: %{stops: [_, _, %{at: 1}]}}] = BuilderFixture.style_at(s)
 
       {:noreply, s} =
         Builder.handle_event(
@@ -899,7 +899,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert [:series, %{stroke: %{stops: [%{opacity: 0.4}, %{at: 1}]}}] =
+      assert ["series", %{stroke: %{stops: [%{opacity: 0.4}, %{at: 1}]}}] =
                BuilderFixture.style_at(s)
     end
 
@@ -932,7 +932,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert StyleStack.origins(
                design,
-               [:series, %{stroke: %{width: 5}}],
+               ["series", %{stroke: %{width: 5}}],
                Visualize.Theme.default()
              ) ==
                %{
@@ -962,7 +962,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert StyleStack.resolved(
                design,
-               [:series, %{stroke: %{width: 5}}],
+               ["series", %{stroke: %{width: 5}}],
                Visualize.Theme.default()
              ) ==
                %{stroke: %{type: :solid, color: "#111", width: 5}}
@@ -978,7 +978,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
         {:frame, 1} => %{
           name: "Frame::wide",
-          fragment: %{frames: %{main: %{margin: %{top: 900}}}}
+          fragment: %{frames: %{"main" => %{margin: %{top: 900}}}}
         }
       }
 
@@ -1031,11 +1031,11 @@ defmodule Visualize.Chart.BuilderTest do
 
       # Nothing joins the layer stack: the entry stays where it is, declared once.
       assert length(BuilderFixture.layers(s)) == 3
-      assert BuilderFixture.style_at(s) == [:series, {:style, 1}]
+      assert BuilderFixture.style_at(s) == ["series", {:style, 1}]
 
       # The design the frame draws carries the entry's body where its id sat.
       design = BuilderFixture.design(s)
-      assert hd(design.marks).style == [:series, %{stroke_width: 5}]
+      assert hd(design.marks).style == ["series", %{stroke_width: 5}]
     end
 
     test "the drop position is honored and clamped", %{socket: s} do
@@ -1046,7 +1046,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert BuilderFixture.style_at(top) == [{:style, 1}, :series]
+      assert BuilderFixture.style_at(top) == [{:style, 1}, "series"]
 
       {:noreply, over} =
         Builder.handle_event(
@@ -1055,7 +1055,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert BuilderFixture.style_at(over) == [:series, {:style, 1}]
+      assert BuilderFixture.style_at(over) == ["series", {:style, 1}]
     end
 
     test "an entry of another kind is refused, and nothing is written", %{socket: s} do
@@ -1171,18 +1171,18 @@ defmodule Visualize.Chart.BuilderTest do
       Recording.seed(%{
         {:style, 1} => %{name: "Styles::thick", fragment: %{style: %{stroke_width: 5}}},
         {:style, 2} => %{name: "Styles::faint", fragment: %{style: %{opacity: 0.4}}},
-        {:style, 3} => %{name: "Styles::lie", fragment: %{frames: %{main: %{kind: :polar}}}},
+        {:style, 3} => %{name: "Styles::lie", fragment: %{frames: %{"main" => %{kind: :polar}}}},
         {:style, 4} => %{name: "Styles::odd", fragment: %{style: %{nonsense: 1}}},
         {:frame, 1} => %{
           name: "Frame::wide",
-          fragment: %{frames: %{main: %{margin: %{top: 900}}}}
+          fragment: %{frames: %{"main" => %{margin: %{top: 900}}}}
         },
         {:composite, 1} => %{
           name: "Charts::pair",
           fragment: %{
             composite: %{
               uses: [Use.new({:frame, 1}), %Use{id: {:use, 2}, ref: nil, local: %{version: 2}}],
-              vars: %{unit: %{default: "%"}}
+              vars: %{"unit" => %{default: "%"}}
             }
           }
         }
@@ -1213,10 +1213,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, two} = Builder.handle_event("add_chart", %{}, s)
       assert Enum.map(two.assigns.charts, & &1.name) == ["chart 1", "chart 2"]
       assert two.assigns.chart == 2
-      assert [%{local: %{frames: %{main: %{}}}, ref: nil}] = two.assigns.uses
+      assert [%{local: %{frames: %{"main" => %{}}}, ref: nil}] = two.assigns.uses
 
       assert BuilderFixture.layers(two) == [
-               {"new frame", %{frames: %{main: %{kind: :cartesian}}}}
+               {"new frame", %{frames: %{"main" => %{kind: :cartesian}}}}
              ]
 
       html = BuilderFixture.render(two)
@@ -1248,7 +1248,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # Deploy is the selected chart's; closing it selects the neighbor; the last stays.
       {:noreply, _} = Builder.handle_event("deploy", %{}, jumped)
-      assert_received {:visualize_chart_deployed, "b", %{frames: %{main: %{}}}}
+      assert_received {:visualize_chart_deployed, "b", %{frames: %{"main" => %{}}}}
       {:noreply, closed} = Builder.handle_event("close_chart", %{"chart" => "2"}, jumped)
       assert Enum.map(closed.assigns.charts, & &1.id) == [1] and closed.assigns.chart == 1
       {:noreply, kept} = Builder.handle_event("close_chart", %{"chart" => "1"}, closed)
@@ -1302,13 +1302,13 @@ defmodule Visualize.Chart.BuilderTest do
       assert group.origin == {:composite, 1}
       assert Stack.linkage(group) == :unlocked
       [wide, pair] = Stack.children(group)
-      assert %Use{ref: nil, local: %{frames: %{main: %{margin: %{top: 900}}}}} = wide
+      assert %Use{ref: nil, local: %{frames: %{"main" => %{margin: %{top: 900}}}}} = wide
       assert %Use{ref: nil, local: %{version: 2}} = pair
       assert length(Enum.uniq(Enum.map([group, wide, pair | rest], & &1.id))) == 6
       # The composite's own vars are the group's, declared by it in the design.
-      assert get_in(group.local, [:composite, :vars]) == %{unit: %{default: "%"}}
+      assert get_in(group.local, [:composite, :vars]) == %{"unit" => %{default: "%"}}
       assert copied.assigns.stack_vars == %{}
-      assert BuilderFixture.design(copied).vars == %{unit: %{default: "%"}}
+      assert BuilderFixture.design(copied).vars == %{"unit" => %{default: "%"}}
       assert copied.assigns.notice == nil
       assert BuilderFixture.selected(copied) == 0
 
@@ -1332,10 +1332,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, edited} =
         Builder.handle_event("edit", %{"_target" => ["top"], "top" => "500"}, s2)
 
-      assert {:ok, %{fragment: %{frames: %{main: %{margin: %{top: 900}}}}}} =
+      assert {:ok, %{fragment: %{frames: %{"main" => %{margin: %{top: 900}}}}}} =
                Recording.get({:frame, 1}, %{})
 
-      assert %Use{ref: nil, local: %{frames: %{main: %{margin: %{top: 500}}}}} =
+      assert %Use{ref: nil, local: %{frames: %{"main" => %{margin: %{top: 500}}}}} =
                edited.assigns.uses |> Enum.at(3) |> Stack.children() |> hd()
     end
 
@@ -1400,7 +1400,7 @@ defmodule Visualize.Chart.BuilderTest do
           m
         )
 
-      assert Enum.at(m.assigns.uses, 3).mask == [[:frames, :main, :margin]]
+      assert Enum.at(m.assigns.uses, 3).mask == [[:frames, "main", :margin]]
       assert BuilderFixture.render(m) =~ ~s(name="frames.main.margin" value="true" checked>)
 
       # Its page: `frame.margin` is Frame::wide's word (width 900, on top), so the form is
@@ -1464,7 +1464,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert %Use{
                ref: nil,
                origin: {:frame, 1},
-               local: %{frames: %{main: %{margin: %{top: 900}}}}
+               local: %{frames: %{"main" => %{margin: %{top: 900}}}}
              } =
                unlocked
 
@@ -1491,12 +1491,12 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, edited} =
         Builder.handle_event("edit", %{"_target" => ["top"], "top" => "500"}, u)
 
-      assert %Use{local: %{frames: %{main: %{margin: %{top: 500}}}}} =
+      assert %Use{local: %{frames: %{"main" => %{margin: %{top: 500}}}}} =
                Enum.at(edited.assigns.uses, 3)
 
-      assert BuilderFixture.design(edited).frames.main.margin.top == 500
+      assert BuilderFixture.design(edited).frames["main"].margin.top == 500
       # The entry is what it was.
-      assert {:ok, %{fragment: %{frames: %{main: %{margin: %{top: 900}}}}}} =
+      assert {:ok, %{fragment: %{frames: %{"main" => %{margin: %{top: 900}}}}}} =
                Recording.get({:frame, 1}, %{})
 
       # Locked again: the ref is back, the local kept over it, the form disabled; the row
@@ -1507,12 +1507,12 @@ defmodule Visualize.Chart.BuilderTest do
       assert %Use{
                ref: {:frame, 1},
                origin: nil,
-               local: %{frames: %{main: %{margin: %{top: 500}}}}
+               local: %{frames: %{"main" => %{margin: %{top: 500}}}}
              } =
                relocked
 
       assert Stack.linkage(relocked) == :edited
-      assert BuilderFixture.design(l).frames.main.margin.top == 500
+      assert BuilderFixture.design(l).frames["main"].margin.top == 500
       html = BuilderFixture.render(l)
       assert html =~ "vis-builder-layer-locked vis-builder-layer-edited"
       assert html =~ "from the library with local changes: o to open, l to unlock"
@@ -1537,13 +1537,13 @@ defmodule Visualize.Chart.BuilderTest do
       Recording.seed(%{
         {:frame, 1} => %{
           name: "Frame::wide",
-          fragment: %{frames: %{main: %{margin: %{top: 900, bottom: 300}}}}
+          fragment: %{frames: %{"main" => %{margin: %{top: 900, bottom: 300}}}}
         }
       })
 
       {:noreply, l} = Builder.handle_event("select_layer", %{"index" => "3"}, l)
 
-      assert BuilderFixture.design(l).frames.main.margin == %{
+      assert BuilderFixture.design(l).frames["main"].margin == %{
                top: 500,
                right: 20,
                bottom: 300,
@@ -1571,13 +1571,13 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, reverted} = Builder.handle_event("revert_site", %{"index" => "3"}, armed)
 
-      assert %Use{ref: {:frame, 1}, origin: nil, local: local, mask: [[:frames, :main, :margin]]} =
+      assert %Use{ref: {:frame, 1}, origin: nil, local: local, mask: [[:frames, "main", :margin]]} =
                Enum.at(reverted.assigns.uses, 3)
 
       assert local == %{}
       assert reverted.assigns.reverting == nil
 
-      assert BuilderFixture.design(reverted).frames.main.margin == %{
+      assert BuilderFixture.design(reverted).frames["main"].margin == %{
                top: 20,
                right: 20,
                bottom: 30,
@@ -1625,7 +1625,7 @@ defmodule Visualize.Chart.BuilderTest do
         use
         | ref: nil,
           origin: {:frame, 1},
-          local: %{frames: %{main: %{margin: %{top: 5}}}}
+          local: %{frames: %{"main" => %{margin: %{top: 5}}}}
       }
 
       encoded = Visualize.Chart.Codec.encode(%{composite: %{uses: [unlocked], vars: %{}}})
@@ -1635,9 +1635,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert Visualize.Chart.Codec.decode(encoded) == %{composite: %{uses: [unlocked], vars: %{}}}
 
-      fetch = fn {:frame, 1} -> {:ok, %{frames: %{main: %{margin: %{top: 900}}}}} end
+      fetch = fn {:frame, 1} -> {:ok, %{frames: %{"main" => %{margin: %{top: 900}}}}} end
 
-      assert {:ok, %{frames: %{main: %{margin: %{top: 5}}}}, _} =
+      assert {:ok, %{frames: %{"main" => %{margin: %{top: 5}}}}, _} =
                Visualize.Chart.Composite.flatten(
                  %{composite: %{uses: [unlocked], vars: %{}}},
                  fetch
@@ -1670,19 +1670,19 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert BuilderFixture.names(s1) == [:house, :shared, "new axis", :panel]
 
-      assert %Use{ref: nil, local: %{axis: %{scale: :x, side: :bottom}}} =
+      assert %Use{ref: nil, local: %{axis: %{scale: "x", side: :bottom}}} =
                Enum.at(s1.assigns.uses, 2)
 
       assert BuilderFixture.selected(s1) == 2
       assert s1.assigns.node_label =~ ~r/^frames\.main\.axes\[\d\]$/
-      assert length(BuilderFixture.design(s1).frames.main.axes) == 2
+      assert length(BuilderFixture.design(s1).frames["main"].axes) == 2
 
       # In the right band: a y axis on the right; `y` is declared, so no scale site.
       {:noreply, s2} =
         Builder.handle_event("place", %{"component" => "axis", "x" => 595, "y" => 207}, s)
 
-      assert %Use{local: %{axis: %{scale: :y, side: :right}}} = Enum.at(s2.assigns.uses, 1)
-      assert length(BuilderFixture.design(s2).frames.main.axes) == 3
+      assert %Use{local: %{axis: %{scale: "y", side: :right}}} = Enum.at(s2.assigns.uses, 1)
+      assert length(BuilderFixture.design(s2).frames["main"].axes) == 3
 
       # A title in the top band; a label in the plot at the nearest corner.
       {:noreply, s3} =
@@ -1714,7 +1714,10 @@ defmodule Visualize.Chart.BuilderTest do
     end
 
     test "an axis brings the scale it needs, beneath it", %{socket: _s} do
-      only_x = [{:base, %{frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}}}}}}]
+      only_x = [
+        {:base, %{frames: %{"main" => %{kind: :cartesian, scales: %{x: %{kind: :linear}}}}}}
+      ]
+
       s = BuilderFixture.socket(only_x)
 
       {:noreply, s} =
@@ -1722,11 +1725,15 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert BuilderFixture.names(s) == ["base", "new scale", "new axis"]
 
-      assert %Use{key: :y, local: %{scale: %{kind: :linear, domain: :auto}}} =
+      assert %Use{key: "y", local: %{scale: %{kind: :linear, domain: :auto}}} =
                Enum.at(s.assigns.uses, 1)
 
-      assert %Use{local: %{axis: %{scale: :y, side: :left}}} = Enum.at(s.assigns.uses, 2)
-      assert BuilderFixture.design(s).frames.main.scales.y == %{kind: :linear, domain: :auto}
+      assert %Use{local: %{axis: %{scale: "y", side: :left}}} = Enum.at(s.assigns.uses, 2)
+
+      assert BuilderFixture.design(s).frames["main"].scales["y"] == %{
+               kind: :linear,
+               domain: :auto
+             }
     end
 
     test "a legend takes the ordinal scale and is written through the ownership rule; none is a notice",
@@ -1739,7 +1746,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       with_color =
         BuilderFixture.layers() ++
-          [{:colors, %{frames: %{main: %{scales: %{c: %{kind: :ordinal, domain: ["a", "b"]}}}}}}]
+          [
+            {:colors,
+             %{frames: %{"main" => %{scales: %{c: %{kind: :ordinal, domain: ["a", "b"]}}}}}}
+          ]
 
       s = BuilderFixture.socket(with_color, selected: 0)
 
@@ -1748,13 +1758,13 @@ defmodule Visualize.Chart.BuilderTest do
 
       # No layer owns `frame.legend`, so it goes to the frame's owner — the highest layer
       # with a value under `frame`, `colors` (§18.15) — not to the selected `house`.
-      assert %Use{local: %{frames: %{main: %{legend: %{scale: :c, position: :top_right}}}}} =
+      assert %Use{local: %{frames: %{"main" => %{legend: %{scale: "c", position: :top_right}}}}} =
                List.last(placed.assigns.uses)
 
       assert placed.assigns.node_label == "frames.main.legend"
 
-      assert BuilderFixture.design(placed).frames.main.legend == %{
-               scale: :c,
+      assert BuilderFixture.design(placed).frames["main"].legend == %{
+               scale: "c",
                position: :top_right
              }
     end
@@ -1765,13 +1775,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, added} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "axis"}, s)
 
-      assert %Use{local: %{axis: %{scale: :x, side: :bottom}}} = Enum.at(added.assigns.uses, 2)
+      assert %Use{local: %{axis: %{scale: "x", side: :bottom}}} = Enum.at(added.assigns.uses, 2)
       assert added.assigns.node_label =~ ~r/^frames\.main\.axes\[\d\]$/
 
       {:noreply, added} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "label"}, s)
 
-      assert %Use{local: %{label: %{anchor: {:axis, :x}}}} = Enum.at(added.assigns.uses, 1)
+      assert %Use{local: %{label: %{anchor: {:axis, "x"}}}} = Enum.at(added.assigns.uses, 1)
 
       {:noreply, added} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:line"}, s)
@@ -1788,7 +1798,7 @@ defmodule Visualize.Chart.BuilderTest do
     test "a library entry dropped on the graph is linked above the selected layer, its placement the library's (#381)",
          %{socket: s} do
       Recording.seed(%{
-        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: :y, side: :left, ticks: 3}}}
+        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: "y", side: :left, ticks: 3}}}
       })
 
       {:noreply, s1} =
@@ -1798,10 +1808,11 @@ defmodule Visualize.Chart.BuilderTest do
       assert %Use{ref: {:axis, 1}, local: local} = Enum.at(s1.assigns.uses, 1)
       assert local == %{}
 
-      assert BuilderFixture.design(s1).frames.main.axes |> Enum.map(& &1.side) |> Enum.sort() == [
-               :bottom,
-               :left
-             ]
+      assert BuilderFixture.design(s1).frames["main"].axes |> Enum.map(& &1.side) |> Enum.sort() ==
+               [
+                 :bottom,
+                 :left
+               ]
 
       # Unlocked, it is the chart's, and a move on the graph takes it to the other side.
       {:noreply, s2} = Builder.handle_event("unlock_site", %{"index" => "1"}, s1)
@@ -1833,7 +1844,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       [_, placed | _] = s1.assigns.uses
 
-      assert %Use{local: %{mark: %{type: :line, data: :primary, channels: %{x: :t, y: :v}}}} =
+      assert %Use{local: %{mark: %{type: :line, data: "primary", channels: %{x: "t", y: "v"}}}} =
                placed
 
       label = s1.assigns.node_label
@@ -1866,16 +1877,16 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s4} =
         Builder.handle_event("place", %{"component" => "mark:rect", "x" => 294, "y" => 207}, s)
 
-      assert %Use{local: %{mark: %{type: :rect, data: :primary, channels: %{x0: :t, x1: :v}}}} =
+      assert %Use{local: %{mark: %{type: :rect, data: "primary", channels: %{x0: "t", x1: "v"}}}} =
                Enum.at(s4.assigns.uses, 1)
 
       # `+ mark` guesses the same; a chart with no source places the type alone.
       {:noreply, s5} =
         Builder.handle_event("component_key", %{"key" => "Insert", "component" => "mark:line"}, s)
 
-      assert %Use{local: %{mark: %{type: :line, data: :primary}}} = Enum.at(s5.assigns.uses, 1)
+      assert %Use{local: %{mark: %{type: :line, data: "primary"}}} = Enum.at(s5.assigns.uses, 1)
 
-      bare = BuilderFixture.socket([{:base, %{frames: %{main: %{kind: :cartesian}}}}])
+      bare = BuilderFixture.socket([{:base, %{frames: %{"main" => %{kind: :cartesian}}}}])
 
       {:noreply, s6} =
         Builder.handle_event(
@@ -1895,11 +1906,11 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("move", %{"node" => "frames.main.axes[0]", "x" => 294, "y" => 5}, s)
 
-      assert %Use{local: %{frames: %{main: %{axes: [%{scale: :x, side: :top}, _]}}}} =
+      assert %Use{local: %{frames: %{"main" => %{axes: [%{scale: "x", side: :top}, _]}}}} =
                Enum.at(s1.assigns.uses, 1)
 
       assert s1.assigns.node_label == "frames.main.axes[0]"
-      assert BuilderFixture.design(s1).frames.main.axes |> Enum.map(& &1.side) == [:top, :left]
+      assert BuilderFixture.design(s1).frames["main"].axes |> Enum.map(& &1.side) == [:top, :left]
 
       # The same region again is nothing; a mark does not move; a region by name works.
       {:noreply, same} =
@@ -1919,7 +1930,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s2} =
         Builder.handle_event("move", %{"node" => "frames.main.axes[1]", "region" => "right"}, s)
 
-      assert %Use{local: %{frames: %{main: %{axes: [_, %{scale: :y, side: :right}]}}}} =
+      assert %Use{local: %{frames: %{"main" => %{axes: [_, %{scale: "y", side: :right}]}}}} =
                Enum.at(s2.assigns.uses, 1)
 
       # A title to the bottom band becomes a caption; into the plot, the nearest corner.
@@ -1947,14 +1958,14 @@ defmodule Visualize.Chart.BuilderTest do
                frames: %{
                  main: %{
                    scales: %{c: %{kind: :ordinal, domain: ["a"]}},
-                   legend: %{scale: :c, position: :top_right}
+                   legend: %{scale: "c", position: :top_right}
                  }
                }
              }}
           ]
 
       Recording.seed(%{
-        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: :y, side: :left, ticks: 3}}}
+        {:axis, 1} => %{name: "Axes::y", fragment: %{axis: %{scale: "y", side: :left, ticks: 3}}}
       })
 
       s = BuilderFixture.socket(with_legend, store: Recording)
@@ -1962,13 +1973,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("move", %{"node" => "frames.main.legend", "x" => 20, "y" => 207}, s)
 
-      assert %Use{local: %{frames: %{main: %{legend: %{position: :left}}}}} =
+      assert %Use{local: %{frames: %{"main" => %{legend: %{position: :left}}}}} =
                List.last(s1.assigns.uses)
 
       {:noreply, s2} =
         Builder.handle_event("move", %{"node" => "frames.main.legend", "x" => 56, "y" => 347}, s)
 
-      assert %Use{local: %{frames: %{main: %{legend: %{position: :bottom_left}}}}} =
+      assert %Use{local: %{frames: %{"main" => %{legend: %{position: :bottom_left}}}}} =
                List.last(s2.assigns.uses)
 
       # A linked layer's axis is the library's word: the move is refused with the notice.
@@ -2024,7 +2035,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert %Use{
                local: %{
-                 frames: %{main: %{axes: [%{scale: :y, side: :right}, %{scale: :y, side: :left}]}}
+                 frames: %{
+                   "main" => %{axes: [%{scale: "y", side: :right}, %{scale: "y", side: :left}]}
+                 }
                }
              } =
                Enum.at(s1.assigns.uses, 1)
@@ -2040,7 +2053,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s2} =
         Builder.handle_event("move", %{"node" => "frames.main.axes[0]", "region" => "bottom"}, s1)
 
-      assert %Use{local: %{frames: %{main: %{axes: [%{scale: :x, side: :bottom}, _]}}}} =
+      assert %Use{local: %{frames: %{"main" => %{axes: [%{scale: "x", side: :bottom}, _]}}}} =
                Enum.at(s2.assigns.uses, 1)
 
       # A chart with no vertical scale: the move brings `y` beneath the axis's owner.
@@ -2052,7 +2065,7 @@ defmodule Visualize.Chart.BuilderTest do
                main: %{
                  kind: :cartesian,
                  scales: %{x: %{kind: :linear}},
-                 axes: [%{scale: :x, side: :bottom}]
+                 axes: [%{scale: "x", side: :bottom}]
                }
              }
            }}
@@ -2064,12 +2077,17 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("move", %{"node" => "frames.main.axes[0]", "region" => "left"}, s3)
 
       assert BuilderFixture.names(s4) == ["new scale", "base"]
-      assert %Use{key: :y, local: %{scale: %{kind: :linear, domain: :auto}}} = hd(s4.assigns.uses)
 
-      assert %Use{local: %{frames: %{main: %{axes: [%{scale: :y, side: :left}]}}}} =
+      assert %Use{key: "y", local: %{scale: %{kind: :linear, domain: :auto}}} =
+               hd(s4.assigns.uses)
+
+      assert %Use{local: %{frames: %{"main" => %{axes: [%{scale: "y", side: :left}]}}}} =
                List.last(s4.assigns.uses)
 
-      assert BuilderFixture.design(s4).frames.main.scales.y == %{kind: :linear, domain: :auto}
+      assert BuilderFixture.design(s4).frames["main"].scales["y"] == %{
+               kind: :linear,
+               domain: :auto
+             }
     end
 
     test "a layer row opens on the kinds it declares, and a kind opens its page in the inspector (spec/14 §18.8, #285)",
@@ -2234,13 +2252,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, opened} = Builder.handle_event("add_layer", %{"name" => "composite:1"}, s)
 
       assert BuilderFixture.names(opened) == ["Frame::wide", "local"]
-      assert opened.assigns.stack_vars == %{unit: %{default: "%"}}
+      assert opened.assigns.stack_vars == %{"unit" => %{default: "%"}}
 
       assert BuilderFixture.design(opened) ==
                %{
                  version: 2,
-                 frames: %{main: %{margin: %{top: 900}}},
-                 vars: %{unit: %{default: "%"}}
+                 frames: %{"main" => %{margin: %{top: 900}}},
+                 vars: %{"unit" => %{default: "%"}}
                }
 
       html = BuilderFixture.render(opened)
@@ -2250,7 +2268,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, saved} = Builder.handle_event("put_design", %{"name" => "Charts::pair"}, opened)
       assert saved.assigns.notice == nil
 
-      assert {:ok, %{fragment: %{composite: %{vars: %{unit: %{default: "%"}}}}}} =
+      assert {:ok, %{fragment: %{composite: %{vars: %{"unit" => %{default: "%"}}}}}} =
                Recording.get({:composite, 1}, %{})
     end
 
@@ -2311,13 +2329,13 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert hd(masked.assigns.uses).mask == [[:frames, :main, :margin]]
+      assert hd(masked.assigns.uses).mask == [[:frames, "main", :margin]]
       assert BuilderFixture.render(masked) =~ ~s(name="frames.main.margin" value="true" checked>)
 
       # The house's contribution no longer carries the margin, so the layers below show through.
       {_house, house} = hd(BuilderFixture.layers(masked))
-      refute Map.has_key?(house.frames.main, :margin)
-      assert Map.has_key?(house.frames.main, :kind)
+      refute Map.has_key?(house.frames["main"], :margin)
+      assert Map.has_key?(house.frames["main"], :kind)
 
       # An unchecked box submits nothing, which is the path leaving.
       {:noreply, back} =
@@ -2423,7 +2441,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # And the id reads back as an id, never as an atom.
       assert Editor.parse({:ref, :style}, "style:1") == {:ok, {:style, 1}}
-      assert Editor.parse({:ref, :style}, "frame:1") == {:ok, :"frame:1"}
+      assert Editor.parse({:ref, :style}, "frame:1") == {:ok, "frame:1"}
     end
   end
 
@@ -2441,7 +2459,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert_received {:deployed, "b", design}
       refute Map.has_key?(design, :composite)
-      assert design.frames.main.kind == :cartesian
+      assert design.frames["main"].kind == :cartesian
       assert {:ok, _applied} = Chart.apply(design, sources: BuilderFixture.sources())
       assert deployed.assigns.notice == nil
 
@@ -2518,8 +2536,8 @@ defmodule Visualize.Chart.BuilderTest do
       refute_received {:visualize_chart_deployed, _, _}
 
       {:noreply, keyed} = Builder.handle_event("set_key", %{"key" => "thick"}, s)
-      assert Enum.at(keyed.assigns.uses, 3).key == :thick
-      assert BuilderFixture.design(keyed).styles.thick == %{stroke_width: 5}
+      assert Enum.at(keyed.assigns.uses, 3).key == "thick"
+      assert BuilderFixture.design(keyed).styles["thick"] == %{stroke_width: 5}
       refute BuilderFixture.render(keyed) =~ "not placed"
 
       {:noreply, blank} = Builder.handle_event("set_key", %{"key" => " "}, keyed)
@@ -2560,8 +2578,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, picked} = pick.(s, "other")
       site = Visualize.Chart.Builder.Stack.get(picked.assigns.uses, picked.assigns.selected)
-      assert site.key == :other
-      assert site.local == %{source: %{fields: [:a, :b]}}
+      assert site.key == "other"
+      assert site.local == %{source: %{fields: ["a", "b"]}}
 
       assert BuilderFixture.render(picked) =~
                ~r|vis-builder-pool-name-on">\s*<input type="radio" name="key" value="other" checked>|
@@ -2571,7 +2589,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, repicked} = pick.(picked, "primary")
 
       assert Visualize.Chart.Builder.Stack.get(repicked.assigns.uses, repicked.assigns.selected).local ==
-               %{source: %{fields: [:a, :b]}}
+               %{source: %{fields: ["a", "b"]}}
 
       {:noreply, odd} =
         Builder.handle_event(
@@ -2581,7 +2599,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       assert Visualize.Chart.Builder.Stack.get(odd.assigns.uses, odd.assigns.selected).key ==
-               :elsewhere
+               "elsewhere"
 
       assert BuilderFixture.render(odd) =~
                ~r|vis-builder-pool-name-on">\s*<input type="radio" name="key" value="elsewhere" checked>|
@@ -2603,7 +2621,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       assert Visualize.Chart.Builder.Stack.get(defaulted.assigns.uses, defaulted.assigns.selected).local.source.default ==
-               :gitlab_uptime
+               "gitlab_uptime"
 
       {:noreply, defaulted} =
         Builder.handle_event(
@@ -2613,7 +2631,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       assert Visualize.Chart.Builder.Stack.get(defaulted.assigns.uses, defaulted.assigns.selected).local.source.default ==
-               :primary
+               "primary"
 
       # A style site still types its name, with no list.
       style = BuilderFixture.with_object(s, :style)
@@ -2674,7 +2692,7 @@ defmodule Visualize.Chart.BuilderTest do
           name: "Scales::hour",
           fragment: %{scale: %{kind: :linear, domain: :auto}}
         },
-        {:source, 2} => %{name: "Sources::alt", fragment: %{source: %{fields: [:t, :v]}}}
+        {:source, 2} => %{name: "Sources::alt", fragment: %{source: %{fields: ["t", "v"]}}}
       }
 
       @impl true
@@ -2728,7 +2746,7 @@ defmodule Visualize.Chart.BuilderTest do
       # The site holds the id; the design holds the body under a synthesized key.
       assert get_in(Enum.at(s.assigns.uses, 1).local, [
                :frames,
-               :main,
+               "main",
                :axes,
                Access.at(0),
                :scale
@@ -2736,9 +2754,9 @@ defmodule Visualize.Chart.BuilderTest do
                {:scale, 4}
 
       design = BuilderFixture.design(s)
-      assert hd(design.frames.main.axes).scale == :"scale:4"
-      assert design.frames.main.scales[:"scale:4"] == %{kind: :linear, domain: :auto}
-      assert hd(design.marks).style == [:series, %{stroke_width: 5}]
+      assert hd(design.frames["main"].axes).scale == :"scale:4"
+      assert design.frames["main"].scales[:"scale:4"] == %{kind: :linear, domain: :auto}
+      assert hd(design.marks).style == ["series", %{stroke_width: 5}]
       refute inspect(design) =~ "{:style, 1}"
       refute inspect(design) =~ "{:scale, 4}"
 
@@ -2805,7 +2823,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert get_in(Enum.at(s.assigns.uses, 1).local, [
                :frames,
-               :main,
+               "main",
                :axes,
                Access.at(0),
                :scale
@@ -2813,7 +2831,7 @@ defmodule Visualize.Chart.BuilderTest do
                {:scale, 9}
 
       design = BuilderFixture.design(s)
-      refute Map.has_key?(hd(design.frames.main.axes), :scale)
+      refute Map.has_key?(hd(design.frames["main"].axes), :scale)
 
       {:noreply, deployed} = Builder.handle_event("deploy", %{}, s)
       assert deployed.assigns.notice == "deployed with 1 reference(s) showing through: scale:9"
@@ -2837,15 +2855,17 @@ defmodule Visualize.Chart.BuilderTest do
       assert String.starts_with?(s.assigns.node_label, "sources")
       html = BuilderFixture.render(s)
       assert html =~ ~s(class="vis-builder-sources")
-      assert %{source_1: %{kind: :sine, fields: [:t, :value], window: 24}} = s.assigns.signals
+
+      assert %{"source_1" => %{kind: :sine, fields: ["t", "value"], window: 24}} =
+               s.assigns.signals
 
       # The source is declared in the selected layer with its columns typed (#369), one row
       # on the page tagged with its layer, and offered to a mark's data (§19.10).
       {_, house} = hd(BuilderFixture.layers(s))
 
-      assert house.sources.source_1 == %{
-               fields: [:t, :value],
-               types: %{t: :number, value: :number}
+      assert house.sources["source_1"] == %{
+               fields: ["t", "value"],
+               types: %{"t" => :number, "value" => :number}
              }
 
       assert html =~
@@ -2893,18 +2913,18 @@ defmodule Visualize.Chart.BuilderTest do
 
       {_, house} = hd(BuilderFixture.layers(s))
 
-      assert house.sources.source_1 == %{
-               fields: [:t, :cpu, :mem],
-               types: %{t: :number, cpu: :number, mem: :number}
+      assert house.sources["source_1"] == %{
+               fields: ["t", "cpu", "mem"],
+               types: %{"t" => :number, "cpu" => :number, "mem" => :number}
              }
 
-      assert s.assigns.signals.source_1.fields == [:t, :cpu, :mem]
+      assert s.assigns.signals["source_1"].fields == ["t", "cpu", "mem"]
 
       {:noreply, s} =
         Builder.handle_event("remove_column", %{"source" => "source_1", "column" => "mem"}, s)
 
-      assert elem(hd(BuilderFixture.layers(s)), 1).sources.source_1.fields == [:t, :cpu]
-      assert s.assigns.signals.source_1.fields == [:t, :cpu]
+      assert elem(hd(BuilderFixture.layers(s)), 1).sources["source_1"].fields == ["t", "cpu"]
+      assert s.assigns.signals["source_1"].fields == ["t", "cpu"]
 
       # The generator: a kind keeps the numbers, none removes the signal and leaves the source.
       {:noreply, s} =
@@ -2917,18 +2937,18 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("set_generator", %{"source" => "source_1", "kind" => "square"}, s)
 
-      assert %{kind: :square, window: 6, fields: [:t, :cpu]} = s.assigns.signals.source_1
+      assert %{kind: :square, window: 6, fields: ["t", "cpu"]} = s.assigns.signals["source_1"]
 
       {:noreply, s} =
         Builder.handle_event("set_generator", %{"source" => "source_1", "kind" => ""}, s)
 
       assert s.assigns.signals == %{}
-      assert Map.has_key?(elem(hd(BuilderFixture.layers(s)), 1).sources, :source_1)
+      assert Map.has_key?(elem(hd(BuilderFixture.layers(s)), 1).sources, "source_1")
       assert BuilderFixture.render(s) =~ "no rows — pick a generator"
 
       # A second source is named past the first; × removes a source and its signal.
       {:noreply, s} = Builder.handle_event("add_source", %{}, s)
-      assert Map.keys(s.assigns.signals) == [:source_2]
+      assert Map.keys(s.assigns.signals) == ["source_2"]
       {:noreply, s} = Builder.handle_event("remove_source", %{"source" => "source_2"}, s)
       assert s.assigns.signals == %{}
       refute Map.has_key?(elem(hd(BuilderFixture.layers(s)), 1).sources, :source_2)
@@ -2947,16 +2967,16 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("rename_source", %{"source" => "source_1", "name" => "feed"}, s)
 
       assert s.assigns.notice == nil
-      assert Map.keys(s.assigns.signals) == [:feed]
+      assert Map.keys(s.assigns.signals) == ["feed"]
       design = BuilderFixture.design(s)
-      assert Map.has_key?(design.sources, :feed) and not Map.has_key?(design.sources, :source_1)
-      assert hd(design.marks).data == :feed
+      assert Map.has_key?(design.sources, "feed") and not Map.has_key?(design.sources, "source_1")
+      assert hd(design.marks).data == "feed"
 
       {:noreply, refused} =
         Builder.handle_event("rename_source", %{"source" => "feed", "name" => "primary"}, s)
 
       assert refused.assigns.notice == "a source is already named primary"
-      assert Map.keys(refused.assigns.signals) == [:feed]
+      assert Map.keys(refused.assigns.signals) == ["feed"]
 
       # The host's rows show where a source has no generator.
       {:noreply, page} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
@@ -3000,7 +3020,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
-      assert site.local == %{source: %{fields: [:cpu, :hour]}}
+      assert site.local == %{source: %{fields: ["cpu", "hour"]}}
 
       # The signal draws: a mark over it renders, and the tick moves the rows.
       {:noreply, s} = Builder.handle_event("select_chart", %{"chart" => "1"}, s)
@@ -3037,7 +3057,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # Save carries the signals with the chart's structure.
       {:noreply, _} = Builder.handle_event("save", %{}, still)
-      assert_received {:visualize_chart_saved, "b", %{composite: %{signals: %{signal_1: _}}}}
+      assert_received {:visualize_chart_saved, "b", %{composite: %{signals: %{"signal_1" => _}}}}
     end
   end
 
@@ -3146,7 +3166,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The flat house style is written in its parts by the edit (D-178); a name is a typed
       # color (#683).
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series]) ==
+      assert get_in(hd(s.assigns.uses).local, [:styles, "series"]) ==
                %{stroke: %{type: :solid, color: {:color, :axis}, width: 2}}
 
       # With no color field selected the panel shows the colors and writes nothing.
@@ -3165,7 +3185,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("drop_color", %{"field" => "stroke.color", "color" => "axis"}, s)
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) ==
+      assert get_in(hd(s.assigns.uses).local, [:styles, "series", :stroke, :color]) ==
                {:color, :axis}
 
       {:noreply, s} =
@@ -3175,14 +3195,14 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :stroke, :color]) == "#abcdef"
+      assert get_in(hd(s.assigns.uses).local, [:styles, "series", :stroke, :color]) == "#abcdef"
       assert BuilderFixture.render(s) =~ ~s(--vis-builder-swatch: #abcdef" title="#abcdef")
 
       {:noreply, refused} =
         Builder.handle_event("drop_color", %{"field" => "stroke.width", "color" => "axis"}, s)
 
       assert refused.assigns.notice == "stroke.width is not a color"
-      assert get_in(hd(refused.assigns.uses).local, [:styles, :series, :stroke, :width]) == 2
+      assert get_in(hd(refused.assigns.uses).local, [:styles, "series", :stroke, :width]) == 2
     end
 
     test "the font panel: families in their face, size, the face list, anchor — for a node with font keys",
@@ -3211,7 +3231,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      style = get_in(hd(faced.assigns.uses).local, [:styles, :series])
+      style = get_in(hd(faced.assigns.uses).local, [:styles, "series"])
       assert style.font == %{weight: :light, style: :italic}
       faced_html = BuilderFixture.render(faced)
 
@@ -3243,7 +3263,7 @@ defmodule Visualize.Chart.BuilderTest do
           s
         )
 
-      assert get_in(hd(s.assigns.uses).local, [:styles, :series, :font, :family]) == "Georgia"
+      assert get_in(hd(s.assigns.uses).local, [:styles, "series", :font, :family]) == "Georgia"
 
       # Under another root there is no font panel; under styles with a node that has no
       # font keys it says which to open.
@@ -3270,7 +3290,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:house,
          %{
            version: 2,
-           sources: %{primary: %{fields: [:t, :v]}},
+           sources: %{primary: %{fields: ["t", "v"]}},
            frames: %{
              main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}
            }
@@ -3303,7 +3323,7 @@ defmodule Visualize.Chart.BuilderTest do
 
     test "a tab of another layer's root is marked too, since the need is the design's", %{} do
       layers = [
-        {:house, %{version: 3, frames: %{main: %{kind: :cartesian}}}},
+        {:house, %{version: 3, frames: %{"main" => %{kind: :cartesian}}}},
         {:panel, %{marks: [%{id: :m, type: :line}]}}
       ]
 
@@ -3324,7 +3344,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:only,
          %{
            version: 2,
-           frames: %{main: %{kind: :cartesian}},
+           frames: %{"main" => %{kind: :cartesian}},
            marks: [%{id: :m, type: :line, data: :p, channels: %{x: :a}}]
          }}
       ]
@@ -3386,7 +3406,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("add_column", %{"source" => "primary", "name" => "w"}, with_extra)
 
       {_, shared} = Enum.at(BuilderFixture.layers(picked), 1)
-      assert shared.sources.primary.fields == [:t, :v, :w]
+      assert shared.sources["primary"].fields == ["t", "v", "w"]
       refute BuilderFixture.render(picked) =~ "vis-builder-column-pick"
 
       # The box adds one; × removes one; the last one removed removes the key.
@@ -3394,13 +3414,13 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("add_column", %{"source" => "primary", "name" => "w"}, s)
 
       {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.sources.primary.fields == [:t, :v, :w]
+      assert shared.sources["primary"].fields == ["t", "v", "w"]
 
       {:noreply, s} =
         Builder.handle_event("remove_column", %{"source" => "primary", "column" => "t"}, s)
 
       {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.sources.primary.fields == [:v, :w]
+      assert shared.sources["primary"].fields == ["v", "w"]
 
       {:noreply, s} =
         Builder.handle_event("remove_column", %{"source" => "primary", "column" => "v"}, s)
@@ -3409,7 +3429,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("remove_column", %{"source" => "primary", "column" => "w"}, s)
 
       {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      refute Map.has_key?(shared.sources.primary, :fields)
+      refute Map.has_key?(shared.sources["primary"], :fields)
 
       # A name that is not a name is ignored.
       {:noreply, same} =
@@ -3428,7 +3448,7 @@ defmodule Visualize.Chart.BuilderTest do
           id: "f",
           kind: :source,
           node: %{fields: [:t, :v]},
-          path: [:sources, :primary],
+          path: [:sources, "primary"],
           label: "sources.primary",
           columns: %{primary: ["t", "v", "w"]},
           source_name: :primary
@@ -3451,7 +3471,7 @@ defmodule Visualize.Chart.BuilderTest do
           id: "f",
           kind: :source,
           node: %{fields: [:t, :v]},
-          path: [:sources, :primary],
+          path: [:sources, "primary"],
           label: "sources.primary"
         })
 
@@ -3481,7 +3501,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("bind_field", %{"field" => "fields", "name" => "ycol"}, s)
 
       {_, shared} = Enum.at(BuilderFixture.layers(s), 1)
-      assert shared.sources.primary.fields == [:t, :v, Chart.var(:ycol)]
+      assert shared.sources["primary"].fields == ["t", "v", Chart.var(:ycol)]
 
       html = BuilderFixture.render(s)
 
@@ -3492,7 +3512,7 @@ defmodule Visualize.Chart.BuilderTest do
       design = BuilderFixture.design(s)
 
       assert {:ok, _} =
-               Chart.apply(put_in(design, [:frames, :main, :kind], :cartesian),
+               Chart.apply(put_in(design, [:frames, "main", :kind], :cartesian),
                  sources: BuilderFixture.sources(),
                  vars: %{ycol: :v}
                )
@@ -3649,7 +3669,7 @@ defmodule Visualize.Chart.BuilderTest do
           k
         )
 
-      assert BuilderFixture.design(k).styles.thick == %{stroke_width: 5}
+      assert BuilderFixture.design(k).styles["thick"] == %{stroke_width: 5}
       {:noreply, k} = Builder.handle_event("select_node", %{"node" => "styles.thick"}, k)
 
       {:noreply, refused} =
@@ -3671,8 +3691,8 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert BuilderFixture.layers(s) ==
                [
-                 {"House", %{version: 3, frames: %{main: %{kind: :cartesian}}}},
-                 {"1", %{version: 3, frames: %{main: %{kind: :cartesian}}}}
+                 {"House", %{version: 3, frames: %{"main" => %{kind: :cartesian}}}},
+                 {"1", %{version: 3, frames: %{"main" => %{kind: :cartesian}}}}
                ]
     end
   end
@@ -3762,7 +3782,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
-      assert shared.sources.primary == %{fields: [:t, :v], default: :other}
+      assert shared.sources["primary"] == %{fields: ["t", "v"], default: "other"}
       refute Map.has_key?(house, :sources)
       assert BuilderFixture.selected(s) == 0
     end
@@ -3779,8 +3799,8 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       [{:house, house}, {:shared, shared}, {:panel, panel}] = BuilderFixture.layers(s)
-      assert house.frames.main.margin.top == 500
-      refute Map.has_key?(shared.frames.main, :size)
+      assert house.frames["main"].margin.top == 500
+      refute Map.has_key?(shared.frames["main"], :size)
       refute Map.has_key?(panel, :frame)
     end
 
@@ -3790,7 +3810,7 @@ defmodule Visualize.Chart.BuilderTest do
           {:house,
            %{
              version: 2,
-             frames: %{main: %{kind: :cartesian}},
+             frames: %{"main" => %{kind: :cartesian}},
              styles: %{series: %{stroke_width: 2}}
            }},
           {:panel, %{styles: %{series: %{stroke_width: 4}}}}
@@ -3808,15 +3828,15 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The panel's node is the one the stack keeps, so it is the one rewritten in its parts.
       [{:house, house}, {:panel, panel}] = BuilderFixture.layers(s)
-      assert house.styles.series.stroke_width == 2
-      assert panel.styles.series == %{stroke: %{width: 7}}
+      assert house.styles["series"].stroke_width == 2
+      assert panel.styles["series"] == %{stroke: %{width: 7}}
     end
 
     test "a keyed site is written at its own path", %{socket: s} do
       s = BuilderFixture.with_object(s, :source)
       {:noreply, s} = Builder.handle_event("set_key", %{"key" => "other", "key.other" => ""}, s)
       site = Visualize.Chart.Builder.Stack.get(s.assigns.uses, s.assigns.selected)
-      assert site.key == :other
+      assert site.key == "other"
 
       # Its row on the data page is tagged with the site; a write from the page lands in
       # the site's `source` body. The selection moves back to `house`, which owns nothing
@@ -3836,7 +3856,7 @@ defmodule Visualize.Chart.BuilderTest do
         )
 
       assert Visualize.Chart.Builder.Stack.get(s.assigns.uses, site.id).local ==
-               %{source: %{default: :primary}}
+               %{source: %{default: "primary"}}
     end
 
     test "a new declaration goes to the selected layer", %{socket: s} do
@@ -3846,10 +3866,13 @@ defmodule Visualize.Chart.BuilderTest do
       [{:house, house}, {:shared, shared}, _panel] = BuilderFixture.layers(s)
 
       assert house.sources == %{
-               source_1: %{fields: [:t, :value], types: %{t: :number, value: :number}}
+               "source_1" => %{
+                 fields: ["t", "value"],
+                 types: %{"t" => :number, "value" => :number}
+               }
              }
 
-      assert shared.sources == %{primary: %{fields: [:t, :v]}}
+      assert shared.sources == %{"primary" => %{fields: ["t", "v"]}}
 
       {:noreply, s} = Builder.handle_event("select_root", %{"root" => "sources"}, s)
       html = BuilderFixture.render(s)
@@ -3939,7 +3962,7 @@ defmodule Visualize.Chart.BuilderTest do
       house = %{
         version: 2,
         styles: %{series: %{stroke: Chart.var(:color), stroke_width: 2}},
-        frames: %{main: %{kind: :cartesian, margin: %{top: 400, bottom: 200}}},
+        frames: %{"main" => %{kind: :cartesian, margin: %{top: 400, bottom: 200}}},
         vars: %{color: %{default: :series_1}, unit: %{default: "%"}},
         labels: [%{id: :t, anchor: :title, text: ["u ", Chart.var(:unit)]}]
       }
@@ -3970,7 +3993,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("unbind_field", %{"field" => "stroke.color"}, s)
 
       {_, house} = hd(BuilderFixture.layers(unbound))
-      assert house.styles.series.stroke == %{type: :solid, width: 2}
+      assert house.styles["series"].stroke == %{type: :solid, width: 2}
       assert BuilderFixture.render(unbound) =~ ~s(data-builder-well="stroke.color")
     end
 
@@ -3983,7 +4006,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("bind_field", %{"field" => "fill.color", "name" => "color"}, s)
 
       {_, house} = hd(BuilderFixture.layers(s))
-      assert house.styles.series.fill == %{color: Chart.var(:color)}
+      assert house.styles["series"].fill == %{color: Chart.var(:color)}
 
       # `unit` is text by its use in a label; a color field refuses it by name.
       {:noreply, refused} =
@@ -3991,7 +4014,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       assert refused.assigns.notice =~ "unit is a :text; opacity takes a :size"
       {_, house} = hd(BuilderFixture.layers(refused))
-      refute Map.has_key?(house.styles.series, :opacity)
+      refute Map.has_key?(house.styles["series"], :opacity)
 
       # A variable used nowhere takes the control's type by landing there.
       {:noreply, s} =
@@ -4003,7 +4026,7 @@ defmodule Visualize.Chart.BuilderTest do
       [fresh] =
         Enum.filter(
           Variables.list(BuilderFixture.layers(s), BuilderFixture.design(s)),
-          &(&1.name == :fresh)
+          &(&1.name == "fresh")
         )
 
       assert fresh.type == :size
@@ -4025,8 +4048,8 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("bind_root", %{"root" => "frames", "name" => "w"}, s)
       {_, house} = hd(Enum.filter(BuilderFixture.layers(s), fn {l, _} -> l == :house end))
 
-      assert house.frames.main.kind == Chart.var(:w) or
-               Enum.any?(Map.values(house.frames.main), &(&1 == Chart.var(:w)))
+      assert house.frames["main"].kind == Chart.var(:w) or
+               Enum.any?(Map.values(house.frames["main"]), &(&1 == Chart.var(:w)))
 
       assert BuilderFixture.render(s) =~ ~s(data-builder-bind-root="frames")
     end
@@ -4038,8 +4061,8 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} = Builder.handle_event("promote", %{"field" => "stroke.width"}, s)
       assert hd(BuilderFixture.names(s)) == "var stroke_width"
       {_, house} = List.last(BuilderFixture.layers(s))
-      assert house.styles.series.stroke.width == Chart.var(:stroke_width)
-      assert BuilderFixture.design(s).vars.stroke_width == %{default: 2}
+      assert house.styles["series"].stroke.width == Chart.var(:stroke_width)
+      assert BuilderFixture.design(s).vars["stroke_width"] == %{default: 2}
 
       # A second promotion of the same key takes the next free name.
       {:noreply, s} = Builder.handle_event("unbind_field", %{"field" => "stroke.width"}, s)
@@ -4087,9 +4110,9 @@ defmodule Visualize.Chart.BuilderTest do
       assert hd(panel.labels).text == ~S|Up #{var(:unit)} now|
 
       assert Enum.map(Chart.free_vars(BuilderFixture.layers(s)), & &1.name) == [
-               :accent,
-               :ticks,
-               :unit
+               "accent",
+               "ticks",
+               "unit"
              ]
     end
 
@@ -4121,11 +4144,11 @@ defmodule Visualize.Chart.BuilderTest do
            %{meta: %{name: ~S|Uptime for #{var(:host)}|}, vars: %{host: %{default: "db1"}}}}
         ])
 
-      assert Enum.map(Chart.free_vars(BuilderFixture.layers(s)), & &1.name) == [:host]
+      assert Enum.map(Chart.free_vars(BuilderFixture.layers(s)), & &1.name) == ["host"]
 
       assert {:ok, applied} =
                Chart.apply(
-                 Map.merge(BuilderFixture.design(s), %{frames: %{main: %{kind: :cartesian}}}),
+                 Map.merge(BuilderFixture.design(s), %{frames: %{"main" => %{kind: :cartesian}}}),
                  vars: %{host: "db2"}
                )
 
@@ -4140,7 +4163,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:chart,
          %{
            version: 2,
-           frames: %{main: %{kind: :cartesian}},
+           frames: %{"main" => %{kind: :cartesian}},
            sources: %{primary: %{fields: [:t, :v, :k], types: types}}
          }}
       ]
@@ -4148,7 +4171,7 @@ defmodule Visualize.Chart.BuilderTest do
       BuilderFixture.socket(layers, sources: sources)
     end
 
-    defp scales(s), do: get_in(BuilderFixture.design(s), [:frames, :main, :scales]) || %{}
+    defp scales(s), do: get_in(BuilderFixture.design(s), [:frames, "main", :scales]) || %{}
 
     test "a placed mark's guessed channels declare their scales from the columns' types" do
       s = bare(%{t: :time, v: :number, k: :category})
@@ -4157,13 +4180,13 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
 
       assert scales(s1) == %{
-               x: %{kind: :time, domain: :auto},
-               y: %{kind: :linear, domain: :auto}
+               "x" => %{kind: :time, domain: :auto},
+               "y" => %{kind: :linear, domain: :auto}
              }
 
       # Written to the frame's owner, the chart layer — never into the mark site (§18.15).
       [chart, mark] = Enum.map(s1.assigns.uses, & &1.local)
-      assert Map.keys(chart.frames.main.scales) == [:x, :y]
+      assert Map.keys(chart.frames["main"].scales) == ["x", "y"]
       assert Map.keys(mark) == [:mark]
 
       # The scale is a real node under frame › scales, and no need is raised.
@@ -4179,7 +4202,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("place", %{"component" => "mark:rect", "region" => "plot"}, s)
 
-      assert scales(s1) == %{x: %{kind: :time, domain: :auto}, y: %{kind: :band, domain: :auto}}
+      assert scales(s1) == %{
+               "x" => %{kind: :time, domain: :auto},
+               "y" => %{kind: :band, domain: :auto}
+             }
 
       label = s1.assigns.node_label
       {:noreply, s2} = Builder.handle_event("select_node", %{"node" => label <> ".channels"}, s1)
@@ -4192,22 +4218,22 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The declared y stands, k notwithstanding; value: k derives the ordinal color scale.
       assert scales(s2) == %{
-               x: %{kind: :time, domain: :auto},
-               y: %{kind: :band, domain: :auto},
-               color: %{kind: :ordinal, domain: :auto}
+               "x" => %{kind: :time, domain: :auto},
+               "y" => %{kind: :band, domain: :auto},
+               "color" => %{kind: :ordinal, domain: :auto}
              }
 
       # A literal number is number evidence; a numeric color is sequential.
       assert Visualize.Chart.Builder.Scales.derive(
-               %{
-                 frames: %{main: %{kind: :cartesian}},
+               Visualize.Chart.Migration.names(%{
+                 frames: %{"main" => %{kind: :cartesian}},
                  sources: %{p: %{fields: [:v], types: %{v: :number}}},
                  marks: [%{type: :rect, data: :p, channels: %{y0: 0, value: :v}}]
-               },
+               }),
                %{}
              ) == %{
-               y: %{kind: :linear, domain: :auto},
-               color: %{kind: :sequential, domain: :auto}
+               "y" => %{kind: :linear, domain: :auto},
+               "color" => %{kind: :sequential, domain: :auto}
              }
     end
 
@@ -4218,7 +4244,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("place", %{"component" => "mark:line", "region" => "plot"}, s)
 
-      assert scales(s1) == %{x: %{kind: :time, domain: :auto}, y: %{kind: :linear, domain: :auto}}
+      assert scales(s1) == %{
+               "x" => %{kind: :time, domain: :auto},
+               "y" => %{kind: :linear, domain: :auto}
+             }
 
       s = bare(%{}, %{primary: []})
 
@@ -4229,7 +4258,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s2)
 
       assert html =~
-               "reads :t through no scale — say what :t is under data, or declare the scale under frame"
+               "reads &quot;t&quot; through no scale — say what &quot;t&quot; is under data, or declare the scale under frame"
 
       # Counted on the mark's tab and its channels section, like any need.
       assert html =~ ~r/vis-builder-node-needs[^>]*aria-label="marks"/
@@ -4576,7 +4605,7 @@ defmodule Visualize.Chart.BuilderTest do
               main: %{
                 kind: :cartesian,
                 scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-                axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left, ticks: 3}]
+                axes: [%{scale: "x", side: :bottom}, %{scale: "y", side: :left, ticks: 3}]
               }
             }
           }
@@ -4592,7 +4621,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:chart,
          %{
            version: 2,
-           sources: %{s: %{fields: [:t, :v]}},
+           sources: %{s: %{fields: ["t", "v"]}},
            marks: [%{id: :m, type: :line, data: :s, channels: %{x: :t, y: :v}, style: :series}],
            labels: [%{anchor: :caption, text: ["two"]}, %{anchor: :subtitle, text: ["three"]}]
          }}
@@ -4627,7 +4656,7 @@ defmodule Visualize.Chart.BuilderTest do
       assert length(s1.assigns.uses) == 5
       # Directly above the frame's layer (index 1), not at the end.
       copy = Enum.at(s1.assigns.uses, 2)
-      assert copy.ref == nil and copy.local == %{axis: %{scale: :y, side: :left, ticks: 3}}
+      assert copy.ref == nil and copy.local == %{axis: %{scale: "y", side: :left, ticks: 3}}
       assert Enum.at(s1.assigns.uses, 1).mask == []
       assert s1.assigns.selected == copy.id
       assert s1.assigns.labels[copy.id] == "copy of frames.main.axes[1]"
@@ -4655,7 +4684,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("override_node", %{"node" => "frames.main.axes[1]"}, s)
 
       copy = Enum.at(s1.assigns.uses, 2)
-      assert copy.local == %{axis: %{scale: :y, side: :left, ticks: 3}}
+      assert copy.local == %{axis: %{scale: "y", side: :left, ticks: 3}}
       assert Enum.at(s1.assigns.uses, 1).mask == []
       assert s1.assigns.labels[copy.id] == "override of frames.main.axes[1]"
       {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["ticks"], "ticks" => "8"}, s1)
@@ -4663,7 +4692,7 @@ defmodule Visualize.Chart.BuilderTest do
       html = BuilderFixture.render(s2)
       assert length(Regex.scan(~r/class="axis axis-left"/, html)) == 1
 
-      assert get_in(BuilderFixture.design(s2), [:frames, :main, :axes])
+      assert get_in(BuilderFixture.design(s2), [:frames, "main", :axes])
              |> Enum.filter(&(&1.side == :left))
              |> hd()
              |> Map.get(:ticks) == 8
@@ -4673,13 +4702,13 @@ defmodule Visualize.Chart.BuilderTest do
          %{socket: s} do
       {:noreply, o} = Builder.handle_event("override_node", %{"node" => "styles.series"}, s)
       copy = Enum.at(o.assigns.uses, 3)
-      assert copy.key == :series and copy.local == %{style: %{stroke_width: 1}}
+      assert copy.key == "series" and copy.local == %{style: %{stroke_width: 1}}
       assert Enum.at(o.assigns.uses, 2).mask == []
 
       {:noreply, c} = Builder.handle_event("copy_node", %{"node" => "styles.series"}, s)
       copy = Enum.at(c.assigns.uses, 3)
-      assert copy.key == :series_2
-      assert Map.keys(BuilderFixture.design(c).styles) |> Enum.sort() == [:series, :series_2]
+      assert copy.key == "series_2"
+      assert Map.keys(BuilderFixture.design(c).styles) |> Enum.sort() == ["series", "series_2"]
     end
 
     test "a label has no identity: override lifts the site whole and masks it; copy draws beside; an id-ed mark copies with a fresh id",
@@ -4710,7 +4739,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, m} = Builder.handle_event("copy_node", %{"node" => "marks[0]"}, s)
 
       assert Enum.at(m.assigns.uses, 1).local == %{
-               mark: %{id: :m_2, type: :line, data: :s, channels: %{x: :t, y: :v}, style: :series}
+               mark: %{
+                 id: "m_2",
+                 type: :line,
+                 data: "s",
+                 channels: %{x: "t", y: "v"},
+                 style: "series"
+               }
              }
 
       assert length(BuilderFixture.design(m).marks) == 2
@@ -4785,11 +4820,11 @@ defmodule Visualize.Chart.BuilderTest do
              main: %{
                kind: :cartesian,
                scales: %{x: %{kind: :linear}, y: %{kind: :linear}},
-               axes: [%{scale: :x, side: :bottom}, %{scale: :y, side: :left}],
+               axes: [%{scale: "x", side: :bottom}, %{scale: "y", side: :left}],
                legend: %{scale: :color}
              }
            },
-           sources: %{s: %{fields: [:t, :v]}},
+           sources: %{s: %{fields: ["t", "v"]}},
            marks: [
              %{type: :line, data: :s, channels: %{x: :t, y: :v}},
              %{type: :line, data: :s, channels: %{x: :t, y: :v}}
@@ -4937,7 +4972,7 @@ defmodule Visualize.Chart.BuilderTest do
   end
 
   describe "axes are ticked where their scale is (spec/14 §18.16, #373)" do
-    defp axes_of(s), do: get_in(BuilderFixture.design(s), [:frames, :main, :axes]) || []
+    defp axes_of(s), do: get_in(BuilderFixture.design(s), [:frames, "main", :axes]) || []
 
     test "a mark's page has a row per position scale; a tick adds the axis, another removes it" do
       rows = %{
@@ -4972,10 +5007,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "bottom"}, s)
 
-      assert axes_of(s1) == [%{scale: :x, side: :bottom}]
+      assert axes_of(s1) == [%{scale: "x", side: :bottom}]
       # In the frame's layer, the chart, not the mark site (§18.15).
       [chart, mark] = Enum.map(s1.assigns.uses, & &1.local)
-      assert chart.frames.main.axes == [%{scale: :x, side: :bottom}]
+      assert chart.frames["main"].axes == [%{scale: "x", side: :bottom}]
       assert Map.keys(mark) == [:mark]
 
       html = BuilderFixture.render(s1)
@@ -4987,13 +5022,13 @@ defmodule Visualize.Chart.BuilderTest do
       assert html =~ ~s(phx-value-node="frames.main.axes[0]")
 
       {:noreply, s2} = Builder.handle_event("toggle_grid", %{"scale" => "x"}, s1)
-      assert axes_of(s2) == [%{scale: :x, side: :bottom, grid: true}]
+      assert axes_of(s2) == [%{scale: "x", side: :bottom, grid: true}]
 
       assert BuilderFixture.render(s2) =~
                ~r/<input type="checkbox" checked phx-click="toggle_grid" phx-value-scale="x"/
 
       {:noreply, s3} = Builder.handle_event("toggle_grid", %{"scale" => "x"}, s2)
-      assert axes_of(s3) == [%{scale: :x, side: :bottom}]
+      assert axes_of(s3) == [%{scale: "x", side: :bottom}]
 
       {:noreply, s4} =
         Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "left"}, s3)
@@ -5001,13 +5036,13 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s5} =
         Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "bottom"}, s4)
 
-      assert axes_of(s5) == [%{scale: :y, side: :left}]
+      assert axes_of(s5) == [%{scale: "y", side: :left}]
     end
 
     test "a scale the frame lacks is declared with the axis; a scale's page shows its row alone" do
       layers = [
         {:chart,
-         %{version: 2, frames: %{main: %{kind: :cartesian, scales: %{y: %{kind: :linear}}}}}}
+         %{version: 2, frames: %{"main" => %{kind: :cartesian, scales: %{y: %{kind: :linear}}}}}}
       ]
 
       s = BuilderFixture.socket(layers, sources: %{})
@@ -5018,7 +5053,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "right"}, s)
 
-      assert axes_of(s1) == [%{scale: :y, side: :right}]
+      assert axes_of(s1) == [%{scale: "y", side: :right}]
 
       # No row on a frame's or a label's page.
       {:noreply, frame} = Builder.handle_event("select_root", %{"root" => "frames"}, s)
@@ -5037,14 +5072,14 @@ defmodule Visualize.Chart.BuilderTest do
 
       {:noreply, s1} = Builder.handle_event("toggle_axis", %{"scale" => "y", "side" => "left"}, s)
       [_house, {:shared, shared}, _panel] = BuilderFixture.layers(s1)
-      assert shared.frames.main.axes == [%{scale: :x, side: :bottom, ticks: 3}]
+      assert shared.frames["main"].axes == [%{scale: "x", side: :bottom, ticks: 3}]
 
       # An axis dropped on the graph is a site (§18.16): unticking it removes the site.
       {:noreply, s2} =
         Builder.handle_event("place", %{"component" => "axis", "region" => "top"}, s1)
 
       assert length(s2.assigns.uses) == 4
-      assert Enum.any?(axes_of(s2), &(&1.scale == :x and &1.side == :top))
+      assert Enum.any?(axes_of(s2), &(&1.scale == "x" and &1.side == :top))
       {:noreply, s2} = Builder.handle_event("select_node", %{"node" => "marks[0]"}, s2)
       {:noreply, s3} = Builder.handle_event("toggle_axis", %{"scale" => "x", "side" => "top"}, s2)
       assert length(s3.assigns.uses) == 3
@@ -5056,7 +5091,7 @@ defmodule Visualize.Chart.BuilderTest do
         {:chart,
          %{
            version: 2,
-           frames: %{main: %{kind: :polar}},
+           frames: %{"main" => %{kind: :polar}},
            sources: %{p: %{fields: [:k, :v], types: %{k: :category, v: :number}}},
            marks: [%{type: :rose, data: :p, channels: %{angle: :k, value: :v}}]
          }}
@@ -5074,7 +5109,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("toggle_axis", %{"scale" => "angle", "side" => "bottom"}, s)
 
-      assert axes_of(s1) == [%{scale: :angle, side: :bottom}]
+      assert axes_of(s1) == [%{scale: "angle", side: :bottom}]
     end
   end
 
@@ -5084,7 +5119,9 @@ defmodule Visualize.Chart.BuilderTest do
         {:chart,
          %{
            version: 2,
-           frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}},
+           frames: %{
+             "main" => %{kind: :cartesian, scales: %{x: %{kind: :time}, y: %{kind: :linear}}}
+           },
            sources: %{primary: %{fields: [:t, :v], types: %{t: :time}}},
            marks: [%{type: :rect, data: :primary, channels: %{x0: :t, x1: :t, y0: 0, y1: :v}}]
          }}
@@ -5116,9 +5153,9 @@ defmodule Visualize.Chart.BuilderTest do
 
       # Picking a column writes the atom, as typing it does; a bare name types too.
       {:noreply, s1} = Builder.handle_event("edit", %{"_target" => ["x0"], "x0" => "extra"}, s)
-      assert BuilderFixture.design(s1).marks |> hd() |> get_in([:channels, :x0]) == :extra
+      assert BuilderFixture.design(s1).marks |> hd() |> get_in([:channels, :x0]) == "extra"
       {:noreply, s2} = Builder.handle_event("edit", %{"_target" => ["y0"], "y0" => "v"}, s)
-      assert BuilderFixture.design(s2).marks |> hd() |> get_in([:channels, :y0]) == :v
+      assert BuilderFixture.design(s2).marks |> hd() |> get_in([:channels, :y0]) == "v"
     end
 
     test "with no data bound the channel is a text box that says so; an extent is auto or min, max" do
@@ -5126,7 +5163,9 @@ defmodule Visualize.Chart.BuilderTest do
         {:chart,
          %{
            version: 2,
-           frames: %{main: %{kind: :cartesian, scales: %{y: %{kind: :linear, domain: [0, 100]}}}},
+           frames: %{
+             "main" => %{kind: :cartesian, scales: %{y: %{kind: :linear, domain: [0, 100]}}}
+           },
            marks: [%{type: :line, channels: %{x: :t}}]
          }}
       ]
@@ -5146,7 +5185,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s1} =
         Builder.handle_event("edit", %{"_target" => ["domain"], "domain" => "auto, 50"}, s)
 
-      assert get_in(BuilderFixture.design(s1), [:frames, :main, :scales, :y, :domain]) == [
+      assert get_in(BuilderFixture.design(s1), [:frames, "main", :scales, "y", :domain]) == [
                :auto,
                50
              ]
@@ -5167,7 +5206,7 @@ defmodule Visualize.Chart.BuilderTest do
 
       # `ticks` and `unit` have defaults; `accent` has neither a default nor a binding.
       unbound = Variables.unbound(BuilderFixture.layers(s), BuilderFixture.design(s), %{})
-      assert Enum.map(unbound, & &1.name) == [:accent]
+      assert Enum.map(unbound, & &1.name) == ["accent"]
 
       assert nodes =~
                ~s(class="vis-builder-node vis-builder-node-needs vis-builder-node-variables" title="variables — 1 thing still needed" aria-label="variables" aria-pressed="false" data-builder-promote-target="true" phx-click="context" phx-value-panel="variables")
@@ -5223,7 +5262,7 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("promote", %{"field" => "stroke.width", "scope" => "root"}, s)
 
       assert %Visualize.Chart.Var{name: name} =
-               BuilderFixture.design(promoted).styles.series.stroke.width
+               BuilderFixture.design(promoted).styles["series"].stroke.width
 
       assert to_string(name) =~ "stroke_width"
     end
@@ -5250,11 +5289,11 @@ defmodule Visualize.Chart.BuilderTest do
       vars = Variables.list(BuilderFixture.layers(s), BuilderFixture.design(s))
 
       # The type is the schema's at the first use, whole: a style site's one_of, an axis's ticks'.
-      assert Enum.map(vars, & &1.name) == [:accent, :ticks, :unit]
-      assert Enum.find(vars, &(&1.name == :unit)).type == :text
-      assert match?({:one_of, [{:ref, :style} | _]}, Enum.find(vars, &(&1.name == :accent)).type)
+      assert Enum.map(vars, & &1.name) == ["accent", "ticks", "unit"]
+      assert Enum.find(vars, &(&1.name == "unit")).type == :text
+      assert match?({:one_of, [{:ref, :style} | _]}, Enum.find(vars, &(&1.name == "accent")).type)
 
-      assert Enum.find(vars, &(&1.name == :unit)).default == "%"
+      assert Enum.find(vars, &(&1.name == "unit")).default == "%"
 
       {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
       html = BuilderFixture.render(s)
@@ -5297,8 +5336,8 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("create_variable", %{"name" => "gap", "default" => "12"}, s)
 
       assert hd(BuilderFixture.names(s)) == "var gap"
-      assert hd(s.assigns.uses).key == :gap
-      assert BuilderFixture.design(s).vars.gap == %{default: 12}
+      assert hd(s.assigns.uses).key == "gap"
+      assert BuilderFixture.design(s).vars["gap"] == %{default: 12}
 
       {:noreply, blank} =
         Builder.handle_event("create_variable", %{"name" => " ", "default" => ""}, s)
@@ -5321,25 +5360,25 @@ defmodule Visualize.Chart.BuilderTest do
         Builder.handle_event("set_default", %{"_target" => ["ticks"], "ticks" => "8"}, s)
 
       assert length(BuilderFixture.names(s)) == 4
-      assert BuilderFixture.design(s).vars.ticks == %{default: 8}
+      assert BuilderFixture.design(s).vars["ticks"] == %{default: 8}
 
       {:noreply, s} =
         Builder.handle_event("set_default", %{"_target" => ["ticks"], "ticks" => ""}, s)
 
-      assert BuilderFixture.design(s).vars.ticks == %{}
+      assert BuilderFixture.design(s).vars["ticks"] == %{}
 
       # A variable nobody declares gets a var site on top, which is what wins.
       {:noreply, s} =
         Builder.handle_event("set_default", %{"_target" => ["fresh"], "fresh" => "1"}, s)
 
       assert List.last(BuilderFixture.names(s)) == "var fresh"
-      assert BuilderFixture.design(s).vars.fresh == %{default: 1}
+      assert BuilderFixture.design(s).vars["fresh"] == %{default: 1}
 
       {:noreply, s} =
         Builder.handle_event("set_default", %{"_target" => ["fresh"], "fresh" => "2"}, s)
 
       assert length(BuilderFixture.names(s)) == 5
-      assert BuilderFixture.design(s).vars.fresh == %{default: 2}
+      assert BuilderFixture.design(s).vars["fresh"] == %{default: 2}
     end
 
     test "the value the preview binds is set from the expanded chip" do
@@ -5348,7 +5387,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, s} =
         Builder.handle_event("set_var", %{"_target" => ["ticks"], "ticks" => "6"}, s)
 
-      assert s.assigns.bindings == %{ticks: 6}
+      assert s.assigns.bindings == %{"ticks" => 6}
       {:noreply, s} = Builder.handle_event("expand_variable", %{"name" => "ticks"}, s)
       assert BuilderFixture.render(s) =~ ~s(name="ticks" value="6" placeholder="3")
     end
@@ -5726,14 +5765,17 @@ defmodule Visualize.Chart.BuilderTest do
       assert opened.assigns.open.id == Library.baseline_id()
 
       # A composite entry opens as its sites: the baseline is one inline frame site.
-      assert BuilderFixture.layers(opened) == [{"local", %{frames: %{main: %{kind: :cartesian}}}}]
+      assert BuilderFixture.layers(opened) == [
+               {"local", %{frames: %{"main" => %{kind: :cartesian}}}}
+             ]
 
       # A drop is a link (#381), resolved through the store, flattened.
       {:noreply, linked} =
         Builder.handle_event("insert", %{"name" => "composite:1", "at" => 3}, socket)
 
       assert BuilderFixture.layers(linked) ==
-               layers ++ [{"baseline", %{version: 3, frames: %{main: %{kind: :cartesian}}}}]
+               BuilderFixture.named(layers) ++
+                 [{"baseline", %{version: 3, frames: %{"main" => %{kind: :cartesian}}}}]
 
       assert %Use{ref: {:composite, 1}} = List.last(linked.assigns.uses)
       assert linked.assigns.notice == nil
@@ -5744,13 +5786,14 @@ defmodule Visualize.Chart.BuilderTest do
 
       # The group reads as what it flattens to, a design-level composite's version with it.
       assert BuilderFixture.layers(added) ==
-               layers ++ [{"baseline", %{version: 3, frames: %{main: %{kind: :cartesian}}}}]
+               BuilderFixture.named(layers) ++
+                 [{"baseline", %{version: 3, frames: %{"main" => %{kind: :cartesian}}}}]
 
       group = List.last(added.assigns.uses)
       assert Stack.group?(group)
       assert group.origin == {:composite, 1}
 
-      assert [%Use{ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}] =
+      assert [%Use{ref: nil, local: %{frames: %{"main" => %{kind: :cartesian}}}}] =
                Stack.children(group)
 
       assert added.assigns.notice == nil
@@ -5762,7 +5805,7 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, missing} = Builder.handle_event("add_layer", %{"name" => "composite:2"}, socket)
       {:noreply, absent} = Builder.handle_event("add_layer", %{"name" => "nope"}, socket)
 
-      assert BuilderFixture.layers(missing) == layers
+      assert BuilderFixture.layers(missing) == BuilderFixture.named(layers)
       assert missing.assigns.notice == "no fragment is stored under composite:2"
       assert absent.assigns.notice == "no fragment is stored under nope"
     end
@@ -5806,8 +5849,10 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, edited} = Builder.handle_event("edit", params, socket)
 
       assert {:house, house} = hd(BuilderFixture.layers(edited))
-      assert house.frames.main.margin == %{top: 640, right: 20, bottom: 30, left: 40}
-      assert Enum.drop(BuilderFixture.layers(edited), 1) == Enum.drop(BuilderFixture.layers(), 1)
+      assert house.frames["main"].margin == %{top: 640, right: 20, bottom: 30, left: 40}
+
+      assert Enum.drop(BuilderFixture.layers(edited), 1) ==
+               Enum.drop(BuilderFixture.named(BuilderFixture.layers()), 1)
     end
 
     test "a blank control removes the key, and an unchecked checkbox writes false" do
@@ -5821,11 +5866,11 @@ defmodule Visualize.Chart.BuilderTest do
       {:noreply, removed} = Builder.handle_event("edit", blank, socket)
 
       assert {:shared, shared} = Enum.at(BuilderFixture.layers(removed), 1)
-      assert hd(shared.frames.main.axes) == %{scale: :x, side: :bottom}
+      assert hd(shared.frames["main"].axes) == %{scale: "x", side: :bottom}
 
       {:noreply, unchecked} = Builder.handle_event("edit", %{"_target" => ["grid"]}, socket)
       assert {:shared, off} = Enum.at(BuilderFixture.layers(unchecked), 1)
-      assert hd(off.frames.main.axes).grid == false
+      assert hd(off.frames["main"].axes).grid == false
     end
 
     test "a key the node kind does not declare changes nothing" do
@@ -5833,7 +5878,7 @@ defmodule Visualize.Chart.BuilderTest do
       params = %{"_target" => ["stoke_width"], "stoke_width" => "3"}
       {:noreply, edited} = Builder.handle_event("edit", params, socket)
 
-      assert BuilderFixture.layers(edited) == BuilderFixture.layers()
+      assert BuilderFixture.layers(edited) == BuilderFixture.named(BuilderFixture.layers())
     end
 
     test "a chart layer becomes the map it is, which is the same design" do
@@ -5844,10 +5889,10 @@ defmodule Visualize.Chart.BuilderTest do
 
       [{_name, layer}] = BuilderFixture.layers(edited)
       assert is_map(layer) and not is_struct(layer)
-      assert layer.frames.main.margin.top == 640
+      assert layer.frames["main"].margin.top == 640
 
-      assert Map.delete(layer.frames.main, :margin) ==
-               Map.delete(Chart.to_map(chart).frames.main, :margin)
+      assert Map.delete(layer.frames["main"], :margin) ==
+               Map.delete(Chart.to_map(chart).frames["main"], :margin)
     end
 
     test "the editor is rendered over the selected layer, with the design's faults" do

@@ -38,9 +38,9 @@ defmodule Visualize.Chart.Compiled do
       ...>   }},
       ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
       ...> }
-      iex> {:ok, %{main: compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
+      iex> {:ok, %{"main" => compiled}} = Visualize.Chart.compile(design, sources: %{primary: %{t: [1, 2], v: [3, 9]}})
       iex> Visualize.Chart.Compiled.dynamic_regions(compiled)
-      [{:grid, {:inferred, [:y]}}, {{:mark, 0}, :data}, {{:axis, 1}, {:inferred, [:y]}}]
+      [{:grid, {:inferred, ["y"]}}, {{:mark, 0}, :data}, {{:axis, 1}, {:inferred, ["y"]}}]
       iex> Visualize.Chart.Compiled.targets(compiled)
       [{:svg, 2}]
 
@@ -48,7 +48,7 @@ defmodule Visualize.Chart.Compiled do
 
   alias Visualize.Backend.{CanvasBinary, Hybrid}
   alias Visualize.{Chart, Render, Theme}
-  alias Visualize.Chart.{Applied, Frame, Mark}
+  alias Visualize.Chart.{Applied, Frame, Mark, Names}
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
   alias Visualize.Chart.Frame.Motion, as: FrameMotion
@@ -317,9 +317,9 @@ defmodule Visualize.Chart.Compiled do
       ...>     y: %{kind: :linear, transition: %{duration: 300}}}}},
       ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
       iex> rows = %{s: [%{t: 1, v: 3}, %{t: 2, v: 9}]}
-      iex> {:ok, %{main: first}} = Visualize.Chart.compile(design, sources: rows)
+      iex> {:ok, %{"main" => first}} = Visualize.Chart.compile(design, sources: rows)
       iex> {_group, first} = Visualize.Chart.Compiled.step(first, rows, at: 0)
-      iex> {:ok, %{main: wider}} = Visualize.Chart.compile(design, sources: rows, size: {900, 400})
+      iex> {:ok, %{"main" => wider}} = Visualize.Chart.compile(design, sources: rows, size: {900, 400})
       iex> Visualize.Chart.Compiled.carry(first, wider).eased == first.eased
       true
   """
@@ -598,7 +598,7 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec stale?(t(), map()) :: boolean()
   def stale?(%__MODULE__{} = compiled, sources) when is_map(sources),
-    do: changed(compiled, sources) != nil
+    do: changed(compiled, Names.keys(sources)) != nil
 
   defp changed(%{versions: versions}, sources) do
     Enum.find_value(sources, fn
@@ -614,6 +614,9 @@ defmodule Visualize.Chart.Compiled do
   # The tick's sources as the chart reads them: a delivery is the source it carries
   # (spec/08 §10.4), once it is known to name the schema the chart was compiled with.
   defp sources!(compiled, sources) do
+    # The host names a source by atom or string; the design by string (D-195).
+    sources = Names.keys(sources)
+
     case changed(compiled, sources) do
       nil ->
         Map.new(sources, fn {name, source} -> {name, Delivery.source(source)} end)

@@ -28,7 +28,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # A new chart is one cartesian frame: valid from its first moment (§18.8, #374).
     @doc false
     def handle_event("add_chart", _params, socket) do
-      use = %{Use.new(nil, []) | ref: nil, local: %{frames: %{main: %{kind: :cartesian}}}}
+      use = %{Use.new(nil, []) | ref: nil, local: %{frames: %{"main" => %{kind: :cartesian}}}}
       n = socket.assigns.next_chart
 
       {:noreply,

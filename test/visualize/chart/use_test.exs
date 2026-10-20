@@ -9,7 +9,7 @@ defmodule Visualize.Chart.UseTest do
   import Visualize.Chart, only: [var: 1]
 
   alias Visualize.Chart
-  alias Visualize.Chart.{Composite, Fragment, Use, Validator}
+  alias Visualize.Chart.{Composite, Fragment, Migration, Use, Validator}
 
   doctest Visualize.Chart.Use
   doctest Visualize.Chart.Composite
@@ -112,9 +112,9 @@ defmodule Visualize.Chart.UseTest do
       set = %Use{id: {:use, 1}, ref: {:design, 1}, vars: %{color: "blue"}}
       renamed = %Use{id: {:use, 1}, ref: {:design, 1}, vars: %{color: var(:color_1)}}
 
-      assert free.(shared) == [:color]
+      assert free.(shared) == ["color"]
       assert free.(set) == []
-      assert free.(renamed) == [:color_1]
+      assert free.(renamed) == ["color_1"]
     end
 
     test "a struct other than a variable is a leaf" do
@@ -157,15 +157,15 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: []}} = Chart.flatten(composite, &fetch/1)
       assert flat.theme == :dark
-      assert flat.frames.main.margin.top == 24
-      assert flat.vars == %{unit: %{default: "%"}}
+      assert flat.frames["main"].margin.top == 24
+      assert flat.vars == %{"unit" => %{default: "%"}}
       refute Map.has_key?(flat, :composite)
     end
 
     test "a mask at a site removes from that site's contribution only" do
       assert {:ok, flat, _} = Chart.flatten(@library[{:composite, 1}], &fetch/1)
-      assert Map.has_key?(flat.frames.main, :kind)
-      refute Map.has_key?(flat.frames.main, :margin)
+      assert Map.has_key?(flat.frames["main"], :kind)
+      refute Map.has_key?(flat.frames["main"], :margin)
     end
 
     test "composites nest, and the nested one's missing refs are reported" do
@@ -269,13 +269,13 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(one, &placed/1)
       # One frame lands as the key itself, not as `gauge_dial`.
-      assert Map.keys(flat.frames) == [:gauge]
-      assert flat.frames.gauge.kind == :polar
+      assert Map.keys(flat.frames) == ["gauge"]
+      assert flat.frames["gauge"].kind == :polar
       # The mark said no frame — its frame was implicit in a composite of one — and says
       # this one now, since the host may have others.
       # The mark's id is the key's too, so two copies of a saved chart are two marks
       # rather than one merged by identity (§8.2).
-      assert [%{id: :gauge_needle, frame: :gauge}] = flat.marks
+      assert [%{id: "gauge_needle", frame: "gauge"}] = flat.marks
     end
 
     test "a composite of several frames keeps its own names apart under the key (#384)" do
@@ -287,12 +287,12 @@ defmodule Visualize.Chart.UseTest do
       }
 
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(pair, &placed/1)
-      assert flat.frames |> Map.keys() |> Enum.sort() == [:load_history, :load_now]
+      assert flat.frames |> Map.keys() |> Enum.sort() == ["load_history", "load_now"]
       # The adoption follows the rename: the pair still shares one axis.
-      assert flat.frames.load_now.scales.y == {:frame, :load_history, :y}
+      assert flat.frames["load_now"].scales["y"] == {:frame, "load_history", "y"}
       # Every mark and label is retargeted to where its frame landed.
-      assert Enum.map(flat.marks, & &1.frame) == [:load_history, :load_now]
-      assert Enum.map(flat.labels, & &1.frame) == [:load_now]
+      assert Enum.map(flat.marks, & &1.frame) == ["load_history", "load_now"]
+      assert Enum.map(flat.labels, & &1.frame) == ["load_now"]
     end
 
     test "two sites of one composite under two keys are four frames that do not collide (#384)" do
@@ -309,13 +309,13 @@ defmodule Visualize.Chart.UseTest do
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(twice, &placed/1)
 
       assert flat.frames |> Map.keys() |> Enum.sort() ==
-               [:a_history, :a_now, :b_history, :b_now]
+               ["a_history", "a_now", "b_history", "b_now"]
 
       assert flat.marks |> Enum.map(& &1.frame) |> Enum.sort() ==
-               [:a_history, :a_now, :b_history, :b_now]
+               ["a_history", "a_now", "b_history", "b_now"]
 
       assert flat.marks |> Enum.map(& &1.id) |> Enum.sort() ==
-               [:a_dot, :a_line, :b_dot, :b_line]
+               ["a_dot", "a_line", "b_dot", "b_line"]
     end
 
     test "a keyless composite keeps its own frame names (#384)" do
@@ -324,8 +324,8 @@ defmodule Visualize.Chart.UseTest do
       }
 
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(keyless, &placed/1)
-      assert Map.keys(flat.frames) == [:dial]
-      assert [%{id: :needle} = mark] = flat.marks
+      assert Map.keys(flat.frames) == ["dial"]
+      assert [%{id: "needle"} = mark] = flat.marks
       refute Map.has_key?(mark, :frame)
     end
 
@@ -346,11 +346,11 @@ defmodule Visualize.Chart.UseTest do
 
       assert {:ok, flat, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
       assert flat.theme == :dark
-      assert flat.frames.main.kind == :cartesian
-      assert flat.styles == %{series: %{stroke_width: 5}}
-      assert flat.frames.main.scales == %{hour: %{kind: :linear, domain: :auto}}
-      assert flat.sources == %{primary: %{fields: [:hour, :value]}}
-      assert [%{id: :m}] = flat.marks
+      assert flat.frames["main"].kind == :cartesian
+      assert flat.styles == %{"series" => %{stroke_width: 5}}
+      assert flat.frames["main"].scales == %{"hour" => %{kind: :linear, domain: :auto}}
+      assert flat.sources == %{"primary" => %{fields: ["hour", "value"]}}
+      assert [%{id: "m"}] = flat.marks
     end
 
     test "the same body is series in one composite and line in another" do
@@ -369,8 +369,8 @@ defmodule Visualize.Chart.UseTest do
         Map.keys(flat.styles)
       end
 
-      assert at.(:series) == [:series]
-      assert at.(:line) == [:line]
+      assert at.(:series) == ["series"]
+      assert at.(:line) == ["line"]
     end
 
     test "a name-keyed site with no key is reported and not placed" do
@@ -395,7 +395,7 @@ defmodule Visualize.Chart.UseTest do
         composite: %{uses: [%Use{id: {:use, 1}, ref: {:style, 2}, key: :series}], vars: %{}}
       }
 
-      assert {:ok, %{styles: %{series: %{stroke_width: 5, opacity: 0.5}}}, _} =
+      assert {:ok, %{styles: %{"series" => %{stroke_width: 5, opacity: 0.5}}}, _} =
                Chart.flatten(outer, &placed/1)
     end
 
@@ -444,7 +444,9 @@ defmodule Visualize.Chart.UseTest do
       assert labels[{:use, 10}] == "axis x bottom"
 
       composite = %{composite: %{uses: uses, vars: %{}}}
-      assert {:ok, ^document, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
+      # The flattened document's names are strings (D-195).
+      named = Migration.names(document)
+      assert {:ok, ^named, %{missing: [], keyless: []}} = Chart.flatten(composite, &placed/1)
     end
 
     test "a map that is many things is no kind of fragment" do
@@ -462,7 +464,10 @@ defmodule Visualize.Chart.UseTest do
       use = %Use{id: {:use, 1}, ref: {:style, 1}, key: :series}
       encoded = Chart.Codec.encode(%{composite: %{uses: [use], vars: %{}}})
       assert %{"$use" => %{"key" => "series"}} = hd(encoded["composite"]["uses"])
-      assert Chart.Codec.decode(encoded) == %{composite: %{uses: [use], vars: %{}}}
+
+      assert Chart.Codec.decode(encoded) == %{
+               composite: %{uses: [%{use | key: "series"}], vars: %{}}
+             }
     end
   end
 
@@ -491,7 +496,19 @@ defmodule Visualize.Chart.UseTest do
       assert %{"$use" => %{"id" => 7, "ref" => %{"$id" => ["style", 11]}}} =
                hd(encoded["composite"]["uses"])
 
-      assert Chart.Codec.decode(encoded) == design
+      # Read back, every name is a string (D-195); a mask path's keys are the schema's.
+      [seven, eight] = design.composite.uses
+
+      assert Chart.Codec.decode(encoded) ==
+               put_in(design.composite.uses, [
+                 %{
+                   seven
+                   | mask: [:stroke, [:frames, "main", :margin]],
+                     vars: %{"color" => var(:color_1)}
+                 },
+                 eight
+               ])
+               |> Map.put(:frames, %{"main" => %{}})
     end
 
     test "an id whose kind is not one is left as it was read, not made into an atom" do

@@ -15,6 +15,7 @@ defmodule Visualize.Chart.ComposeTest do
   use ExUnitProperties
 
   alias Visualize.Chart
+  alias Visualize.Chart.Migration
 
   @label_set %{
     labels: [
@@ -55,12 +56,12 @@ defmodule Visualize.Chart.ComposeTest do
       {:ok, design} = Chart.compose([@label_set, @house, @chart])
 
       assert Enum.map(design.labels, & &1.anchor) == [:caption, {:frame, :top_right}, :title]
-      assert Map.keys(design.styles) |> Enum.sort() == [:accent, :muted, :series]
+      assert Map.keys(design.styles) |> Enum.sort() == ["accent", "muted", "series"]
       assert design.theme == :dark
-      assert design.frames.main.margin == @house.frames.main.margin
-      assert Map.keys(design.frames.main.scales) |> Enum.sort() == [:x, :y]
-      assert Enum.map(design.frames.main.axes, & &1.scale) == [:x, :y]
-      assert design.marks == @chart.marks
+      assert design.frames["main"].margin == @house.frames.main.margin
+      assert Map.keys(design.frames["main"].scales) |> Enum.sort() == ["x", "y"]
+      assert Enum.map(design.frames["main"].axes, & &1.scale) == ["x", "y"]
+      assert design.marks == Migration.names(@chart).marks
       assert {:ok, _} = Chart.from_map(design)
     end
 
@@ -77,28 +78,28 @@ defmodule Visualize.Chart.ComposeTest do
 
       assert Chart.compose(a, b) ==
                {:error,
-                [{[:frames, :main, :scales, :x], :conflict}, {[:styles, :series], :conflict}]}
+                [{[:frames, "main", :scales, "x"], :conflict}, {[:styles, "series"], :conflict}]}
 
       assert Chart.compose([a, b]) == Chart.compose(a, b)
     end
 
     test "a union name declared equally in both is taken once" do
       a = %{styles: %{series: %{stroke_width: 2}}, vars: %{unit: %{default: "%"}}}
-      assert Chart.compose(a, a) == {:ok, a}
+      assert Chart.compose(a, a) == {:ok, Migration.names(a)}
     end
 
     test "a key one fragment alone carries is taken as it is" do
       assert Chart.compose(%{version: 2}, %{marks: []}) == {:ok, %{version: 2, marks: []}}
-      assert Chart.compose(%{}, @chart) == {:ok, @chart}
-      assert Chart.compose(@chart, %{}) == {:ok, @chart}
+      assert Chart.compose(%{}, @chart) == {:ok, Migration.names(@chart)}
+      assert Chart.compose(@chart, %{}) == {:ok, Migration.names(@chart)}
     end
 
     test "a node given as anything but a map by either side is the later's whole" do
       assert Chart.compose(%{theme: :dark}, %{theme: %{name: :house}}) ==
-               {:ok, %{theme: %{name: :house}}}
+               {:ok, %{theme: %{name: "house"}}}
 
       assert Chart.compose(%{theme: %{name: :a, axis: "#000"}}, %{theme: %{name: :b}}) ==
-               {:ok, %{theme: %{name: :b, axis: "#000"}}}
+               {:ok, %{theme: %{name: "b", axis: "#000"}}}
     end
 
     test "a whole-node variable at a union key is one value, never merged as a name map" do
@@ -114,8 +115,11 @@ defmodule Visualize.Chart.ComposeTest do
       assert Chart.compose(%{styles: sheet}, %{styles: Chart.var(:other)}) ==
                {:error, [{[:styles], :conflict}]}
 
-      assert Chart.compose(%{styles: sheet}, %{styles: sheet}) == {:ok, %{styles: sheet}}
-      assert Chart.compose(%{styles: sheet}, %{version: 2}) == {:ok, %{styles: sheet, version: 2}}
+      assert Chart.compose(%{styles: sheet}, %{styles: sheet}) ==
+               {:ok, Migration.names(%{styles: sheet})}
+
+      assert Chart.compose(%{styles: sheet}, %{version: 2}) ==
+               {:ok, Migration.names(%{styles: sheet, version: 2})}
     end
 
     test "every name-map key reads a whole-node variable the same way, at its own path" do
@@ -126,12 +130,12 @@ defmodule Visualize.Chart.ComposeTest do
             {%{vars: %{unit: %{default: "%"}}}, %{vars: v}, [:vars]},
             {%{styles: %{series: %{stroke_width: 2}}}, %{styles: v}, [:styles]},
             {%{frames: %{main: %{scales: %{x: %{kind: :time}}}}},
-             %{frames: %{main: %{scales: v}}}, [:frames, :main, :scales]},
+             %{frames: %{main: %{scales: v}}}, [:frames, "main", :scales]},
             {%{frames: %{main: %{kind: :polar}}}, %{frames: v}, [:frames]}
           ] do
         assert Chart.compose(variable, declared) == {:error, [{path, :conflict}]}
         assert Chart.compose(declared, variable) == {:error, [{path, :conflict}]}
-        assert Chart.compose(variable, variable) == {:ok, variable}
+        assert Chart.compose(variable, variable) == {:ok, Migration.names(variable)}
       end
     end
 
@@ -160,7 +164,7 @@ defmodule Visualize.Chart.ComposeTest do
 
     test "compose/1 folds left to right and is the empty map for no fragments" do
       assert Chart.compose([]) == {:ok, %{}}
-      assert Chart.compose([@chart]) == {:ok, @chart}
+      assert Chart.compose([@chart]) == {:ok, Migration.names(@chart)}
       {:ok, ab} = Chart.compose(@label_set, @house)
       assert Chart.compose([@label_set, @house, @chart]) == Chart.compose(ab, @chart)
     end
@@ -212,7 +216,10 @@ defmodule Visualize.Chart.ComposeTest do
     })
   end
 
-  defp fragment do
+  # A fragment as a reader holds it, its names strings (D-195).
+  defp fragment, do: StreamData.map(atom_fragment(), &Migration.names/1)
+
+  defp atom_fragment do
     optional_map(%{
       version: constant(1),
       theme: member_of([:default, :dark]),
@@ -236,14 +243,14 @@ defmodule Visualize.Chart.ComposeTest do
           assert Map.get(merged, :version) == later(a, b, :version)
 
           if is_map(a[:frames]) and is_map(b[:frames]) do
-            assert Map.get(merged.frames.main, :size) ==
-                     later(a.frames.main, b.frames.main, :size)
+            assert Map.get(merged.frames["main"], :size) ==
+                     later(a.frames["main"], b.frames["main"], :size)
 
-            assert Map.get(merged.frames.main, :kind) ==
-                     later(a.frames.main, b.frames.main, :kind)
+            assert Map.get(merged.frames["main"], :kind) ==
+                     later(a.frames["main"], b.frames["main"], :kind)
 
-            assert Map.get(merged.frames.main, :axes) ==
-                     concat(a.frames.main, b.frames.main, :axes)
+            assert Map.get(merged.frames["main"], :axes) ==
+                     concat(a.frames["main"], b.frames["main"], :axes)
           else
             assert Map.get(merged, :frame) == later(a, b, :frame)
           end
