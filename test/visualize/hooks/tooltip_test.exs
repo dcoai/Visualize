@@ -43,6 +43,13 @@ defmodule Visualize.Hooks.TooltipTest do
     assert js =~ "return el && this.el.contains(el) ? el : null;"
   end
 
+  test "an element under data-tooltip-show=\"false\" is never shown, by pointer or sync (D-200)" do
+    js = Tooltip.js_hook()
+    assert js =~ "return this.nearest(el, 'data-tooltip-show') !== 'false';"
+    assert js =~ "if (!el || !this.shown(el)) {"
+    assert js =~ "if (!this.shown(el)) return;"
+  end
+
   test "fields come from data-datum in order and data-datum-<field> with _ as -" do
     js = Tooltip.js_hook()
     assert js =~ "el.getAttribute('data-datum')"

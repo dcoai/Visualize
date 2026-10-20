@@ -327,8 +327,9 @@ defmodule Visualize.Chart.Mark do
     )
   end
 
-  # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7), and the
-  # frame's name and the mark's position when it keys its elements (D-170).
+  # The group's `data-tooltip-template` and `data-tooltip-event` (spec/14 §5.7), the
+  # frame's name and the mark's position when it keys its elements (D-170), and
+  # `data-tooltip-show="false"` when nothing is shown under the pointer (D-200).
   defp tooltip_attrs(%{tooltip: nil}), do: %{}
 
   defp tooltip_attrs(%{tooltip: tooltip} = ctx) do
@@ -339,9 +340,12 @@ defmodule Visualize.Chart.Mark do
         ],
         value = Map.get(tooltip, key),
         value != nil,
-        into: key_attrs(ctx.keys),
+        into: ctx.keys |> key_attrs() |> Map.merge(show_attrs(tooltip)),
         do: {name, to_string(value)}
   end
+
+  defp show_attrs(%{show: false}), do: %{"data-tooltip-show" => "false"}
+  defp show_attrs(_tooltip), do: %{}
 
   defp key_attrs(nil), do: %{}
 
@@ -374,14 +378,17 @@ defmodule Visualize.Chart.Mark do
   end
 
   # The datum attributes of spec/10 §12.2 on an element: the tooltip's fields read from
-  # the datum, or every column of the datum in sorted order when it names none.
+  # the datum, or every column of the datum in sorted order when it names none — save
+  # under `show: false`, where nothing reads them and only the named ones are written
+  # (D-200).
   defp datum_attrs(element, _datum, %{tooltip: nil}), do: element
 
   defp datum_attrs(element, datum, %{tooltip: tooltip} = ctx) do
     fields =
-      case Map.get(tooltip, :fields, []) do
-        [] -> datum |> Map.keys() |> Enum.sort() |> Enum.map(&{&1, Map.get(datum, &1)})
-        fields -> Enum.map(fields, &{&1, Table.get(datum, &1)})
+      case {Map.get(tooltip, :fields, []), Map.get(tooltip, :show, true)} do
+        {[], false} -> []
+        {[], _show} -> datum |> Map.keys() |> Enum.sort() |> Enum.map(&{&1, Map.get(datum, &1)})
+        {fields, _show} -> Enum.map(fields, &{&1, Table.get(datum, &1)})
       end
 
     element |> Element.datum(fields) |> row_key(datum, ctx.keys)
