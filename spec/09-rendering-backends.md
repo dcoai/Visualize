@@ -23,6 +23,7 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 | `Visualize.Incremental` | Stateful high-level API over `CanvasIncremental` |
 | `Visualize.Benchmark` | Throughput and payload comparison |
 | `Visualize.Render.Raster` | Internal: the one module that runs the resvg binary, behind `Visualize.Render.to_png/2` (§9) |
+| `Visualize.Render.Segments` | A drawing as keyed segments of a backend's output, written again only where an element changed (§1.4, D-203) |
 
 ### 1.2 The backend behaviour
 
@@ -35,6 +36,22 @@ The rendering layer turns the backend-agnostic IR (`Visualize.IR.Element`, `Visu
 Wherever this document says "formatted", a number goes through `Visualize.IR.Path.format_number/1` (spec/02 §2.2; D-12, D-32): an integer as-is; a float with at most four decimals, trailing zeros and point trimmed, never in exponent notation, never `-0`. A float that rounds to a whole number is written as that integer's digits, at any magnitude (#812): `1.0e20` is `100000000000000000000`, as before, and a float past about `1.0e253`, which the four-decimal conversion could not write and raised on, is its digits too. Every number of every drawing passes through it, so it builds only the text it returns. The SVG backend uses it for path data, transform strings and points; the Canvas backend for every numeric argument.
 
 SVG *attribute* values (as opposed to path data, transform strings and points) are NOT formatted: numbers are printed with `to_string/1`, so a float attribute keeps its full precision and may use exponent notation (`1.0e3`).
+
+### 1.4 Segments
+
+**A drawing is also its segments** (#813, D-203). `Visualize.Render.Segments` cuts the output of a backend into one segment per element drawn alone and one for each start and end of a group, in drawing order, each `{key, text}`, so that a page that sends a drawing as a keyed list sends only the segments a change touched (spec/10 §19.3):
+
+- **What a segment is.** A group and the root are their start, their children's segments and their end; any other element — and a group that names its identity (`data-vis-id`) or is clipped — is one segment, its text what the backend writes for it in the style its groups give it. A segment with no text (a canvas stream's root, a group with nothing to set) is left out.
+- **The texts are the output.** `svg/2`'s texts concatenated are `Visualize.Render.to_string(tree, backend: :svg)`, byte for byte. `json/2`'s texts are each segment's commands as the `:json` output writes them (§3.5) without the brackets: joined by commas and bracketed, they are `Visualize.Render.to_string(tree, backend: :canvas, format: :json)`. `binary/2`'s texts are pieces of the binary stream (§4) in base64, the stream's head — its version and paint records — the first: decoded and concatenated, they are `Visualize.Backend.CanvasBinary.encode_element!/1` of the tree. `text/2` puts them together. Each backend cuts its own output (`segment` in `Visualize.Backend.SVG`, `Visualize.Backend.Canvas` and `Visualize.Backend.CanvasBinary`), so a segment is never a second serializer of what it holds.
+- **The keys.** An element that names its identity (spec/14 §3.10, D-167) is keyed `"id:" <> identity`; a group's start and end by its path from the root — each element's index among its parent's children, `"r/2/1"` — followed by `<` and `>`; any other element by its group's path, `~` and a hash of the element and the style it inherits, so an element keeps its key when an element before it comes or goes, and one drawn differently is another. A key is never repeated: a second element of one key is keyed as the first with `#2`, and so on.
+- **The cache.** Each function takes the cache the previous call returned and returns the next: an element drawn alone whose key, element and inherited style are equal to the last drawing's — compared whole, never by the hash — reuses the text written then. A cache is an economy only: the segments are the same with `%{}`. It holds the last drawing's elements and nothing older; a cache of another output, or for the binary stream of another set of paints, is not read.
+
+| Function | Contract |
+|---|---|
+| `Visualize.Render.Segments.svg/2` | `svg(tree, cache)`: `{segments, cache}`, the tree's SVG markup in segments. |
+| `Visualize.Render.Segments.json/2` | `json(tree, cache)`: `{segments, cache}`, the tree's `:json` canvas commands in segments. |
+| `Visualize.Render.Segments.binary/2` | `binary(tree, cache)`: `{segments, cache}`, the tree's binary canvas stream in base64 segments, its head first. |
+| `Visualize.Render.Segments.text/2` | `text(segments, format)`: the output the segments are of, `:svg`, `:json` or `:binary` (in base64). |
 
 ## 2. Visualize.Backend.SVG
 

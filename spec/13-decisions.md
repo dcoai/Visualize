@@ -2732,3 +2732,47 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - 100 ms is the rate at which a click still feels immediate, and 200 KB a move is what a slow connection carries in well under a second; a 2,500-item chart that misses either is not interactive, whatever its first render costs.
 - A change that makes a lookup walk a domain, places items twice, or re-sends what a move did not change fails the cost test by name, not as a slow page someone notices.
 - The budget is the component's: a page that recomputes its whole design per move pays for that itself, as the Minesweeper page's `Chart.apply/2` (17–24 ms at 2,500 rows) does outside it.
+
+## 203. D-203 — A drawing travels as keyed segments, so a move sends the items it changed, on SVG and on both canvases
+
+**Context.** #809 (D-202): `Visualize.Components.Chart` sent the whole drawing as one dynamic on every update — the SVG, or the canvas stream in `data-binary` or `data-commands` — so a move on a 50 × 50 grid, which changes a few cells, sent the 2,500 others again. The candidates were measured on #808's move (2,500 cells, the LiveView diff of the component JSON-encoded, as the socket carries it): the whole drawing as before, **1,274,212 B** on SVG, **2,833,702 B** on the JSON canvas and **1,379,161 B** on the binary canvas; the SVG keyed by item with the keyboard's attribute whole (candidate A), **583,787 B**; A with the keyboard's positions sent once and its readouts whole (C), **563,209 B**, since the positions were 25,501 B and the readouts 323,584 B; A with the keyboard's points keyed (D-204), **14,853 B** with items keyed by their place, and **1,417 B** (SVG), **2,063 B** (JSON) and **1,255 B** (binary) once an item is keyed by what it draws. The spec/09 incremental path (§5, §7) is the third candidate for a canvas: it is a scroll's protocol, and a delta painted over the last frame is wrong for any item that is not opaque — a grid's translucent cell painted again over itself darkens — while a delta that clears first uncovers what lies beneath. It would need a stateful hook that a reconnect or a missed patch desynchronizes, and its bytes would be those of the changed items, which the keyed segments already are.
+
+**Decision.** A drawing is sent as **keyed segments** (spec/09 §1.4, spec/10 §19.3): `Visualize.Render.Segments` cuts a backend's output into one segment per element drawn alone and one for each start and end of a group, keyed by the element's identity (D-167), else by its group's path and a hash of what it draws; a group by its path. The component renders them as a keyed LiveView comprehension: on SVG each segment raw, so the markup is the same byte for byte; on a canvas each the `data-c` of an `<i>` in a hidden `<div data-vis-stream>` beside the hook's element, which puts the stream together — the JSON commands joined, the binary pieces decoded and concatenated — when its `data-drawn` names a new drawing. LiveView sends a keyed comprehension's changed entries only. A hash only names a key; a text is reused only for an element equal to the last one under that key.
+
+**Consequences.**
+- A move on the 2,500-cell grid sends 1.3–2.1 KB where it sent 1.3–2.8 MB, under D-202's 200 KB uncompressed, on every backend; an item keyed by what it draws keeps its key when an item before it comes or goes, so a new count label does not resend the labels after it.
+- **Breaking** for a host that reads the component's canvas markup: the stream is no longer in `data-binary` or `data-commands` of the hook's element, which carries `data-stream` and `data-drawn`, and its pieces are children of the `data-vis-stream` element. `CanvasChart` and `CanvasBinaryChart` read both forms, so a hand-written page's `data-binary` or `data-commands` draws as before. The SVG's markup is unchanged.
+- The canvas hooks rebuild the stream from its pieces on each new drawing: for 2,500 cells that is 2,560 attribute reads and as many base64 decodes, a few milliseconds the hook harness can execute but no browser on the host could time.
+
+## 204. D-204 — The keyboard's points travel one element each, not positions and readouts split
+
+**Context.** #809: `data-keyboard-points`, 344 KB of JSON for a 2,500-cell grid (750 KB HTML-escaped), was re-sent on every move. #809 proposed splitting it into the points' positions, sent once per drawing, and their readouts, sent when they change. Measured (D-203's move): the positions are 25,501 B and the readouts 323,584 B, and a move changes the readouts of the cells it changes only; split, a move still sent 563,209 B.
+
+**Decision.** `Visualize.Hooks.Keyboard.listed/2` writes the points one element each: the series' names, `grid` and counts in `data-keyboard-series`, each point as `data-keyboard-points` writes it in the `data-p` of one `<i>` in a hidden `<div data-keyboard-list>` inside the hook's element, keyed by its series' place and its own. `KeyboardHook` reads either form. `Visualize.Components.Chart` sends the list as a keyed comprehension, so a move sends the points it changed; `attrs/1,2` stays for a page that writes the attribute itself.
+
+**Consequences.**
+- A move sends a few points: the SVG move of D-203 fell from 583,787 B to 14,853 B with this alone.
+- **Breaking** for a host that reads `data-keyboard-points` off the component's markup: it carries `data-keyboard-series` and the list instead. A hand-written page's attribute reads as before.
+- A point's readout counts its series (`3 of 2,500`), so a move that changes how many points a series has rewrites every readout of it; a grid's count is fixed.
+
+## 205. D-205 — Every part of a drawing is its own assign and its own cache, so what a move did not change is neither sent nor written again
+
+**Context.** #809: the component held the canvas's stream, text layer, hit index and summary in one `@canvas` assign, and LiveView re-sends every dynamic that reads an assign that changed: a move re-sent the 61,665 B hit index though no item had moved. And every update wrote every item again — serialized each element, encoded each point, measured each hit box — though a move changes a few.
+
+**Decision.** The hit index, the summary, the canvas's size, the text layer, the segments and the points are separate assigns; LiveView marks an assign changed only when its value differs, so an unchanged part is not sent. Each part that writes per item keeps what it wrote: the segments' cache (spec/09 §1.4), the points' (`Keyboard.listed/2`'s `cache:`) and the hit index's (`Visualize.Hooks.Tooltip.items/2`), each reusing an item's text only when what it was written from is equal to the last drawing's, compared whole.
+
+**Consequences.**
+- At 2,500 cells serializing the SVG falls from 1.4 M reductions to 0.05 M on a move, the canvas streams from 1.3–1.7 M to 0.05–0.11 M, the points' JSON from 0.48 M to almost nothing and the hit index from 0.6 M to a fraction.
+- The caches hold the last drawing's elements and points: their memory is one drawing's, which the component already held once in the drawing it compared against.
+- A cache is an economy only: every part is the same with an empty one, and the tests hold each to its uncached output.
+
+## 206. D-206 — The component makes its drawing in a process of its own, sized by the last drawing
+
+**Context.** #809: with D-203–D-205 a 2,500-cell move did 3.6–4.2 M reductions, about 70–90 ms of work, yet took 258–300 ms in a process holding what a LiveView holds — the component's state and the diff's prints. The rest was garbage collection: an update allocates tens of megabytes it drops at once, and each collection in the LiveView's process copies the live data around it, the state among it. The same update in a process whose heap is sized not to collect took 83–94 ms. The library cannot size the host's LiveView process, which is the host's to configure.
+
+**Decision.** `Visualize.Components.Chart` makes each drawing — the placements, the keyboard's points, the segments, the hit index — in a process spawned for it and linked to the LiveView, with a minimum heap of what the last drawing used and a quarter more, and a binary heap no drawing reaches, so it collects nothing once sized; the first drawing is sized by the BEAM. It returns the parts and their caches, which are copied into the LiveView's process, and its heap is freed whole when it ends. A fault in it exits the LiveView, as it did in place.
+
+**Consequences.**
+- A 2,500-cell move takes about 95–125 ms where it took 258–300 ms with the drawing in place, and the Expert board's 20–26 ms (spec/12 §6, D-202), on a host shared with other work; what remains is the drawing's own work, and copying its inputs and its results.
+- The drawing's memory is transient and whole: a 2,500-cell drawing reserves its heap for the length of the update and returns it at once, instead of the LiveView's heap growing and shrinking around it.
+- `Visualize.Work.reductions/1` counts what a process executes, so the cost test counts the drawing's function itself (`Visualize.Components.Chart.drawn/4`), not the component's update around it.
