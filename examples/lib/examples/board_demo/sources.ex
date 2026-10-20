@@ -6,15 +6,19 @@ defmodule Examples.BoardDemo.Sources do
   """
   use Visualize.VirtualSources
 
-  @doc "A host's direction over its readings: the newest against the oldest, 5 points either way."
+  @doc """
+  A host's direction over its readings: the least-squares slope of its CPU per reading
+  (`Visualize.Data.slope/1`, #769), a point a reading either way; `nil` for a single
+  reading is no direction.
+  """
   defsource trend(rows) do
-    cpu = Enum.map(rows, & &1.cpu)
-    delta = List.last(cpu) - List.first(cpu)
+    slope = rows |> Enum.map(& &1.cpu) |> Visualize.Data.slope()
 
     trend =
       cond do
-        delta > 5 -> :increasing
-        delta < -5 -> :decreasing
+        slope == nil -> :neutral
+        slope > 1 -> :increasing
+        slope < -1 -> :decreasing
         true -> :neutral
       end
 

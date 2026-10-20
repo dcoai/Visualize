@@ -82,6 +82,9 @@ defmodule ExamplesWeb.BoardLiveTest do
     for row <- delivery.rows do
       assert row["health.state"] in ["good", "warning", "bad"]
       assert row["trend.trend"] in [:increasing, :decreasing, :neutral]
+      # A label the stored function built with interpolation and `Visualize.Data.mean` (#769).
+      assert row["health.note"] =~ ~r/^h\d+ averaged \d+(\.\d)?% over its last \d+$/
+      assert String.starts_with?(row["health.note"], row["host"] || row[:host])
     end
 
     Server.unsubscribe(board, self())
@@ -91,7 +94,9 @@ defmodule ExamplesWeb.BoardLiveTest do
     rows = for cpu <- [10, 12, 30], do: %{cpu: cpu}
     assert Examples.BoardDemo.Sources.trend(rows) == %{trend: :increasing}
     assert [trend: source] = Examples.BoardDemo.Sources.__virtual_sources__()
-    assert source =~ "delta > 5 -> :increasing"
+    assert source =~ "Visualize.Data.slope()"
+    assert Examples.BoardDemo.Sources.trend([%{cpu: 40}]) == %{trend: :neutral}
+    assert Examples.BoardDemo.Sources.trend([%{cpu: 40}, %{cpu: 39.5}]) == %{trend: :neutral}
   end
 
   # The hosts cell's first view whose icons are drawn from the virtual sources' answers:
@@ -473,7 +478,9 @@ defmodule ExamplesWeb.BoardLiveTest do
     %{svg: svg} = hosts_view()
     Server.unsubscribe(board, self())
 
-    assert svg =~ ~s(data-tooltip-template="{host}: {cpu}% CPU, {health.state}, {trend.trend}")
+    assert svg =~
+             ~s(data-tooltip-template="{host}: {cpu}% CPU, {health.state}, {trend.trend}\n{health.note}")
+
     assert svg =~ ~s(data-tooltip-event="host_picked")
 
     {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})

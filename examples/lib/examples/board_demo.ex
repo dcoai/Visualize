@@ -582,11 +582,15 @@ defmodule Examples.BoardDemo do
             label: "Health",
             values: [:good, :warning, :bad],
             status: %{good: :good, warning: :warning, bad: :bad}
-          }
+          },
+          note: %{type: :category, label: "Note"}
         },
+        # A statistic of `Visualize.Data` and a label built with interpolation (#769).
         elixir: """
         fn rows ->
-          latest = Enum.at(rows, -1).cpu
+          newest = Enum.at(rows, -1)
+          latest = newest.cpu
+          mean = rows |> Enum.map(& &1.cpu) |> Visualize.Data.mean() |> Float.round(1)
 
           state =
             cond do
@@ -595,7 +599,7 @@ defmodule Examples.BoardDemo do
               true -> :good
             end
 
-          %{state: state}
+          %{state: state, note: "\#{newest.host} averaged \#{mean}% over its last \#{Enum.count(rows)}"}
         end
         """
       },
@@ -619,7 +623,9 @@ defmodule Examples.BoardDemo do
 
     Design.fold([
       chart(meta: %{name: "Hosts"}),
-      source(:hosts, [:t, :host, :cpu, state, :"trend.trend"], types: %{t: :time, cpu: :number}),
+      source(:hosts, [:t, :host, :cpu, state, :"trend.trend", :"health.note"],
+        types: %{t: :time, cpu: :number}
+      ),
       cartesian(margin: %{top: 10, right: 110, bottom: 26, left: 40}),
       band_scale(:x, padding: 0.3),
       linear_scale(:y, domain: [-12, 100]),
@@ -631,8 +637,8 @@ defmodule Examples.BoardDemo do
       rect(newest, %{x0: :host, x1: :host, y0: 0, y1: :cpu},
         style: {:field, state},
         tooltip: %{
-          fields: [:host, :cpu, state, :"trend.trend"],
-          template: "{host}: {cpu}% CPU, {health.state}, {trend.trend}",
+          fields: [:host, :cpu, state, :"trend.trend", :"health.note"],
+          template: "{host}: {cpu}% CPU, {health.state}, {trend.trend}\n{health.note}",
           event: :host_picked
         }
       ),

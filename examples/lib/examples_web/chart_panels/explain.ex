@@ -17,10 +17,27 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   alias Visualize.Chart
   alias Visualize.Chart.Builder.Inspector
 
-  @doc "The panel's state for `module`: closed, nothing picked."
+  @doc "The panel's state for the gallery chart `module`: closed, nothing picked."
   @spec init(module()) :: map()
-  def init(module),
-    do: %{module: module, open: false, svg: nil, node: nil, look: nil, data: [], datum: nil}
+  def init(module), do: init(module.title(), fn -> Design.applied(module, []) end)
+
+  @doc """
+  The panel's state for any applied chart: `title` names it, and `applied` makes it — a
+  function, called when the panel opens and at each pick, so a chart applied with a host's
+  generators and assigns (spec/14 §3.13) is explained as it is drawn.
+  """
+  @spec init(String.t(), (-> Chart.Applied.t())) :: map()
+  def init(title, applied) when is_function(applied, 0),
+    do: %{
+      title: title,
+      applied: applied,
+      open: false,
+      svg: nil,
+      node: nil,
+      look: nil,
+      data: [],
+      datum: nil
+    }
 
   @doc """
   The state after an event: `open` draws the chart, `close` hides it, and a picked `node`
@@ -32,13 +49,12 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   @spec event(map(), map()) :: map()
   def event(%{open: false} = state, %{"action" => "open"}) do
     svg =
-      state.module
-      |> Design.applied([])
+      state.applied.()
       |> Chart.render(
         root: true,
         paths: true,
         summary: false,
-        title: state.module.title() <> " (explain)"
+        title: state.title <> " (explain)"
       )
 
     %{state | open: true, svg: svg}
@@ -47,7 +63,7 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   def event(state, %{"action" => "close"}), do: %{state | open: false}
 
   def event(%{open: true} = state, %{"node" => node}) when is_binary(node) do
-    applied = Design.applied(state.module, [])
+    applied = state.applied.()
 
     case path(node, Map.keys(applied.frames)) do
       nil ->
@@ -66,7 +82,7 @@ defmodule ExamplesWeb.ChartPanels.Explain do
         state
 
       datum ->
-        applied = Design.applied(state.module, [])
+        applied = state.applied.()
         at = path(state.node, Map.keys(applied.frames))
         %{state | datum: datum, look: explained(applied, at, data, datum)}
     end
@@ -115,7 +131,7 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   defp data(applied, [:marks, i]) do
     mark = Enum.at(applied.chart.marks, i)
 
-    case Enum.find(List.wrap(Map.get(mark, :style)), &match?({:field, _}, &1)) do
+    case styled_by(Map.get(mark, :style)) do
       {:field, field} ->
         applied.sources
         |> Map.get(source(mark.data), [])
@@ -129,6 +145,23 @@ defmodule ExamplesWeb.ChartPanels.Explain do
   end
 
   defp data(_applied, _at), do: []
+
+  # The field a mark's style reads per datum: a stack's `{:field, f}` entry (spec/14 §3.6),
+  # else a field a generator call takes as an argument, wherever in the style it stands —
+  # a stack entry or a paint (§3.13) — or `nil`.
+  defp styled_by(style) do
+    Enum.find(List.wrap(style), &match?({:field, _}, &1)) || generated_field(style)
+  end
+
+  defp generated_field({:generate, _name, args}),
+    do: Enum.find(args, &match?({:field, _}, &1))
+
+  defp generated_field(list) when is_list(list), do: Enum.find_value(list, &generated_field/1)
+
+  defp generated_field(map) when is_map(map) and not is_struct(map),
+    do: map |> Map.values() |> generated_field()
+
+  defp generated_field(_term), do: nil
 
   defp source(%{source: source}), do: source
   defp source(source), do: source
