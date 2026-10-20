@@ -2,10 +2,11 @@ defmodule ExamplesWeb.SourcesLive do
   @moduledoc """
   Data sources (spec/08 §6, §11, spec/05 §4, #781, work item #834): data in the shapes a
   host holds it, drawn as a host draws it. An Nx tensor through the function components
-  of `Visualize.Components` written in this page's HEEx; an Explorer data frame bound to a
-  design, its regions summed by the `:sum` step and its axis in dollars; the `:density`
-  step and two closed curves; the facts a quantity carries; and a feed asked for a window
-  box. Everything is drawn at mount: the page has no event of its own.
+  of `Visualize.Components` written in this page's HEEx, and bound to a design's slot by
+  its declared fields (D-214); an Explorer data frame bound to a design, its regions summed
+  by the `:sum` step and its axis in dollars; the `:density` step and two closed curves;
+  the facts a quantity carries; and a feed asked for a window box. Everything is drawn at
+  mount: the page has no event of its own.
   """
   use Phoenix.LiveView
 
@@ -19,6 +20,7 @@ defmodule ExamplesWeb.SourcesLive do
     {:ok,
      assign(socket,
        samples: Sources.samples(),
+       samples_svg: Sources.samples_svg(),
        walk: Sources.walk(),
        quarter: Sources.quarter("Q4"),
        sales_svg: Sources.sales_svg(),
@@ -81,9 +83,14 @@ defmodule ExamplesWeb.SourcesLive do
             />
           </div>
           <p class="panel-note">
-            A design names its fields, and a tensor's tuples have none, so a tensor bound to a
-            design's slot draws nothing today (#830): a host hands a design a list of maps.
+            A design names its fields, and a tensor's tuples have none: bound to a design's
+            slot, a tensor's columns take the slot's declared fields in order, so
+            <code>source(:samples, [:x, :y])</code>
+            reads column 0 as <code>x</code>
+            and column 1 as <code>y</code>. The same samples,
+            the tensor itself bound to a design's circles:
           </p>
+          <div class="sources-svg">{Phoenix.HTML.raw(@samples_svg)}</div>
         </Panel.panel>
 
         <Panel.panel id="panel-frame">

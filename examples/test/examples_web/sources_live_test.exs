@@ -37,6 +37,13 @@ defmodule ExamplesWeb.SourcesLiveTest do
     assert svg =~ "rotate(-30"
   end
 
+  test "the tensor bound to a design draws a circle per sample (D-214)" do
+    svg = Sources.samples_svg()
+    assert length(Regex.scan(~r/<circle /, svg)) == 200
+    html = build_conn() |> get("/sources") |> html_response(200)
+    assert html =~ ~s(id="sources-samples")
+  end
+
   test "the density draws rings, and both outlines close" do
     svg = Sources.density_svg()
     assert length(Regex.scan(~r/<path /, svg)) >= 6

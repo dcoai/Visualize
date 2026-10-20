@@ -34,6 +34,33 @@ defmodule Examples.Sources do
     Nx.stack([Nx.iota({60}), Nx.cumulative_sum(steps)], axis: 1)
   end
 
+  @doc """
+  The samples as a design draws them: a circle per sample over a slot declaring
+  `[:x, :y]`, which names the tensor's two columns in that order (spec/14 §7.3, D-214).
+  """
+  @spec samples_design() :: map()
+  def samples_design do
+    Design.fold([
+      chart(meta: %{name: "Normal samples", description: ["A tensor bound to a design's slot"]}),
+      source(:samples, [:x, :y], types: %{x: :number, y: :number}),
+      cartesian(margin: %{top: 12, right: 16, bottom: 32, left: 40}),
+      linear_scale(:x, nice: true),
+      linear_scale(:y, nice: true),
+      axis(:x, :bottom, ticks: 5),
+      axis(:y, :left, ticks: 5, grid: true),
+      circle(:samples, %{x: :x, y: :y}, options: %{radius: 2.5})
+    ])
+  end
+
+  @doc "`samples_design/0` over the tensor itself, drawn as a document `<svg>`."
+  @spec samples_svg() :: String.t()
+  def samples_svg do
+    {:ok, applied} =
+      Chart.apply(samples_design(), sources: %{samples: samples()}, size: {320, 240})
+
+    Chart.render(applied, root: true, id: "sources-samples")
+  end
+
   # -- an Explorer data frame -------------------------------------------------------------
 
   @doc "Sales by region and quarter as an Explorer data frame: its columns named by strings."
