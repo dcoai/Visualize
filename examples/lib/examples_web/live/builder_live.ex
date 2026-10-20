@@ -125,7 +125,7 @@ defmodule ExamplesWeb.BuilderLive do
       end
     end
 
-    # The `/board` page's board (spec/15 §10, spec/14 §22, D-152): its ten components
+    # The `/board` page's board (spec/15 §10, spec/14 §22, D-152): its eleven components
     # seeded as `Boards::` composites, and the board itself with its cells' refs moved onto
     # the ids the seeding just issued, so opening it is the board mode. The `/board` page's
     # binding is the host's and is given to the builder as `board_bindings`, never stored.
@@ -162,7 +162,8 @@ defmodule ExamplesWeb.BuilderLive do
             {"Boards::weather", {:composite, 8}},
             {"Boards::latency", {:composite, 9}},
             {"Boards::status", {:composite, 10}},
-            {"Boards::colored", {:composite, 12}}
+            {"Boards::colored", {:composite, 12}},
+            {"Boards::links", {:composite, 13}}
           ],
           do: {name, demo_id, Map.fetch!(store, demo_id)}
     end

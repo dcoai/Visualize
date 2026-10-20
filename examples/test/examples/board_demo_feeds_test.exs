@@ -118,3 +118,53 @@ defmodule Examples.BoardDemo.FeedsTest.Memory do
       :telemetry.execute([:examples, :vm], %{memory: 64.0, run_queue: 0}, %{})
     end
 end
+
+defmodule Examples.BoardDemo.FeedsTest.Links do
+  use ExUnit.Case, async: true
+
+  use Visualize.Feed.Conformance, name: "Links", feed: Examples.BoardDemo.Links.new()
+end
+
+# A feed made to put its cell in one state (#781, work item #821), a well-behaved feed still.
+defmodule Examples.BoardDemo.FeedsTest.StatesStale do
+  use ExUnit.Case, async: true
+  require Examples.BoardDemo.FeedsTest, as: Feeds
+
+  use Visualize.Feed.Conformance,
+    name: "States :stale",
+    feed: Examples.BoardDemo.States.new(:stale, clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
+end
+
+# A feed made to put its cell in one state (#781, work item #821), a well-behaved feed still.
+defmodule Examples.BoardDemo.FeedsTest.StatesNoData do
+  use ExUnit.Case, async: true
+  require Examples.BoardDemo.FeedsTest, as: Feeds
+
+  use Visualize.Feed.Conformance,
+    name: "States :no_data",
+    feed: Examples.BoardDemo.States.new(:no_data, clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
+end
+
+# A feed made to put its cell in one state (#781, work item #821), a well-behaved feed still.
+defmodule Examples.BoardDemo.FeedsTest.StatesCapped do
+  use ExUnit.Case, async: true
+  require Examples.BoardDemo.FeedsTest, as: Feeds
+
+  use Visualize.Feed.Conformance,
+    name: "States :capped",
+    feed: Examples.BoardDemo.States.new(:capped, clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
+end
+
+# A feed made to put its cell in one state (#781, work item #821), a well-behaved feed still.
+defmodule Examples.BoardDemo.FeedsTest.StatesInvalid do
+  use ExUnit.Case, async: true
+  require Examples.BoardDemo.FeedsTest, as: Feeds
+
+  use Visualize.Feed.Conformance,
+    name: "States :invalid",
+    feed: Examples.BoardDemo.States.new(:invalid, clock: Feeds.clock()),
+    windows: [nil, Feeds.window()]
+end

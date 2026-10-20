@@ -341,7 +341,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(colored errors hosts latency load memory offline queue requests services status wave weather)
+             ~w(capped colored errors hosts invalid latency links load memory no_data offline queue requests services stale status wave weather)
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 

@@ -187,19 +187,37 @@ defmodule ExamplesWeb.BoardLive do
 
   defp window(_params), do: nil
 
-  # A selection as the URL writes it, `field:value`, for the fields the board selects by.
-  @selectable %{"service" => :service, "host" => :host}
+  # A selection as the URL writes it, `field:value`, for the fields the board selects by; a
+  # composite one (D-167) its fields' pairs sorted and joined, `host:h2,iface:eth1`.
+  @selectable ~w(service host iface)
 
-  defp selection({field, value}) when field in [:service, :host], do: "#{field}:#{value}"
+  defp selection({field, value}), do: selection(%{field => value})
+
+  defp selection(identity) when is_map(identity) do
+    pairs = for {field, value} <- identity, do: {to_string(field), to_string(value)}
+
+    if Enum.all?(pairs, fn {field, _value} -> field in @selectable end),
+      do: pairs |> Enum.sort() |> Enum.map_join(",", fn {field, value} -> "#{field}:#{value}" end)
+  end
+
   defp selection(_identity), do: nil
 
+  # The identity a URL's selection names, its fields kept as the strings the board reads
+  # them as (D-195): a pair for one field, a map for several, `nil` for a field the board
+  # does not select by — never an atom made from the URL.
   defp identity(nil), do: nil
 
   defp identity(param) do
-    with [field, value] <- String.split(param, ":", parts: 2),
-         {:ok, field} <- Map.fetch(@selectable, field),
-         do: {field, value},
-         else: (_ -> nil)
+    pairs =
+      for part <- String.split(param, ","),
+          [field, value] <- [String.split(part, ":", parts: 2)],
+          do: {field, value}
+
+    cond do
+      pairs == [] or Enum.any?(pairs, fn {field, _value} -> field not in @selectable end) -> nil
+      length(pairs) == 1 -> hd(pairs)
+      true -> Map.new(pairs)
+    end
   end
 
   # The page's URL with some parameters changed, `nil` dropping one.
@@ -225,6 +243,12 @@ defmodule ExamplesWeb.BoardLive do
   def handle_event("chaos", _params, socket) do
     :ok = Examples.BoardDemo.Chaos.fail_for(@outage)
     {:noreply, socket}
+  end
+
+  # One link, named by both its fields: a composite selection made directly (D-167).
+  def handle_event("select_link", _params, socket) do
+    link = %{"host" => "h2", "iface" => "eth1"}
+    {:noreply, push_patch(socket, to: path(socket, %{"select" => selection(link)}))}
   end
 
   def handle_event("window", %{"last" => last}, socket) do
@@ -337,6 +361,26 @@ defmodule ExamplesWeb.BoardLive do
             Before a cell's first view it is drawn <em>Loading…</em>, and <em>Offline</em>
             is
             always <em>Feed down</em>.
+          </p>
+          <p class="board-every-state">
+            The last row is one chart over four feeds, each made to be in one state: <em>Stale</em>
+            stopped reporting ninety seconds ago, past the board's <code>stale_after: 30</code>;
+            <em>No data</em>
+            answers no rows; <em>Capped</em>
+            answers only its newest readings; and <em>Invalid binding</em>
+            sends text where
+            the design reads a number, so the cell names the mismatch rather than crash.
+          </p>
+          <p class="board-links">
+            <em>Links</em>
+            names a link by two fields, <code>host</code>
+            and <code>iface</code>:
+            click a bar to select that one link, a composite selection the URL keeps as <code>?select=host:h2,iface:eth1</code>, or <button
+              type="button"
+              phx-click="select_link"
+            >select h2's eth1</button>.
+            Picking a host on <em>Hosts</em>
+            selects the pair <code>host: h2</code>, both its links.
           </p>
           <p class="board-picked">
             Hover a host's bar for its reading, health and trend; click one and the page is told:
