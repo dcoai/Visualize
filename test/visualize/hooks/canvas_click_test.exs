@@ -100,7 +100,7 @@ defmodule Visualize.Hooks.CanvasClickTest do
         Stub.mark(#{Jason.encode!(inspect(at))});
         {
           const node = #{if backend == :svg and target, do: "pick(#{selector})", else: "null"};
-          Stub.fire(el, 'click', {target: node || chart, clientX: #{10 + 2 * x}, clientY: #{20 + 2 * y}, shiftKey: true});
+          Stub.fire(tip, 'click', {target: node || chart, clientX: #{10 + 2 * x}, clientY: #{20 + 2 * y}, shiftKey: true});
         }
         """
       end)
@@ -112,7 +112,8 @@ defmodule Visualize.Hooks.CanvasClickTest do
     const pick = ([mark, row]) => el.querySelectorAll('[data-mark]')
       .filter((g) => g.getAttribute('data-mark') === String(mark))[0]
       .querySelectorAll('[data-row]').filter((n) => n.getAttribute('data-row') === String(row))[0];
-    Stub.mount(TooltipHook, el);
+    const tip = el.querySelector('[data-tooltip-drawn]');
+    Stub.mount(TooltipHook, tip);
     #{clicks}
     Stub.done({});
     """

@@ -70,25 +70,31 @@ defmodule Visualize.Hooks.TooltipTest do
     assert js =~ "document.elementFromPoint(touch.clientX, touch.clientY)"
   end
 
+  # A click's key and its wire event are `VisualizeItems`' (spec/10 §12.5), which
+  # `TooltipHook` and `KeyboardHook` share, so one click is one event whichever hears it.
   test "a click pushes one wire event, visualize_event, and never the datum's strings (D-170)" do
     js = Tooltip.js_hook()
-    assert js =~ "this.nearest(el, 'data-tooltip-event')"
-    assert js =~ "if (!event || mark === null || row === null) return null;"
-    assert js =~ "else this.pushEvent('visualize_event', payload);"
-    assert js =~ "if (target) this.pushEventTo(target, 'visualize_event', payload);"
-    assert length(String.split(js, "pushEvent(")) == 2
-    refute js =~ "this.fields(el).values)"
+    assert js =~ "return VisualizeItems.key(this.el, this, e);"
+    assert js =~ "VisualizeItems.send(this, this.el, key, e);"
+    refute js =~ "pushEvent("
+
+    items = Tooltip.js_items()
+    assert items =~ "this.nearest(root, el, 'data-tooltip-event')"
+    assert items =~ "if (!event || mark === null || row === null) return null;"
+    assert items =~ "else hook.pushEvent('visualize_event', payload);"
+    assert items =~ "if (target) hook.pushEventTo(target, 'visualize_event', payload);"
+    assert length(String.split(items, "pushEvent(")) == 2
+    refute items =~ "data-datum-"
   end
 
   test "the payload is the element's key, the drawing's token, the pointer and the modifiers" do
-    js = Tooltip.js_hook()
-    assert js =~ "frame: this.nearest(el, 'data-frame'),"
-    assert js =~ "mark: parseInt(mark, 10),"
-    assert js =~ "row: parseInt(row, 10),"
-    assert js =~ "drawn: this.el.dataset.tooltipDrawn || null,"
+    js = Tooltip.js_items()
+    assert js =~ "frame: this.nearest(root, el, 'data-frame'), mark: parseInt(mark, 10),"
+    assert js =~ "row: parseInt(row, 10), at: this.svgPoint(el, e) };"
+    assert js =~ "drawn: root.dataset.tooltipDrawn || null,"
     assert js =~ "['shift', 'alt', 'ctrl', 'meta'].filter((name) => e && e[name + 'Key'])"
     # On a canvas the key is the hit index's (spec/10 §12.5, D-197).
-    assert js =~ "const hit = at && VisualizeItems.hit(items, at.x, at.y);"
+    assert js =~ "const hit = at && this.hit(items, at.x, at.y);"
     assert js =~ "pt.matrixTransform(svg.getScreenCTM().inverse())"
   end
 

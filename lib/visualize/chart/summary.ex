@@ -48,6 +48,7 @@ defmodule Visualize.Chart.Summary do
   alias Visualize.Chart.{Applied, Frame, Mark, Text, Var}
   alias Visualize.Chart.Frame.{Furniture, Scales}
   alias Visualize.Chart.Mark.Channels
+  alias Visualize.Chart.Summary.Identities
   alias Visualize.Data.Table
   alias Visualize.{Format, Quantity, Scale, Unit}
   alias Visualize.IR.Path
@@ -206,7 +207,7 @@ defmodule Visualize.Chart.Summary do
       applied
       |> realized()
       |> Enum.sort_by(&{&1.z, to_string(&1.name)})
-      |> Enum.flat_map(&frame_points(&1, sources))
+      |> Enum.flat_map(&frame_points(&1, sources, applied.schemas))
 
     grouped = Enum.group_by(all, &elem(&1, 0), &elem(&1, 1))
 
@@ -216,16 +217,52 @@ defmodule Visualize.Chart.Summary do
     |> Enum.map(fn name ->
       rows = Map.fetch!(grouped, name)
       n = length(rows)
+      grid? = Enum.all?(rows, &Map.get(&1, :grid?, false))
 
       points =
-        for {{ctx, value, row, reading, position}, i} <- sampled(rows, n) do
-          said = "#{value.label} #{formatter(ctx.frame, value.scale).(reading)}"
-          where = Enum.join(Enum.reject([place(ctx, value.where, row), said], &is_nil/1), ", ")
-          {x, y} = position || {nil, nil}
-          %{text: "#{name}, #{i} of #{n}: #{where}", x: x, y: y, row: row, mark: ctx.mark}
+        for {entry, i} <- if(grid?, do: Enum.with_index(rows, 1), else: sampled(rows, n)) do
+          {x, y} = entry.position || {nil, nil}
+
+          %{
+            text: "#{name}, #{i} of #{n}: #{where(entry)}",
+            x: x,
+            y: y,
+            row: entry.row,
+            mark: entry.mark,
+            key: entry.key
+          }
         end
 
-      %{name: name, points: points}
+      if grid?,
+        do: %{name: name, points: cells(points), grid: true},
+        else: %{name: name, points: points}
+    end)
+  end
+
+  # What a point's readout says after its count: where it is and its value, or — for a
+  # mark that draws no number — its identity and its tooltip's text (D-198).
+  defp where(%{said: said}), do: said
+
+  defp where(%{ctx: ctx, value: value, row: row, reading: reading}) do
+    said = "#{value.label} #{formatter(ctx.frame, value.scale).(reading)}"
+    Enum.join(Enum.reject([place(ctx, value.where, row), said], &is_nil/1), ", ")
+  end
+
+  # A grid's points with their column and row (D-198): each position's place among the
+  # distinct x and the distinct y of the grid, left to right and top to bottom; `nil` for
+  # a point with no position.
+  defp cells(points) do
+    index = fn values ->
+      values |> Enum.uniq() |> Enum.sort() |> Enum.with_index() |> Map.new()
+    end
+
+    placed = Enum.reject(points, &is_nil(&1.x))
+    columns = index.(Enum.map(placed, & &1.x))
+    rows = index.(Enum.map(placed, & &1.y))
+
+    Enum.map(points, fn point ->
+      cell = if point.x != nil, do: {Map.fetch!(columns, point.x), Map.fetch!(rows, point.y)}
+      Map.put(point, :cell, cell)
     end)
   end
 
@@ -238,23 +275,68 @@ defmodule Visualize.Chart.Summary do
     for {row, i} <- Enum.with_index(rows), MapSet.member?(keep, i), do: {row, i + 1}
   end
 
-  defp frame_points(frame, sources) do
-    for mark <- frame.marks,
-        Map.get(mark, :type) not in @auxiliary,
-        ctx = %{frame: frame, mark: mark},
-        value = value(ctx),
-        value != nil,
-        rows = Mark.rows(frame, mark, sources),
-        {row, position} <- Enum.zip(rows, positions(frame, mark, rows)),
-        reading = value.read.(row),
-        is_number(reading) do
-      name =
-        case Channels.reading(ctx, :series, row) || stacked_key(mark, row) do
-          nil -> value.label
-          series -> plain(series)
+  # Every data mark's points: the rows whose value is a number, or — for a mark that draws
+  # none — the rows with an identity (D-198). Each carries its key when its mark declares
+  # an event: what a click on it would send (spec/10 §17.3).
+  defp frame_points(frame, sources, schemas) do
+    frame.marks
+    |> Enum.with_index()
+    |> Enum.reject(fn {mark, _position} -> Map.get(mark, :type) in @auxiliary end)
+    |> Enum.flat_map(fn {mark, position} ->
+      rows = Mark.rows(frame, mark, sources)
+      key = key(frame, mark, position)
+
+      entries =
+        case value_points(%{frame: frame, mark: mark}, rows) do
+          [] -> Identities.entries(frame, mark, rows, schemas)
+          valued -> valued
         end
 
-      {name, {ctx, value, row, reading, position}}
+      for {name, entry} <- entries,
+          do:
+            {name, Map.merge(entry, %{mark: mark, key: key && Map.put(key, :row, entry.ordinal)})}
+    end)
+  end
+
+  defp value_points(ctx, rows) do
+    case value(ctx) do
+      nil ->
+        []
+
+      value ->
+        for {{row, position}, ordinal} <-
+              Enum.with_index(Enum.zip(rows, positions(ctx.frame, ctx.mark, rows))),
+            reading = value.read.(row),
+            is_number(reading) do
+          name =
+            case Channels.reading(ctx, :series, row) || stacked_key(ctx.mark, row) do
+              nil -> value.label
+              series -> plain(series)
+            end
+
+          {name,
+           %{
+             ctx: ctx,
+             value: value,
+             row: row,
+             reading: reading,
+             position: position,
+             ordinal: ordinal
+           }}
+        end
+    end
+  end
+
+  # The key of a mark's point when the mark declares an event (spec/10 §12.3, D-170): the
+  # event, the frame's name and the mark's position; the row's ordinal is the point's.
+  defp key(frame, mark, position) do
+    case Map.get(mark, :tooltip) do
+      %{event: event}
+      when is_binary(event) or (is_atom(event) and event not in [nil, true, false]) ->
+        %{event: Visualize.Event.name(event), frame: to_string(frame.name), mark: position}
+
+      _none ->
+        nil
     end
   end
 

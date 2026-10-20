@@ -53,10 +53,11 @@ defmodule Visualize.Hooks.Keyboard do
   @spec attrs(Applied.t()) :: %{String.t() => String.t()}
   def attrs(%Applied{frame: frame} = applied) do
     series =
-      Enum.map_join(Summary.points(applied), ",", fn %{name: name, points: points} ->
-        ~s({"name":#{string(name)},"points":[) <>
-          Enum.map_join(points, ",", &"[#{number(&1.x)},#{number(&1.y)},#{string(&1.text)}]") <>
-          "]}"
+      Enum.map_join(Summary.points(applied), ",", fn %{name: name, points: points} = series ->
+        grid = if Map.get(series, :grid, false), do: ~s(,"grid":true), else: ""
+
+        ~s({"name":#{string(name)}#{grid},"points":[) <>
+          Enum.map_join(points, ",", &point/1) <> "]}"
       end)
 
     %{
@@ -66,6 +67,25 @@ defmodule Visualize.Hooks.Keyboard do
     }
     |> Map.merge(States.attrs(frame, :focused))
   end
+
+  # A point: `[x, y, readout]`, then its key — what a click on it sends — and its grid
+  # cell when it has either (spec/10 §17.2, D-198).
+  defp point(%{x: x, y: y, text: text} = point) do
+    base = "#{number(x)},#{number(y)},#{string(text)}"
+
+    case {Map.get(point, :key), Map.get(point, :cell)} do
+      {nil, nil} -> "[" <> base <> "]"
+      {key, cell} -> "[" <> base <> "," <> key(key) <> "," <> cell(cell) <> "]"
+    end
+  end
+
+  defp key(nil), do: "null"
+
+  defp key(%{event: event, frame: frame, mark: mark, row: row}),
+    do: ~s({"event":#{string(event)},"frame":#{string(frame)},"mark":#{mark},"row":#{row}})
+
+  defp cell(nil), do: "null"
+  defp cell({column, row}), do: "[#{column},#{row}]"
 
   defp number(nil), do: "null"
   defp number(n), do: Path.format_number(n)
@@ -146,6 +166,14 @@ defmodule Visualize.Hooks.Keyboard do
         const ds = this.el.dataset;
         this.name = ds.keyboardName || 'Chart';
         this.series = JSON.parse(ds.keyboardPoints || '[]');
+        // A grid's points by their cell, `column,row` (spec/10 §17.3, D-198).
+        this.series.forEach((s) => {
+          if (!s.grid) return;
+          s.cells = new Map();
+          s.points.forEach((p, i) => { if (p[4]) s.cells.set(p[4][0] + ',' + p[4][1], i); });
+          s.columns = Math.max(0, ...s.points.map((p) => (p[4] ? p[4][0] + 1 : 0)));
+          s.rows = Math.max(0, ...s.points.map((p) => (p[4] ? p[4][1] + 1 : 0)));
+        });
         this.size = ds.size ? ds.size.split(',').map(parseFloat) : null;
         this.eventName = ds.keyboardEvent || null;
         this.pickName = ds.keyboardPickEvent || null;
@@ -188,11 +216,12 @@ defmodule Visualize.Hooks.Keyboard do
       handleKeyDown(e) {
         const at = this.at;
         let next = null;
+        const grid = at && this.series[at.series].grid;
         switch (e.key) {
-          case 'ArrowRight': next = at ? this.clamp(at.series, at.index + 1) : this.clamp(0, 0); break;
-          case 'ArrowLeft': next = at ? this.clamp(at.series, at.index - 1) : this.clamp(0, 0); break;
-          case 'ArrowDown': next = at ? this.clamp(at.series + 1, at.index) : this.clamp(0, 0); break;
-          case 'ArrowUp': next = at ? this.clamp(at.series - 1, at.index) : this.clamp(0, 0); break;
+          case 'ArrowRight': next = grid ? this.step(at, 1, 0) : at ? this.clamp(at.series, at.index + 1) : this.clamp(0, 0); break;
+          case 'ArrowLeft': next = grid ? this.step(at, -1, 0) : at ? this.clamp(at.series, at.index - 1) : this.clamp(0, 0); break;
+          case 'ArrowDown': next = grid ? this.step(at, 0, 1) : at ? this.clamp(at.series + 1, at.index) : this.clamp(0, 0); break;
+          case 'ArrowUp': next = grid ? this.step(at, 0, -1) : at ? this.clamp(at.series - 1, at.index) : this.clamp(0, 0); break;
           case 'Home': next = this.clamp(at ? at.series : 0, 0); break;
           case 'End': next = this.clamp(at ? at.series : 0, Infinity); break;
           case 'Escape': this.escape(); return;
@@ -208,9 +237,37 @@ defmodule Visualize.Hooks.Keyboard do
         if (moved && this.eventName) this.push(this.eventName, { series: next.series, index: next.index });
       },
 
-      // The reached point picked (spec/15 §13.2); nothing before a point is reached.
+      // In a grid, the nearest point from `at` by (dc, dr) cells, skipping empty cells; the
+      // point itself at the grid's edge (spec/10 §17.3, D-198).
+      step(at, dc, dr) {
+        const s = this.series[at.series];
+        const cell = s.points[at.index][4];
+        if (!cell) return at;
+        for (let c = cell[0] + dc, r = cell[1] + dr; c >= 0 && r >= 0 && c < s.columns && r < s.rows; c += dc, r += dr) {
+          const index = s.cells.get(c + ',' + r);
+          if (index !== undefined) return { series: at.series, index };
+        }
+        return at;
+      },
+
+      // The tooltip's element the chart sits in: the holder's token and target are there.
+      tooltip() {
+        return this.el.querySelector('[data-tooltip-drawn]') || this.el.querySelector('[data-tooltip-target]') || this.el;
+      },
+
+      // The reached point picked (spec/15 §13.2); nothing before a point is reached. A
+      // point a click would key is clicked: the same visualize_event, at the point (D-198).
       pick(at, e) {
-        if (!at || !this.pickName) return;
+        if (!at) return;
+        const point = this.series[at.series].points[at.index];
+        const key = point[3];
+        if (key) {
+          if (e && e.preventDefault) e.preventDefault();
+          const where = point[0] === null || point[1] === null ? null : { x: point[0], y: point[1] };
+          VisualizeItems.send(this, this.tooltip(), Object.assign({}, key, { at: where }), e);
+          return;
+        }
+        if (!this.pickName) return;
         if (e && e.preventDefault) e.preventDefault();
         this.push(this.pickName, { series: at.series, index: at.index });
       },
@@ -222,9 +279,18 @@ defmodule Visualize.Hooks.Keyboard do
       // A click picks the point nearest to it, by the crosshair's snapping: the least
       // horizontal distance, then the least vertical one. A click ending a drag is a brush.
       handleClick(e) {
-        if (!this.pickName) return;
         const down = this.down;
         this.down = null;
+        // A click on an item a mark's event keys is TooltipHook's to send: one click, one
+        // event (D-198). The point it keys becomes the reached point.
+        const tip = this.tooltip();
+        const key = VisualizeItems.key(tip, this.keyCache || (this.keyCache = {}), e);
+        if (key) {
+          const at = this.find(key);
+          if (at) this.at = at;
+          return;
+        }
+        if (!this.pickName) return;
         if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 3) return;
         const chart = this.el.querySelector('svg, canvas') || this.el;
         const rect = chart.getBoundingClientRect();
@@ -245,6 +311,16 @@ defmodule Visualize.Hooks.Keyboard do
         if (!best) return;
         this.at = { series: best.series, index: best.index };
         this.push(this.pickName, { series: best.series, index: best.index });
+      },
+
+      // The point a key names, as `{series, index}`; null when no point carries it.
+      find(key) {
+        for (let s = 0; s < this.series.length; s++) {
+          const i = this.series[s].points.findIndex((p) => p[3] && p[3].mark === key.mark &&
+            p[3].row === key.row && p[3].frame === key.frame && p[3].event === key.event);
+          if (i >= 0) return { series: s, index: i };
+        }
+        return null;
       },
 
       // Escape forgets the point and, inside a board's cell, hands focus back to it

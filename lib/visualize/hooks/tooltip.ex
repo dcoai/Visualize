@@ -101,14 +101,15 @@ defmodule Visualize.Hooks.Tooltip do
   def js_items do
     ~S"""
     const VisualizeItems = {
-      // The index on a hook element, parsed once per value it holds; [] without one.
-      read(hook) {
-        const raw = hook.el.dataset.visItems || null;
-        if (raw !== hook.itemsRaw) {
-          hook.itemsRaw = raw;
-          hook.items = raw ? JSON.parse(raw) : [];
+      // The index on a hook's element, parsed once per value it holds and kept on `cache`
+      // (the hook, or any object with `el`); [] without one.
+      read(cache) {
+        const raw = cache.el.dataset.visItems || null;
+        if (raw !== cache.itemsRaw) {
+          cache.itemsRaw = raw;
+          cache.items = raw ? JSON.parse(raw) : [];
         }
-        return hook.items;
+        return cache.items;
       },
 
       // A client point in the chart's units, through the chart's canvas (or SVG) and the
@@ -123,6 +124,67 @@ defmodule Visualize.Hooks.Tooltip do
         const y = (clientY - rect.top) * size[1] / rect.height;
         if (x < 0 || y < 0 || x > size[0] || y > size[1]) return null;
         return { x, y };
+      },
+
+      // The key under a pointer event, inside the tooltip's element `root`: the datum
+      // element's on an SVG (spec/10 §12.3); on a canvas, which draws none, the topmost item
+      // of the hit index (12.5, D-197), `cache` keeping the parsed index. null for a pointer
+      // over nothing keyed, or over a datum of a mark without an event.
+      key(root, cache, e) {
+        const target = e.target;
+        const el = target && target.closest ? target.closest('[data-datum]') : null;
+        if (el && root.contains(el)) {
+          const event = this.nearest(root, el, 'data-tooltip-event');
+          const mark = this.nearest(root, el, 'data-mark');
+          const row = el.getAttribute('data-row');
+          if (!event || mark === null || row === null) return null;
+          return { event, frame: this.nearest(root, el, 'data-frame'), mark: parseInt(mark, 10),
+                   row: parseInt(row, 10), at: this.svgPoint(el, e) };
+        }
+        cache.el = root;
+        const items = this.read(cache);
+        if (items.length === 0) return null;
+        const at = this.point(root, e.clientX, e.clientY);
+        const hit = at && this.hit(items, at.x, at.y);
+        return hit ? Object.assign(hit, { at }) : null;
+      },
+
+      // The nearest attribute on an element or an ancestor, searched no further than root.
+      nearest(root, el, attribute) {
+        for (let node = el; node; node = node.parentElement) {
+          if (node.hasAttribute(attribute)) return node.getAttribute(attribute);
+          if (node === root) return null;
+        }
+        return null;
+      },
+
+      // The pointer in the user units of the element's nearest <svg>, null without one.
+      svgPoint(el, e) {
+        const svg = el.closest('svg');
+        if (!svg || typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return null;
+        const pt = svg.createSVGPoint();
+        pt.x = e.clientX;
+        pt.y = e.clientY;
+        const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+        return { x: p.x, y: p.y };
+      },
+
+      // One wire event for a key, `visualize_event`: the key's event name, frame, mark and
+      // row, the drawing's token on `root`, the point and the keys held; pushed by `hook`
+      // to the component root's data-tooltip-target names, else to the LiveView (D-161).
+      send(hook, root, key, e) {
+        const payload = {
+          event: key.event,
+          frame: key.frame,
+          mark: key.mark,
+          row: key.row,
+          drawn: root.dataset.tooltipDrawn || null,
+          at: key.at,
+          modifiers: ['shift', 'alt', 'ctrl', 'meta'].filter((name) => e && e[name + 'Key'])
+        };
+        const target = root.dataset.tooltipTarget;
+        if (target) hook.pushEventTo(target, 'visualize_event', payload);
+        else hook.pushEvent('visualize_event', payload);
       },
 
       // The topmost item under a point: the last drawn whose shape holds it, as `{event,
@@ -397,53 +459,14 @@ defmodule Visualize.Hooks.Tooltip do
         if (key) this.send(key, e);
       },
 
-      // The key under a pointer event: the datum element's on an SVG; on a canvas, which
-      // draws none, the topmost item of the hit index (spec/10 §12.5, D-197). null for a
-      // pointer over nothing keyed, or over a datum of a mark without an event.
+      // The key under a pointer event (spec/10 §12.3, §12.5): VisualizeItems.key/3.
       keyAt(e) {
-        const el = this.datumElement(e.target);
-        if (el) {
-          const event = this.nearest(el, 'data-tooltip-event');
-          const mark = this.nearest(el, 'data-mark');
-          const row = el.getAttribute('data-row');
-          if (!event || mark === null || row === null) return null;
-          return { event, frame: this.nearest(el, 'data-frame'), mark: parseInt(mark, 10),
-                   row: parseInt(row, 10), at: this.at(el, e) };
-        }
-        const items = VisualizeItems.read(this);
-        if (items.length === 0) return null;
-        const at = VisualizeItems.point(this.el, e.clientX, e.clientY);
-        const hit = at && VisualizeItems.hit(items, at.x, at.y);
-        return hit ? Object.assign(hit, { at }) : null;
+        return VisualizeItems.key(this.el, this, e);
       },
 
-      // One wire event for a key: its event name (a click's, or another the key names), the
-      // drawing's token and the keys held; to the component data-tooltip-target names,
-      // else to the LiveView (D-161).
+      // One wire event for a key, to this hook's holder (D-161, D-170).
       send(key, e) {
-        const payload = {
-          event: key.event,
-          frame: key.frame,
-          mark: key.mark,
-          row: key.row,
-          drawn: this.el.dataset.tooltipDrawn || null,
-          at: key.at,
-          modifiers: ['shift', 'alt', 'ctrl', 'meta'].filter((name) => e && e[name + 'Key'])
-        };
-        const target = this.el.dataset.tooltipTarget;
-        if (target) this.pushEventTo(target, 'visualize_event', payload);
-        else this.pushEvent('visualize_event', payload);
-      },
-
-      // The pointer in the user units of the element's nearest <svg>, null without one.
-      at(el, e) {
-        const svg = el.closest('svg');
-        if (!svg || typeof e.clientX !== 'number' || typeof e.clientY !== 'number') return null;
-        const pt = svg.createSVGPoint();
-        pt.x = e.clientX;
-        pt.y = e.clientY;
-        const p = pt.matrixTransform(svg.getScreenCTM().inverse());
-        return { x: p.x, y: p.y };
+        VisualizeItems.send(this, this.el, key, e);
       },
 
       destroyed() {

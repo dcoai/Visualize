@@ -40,7 +40,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     alias Visualize.Chart
     alias Visualize.Chart.{Applied, Summary}
     alias Visualize.Event
-    alias Visualize.Hooks.Tooltip
+    alias Visualize.Hooks.{Keyboard, Tooltip}
     alias Visualize.IR.Element
 
     @impl true
@@ -52,6 +52,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
          svg: nil,
          canvas: nil,
          hover: %{},
+         keyboard: %{},
          motion: false
        )}
     end
@@ -89,7 +90,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
       assign(socket,
         drawing: drawing,
         drawn: Integer.to_string(System.unique_integer([:positive, :monotonic])),
-        hover: Tooltip.attrs(chart.frame)
+        hover: Tooltip.attrs(chart.frame),
+        # Every point and every keyed item reached from the keyboard (spec/10 §17, D-198).
+        keyboard: Keyboard.attrs(chart)
       )
       |> assign(drawn_as(backend, chart, render_opts))
     end
@@ -168,22 +171,25 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @impl true
     def render(%{canvas: nil} = assigns) do
       ~H"""
-      <div
-        id={@id}
-        phx-hook="TooltipHook"
-        data-tooltip-target={@myself}
-        data-tooltip-drawn={@drawn}
-        data-tooltip-class={@tooltip_class}
-        {@hover}
-      >
-        <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">{Phoenix.HTML.raw(@svg)}</div>
-        {if @motion, do: nil, else: Phoenix.HTML.raw(@svg)}
+      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" {@keyboard}>
+        <div
+          id={@id}
+          phx-hook="TooltipHook"
+          data-tooltip-target={@myself}
+          data-tooltip-drawn={@drawn}
+          data-tooltip-class={@tooltip_class}
+          {@hover}
+        >
+          <div :if={@motion} id={"#{@id}-motion"} phx-hook="MotionHook">{Phoenix.HTML.raw(@svg)}</div>
+          {if @motion, do: nil, else: Phoenix.HTML.raw(@svg)}
+        </div>
       </div>
       """
     end
 
     def render(assigns) do
       ~H"""
+      <div id={"#{@id}-keys"} phx-hook="KeyboardHook" {@keyboard}>
       <div
         id={@id}
         phx-hook="TooltipHook"
@@ -230,6 +236,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             {Phoenix.HTML.raw(@canvas.text)}
           </div>
         </div>
+      </div>
       </div>
       """
     end
