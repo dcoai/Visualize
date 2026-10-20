@@ -49,7 +49,7 @@ defmodule ExamplesWeb.ChartLive do
     "world_map",
     "day_night_gps",
     "globe",
-    "gps_track",
+    "grandmas_marathon",
     "hexbin",
     "spectrum",
     "colors",

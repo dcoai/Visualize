@@ -1,20 +1,25 @@
 defmodule ExamplesWeb.ChartLiveBackdropTest do
   @moduledoc """
   A basemap is the page's backdrop (spec/14 §12.4, #476, D-120): on the Canvas backend
-  the GPS track's tiles sit in a layer beneath the canvas, the dense track on the canvas
+  the marathon's tiles sit in layers beneath the canvases, the dense course on a canvas
   over them, and the static and dynamic SVG over both, the attribution in the SVG so it
   reads over the data. The tiles are URLs in the markup; nothing is fetched.
+
+  *Grandma's Marathon* (#783) has two fitted `:geo` frames, the course and the pack inset,
+  so the page has a backdrop layer for each.
   """
   use ExUnit.Case, async: true
 
-  alias Examples.Charts.{Design, GpsTrack}
+  alias Examples.Charts.{Design, Marathon}
   alias ExamplesWeb.ChartLive
 
   @attribution "© OpenStreetMap contributors"
   @tile ~r{<image [^>]*href="https://tile\.openstreetmap\.org/\d+/\d+/\d+\.png"}
 
   defp page(backend) do
-    {:ok, s} = ChartLive.mount(%{"chart" => "gps_track"}, %{}, %Phoenix.LiveView.Socket{})
+    {:ok, s} =
+      ChartLive.mount(%{"chart" => "grandmas_marathon"}, %{}, %Phoenix.LiveView.Socket{})
+
     {:noreply, s} = ChartLive.handle_event("set_backend", %{"backend" => to_string(backend)}, s)
     s
   end
@@ -44,42 +49,47 @@ defmodule ExamplesWeb.ChartLiveBackdropTest do
     s = page(:canvas)
     h = html(s)
 
-    [backdrop] = layers(h, "hybrid-backdrop-layer")
+    # A backdrop for each fitted frame: the course and the inset.
+    backdrops = layers(h, "hybrid-backdrop-layer")
+    assert length(backdrops) == 2
     [static] = layers(h, "hybrid-static-layer")
-    [dynamic] = layers(h, "hybrid-dynamic-layer")
+    dynamics = layers(h, "hybrid-dynamic-layer")
+    assert dynamics != []
 
     # The z-order the markup states and the order it is written in agree.
-    assert backdrop =~ "z-index: 0;"
+    assert Enum.all?(backdrops, &(&1 =~ "z-index: 0;"))
     assert static =~ "z-index: 2;"
-    assert dynamic =~ "z-index: 3;"
-    [canvas_tag] = Regex.run(~r/<div[^>]*id="plot-canvas-main"[^>]*>/, h)
+    assert Enum.all?(dynamics, &(&1 =~ "z-index: 3;"))
+    [canvas_tag] = Regex.run(~r/<div[^>]*id="plot-canvas-course"[^>]*>/, h)
     assert canvas_tag =~ "z-index: 1;"
     assert canvas_tag =~ ~s(data-binary="…")
 
-    assert at(h, "hybrid-backdrop-layer") < at(h, ~s(id="plot-canvas-main"))
-    assert at(h, ~s(id="plot-canvas-main")) < at(h, "hybrid-static-layer")
+    assert at(h, "hybrid-backdrop-layer") < at(h, ~s(id="plot-canvas-course"))
+    assert at(h, ~s(id="plot-canvas-course")) < at(h, "hybrid-static-layer")
     assert at(h, "hybrid-static-layer") < at(h, "hybrid-dynamic-layer")
 
-    # The tiles are the backdrop alone; the attribution is over the canvas.
+    # The tiles are the backdrops alone; the attribution is over the canvas.
+    backdrop = Enum.join(backdrops)
+    dynamic = Enum.join(dynamics)
     assert length(Regex.scan(@tile, backdrop)) > 0
     refute backdrop =~ @attribution
     refute static =~ "<image"
     refute dynamic =~ "<image"
     assert dynamic =~ @attribution
 
-    # The track is on the canvas, not in either SVG layer: only the runner's dot is SVG.
+    # The course is on the canvas, not in either SVG layer: the runners are SVG.
     refute static =~ "mark-line"
     refute dynamic =~ "mark-line"
     assert dynamic =~ "mark-circle"
   end
 
-  test "the track is drawn on the canvas, and its stream draws" do
-    hybrid = Design.hybrid(GpsTrack, [])
-    [plot] = hybrid.plots
+  test "the course is drawn on the canvas, and its stream draws" do
+    hybrid = Design.hybrid(Marathon, [])
+    course = Enum.find(hybrid.plots, &(to_string(&1.name) == "course"))
 
-    records = plot.canvas |> Base.decode64!() |> Visualize.Backend.CanvasBinary.Decoder.decode()
+    records = course.canvas |> Base.decode64!() |> Visualize.Backend.CanvasBinary.Decoder.decode()
     assert Enum.count(records, &(&1 == :stroke)) > 0
-    assert length(Regex.scan(@tile, hybrid.backdrop)) > 0
+    assert length(Regex.scan(@tile, course.backdrop)) > 0
     refute hybrid.static =~ "<image"
   end
 

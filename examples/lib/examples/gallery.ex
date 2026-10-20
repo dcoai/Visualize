@@ -47,8 +47,9 @@ defmodule Examples.Gallery do
     # The night side and the GPS constellation over the turning World Map (#526)
     {Examples.Charts.DayNightGps, "day_night_gps"},
     {Examples.Charts.Globe, "globe"},
-    # A GPS track over OpenStreetMap tiles, the basemap beneath the canvas (#476)
-    {Examples.Charts.GpsTrack, "gps_track"},
+    # An elite field on Grandma's Marathon over OpenStreetMap tiles: the course beneath
+    # the canvas, an inset fitted to the field every tick, and the standings (#476, #783)
+    {Examples.Charts.Marathon, "grandmas_marathon"},
     # A machine's load, two ways (#415), one source in two frames (#429), and the dial
     # inset over the log-age plot's corner (#498)
     {Examples.Charts.LoadGauge, "load_gauge"},

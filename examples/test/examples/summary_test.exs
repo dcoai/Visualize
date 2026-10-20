@@ -28,7 +28,6 @@ defmodule Examples.SummaryTest do
     Charts.ForceGraph => ["network graph"],
     Charts.GaugeChart => ["gauge"],
     Charts.Globe => ["map"],
-    Charts.GpsTrack => ["map"],
     Charts.PaintsChart => ["area chart", "bar chart"],
     Charts.GroupedBarChart => ["grouped bar chart"],
     Charts.Heatmap => ["heatmap"],
@@ -40,6 +39,8 @@ defmodule Examples.SummaryTest do
     Charts.LoadAgeGauge => ["line chart", "gauge"],
     Charts.LoadChart => ["area chart", "radial bar chart"],
     Charts.LoadGauge => ["gauge"],
+    # The clock frame is a text alone, which the rules call a chart (#783).
+    Charts.Marathon => ["chart", "map", "map", "bar chart"],
     Charts.MultiLineChart => ["line chart"],
     Charts.PieChart => ["pie chart"],
     Charts.PolarTransformChart => ["radar chart"],
@@ -138,7 +139,9 @@ defmodule Examples.SummaryTest do
     html = Summary.table(applied)
 
     if Enum.any?(summary.frames, &(&1.extremes != [])) do
-      assert html =~ "<table><caption>#{escape(module.title())}", inspect(module)
+      # The table is HTML, escaped as Phoenix escapes it: an apostrophe is `&#39;` (#783).
+      caption = module.title() |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
+      assert html =~ "<table><caption>#{caption}", inspect(module)
       assert html =~ ~s(<th scope="col">), inspect(module)
     end
   end

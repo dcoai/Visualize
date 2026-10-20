@@ -41,7 +41,8 @@ defmodule ExamplesWeb.GalleryLiveTest do
 
     for {module, slug} <- charts() do
       assert html =~ ~s(href="/chart/#{slug}"), slug
-      assert html =~ module.title(), slug
+      # The page escapes the title as HTML: an apostrophe is `&#39;` (#783).
+      assert html =~ html_escape(module.title()), slug
     end
   end
 
@@ -100,4 +101,6 @@ defmodule ExamplesWeb.GalleryLiveTest do
     Previews.clear()
     assert Previews.get(Examples.Charts.LineChart, @size) == :miss
   end
+
+  defp html_escape(text), do: text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
 end

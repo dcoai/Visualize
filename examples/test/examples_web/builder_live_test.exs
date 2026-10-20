@@ -109,8 +109,9 @@ defmodule ExamplesWeb.BuilderLiveTest do
       for name <- names do
         assert {_kind, _n} = Library.id_of(name)
 
-        assert html =~
-                 ~s(<span class="vis-builder-fragment">#{String.replace(name, "Charts::", "")}</span>)
+        # The page escapes the name as HTML: an apostrophe is `&#39;` (#783).
+        shown = name |> String.replace("Charts::", "") |> html_escape()
+        assert html =~ ~s(<span class="vis-builder-fragment">#{shown}</span>)
       end
     end
 
@@ -325,4 +326,6 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert :ok in shown
     end
   end
+
+  defp html_escape(text), do: text |> Phoenix.HTML.html_escape() |> Phoenix.HTML.safe_to_string()
 end
