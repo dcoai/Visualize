@@ -25,11 +25,15 @@ defmodule ExamplesWeb.BoardLive do
   selected in all three, and a click on a bar drills down. The component hands the drill to
   this page, which follows it to `/board/detail` with the bar's service: the page knows its
   routes, the library does not.
+
+  Beneath the board, *The board outside its process* (`ExamplesWeb.BoardLive.Lifecycle`,
+  #822) reopens a snapshot from its JSON — uploaded, or the board frozen now — carries the
+  board in a bundle to a second library, and runs the feed conformance kit in a task.
   """
   use Phoenix.LiveView
 
   alias Examples.BoardDemo
-  alias ExamplesWeb.BoardLive.Station
+  alias ExamplesWeb.BoardLive.{Lifecycle, Station}
   alias ExamplesWeb.{Highlight, Panel}
   alias Visualize.Board.Server
   alias Visualize.{Event, Quantity, Unit}
@@ -40,6 +44,8 @@ defmodule ExamplesWeb.BoardLive do
   @firmware [{"°C", "°C"}, {"°F", "°F"}, {"K", "K"}]
   # How long the board's host function fails when the page asks it to.
   @outage 20_000
+  # The largest snapshot document the page reopens.
+  @snapshot_max 16_000_000
 
   @impl true
   def mount(params, _session, socket) do
@@ -57,8 +63,12 @@ defmodule ExamplesWeb.BoardLive do
        memory_compatibility: BoardDemo.memory_compatibility(),
        station: system |> Station.new() |> Station.tick(),
        params: %{},
-       picked: nil
-     )}
+       picked: nil,
+       reopened: nil,
+       bundle: nil,
+       conformance: nil
+     )
+     |> allow_upload(:snapshot, accept: ~w(.json), max_entries: 1, max_file_size: @snapshot_max)}
   end
 
   # The station's newest readings, written in the viewer's system (D-156): what a host's
@@ -152,6 +162,10 @@ defmodule ExamplesWeb.BoardLive do
   end
 
   def handle_info({:visualize_event, "demo-board", %Event{}}, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_async(:conformance, {:ok, rows}, socket),
+    do: {:noreply, assign(socket, conformance: rows)}
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -249,6 +263,32 @@ defmodule ExamplesWeb.BoardLive do
   def handle_event("select_link", _params, socket) do
     link = %{"host" => "h2", "iface" => "eth1"}
     {:noreply, push_patch(socket, to: path(socket, %{"select" => selection(link)}))}
+  end
+
+  # The board outside its process (#822): a snapshot reopened from its JSON — uploaded, or
+  # the board frozen now — the board carried in a bundle, and the conformance kit's report.
+  def handle_event("reopen_pick", _params, socket), do: {:noreply, socket}
+
+  def handle_event("reopen", _params, socket) do
+    reopened =
+      consume_uploaded_entries(socket, :snapshot, fn %{path: path}, _entry ->
+        {:ok, Lifecycle.reopen(File.read!(path))}
+      end)
+
+    {:noreply, assign(socket, reopened: List.first(reopened, socket.assigns.reopened))}
+  end
+
+  def handle_event("freeze", _params, socket),
+    do: {:noreply, assign(socket, reopened: Lifecycle.freeze(socket.assigns.board))}
+
+  def handle_event("carry", _params, socket),
+    do: {:noreply, assign(socket, bundle: Lifecycle.carry())}
+
+  def handle_event("conformance", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(conformance: :running)
+     |> start_async(:conformance, fn -> Lifecycle.conformance() end)}
   end
 
   def handle_event("window", %{"last" => last}, socket) do
@@ -400,6 +440,16 @@ defmodule ExamplesWeb.BoardLive do
           />
         </Panel.panel>
 
+        <Panel.panel id="panel-lifecycle">
+          <:title>The board outside its process</:title>
+          <Lifecycle.panel
+            uploads={@uploads}
+            reopened={@reopened}
+            bundle={@bundle}
+            conformance={@conformance}
+          />
+        </Panel.panel>
+
         <Panel.panel id="panel-station">
           <:title>The station, on the page's own loop</:title>
           <p class="panel-note">
@@ -460,6 +510,13 @@ defmodule ExamplesWeb.BoardLive do
     <style>
       .board-windows button, .board-exports button { margin: 0 0.25rem; }
       .board-unit { margin: 0 0.25rem; }
+      .board-lifecycle table { border-collapse: collapse; font-size: 0.8rem; margin: 0.5rem 0; }
+      .board-lifecycle th, .board-lifecycle td { padding: 0.2rem 0.5rem; text-align: left; border-bottom: 1px solid #eee; vertical-align: top; }
+      .board-lifecycle td.pass { color: #1d6b2b; }
+      .board-lifecycle td.fail { color: #a3171c; }
+      .board-finding { display: block; font-size: 0.75rem; }
+      .board-fault { color: #a3171c; font-family: monospace; font-size: 0.85rem; }
+      .board-reopened-svg svg { max-width: 100%; height: auto; border: 1px solid #e0e0e0; }
       .board-unit-current { font-weight: 600; text-decoration: none; color: inherit; }
       .board-reading { margin-right: 1rem; }
       .vis-board-header { display: flex; gap: 1rem; align-items: baseline; }
