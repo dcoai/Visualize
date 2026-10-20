@@ -100,15 +100,18 @@ defmodule Visualize.Chart.Summary.Identities do
   defp identity_text(identity) when is_map(identity),
     do: identity |> Enum.sort() |> Enum.map_join(", ", fn {f, v} -> "#{f} #{v}" end)
 
-  # The mark's tooltip template with the row's fields in it, as `TooltipHook` writes it;
+  # The mark's tooltip template with the row's fields in it, as `TooltipHook` writes it,
+  # trimmed, since a field with no value leaves its space behind;
   # `nil` without a template.
   defp tooltip_text(%{tooltip: %{template: template}}, row) when is_binary(template) do
-    Regex.replace(~r/\{([^}]+)\}/, template, fn _all, field ->
+    ~r/\{([^}]+)\}/
+    |> Regex.replace(template, fn _all, field ->
       case Table.get(row, field) do
         nil -> ""
         value -> to_string(value)
       end
     end)
+    |> String.trim()
   end
 
   defp tooltip_text(_mark, _row), do: nil

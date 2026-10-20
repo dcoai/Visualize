@@ -332,7 +332,11 @@ defmodule Visualize.Chart.Mark do
   defp tooltip_attrs(%{tooltip: nil}), do: %{}
 
   defp tooltip_attrs(%{tooltip: tooltip} = ctx) do
-    for {key, name} <- [template: "data-tooltip-template", event: "data-tooltip-event"],
+    for {key, name} <- [
+          template: "data-tooltip-template",
+          event: "data-tooltip-event",
+          context_event: "data-tooltip-context-event"
+        ],
         value = Map.get(tooltip, key),
         value != nil,
         into: key_attrs(ctx.keys),
@@ -348,8 +352,17 @@ defmodule Visualize.Chart.Mark do
   # its position among the frame's marks, and each datum's ordinal in the mark's realized
   # rows — all of them, before a facet's panel is taken, as `rows/3` gives them. Equal rows
   # are one row to a click, so the first ordinal names them. `nil` for a mark without an
-  # event, or one drawn outside its frame's marks, which cannot be resolved.
-  defp keys(%{tooltip: %{event: event}, frame: frame, mark: mark}, rows) when event != nil do
+  # event — a click's or a secondary gesture's (D-199) — or one drawn outside its frame's
+  # marks, which cannot be resolved.
+  defp keys(%{tooltip: tooltip, frame: frame, mark: mark}, rows) when is_map(tooltip) do
+    if Map.get(tooltip, :event) == nil and Map.get(tooltip, :context_event) == nil,
+      do: nil,
+      else: position_keys(frame, mark, rows)
+  end
+
+  defp keys(_ctx, _rows), do: nil
+
+  defp position_keys(frame, mark, rows) do
     case Enum.find_index(frame.marks, &(&1 == mark)) do
       nil ->
         nil
@@ -359,8 +372,6 @@ defmodule Visualize.Chart.Mark do
         %{frame: frame.name, mark: position, ordinals: ordinals}
     end
   end
-
-  defp keys(_ctx, _rows), do: nil
 
   # The datum attributes of spec/10 §12.2 on an element: the tooltip's fields read from
   # the datum, or every column of the datum in sorted order when it names none.

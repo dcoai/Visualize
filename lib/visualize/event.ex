@@ -220,21 +220,26 @@ defmodule Visualize.Event do
     end
   end
 
-  defp declares?(mark, name), do: declared_name(mark) == name
+  defp declares?(mark, name), do: name in declared_names(mark)
 
-  # The event a mark's tooltip declares, as its string, or `nil`.
-  defp declared_name(mark) do
+  # The events a mark's tooltip declares, as strings: a click's `event` and a secondary
+  # gesture's `context_event` (spec/14 §5.7, D-199).
+  defp declared_names(mark) do
     case Map.get(mark, :tooltip) do
-      %{event: event} when is_binary(event) or (is_atom(event) and event not in @not_names) ->
-        name(event)
+      tooltip when is_map(tooltip) ->
+        for key <- [:event, :context_event],
+            event = Map.get(tooltip, key),
+            is_binary(event) or (is_atom(event) and event not in @not_names),
+            do: name(event)
 
       _none ->
-        nil
+        []
     end
   end
 
   @doc """
-  The event names a chart's marks declare (spec/14 §5.7), as strings, sorted and unique.
+  The event names a chart's marks declare (spec/14 §5.7), as strings, sorted and unique:
+  each mark's `event` and `context_event` (D-199).
 
       iex> chart = Visualize.Chart.from_map!(%{version: 2, sources: %{s: %{fields: [:x, :y]}},
       ...>   frames: %{main: %{kind: :cartesian, scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
@@ -249,8 +254,7 @@ defmodule Visualize.Event do
   def declared(%Chart{marks: marks}) do
     marks
     |> List.wrap()
-    |> Enum.map(&declared_name/1)
-    |> Enum.reject(&is_nil/1)
+    |> Enum.flat_map(&declared_names/1)
     |> Enum.uniq()
     |> Enum.sort()
   end

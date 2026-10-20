@@ -160,6 +160,16 @@ defmodule Visualize.Chart.Validator.Held do
       when kind in [:paint, :stroke] and type != :solid,
       do: [{path ++ [:color], {:invalid_for, type}}]
 
+  # A mark's two declared names are two gestures' (spec/14 §5.7, D-199): one name for
+  # both would give the host one event for two.
+  def held(:tooltip, %{event: event, context_event: context}, path, _ctx)
+      when (is_binary(event) or is_atom(event)) and (is_binary(context) or is_atom(context)) and
+             event not in [nil, true, false] and context not in [nil, true, false] do
+    if to_string(event) == to_string(context),
+      do: [{path ++ [:context_event], {:same_name, :event}}],
+      else: []
+  end
+
   def held(_kind, _map, _path, _ctx), do: []
 
   # The angle scale's sweep is a turn at most and never nothing; an axis's radius is

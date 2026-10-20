@@ -7,7 +7,7 @@ defmodule Visualize.Hooks.TooltipTest do
 
   doctest Tooltip
 
-  @listeners ~w(mousemove mouseleave touchmove touchend click)
+  @listeners ~w(mousemove mouseleave touchmove touchend click contextmenu touchstart touchcancel)
 
   test "the tooltip element is created on mount with the configured class and removed on destroy" do
     js = Tooltip.js_hook()
@@ -20,11 +20,11 @@ defmodule Visualize.Hooks.TooltipTest do
     assert js =~ "if (this.tip.parentNode) this.tip.parentNode.removeChild(this.tip);"
   end
 
-  test "five listeners are bound once, kept, and removed with the same references (D-47)" do
+  test "the listeners are bound once, kept, and removed with the same references (D-47)" do
     js = Tooltip.js_hook()
-    # The five pointer listeners and the sync bus's one (spec/10 §4.3), which the bus adds
-    # and removes on `document`.
-    assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 6
+    # The five pointer listeners, the three of a secondary gesture (D-199) and the sync
+    # bus's one (spec/10 §4.3), which the bus adds and removes on `document`.
+    assert length(Regex.scan(~r/\.bind\(this\)/, js)) == 9
     assert js =~ "this.onSync = this.handleSync.bind(this);"
     assert js =~ "VisualizeSync.detach(this);"
 
@@ -33,8 +33,8 @@ defmodule Visualize.Hooks.TooltipTest do
       assert js =~ ~r/this\.el\.removeEventListener\('#{name}', this\.on\w+\)/
     end
 
-    assert length(Regex.scan(~r/addEventListener\(/, js)) == 5
-    assert length(Regex.scan(~r/removeEventListener\(/, js)) == 5
+    assert length(Regex.scan(~r/addEventListener\(/, js)) == 8
+    assert length(Regex.scan(~r/removeEventListener\(/, js)) == 8
   end
 
   test "the datum element is the nearest ancestor-or-self with data-datum inside the hook" do
@@ -79,7 +79,10 @@ defmodule Visualize.Hooks.TooltipTest do
     refute js =~ "pushEvent("
 
     items = Tooltip.js_items()
-    assert items =~ "this.nearest(root, el, 'data-tooltip-event')"
+
+    assert items =~
+             "this.nearest(root, el, context ? 'data-tooltip-context-event' : 'data-tooltip-event')"
+
     assert items =~ "if (!event || mark === null || row === null) return null;"
     assert items =~ "else hook.pushEvent('visualize_event', payload);"
     assert items =~ "if (target) hook.pushEventTo(target, 'visualize_event', payload);"

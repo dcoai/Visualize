@@ -75,7 +75,14 @@ defmodule Visualize.Hooks.KeyboardGridTest do
       {x, y} = center({c, r})
       assert_in_delta point.x, x, 1.0e-9
       assert_in_delta point.y, y, 1.0e-9
-      assert point.key == %{event: "cell_click", frame: "main", mark: 0, row: ordinal}
+
+      assert point.key == %{
+               event: "cell_click",
+               context: nil,
+               frame: "main",
+               mark: 0,
+               row: ordinal
+             }
     end
 
     assert hd(points).text == "cells, 1 of 9: col 0, row 0, open"

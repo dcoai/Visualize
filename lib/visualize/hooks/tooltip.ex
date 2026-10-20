@@ -88,7 +88,7 @@ defmodule Visualize.Hooks.Tooltip do
       ...>             options: %{radius: 4}, tooltip: %{event: :pick}}]}
       iex> {:ok, applied} = Visualize.Chart.apply(design, sources: %{s: [%{x: 5, y: 5}]}, size: {100, 100})
       iex> Visualize.Hooks.Tooltip.items(Visualize.Chart.generate(applied))
-      ~s([{"event":"pick","frame":"main","mark":0,"items":[[0,"c",50,50,4]]}])
+      ~s([{"event":"pick","context":null,"frame":"main","mark":0,"items":[[0,"c",50,50,4]]}])
 
   """
   @spec items(Element.t()) :: String.t()
@@ -130,11 +130,14 @@ defmodule Visualize.Hooks.Tooltip do
       // element's on an SVG (spec/10 §12.3); on a canvas, which draws none, the topmost item
       // of the hit index (12.5, D-197), `cache` keeping the parsed index. null for a pointer
       // over nothing keyed, or over a datum of a mark without an event.
-      key(root, cache, e) {
+      // `kind` is 'click' (the default) for the mark's event, 'context' for its context
+      // event (D-199): the key is named by it, and is null for a mark that declares none.
+      key(root, cache, e, kind) {
+        const context = kind === 'context';
         const target = e.target;
         const el = target && target.closest ? target.closest('[data-datum]') : null;
         if (el && root.contains(el)) {
-          const event = this.nearest(root, el, 'data-tooltip-event');
+          const event = this.nearest(root, el, context ? 'data-tooltip-context-event' : 'data-tooltip-event');
           const mark = this.nearest(root, el, 'data-mark');
           const row = el.getAttribute('data-row');
           if (!event || mark === null || row === null) return null;
@@ -146,7 +149,8 @@ defmodule Visualize.Hooks.Tooltip do
         if (items.length === 0) return null;
         const at = this.point(root, e.clientX, e.clientY);
         const hit = at && this.hit(items, at.x, at.y);
-        return hit ? Object.assign(hit, { at }) : null;
+        const event = hit && (context ? hit.context : hit.event);
+        return event ? { event, frame: hit.frame, mark: hit.mark, row: hit.row, at } : null;
       },
 
       // The nearest attribute on an element or an ancestor, searched no further than root.
@@ -188,13 +192,13 @@ defmodule Visualize.Hooks.Tooltip do
       },
 
       // The topmost item under a point: the last drawn whose shape holds it, as `{event,
-      // frame, mark, row}`; null for none.
+      // context, frame, mark, row}`; null for none.
       hit(items, x, y) {
         for (let e = items.length - 1; e >= 0; e--) {
           const entry = items[e];
           for (let i = entry.items.length - 1; i >= 0; i--) {
             if (this.holds(entry.items[i], x, y)) {
-              return { event: entry.event, frame: entry.frame, mark: entry.mark, row: entry.items[i][0] };
+              return { event: entry.event, context: entry.context, frame: entry.frame, mark: entry.mark, row: entry.items[i][0] };
             }
           }
         }
@@ -253,7 +257,13 @@ defmodule Visualize.Hooks.Tooltip do
         this.onMouseMove = this.handleMouseMove.bind(this);
         this.onMouseLeave = this.leave.bind(this);
         this.onTouchMove = this.handleTouchMove.bind(this);
-        this.onTouchEnd = this.leave.bind(this);
+        this.onTouchEnd = this.handleTouchEnd.bind(this);
+        // A secondary gesture (spec/10 §12.3, D-199): a right-click, or a long-press.
+        this.onContextMenu = this.handleContextMenu.bind(this);
+        this.onTouchStart = this.handleTouchStart.bind(this);
+        this.onTouchCancel = this.cancelPress.bind(this);
+        this.press = null;
+        this.pressedAt = null;
         this.onClick = this.handleClick.bind(this);
         this.onSync = this.handleSync.bind(this);
         VisualizeSync.attach(this);
@@ -262,6 +272,9 @@ defmodule Visualize.Hooks.Tooltip do
         this.el.addEventListener('mouseleave', this.onMouseLeave);
         this.el.addEventListener('touchmove', this.onTouchMove, { passive: true });
         this.el.addEventListener('touchend', this.onTouchEnd);
+        this.el.addEventListener('contextmenu', this.onContextMenu);
+        this.el.addEventListener('touchstart', this.onTouchStart, { passive: true });
+        this.el.addEventListener('touchcancel', this.onTouchCancel);
         this.el.addEventListener('click', this.onClick);
       },
 
@@ -364,6 +377,10 @@ defmodule Visualize.Hooks.Tooltip do
       // A touch event's target is where the touch began, so the element under the
       // finger is looked up by position.
       handleTouchMove(e) {
+        if (this.press && (e.touches.length !== 1 ||
+            Math.hypot(e.touches[0].clientX - this.press.x, e.touches[0].clientY - this.press.y) > 10)) {
+          this.cancelPress();
+        }
         if (e.touches.length !== 1) return;
         const touch = e.touches[0];
         this.show(document.elementFromPoint(touch.clientX, touch.clientY), touch.pageX, touch.pageY);
@@ -455,8 +472,58 @@ defmodule Visualize.Hooks.Tooltip do
       // event with the element's key, the drawing's token, the pointer and the modifiers,
       // never the datum's strings; the server resolves the row.
       handleClick(e) {
+        if (this.swallowed(e)) return;
         const key = this.keyAt(e);
         if (key) this.send(key, e);
+      },
+
+      // A right-click on an item whose mark declares a context event: that event, and no
+      // browser menu; over anything else the menu is the browser's (spec/10 §12.3, D-199).
+      handleContextMenu(e) {
+        if (this.swallowed(e)) return;
+        const key = VisualizeItems.key(this.el, this, e, 'context');
+        if (!key) return;
+        e.preventDefault();
+        this.send(key, e);
+      },
+
+      // A long-press: one touch held 500 ms within 10 pixels of where it began.
+      handleTouchStart(e) {
+        this.cancelPress();
+        if (!e.touches || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        this.press = { x: touch.clientX, y: touch.clientY, timer: setTimeout(() => this.longPress(), 500) };
+      },
+
+      handleTouchEnd() {
+        this.cancelPress();
+        this.leave();
+      },
+
+      cancelPress() {
+        if (this.press) clearTimeout(this.press.timer);
+        this.press = null;
+      },
+
+      // The press held: the context event of the item under it, as a right-click there.
+      longPress() {
+        const press = this.press;
+        this.press = null;
+        if (!press) return;
+        const target = typeof document.elementFromPoint === 'function' ?
+          document.elementFromPoint(press.x, press.y) : null;
+        const at = { target, clientX: press.x, clientY: press.y };
+        const key = VisualizeItems.key(this.el, this, at, 'context');
+        if (!key) return;
+        this.pressedAt = performance.now();
+        this.send(key, at);
+      },
+
+      // The click and the menu a browser fires after a long-press are the press's own.
+      swallowed(e) {
+        if (this.pressedAt === null || performance.now() - this.pressedAt > 800) return false;
+        if (e.preventDefault) e.preventDefault();
+        return true;
       },
 
       // The key under a pointer event (spec/10 §12.3, §12.5): VisualizeItems.key/3.
@@ -475,6 +542,10 @@ defmodule Visualize.Hooks.Tooltip do
         this.el.removeEventListener('touchmove', this.onTouchMove);
         this.el.removeEventListener('touchend', this.onTouchEnd);
         this.el.removeEventListener('click', this.onClick);
+        this.el.removeEventListener('contextmenu', this.onContextMenu);
+        this.el.removeEventListener('touchstart', this.onTouchStart);
+        this.el.removeEventListener('touchcancel', this.onTouchCancel);
+        this.cancelPress();
         VisualizeSync.detach(this);
         if (this.tip.parentNode) this.tip.parentNode.removeChild(this.tip);
         if (this.outline && this.outline.parentNode) this.outline.parentNode.removeChild(this.outline);

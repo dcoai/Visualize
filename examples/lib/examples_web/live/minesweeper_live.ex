@@ -13,16 +13,18 @@ defmodule ExamplesWeb.MinesweeperLive do
   - **A cell is an identity.** The page binds its rows as a `Visualize.Data.Delivery`
     under a schema that declares `row` and `col` together as the cell's identity (D-167),
     and the design requires it.
-  - **A click is an event.** The cells declare `event: :cell_click`, so
-    `Visualize.Components.Chart` resolves a click to the cell drawn and sends the page one
-    `Visualize.Event` (D-170), the cell in its `item`. Flag mode, or a click with Shift held
-    (the event's `modifiers`), flags instead of revealing.
+  - **A click is an event.** The cells declare `event: :cell_click` and `context_event:
+    :flag`, so `Visualize.Components.Chart` resolves a click to the cell drawn and sends the
+    page one `Visualize.Event` (D-170), the cell in its `item`. Flag mode, or a click with
+    Shift held (the event's `modifiers`), flags instead of revealing; a right-click, a
+    long-press or the Menu key sends `flag` (D-199), which flags in either mode.
+  - **Every backend, and the keyboard.** The grid is drawn as SVG, on the JSON canvas or on
+    the binary canvas, a click resolving through the drawing's hit index on a canvas
+    (D-197), and the chart is one tab stop whose cells the arrows reach by row and by
+    column, Enter revealing the focused cell (D-198).
   - **The host owns the game.** `Examples.Minesweeper` is the state and the rules; each
     move is a new game value, and the chart is drawn again from its rows. A cell's fill
     fades between its states and a glyph grows in, by identity (spec/14 §3.10, §3.12).
-
-  It is drawn as SVG only: a click reaches a host as an event through the elements the
-  chart draws, and a canvas draws none (the page says why).
   """
   use Phoenix.LiveView
 
@@ -109,7 +111,12 @@ defmodule ExamplesWeb.MinesweeperLive do
         channels: %{x0: :col, x1: :col, y0: :row, y1: :row},
         options: %{corner_radius: 3},
         style: [:cell, {:field, :state}],
-        tooltip: %{fields: [:state], template: "{state}", event: :cell_click}
+        tooltip: %{
+          fields: [:state, :count],
+          template: "{state} {count}",
+          event: :cell_click,
+          context_event: :flag
+        }
       },
       %{
         type: :text,
@@ -161,10 +168,24 @@ defmodule ExamplesWeb.MinesweeperLive do
     applied
   end
 
+  # The backends the grid is drawn on, by the name the switch sends: the component's
+  # `backend` and `canvas_format` (spec/10 §19.3). A name not here is refused, and no atom
+  # is made of it.
+  @backends %{
+    "svg" => {"SVG", []},
+    "json" => {"Canvas (JSON)", [backend: :canvas, canvas_format: :json]},
+    "binary" => {"Canvas (binary)", [backend: :canvas, canvas_format: :binary]}
+  }
+
+  @doc "The backends the page draws on: `{name, label, component options}`, in order."
+  @spec backends() :: [{String.t(), String.t(), keyword()}]
+  def backends,
+    do: for(name <- ~w(svg json binary), {label, opts} = @backends[name], do: {name, label, opts})
+
   # A `seed` in the address replays its game; without one each game is new.
   @impl true
   def mount(params, _session, socket) do
-    {:ok, socket |> assign(mode: :reveal) |> start(seed(params))}
+    {:ok, socket |> assign(mode: :reveal, backend: "svg") |> start(seed(params))}
   end
 
   defp seed(%{"seed" => seed}) do
@@ -181,9 +202,19 @@ defmodule ExamplesWeb.MinesweeperLive do
     assign(socket, game: game, chart: applied(game), started: nil, elapsed: 0)
   end
 
+  # A right-click, a long-press or the Menu key on a cell (D-199): it flags, in either mode.
+  @impl true
+  def handle_info(
+        {:visualize_event, "mines-chart",
+         %Event{event: "flag", item: {_mark, %{"row" => r, "col" => c}}}},
+        socket
+      ) do
+    game = Minesweeper.toggle_flag(socket.assigns.game, {r, c})
+    {:noreply, socket |> clock(game) |> assign(game: game, chart: applied(game))}
+  end
+
   # A click on a cell, resolved by the chart's component to the cell drawn (D-170): its
   # identity is the event's item. Flag mode, or Shift held, flags; any other click reveals.
-  @impl true
   def handle_info(
         {:visualize_event, "mines-chart",
          %Event{
@@ -238,6 +269,11 @@ defmodule ExamplesWeb.MinesweeperLive do
 
   def handle_event("new", _params, socket), do: {:noreply, start(socket, nil)}
 
+  def handle_event("backend", %{"backend" => name}, socket) when is_map_key(@backends, name),
+    do: {:noreply, assign(socket, backend: name)}
+
+  def handle_event("backend", _params, socket), do: {:noreply, socket}
+
   @impl true
   def render(assigns) do
     ~H"""
@@ -251,7 +287,9 @@ defmodule ExamplesWeb.MinesweeperLive do
           <p class="panel-note">
             Reveal every cell without a mine. A number is how many of the eight cells
             around it hold one. The first click is always safe. Flag a cell you think is
-            mined with <em>Flag</em> mode, or by holding Shift as you click.
+            mined with a right-click, a long-press, <em>Flag</em> mode, or by holding Shift
+            as you click. From the keyboard, Tab to the grid, move with the arrows, reveal
+            with Enter and flag with the Menu key or Shift+F10.
           </p>
 
           <div class="mines-bar">
@@ -267,20 +305,37 @@ defmodule ExamplesWeb.MinesweeperLive do
               </button>
             </span>
             <button type="button" phx-click="new">New game</button>
+            <span class="mines-backend-switch" role="group" aria-label="backend">
+              <button
+                :for={{name, label, _opts} <- backends()}
+                type="button"
+                phx-click="backend"
+                phx-value-backend={name}
+                aria-pressed={to_string(@backend == name)}
+              >
+                {label}
+              </button>
+            </span>
           </div>
 
           <.status game={@game} elapsed={@elapsed} />
 
           <div class="chart-container mines-board">
-            <.live_component module={Visualize.Components.Chart} id="mines-chart" chart={@chart} />
+            <.live_component
+              module={Visualize.Components.Chart}
+              id="mines-chart"
+              chart={@chart}
+              {component_backend(@backend)}
+            />
           </div>
 
           <p class="panel-note mines-backend">
-            Drawn as SVG only. A click reaches the page as a <code>Visualize.Event</code>
-            through the element it lands on, which <code>TooltipHook</code>
-            keys to its row; a canvas draws no element per cell, so there is nothing for
-            a click to land on, and <code>KeyboardHook</code>'s pick, which does find a
-            point on a canvas, reaches only marks that draw a number.
+            The same game on every backend. On the SVG a click lands on the cell's element;
+            on a canvas, which draws none, <code>TooltipHook</code>
+            finds the cell in the hit index drawn beside the stream, so the page receives
+            the same <code>Visualize.Event</code>
+            either way. <code>KeyboardHook</code>
+            reaches the cells by row and column.
           </p>
         </Panel.panel>
 
@@ -297,7 +352,7 @@ defmodule ExamplesWeb.MinesweeperLive do
 
     <style>
       .mines-bar { display: flex; gap: 1rem; align-items: center; margin: 0.5rem 0; }
-      .mines-mode button[aria-pressed="true"] { font-weight: bold; }
+      .mines-mode button[aria-pressed="true"], .mines-backend-switch button[aria-pressed="true"] { font-weight: bold; }
       .mines-status { margin: 0.5rem 0; color: #444; }
       .mines-won { color: #2e7d32; }
       .mines-lost { color: #c23238; }
@@ -306,6 +361,9 @@ defmodule ExamplesWeb.MinesweeperLive do
     </style>
     """
   end
+
+  # The component's options for the backend chosen.
+  defp component_backend(name), do: @backends |> Map.fetch!(name) |> elem(1)
 
   @doc "The status line: the mines left, the time and how the game stands."
   attr(:game, Minesweeper, required: true)
@@ -335,7 +393,8 @@ defmodule ExamplesWeb.MinesweeperLive do
     # A rect per cell on two band scales; each cell's state names its style.
     %{type: :rect, data: :cells, channels: %{x0: :col, x1: :col, y0: :row, y1: :row},
       style: [:cell, {:field, :state}],
-      tooltip: %{fields: [:state], template: "{state}", event: :cell_click}}
+      tooltip: %{fields: [:state, :count], template: "{state} {count}",
+                 event: :cell_click, context_event: :flag}}
 
     # The counts, colored through a threshold scale whose range is typed colors.
     %{type: :text, data: %{source: :cells, transforms: [%{op: :filter, field: :count, test: :present}]},
@@ -359,8 +418,16 @@ defmodule ExamplesWeb.MinesweeperLive do
                            col: %{type: :category, identity: true}, ...})
 
     ~H"""
-    <.live_component module={Visualize.Components.Chart} id="mines-chart" chart={@chart} />
+    <.live_component module={Visualize.Components.Chart} id="mines-chart" chart={@chart}
+                     backend={:canvas} />
     """
+
+    # A right-click, a long-press or the Menu key on a cell flags it.
+    def handle_info({:visualize_event, "mines-chart",
+                     %Visualize.Event{event: "flag", item: {_mark, %{"row" => r, "col" => c}}}}, socket) do
+      game = Minesweeper.toggle_flag(socket.assigns.game, {r, c})
+      {:noreply, assign(socket, game: game, chart: applied(game))}
+    end
 
     def handle_info({:visualize_event, "mines-chart",
                      %Visualize.Event{event: "cell_click", item: {_mark, %{"row" => r, "col" => c}}}}, socket) do

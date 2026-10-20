@@ -17,6 +17,14 @@ release it merely follows.
 
 ### Added
 
+- **A secondary action on an item: `context_event`** (#767, D-199). A mark's `tooltip`
+  may declare `context_event: :flag` beside its `event`. A right-click on one of its items,
+  a long-press on touch, or the Menu key or Shift+F10 on the item focused from the
+  keyboard sends the page an ordinary `Visualize.Event` named `"flag"`, with the same item,
+  row and path a click gives, on SVG and on either canvas. The browser's own context menu
+  is suppressed only over items whose mark declares one. `context_event` and `event` must
+  differ; a design that names both alike is refused with `{:same_name, :event}`.
+
 - **A grid of states from the keyboard** (#765, D-198). `KeyboardHook` now reaches every
   mark with an identity, not only marks that draw a number: a band × band grid's cells
   are reached with the arrows in two dimensions (row and column), each read as its

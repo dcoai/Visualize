@@ -2662,3 +2662,19 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - On a board, a click on a status cell whose mark declares an event no longer also selects by pick; a board whose cells declare no event picks as before.
 - A grid's series is not sampled: a grid is reached cell by cell, and a grid of more than 1,000 cells is reached whole.
 - **Rejected:** a separate focus list sent beside the hit index (two lists of one set of items, with their own order); making Enter push the pick event and letting the board translate it (a page's chart would still get nothing); and dropping the pick on every click when the chart has any event (a board would lose its pointer selection over marks without one).
+
+## 199. D-199 — A secondary action is a second name a mark declares, `context_event`, raised by right-click, long-press and the Menu key, and the browser's menu yields only to it
+
+**Context.** #767, found by the minesweeper demo (#758, #762). Only the builder's hook listened for `contextmenu`, so a chart host could not offer a secondary action on an item: right-click to flag a cell, a context menu on a dashboard series. The proposal left open whether the action is a new event name (`"item_context"`) or a `button:` field on the click event, and proposed a chart-wide opt-in. The evaluation decided it: **the opt-in is a declared name on the mark beside its `event`**, no new `Visualize.Event` field, and the browser's menu suppressed only on items whose mark declares one.
+
+**Decision.**
+- **A name, beside `event`.** `tooltip.context_event` is a name like `event`, declared on the mark and delivered as the event's string. The host receives an ordinary `Visualize.Event` with that name and the item, row, path, `at` and modifiers a click on the item gives, and writes one more `handle_info` clause; nothing in the struct changes, and nothing distinguishes the gesture beyond its name. A `button:` field would have made every host match on two fields, and a runtime atom (`:item_context`) would have been one name for every mark's secondary action, which a host with two clickable marks could not tell apart without the item.
+- **Per mark, so the menu yields only where it is meant to.** The browser's context menu is the page's own and a reader expects it. A chart-wide flag would suppress it over every pixel of the chart; the per-mark name suppresses it only over an item whose mark declares one — a minesweeper cell, not the page's background or an axis.
+- **The two names differ.** A mark may declare either or both, and each keys its elements. Declaring one name for both would give the host one event for two gestures, so the validator refuses it (`{:same_name, :event}`).
+- **Three gestures, one event.** A right-click (`contextmenu`), a long-press on touch (500 ms, 10-pixel slop, the click and menu a browser fires after it swallowed for 800 ms), and the Menu key or Shift+F10 on the item focused from the keyboard (D-198) each push `visualize_event` with the context name through `VisualizeItems.send`, so they resolve on the server through the one `Event.resolve/3` path (D-170) and on every backend (D-197). The resolver accepts a click named by either of the mark's names.
+
+**Consequences.**
+- The hit index's entries and the keyboard's keys carry `context`; the SVG's mark group carries `data-tooltip-context-event`.
+- `Visualize.Event.declared/1` lists context names too, so a host that checks a chart's names sees them.
+- A long-press that would have opened a touch browser's own menu over such an item opens nothing now: the item's secondary action is the host's.
+- **Rejected:** a `button:` field on the click event, a single runtime `:item_context` event, and a chart-wide opt-in, for the reasons above.

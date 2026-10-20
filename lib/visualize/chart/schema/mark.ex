@@ -290,7 +290,9 @@ defmodule Visualize.Chart.Schema.Mark do
     [
       spec(:fields, {:list, :field}, :binding, default: []),
       spec(:template, :string, :content),
-      spec(:event, {:one_of, [:name, :string]}, :binding)
+      spec(:event, {:one_of, [:name, :string]}, :binding),
+      # The name a secondary gesture delivers (spec/14 §5.7, #767, D-199).
+      spec(:context_event, {:one_of, [:name, :string]}, :binding)
     ]
   end
 

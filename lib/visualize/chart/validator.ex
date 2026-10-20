@@ -53,6 +53,7 @@ defmodule Visualize.Chart.Validator do
           | {:generated, :style | :color, atom(), term()}
           | {:ref_kind, atom(), atom()}
           | {:invalid_for, atom()}
+          | {:same_name, atom()}
           | {:unsupported_version, term()}
           | {:newer_schema, pos_integer(), pos_integer()}
           | {:limit, Visualize.Chart.Limits.name(), pos_integer(), number()}

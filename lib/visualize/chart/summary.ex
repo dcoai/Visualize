@@ -328,17 +328,21 @@ defmodule Visualize.Chart.Summary do
   end
 
   # The key of a mark's point when the mark declares an event (spec/10 §12.3, D-170): the
-  # event, the frame's name and the mark's position; the row's ordinal is the point's.
+  # click's and the secondary gesture's names (D-199), the frame's name and the mark's
+  # position; the row's ordinal is the point's.
   defp key(frame, mark, position) do
-    case Map.get(mark, :tooltip) do
-      %{event: event}
-      when is_binary(event) or (is_atom(event) and event not in [nil, true, false]) ->
-        %{event: Visualize.Event.name(event), frame: to_string(frame.name), mark: position}
+    tooltip = Map.get(mark, :tooltip) || %{}
+    event = declared(Map.get(tooltip, :event))
+    context = declared(Map.get(tooltip, :context_event))
 
-      _none ->
-        nil
-    end
+    if event || context,
+      do: %{event: event, context: context, frame: to_string(frame.name), mark: position}
   end
+
+  defp declared(name) when is_binary(name) or (is_atom(name) and name not in [nil, true, false]),
+    do: Visualize.Event.name(name)
+
+  defp declared(_none), do: nil
 
   # Where each row is drawn, in the chart's pixels (§21.5): the middle of its `x` — of `x0`
   # and `x1` for a rectangle — and its `y`, or `y1`, moved by the frame's margin and box; no
