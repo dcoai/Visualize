@@ -68,6 +68,47 @@ defmodule Visualize.Render.RasterPortTest do
       refute group_alive?(os_pid)
     end
 
+    # The pid is reported before the port's program has called `setsid`, so a kill sent at
+    # once can find no group (#845, D-213). A 1 ms timeout puts the kill in that window
+    # several times in a hundred on a loaded runner. Every run must still return with its
+    # group gone, which a lost kill would turn into a 60 s wait.
+    test "every run of a forced race returns with its group gone" do
+      for _ <- 1..100 do
+        assert {:timeout, os_pid} = Raster.run("/bin/sh", ["-c", "sleep 60"], "<svg/>", 1)
+        refute group_alive?(os_pid)
+      end
+    end
+
+    # The same lost kill, forced on every runner: the first round signals nothing, so a kill
+    # that is sent once and never checked leaves the call waiting on `sleep 60`.
+    test "a kill that lands on nothing is sent again until the port exits" do
+      rounds = :counters.new(1, [])
+
+      signal = fn os_pid ->
+        :counters.add(rounds, 1, 1)
+        if :counters.get(rounds, 1) == 1, do: :ok, else: Raster.signal(os_pid)
+      end
+
+      assert {:timeout, os_pid} =
+               Raster.run("/bin/sh", ["-c", "sleep 60"], "<svg/>", 50, signal)
+
+      assert :counters.get(rounds, 1) >= 2
+      refute group_alive?(os_pid)
+    end
+
+    # A kill that never lands still returns, at spec/09 §9.5's bound, with the port closed:
+    # no wait after the timeout is unbounded. The test then ends the group itself.
+    test "a kill that never lands returns at the bound, the port closed" do
+      assert {:timeout, os_pid} =
+               Raster.run("/bin/sh", ["-c", "sleep 60"], "<svg/>", 50, fn _ -> :ok end)
+
+      assert Enum.filter(Port.list(), &(Port.info(&1, :connected) == {:connected, self()})) ==
+               []
+
+      :ok = Raster.signal(os_pid)
+      refute group_alive?(os_pid)
+    end
+
     @tag :resvg
     test "a render that outlasts it is {:error, :timeout}, and resvg is gone" do
       svg = Chart.render(Designs.apply(:rose), root: true, resolve: :literal)

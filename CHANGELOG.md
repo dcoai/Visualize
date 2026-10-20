@@ -112,6 +112,12 @@ release it merely follows.
 
 ### Fixed
 
+- **A `to_png/2` timeout always stops the render and returns** (#845, D-213). On a busy
+  host, a timeout that fired just as resvg was starting could miss it. resvg then rendered
+  to the end, and `to_png/2` waited for it, past its `:timeout`. Now the kill is checked
+  and sent again until the render has stopped. `{:error, :timeout}` arrives within the
+  `:timeout` plus at most 6 s whatever the load, and normally within milliseconds of it.
+
 - **A basemap stays inside its own frame** (#826, #827, D-209). A `:tiles` mark covers
   its plot with whole tiles, so the tiles at the edges reach up to one tile past it. A
   chart of one frame hid this at the document's edge. In a design of several frames, one
