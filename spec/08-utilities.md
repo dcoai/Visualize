@@ -791,6 +791,19 @@ The contracts bind what an entry *means*, not every key's type; a value of the w
 
 **The furniture styles are spec/14 §3.3's built-in styles.** `:axis`, `:grid`, `:label` and `:title` are read from the theme a chart is drawn with, so a host theme that changes `:title`'s weight changes every title drawn under it; a design's `styles` entry of the same name still replaces one whole.
 
+**In the examples: the Theme lab** (#784, work item #785). `/theme-lab`, under the Charts tab and linked from the gallery, builds a host theme in code — `Visualize.Theme.new(name: "house", colors: %{"brand" => …, red: %{100 => …, 500 => …}}, styles: …, defaults: …)`, held by `Visualize.Theme.check/1` — and shows what it holds, one panel each (`Examples.ThemeLab`, `ExamplesWeb.ThemeLabLive`):
+
+- **its color table** (7.1, #663): `color_names/1` without the CSS names folded in, the name the house adds marked; the house pins red's 500, so `:bad`, the status ramp's red end, follows it;
+- **steps pinned from a brand's tokens** (spec/08 §1.9, #667): `shade(color(:red), n)` from 0 to 1000 under the house theme above the default's, the pinned 100 and 500 marked, with what `:css` SVG writes for a pinned step (`var(--vis-red-100, …)`) and for a computed one (a relative `oklch(from …)`);
+- **a ramp** (7.5): `ramp/3` at eleven positions of `:thermal` and `:status`;
+- **colors resolved** (spec/08 §1.9, #662, #665): `Visualize.Color.resolve/3` in `:literal` and `:css` mode beside the literal in OKLCH (`to_oklch/1`), for a name the theme adds, a `saturate`, a `lighten`, a pinned and a computed step, and an `alpha`;
+- **a palette of its own, and defaults** (7.7, spec/14 §3.8, #636, #670): one design — a bar per role, styled by its name — drawn under the default theme and under the house, whose `styles` replace `:title`, `:grid` and `:good` whole and whose `defaults` widen every stroke and set every text in a serif; `style/2` under each theme for the three entries, and `defaults/1` of the house;
+- **forced colors** (7.3, #665): the house stylesheet carried by the page and the `@media (forced-colors: active)` block that ends it, with a switch that previews a high-contrast viewer by reading the block's media condition as always true;
+- **contracts** (7.7, #666, #637): a design's inline theme read by `Visualize.Chart.from_map/1` and refused at its path, the measured value and the rule worded by `Visualize.Chart.Validator.format/1` — a role fill under 3:1, two roles that differ only in hue, a name the table lacks — and the same roles fixed, accepted and drawn;
+- **print, in grayscale** (7.2, #673): the role bars under the default theme and under `print/0`, on a grayscale view by default, so the default's roles fall to near grays while the print theme's hatches keep their meaning.
+
+The page's switches match their parameters against fixed lists of words and make no atom (D-195).
+
 ## 8. Signals
 
 **Implemented** (#244). A signal is a *generated source*: a description from which `Visualize.Signals` yields rows, pure and deterministic for a tick, so a chart under design has feeds that move without a host supplying any. A deployed design still binds to the host's pool (spec/14 §7.3) under the same names; signals are the builder's stand-in for it.
