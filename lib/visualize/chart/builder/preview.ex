@@ -346,8 +346,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     # What the preview knows of each slot's fields' types (spec/14 §18.4), `{rows,
     # schemas}`: each slot bound as application binds it — its own name, else its
-    # `default` — typed by what its rows show, the values the pane draws, and a slot whose
-    # feed is in the catalog by its schema too.
+    # `default`, a delivery as its source and a tensor named by the slot's fields (D-214) —
+    # typed by what its rows show, the values the pane draws, and a slot whose feed is in
+    # the catalog by its schema too. A tensor the slot cannot read types nothing.
     defp types(design, pool, catalog) do
       catalog = catalog || %{}
 
@@ -357,13 +358,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
             for {slot, node} <- slots,
                 is_map(node),
                 {:ok, feed, source} <- [Template.entry(pool, slot, node)],
+                {:ok, source} <- [Template.read(node, Delivery.source(source))],
                 do: {slot, feed, source}
 
           _variable_or_none ->
             []
         end
 
-      {Map.new(bound, fn {slot, _feed, source} -> {slot, Table.column_types(rows(source))} end),
+      {Map.new(bound, fn {slot, _feed, source} -> {slot, Table.column_types(source)} end),
        for(
          {slot, feed, _source} <- bound,
          is_map_key(catalog, feed),
@@ -371,8 +373,5 @@ if Code.ensure_loaded?(Phoenix.Component) do
          do: {slot, catalog[feed]}
        )}
     end
-
-    defp rows(%Delivery{} = delivery), do: Delivery.source(delivery)
-    defp rows(source), do: source
   end
 end

@@ -44,13 +44,14 @@ defmodule Visualize.Data.Table do
   The rows of a tabular source, as a list.
 
   - A list of rows is returned as-is: no copy, no traversal.
-  - A keyword list whose values are equal-length lists is a list of columns; the rows are
-    maps keyed by the keys. (`table` reads a list the same way, columns before rows.)
-  - A map whose values are equal-length lists is a map of columns, rows keyed likewise.
+  - A keyword list whose values are equal-length columns is a list of columns; the rows are
+    maps keyed by the keys. (`table` reads a list the same way, columns before rows.) A
+    column is a list or a rank-1 `Nx.Tensor` (D-214).
+  - A map whose values are equal-length columns is a map of columns, rows keyed likewise.
     Any other plain map raises `ArgumentError`.
   - An `Nx.Tensor` of rank 2 yields one tuple per row, in column order — the shape the
     default `Visualize.Shape.Line` accessors read; rank 1 yields its values. Any other rank
-    raises `ArgumentError`.
+    raises `ArgumentError`. A tuple has no names: `named/2` gives a tensor's columns some.
   - A `Visualize.Data.Delivery` is the rows of the source it carries (spec/08 §10.4).
   - Any other struct is read through `Table.to_rows/1`: rows keyed by the reader's column
     names as it spells them. A struct with no `Table.Reader` impl raises
@@ -72,6 +73,37 @@ defmodule Visualize.Data.Table do
   def rows([first | _] = list) do
     if columns?(list, first), do: column_rows(list), else: list
   end
+
+  @doc """
+  A tensor's columns under `names`, in order: the column map `rows/1` reads (spec/08 §6.4,
+  D-214).
+
+  Column `i` of a rank-2 tensor is `Enum.at(names, i)`, and a rank-1 tensor is one column.
+  A tensor whose width is not `length(names)` is `{:error, {:width, length(names), width}}`,
+  one of another rank `{:error, {:rank, rank}}`; nothing raises. Any other source is
+  `{:ok, source}`, the same term, so every source can pass through.
+
+      iex> Visualize.Data.Table.named([%{x: 1}], ["x"])
+      {:ok, [%{x: 1}]}
+  """
+  @spec named(source(), [name()]) ::
+          {:ok, source()}
+          | {:error, {:width, non_neg_integer(), non_neg_integer()} | {:rank, non_neg_integer()}}
+  def named(%{__struct__: Nx.Tensor} = tensor, names) when is_list(names) do
+    case {Nx.rank(tensor), length(names)} do
+      {1, 1} -> {:ok, %{hd(names) => Nx.to_list(tensor)}}
+      {1, n} -> {:error, {:width, n, 1}}
+      {2, n} -> named_columns(tensor, names, Nx.axis_size(tensor, 1), n)
+      {rank, _n} -> {:error, {:rank, rank}}
+    end
+  end
+
+  def named(source, names) when is_list(names), do: {:ok, source}
+
+  defp named_columns(tensor, names, n, n),
+    do: {:ok, names |> Enum.zip(tensor |> Nx.transpose() |> Nx.to_list()) |> Map.new()}
+
+  defp named_columns(_tensor, _names, width, n), do: {:error, {:width, n, width}}
 
   @doc """
   The value of column `name` in `row`, by either spelling of the name.
@@ -227,23 +259,42 @@ defmodule Visualize.Data.Table do
 
   def temporal?(_), do: false
 
-  # A list is columns when every element names an equal-length list.
-  defp columns?(list, {name, values})
-       when (is_atom(name) or is_binary(name)) and is_list(values) do
-    n = length(values)
+  # A list is columns when every element names an equal-length column.
+  defp columns?(list, {name, values}) when is_atom(name) or is_binary(name) do
+    n = column_length(values)
 
-    Enum.all?(
-      list,
-      &match?({k, v} when (is_atom(k) or is_binary(k)) and is_list(v) and length(v) == n, &1)
-    )
+    n != nil and
+      Enum.all?(list, fn
+        {k, v} when is_atom(k) or is_binary(k) -> column_length(v) == n
+        _other -> false
+      end)
   end
 
   defp columns?(_list, _first), do: false
 
+  # A column's length: a list's, or a rank-1 tensor's (D-214); `nil` for anything else.
+  defp column_length(values) when is_list(values), do: length(values)
+
+  defp column_length(%{__struct__: Nx.Tensor} = tensor) do
+    if Nx.rank(tensor) == 1, do: Nx.axis_size(tensor, 0)
+  end
+
+  defp column_length(_values), do: nil
+
+  # A rank-1 tensor column as its list of values; anything else as given.
+  defp column(%{__struct__: Nx.Tensor} = tensor) do
+    if Nx.rank(tensor) == 1, do: Nx.to_list(tensor), else: tensor
+  end
+
+  defp column(values), do: values
+
   # Column pairs to rows: one map per index, keyed by every column name. Callers pass a
   # non-empty list.
-  defp column_rows([{_, first} | _] = columns) do
-    n = length(first)
+  defp column_rows(pairs) do
+    columns = Enum.map(pairs, fn {name, values} -> {name, column(values)} end)
+    [{_, first} | _] = columns
+    # A first column that is no list is reported by the check below, by its name.
+    n = if is_list(first), do: length(first), else: 0
 
     Enum.each(columns, fn {name, values} ->
       unless is_list(values) and length(values) == n do

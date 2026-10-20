@@ -48,7 +48,7 @@ defmodule Visualize.Chart.Compiled do
 
   alias Visualize.Backend.{CanvasBinary, Hybrid}
   alias Visualize.{Chart, Render, Theme}
-  alias Visualize.Chart.{Applied, Frame, Mark, Names}
+  alias Visualize.Chart.{Applied, Frame, Mark, Names, Template}
   alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
   alias Visualize.Chart.Frame.Motion, as: FrameMotion
@@ -612,20 +612,35 @@ defmodule Visualize.Chart.Compiled do
   end
 
   # The tick's sources as the chart reads them: a delivery is the source it carries
-  # (spec/08 §10.4), once it is known to name the schema the chart was compiled with.
+  # (spec/08 §10.4), once it is known to name the schema the chart was compiled with, and a
+  # tensor its columns named by the slot's fields, as application binds it (D-214).
   defp sources!(compiled, sources) do
     # The host names a source by atom or string; the design by string (D-195).
     sources = Names.keys(sources)
 
     case changed(compiled, sources) do
       nil ->
-        Map.new(sources, fn {name, source} -> {name, Delivery.source(source)} end)
+        Map.new(sources, fn {name, source} -> {name, read!(compiled, name, source)} end)
 
       {slot, compiled_with, delivered} ->
         raise ArgumentError,
               "slot #{inspect(slot)}'s delivery names schema version #{inspect(delivered)}, " <>
                 "and the chart was compiled with #{inspect(compiled_with)}: a schema change " <>
                 "recompiles (spec/14 §12.1) — compile again and carry/2 the state across"
+    end
+  end
+
+  # A tick has no error return: a tensor its slot cannot read raises, naming the slot, as a
+  # stale delivery does.
+  defp read!(%{chart: %Chart{sources: slots}}, name, source) do
+    case Template.read(Map.get(slots || %{}, name), Delivery.source(source)) do
+      {:ok, source} ->
+        source
+
+      {:error, reason} ->
+        raise ArgumentError,
+              "a tick's source cannot bind: " <>
+                Visualize.Chart.Validator.format({[:sources, name], reason}) <> " (spec/14 §7.3)"
     end
   end
 

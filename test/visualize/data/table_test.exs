@@ -95,6 +95,35 @@ defmodule Visualize.Data.TableTest do
       assert Table.rows(Nx.tensor([1.5, 2.5])) == [1.5, 2.5]
     end
 
+    test "a map or keyword list of rank-1 tensors is columns, as one of lists is (D-214)" do
+      rows = Table.rows(%{t: [1, 2], v: [3.0, 4.0]})
+      assert Table.rows(%{t: Nx.tensor([1, 2]), v: Nx.tensor([3.0, 4.0])}) == rows
+      assert Table.rows(t: Nx.tensor([1, 2]), v: [3.0, 4.0]) == rows
+    end
+
+    test "a column tensor of another rank, or of another length, is a caller error" do
+      assert_raise ArgumentError, ~r/expected every column/, fn ->
+        Table.rows(%{t: Nx.tensor([[1, 2]]), v: [3, 4]})
+      end
+
+      assert_raise ArgumentError, ~r/expected every column/, fn ->
+        Table.rows(%{t: Nx.tensor([1, 2]), v: [3]})
+      end
+    end
+
+    test "named/2 names a tensor's columns in order, and passes any other source" do
+      assert Table.named(Nx.tensor([[1, 10], [2, 20]]), ["t", "v"]) ==
+               {:ok, %{"t" => [1, 2], "v" => [10, 20]}}
+
+      assert Table.named(Nx.tensor([1, 2]), [:v]) == {:ok, %{v: [1, 2]}}
+      assert Table.named(Nx.tensor([[1, 10]]), [:t]) == {:error, {:width, 1, 2}}
+      assert Table.named(Nx.tensor([1, 2]), [:t, :v]) == {:error, {:width, 2, 1}}
+      assert Table.named(Nx.tensor([[[1]]]), [:t]) == {:error, {:rank, 3}}
+      assert Table.named(Nx.tensor(1), [:t]) == {:error, {:rank, 0}}
+      rows = [%{t: 1}]
+      assert Table.named(rows, [:t]) == {:ok, rows}
+    end
+
     test "a struct with no Table.Reader impl is the protocol's error" do
       assert_raise Protocol.UndefinedError, fn -> Table.rows(~D[2024-01-01]) end
     end
