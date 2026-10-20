@@ -183,6 +183,31 @@ defmodule Visualize.Backend.Canvas do
     [~s( role="img" aria-label="), escape.(title), ~s("), described, ">", fallback]
   end
 
+  @doc false
+  # One step of `Visualize.Render.Segments` (spec/09 §1.4, #813, D-203), in the style its
+  # ancestors give it: a group as its setup and its restore around its children, which
+  # inherit its style; the root as its children; any other element — one that names its
+  # identity or is clipped, whatever its type — as its commands. The parts concatenate to
+  # the element's commands.
+  @spec segment(Element.t(), map()) ::
+          {:leaf, [tuple()]} | {:node, [tuple()], [tuple()], [Element.t()], map()}
+  def segment(%Element{attrs: %{"data-vis-id" => _}} = element, inherited),
+    do: {:leaf, element_to_commands(element, inherited)}
+
+  def segment(%Element{clip: %{}} = element, inherited),
+    do: {:leaf, element_to_commands(element, inherited)}
+
+  def segment(%Element{type: :group, children: children, style: style} = group, inherited) do
+    setup = [{:save, []}] ++ transform_commands(group.transform) ++ style_setup_commands(style)
+    {:node, setup, [{:restore, []}], children, Map.merge(inherited, style)}
+  end
+
+  def segment(%Element{type: :root, children: children}, inherited),
+    do: {:node, [], [], children, inherited}
+
+  def segment(%Element{} = element, inherited),
+    do: {:leaf, element_to_commands(element, inherited)}
+
   # ============================================================
   # Element to Commands Conversion
   # ============================================================

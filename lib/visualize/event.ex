@@ -299,6 +299,44 @@ defmodule Visualize.Event do
 
   def identity(mark, row, nil) when is_map(row), do: series_identity(mark, row)
 
+  @doc false
+  # `identity/3` of a mark and schema as a function of the row, the schema's declared
+  # fields and their names read once (#813): a mark's every row asks for its identity,
+  # and a grid's are thousands.
+  @spec identifier(map(), Schema.t() | nil) :: (map() -> Visualize.Board.identity() | nil)
+  def identifier(mark, %Schema{} = schema) do
+    case Schema.identity(schema) do
+      [] ->
+        &identity(mark, &1, schema)
+
+      [field] ->
+        name = Names.name(field)
+
+        fn row ->
+          case Table.get(row, field) do
+            nil -> nil
+            value -> {name, value}
+          end
+        end
+
+      fields ->
+        named = Enum.map(fields, &{&1, Names.name(&1)})
+        &composite(named, &1)
+    end
+  end
+
+  def identifier(mark, nil), do: &series_identity(mark, &1)
+
+  # A composite identity keyed by the fields' names, `nil` when the row lacks any of them.
+  defp composite(named, row) do
+    Enum.reduce_while(named, %{}, fn {field, name}, identity ->
+      case Table.get(row, field) do
+        nil -> {:halt, nil}
+        value -> {:cont, Map.put(identity, name, value)}
+      end
+    end)
+  end
+
   # The declared identity as a selection names it: the pair for one field, the map for
   # several, `nil` for a row that lacks it; a field is named by its string (D-195).
   defp declared_identity(_fields, nil), do: nil

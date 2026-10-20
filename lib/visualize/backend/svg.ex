@@ -63,6 +63,43 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:svg, attrs, [content], nil)
   end
 
+  @doc false
+  # One step of `Visualize.Render.Segments` (spec/09 §1.4, #813, D-203): a group or the
+  # root as its start tag, its end tag and the children written between them, and any
+  # other element — one that names its identity or is clipped, whatever its type — as the
+  # text `render_element/2` writes for it. The parts concatenate to `render_element/2`.
+  @spec segment(Element.t()) :: {:leaf, iodata()} | {:node, iodata(), iodata(), [Element.t()]}
+  def segment(%Element{attrs: %{"data-vis-id" => _}} = element),
+    do: {:leaf, do_render_element(element)}
+
+  def segment(%Element{clip: %{}} = element), do: {:leaf, do_render_element(element)}
+
+  def segment(%Element{type: :group, style: %{vector_effect: effect} = style} = group) do
+    children =
+      Enum.map(group.children, fn child ->
+        %{child | style: Map.put_new(child.style, :vector_effect, effect)}
+      end)
+
+    segment(%{group | style: Map.delete(style, :vector_effect), children: children})
+  end
+
+  def segment(%Element{type: :group, children: [_ | _] = children} = group) do
+    attrs =
+      group.style
+      |> style_to_attrs()
+      |> Map.merge(group.attrs)
+      |> maybe_add_transform(group.transform)
+
+    {:node, ["<g", Renderer.render_attrs(attrs), ">"], "</g>", children}
+  end
+
+  def segment(%Element{type: :root, attrs: attrs, children: [_ | _] = children}) do
+    svg_attrs = Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, attrs)
+    {:node, ["<svg", Renderer.render_attrs(svg_attrs), ">"], "</svg>", children}
+  end
+
+  def segment(%Element{} = element), do: {:leaf, do_render_element(element)}
+
   # ============================================================
   # Element Rendering
   # ============================================================

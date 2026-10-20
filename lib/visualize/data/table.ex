@@ -93,10 +93,18 @@ defmodule Visualize.Data.Table do
       %{^name => value} ->
         value
 
+      # The atom key this name spelled last time, read at once (#813): every channel of
+      # every item of a chart reads a field by its name.
       _ ->
-        case key(row, name) do
-          nil -> nil
-          key -> Map.fetch!(row, key)
+        case Process.get({__MODULE__, name}) do
+          key when is_map_key(row, key) ->
+            :erlang.map_get(key, row)
+
+          _other ->
+            case scan(row, name) do
+              nil -> nil
+              key -> Map.fetch!(row, key)
+            end
         end
     end
   end

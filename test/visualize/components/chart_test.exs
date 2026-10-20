@@ -150,4 +150,72 @@ defmodule Visualize.Components.ChartTest do
     t1 = DateTime.add(@t0, 60)
     assert_received {:visualize_event, "sales", %Event{row: %{t: ^t1, v: 1}}}
   end
+
+  # #813 (D-203 – D-206): what an update sends. A move is a new chart with one row changed.
+  describe "a move (#813)" do
+    alias Visualize.Hooks.{Keyboard, Tooltip}
+    alias Visualize.Render.Segments
+
+    @backends [
+      svg: [],
+      json: [backend: :canvas, canvas_format: :json],
+      binary: [backend: :canvas]
+    ]
+
+    defp moved, do: rows() |> List.update_at(1, &%{&1 | v: 9})
+
+    defp drawn_after_move(opts) do
+      first = updated(Map.merge(%{id: "sales", chart: applied()}, Map.new(opts)))
+      updated(Map.merge(%{id: "sales", chart: applied(moved())}, Map.new(opts)), first)
+    end
+
+    test "the segments are the drawing, and the points and the index are what they were whole" do
+      for {name, opts} <- @backends do
+        %{assigns: assigns} = drawn_after_move(opts)
+        chart = applied(moved())
+
+        case name do
+          :svg ->
+            assert Segments.text(assigns.segments, :svg) == Chart.render(chart, root: true)
+
+          format ->
+            tree = Chart.generate(chart, resolve: :literal)
+
+            stream =
+              Visualize.Render.to_string(tree,
+                backend: :canvas,
+                format: if(format == :json, do: :json, else: :binary_base64)
+              )
+
+            assert Segments.text(assigns.segments, format) == IO.iodata_to_binary(stream)
+            assert assigns.items == Tooltip.items(tree)
+        end
+
+        # The points, one element each, are the points of data-keyboard-points.
+        whole = Keyboard.attrs(chart)["data-keyboard-points"] |> Jason.decode!()
+        listed = assigns.points |> Enum.map(&Jason.decode!(elem(&1, 1)))
+        assert listed == Enum.flat_map(whole, & &1["points"])
+      end
+    end
+
+    test "a click after a move resolves to the row drawn, on every backend" do
+      for {_name, opts} <- @backends do
+        socket = drawn_after_move(opts)
+        params = params(socket.assigns.drawn, %{"row" => 1})
+        assert {:noreply, _} = Component.handle_event("visualize_event", params, socket)
+        assert_receive {:visualize_event, "sales", %Event{row: row}}
+        assert row.v == 9
+      end
+    end
+
+    test "the drawing is made apart, and the next is sized by it" do
+      first = updated(%{id: "sales", chart: applied()})
+      assert first.assigns.heap > 0
+      second = updated(%{id: "sales", chart: applied(moved())}, first)
+      assert second.assigns.heap > 0
+
+      assert Segments.text(second.assigns.segments, :svg) ==
+               Chart.render(applied(moved()), root: true)
+    end
+  end
 end

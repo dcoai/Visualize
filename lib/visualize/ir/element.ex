@@ -555,7 +555,8 @@ defmodule Visualize.IR.Element do
 
     attrs =
       for {field, value} <- pairs, value != nil, into: %{"data-datum" => names} do
-        {"data-datum-" <> String.replace(to_string(field), "_", "-"), to_string(value)}
+        {"data-datum-" <> :binary.replace(to_string(field), "_", "-", [:global]),
+         to_string(value)}
       end
 
     set_attrs(element, attrs)

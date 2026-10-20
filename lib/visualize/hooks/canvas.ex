@@ -17,6 +17,11 @@ defmodule Visualize.Hooks.Canvas do
       # Push a new frame
       push_event(socket, "canvas_commands", %{commands: Visualize.Render.to_canvas_string(el, format: :json)})
 
+  An element carrying `data-stream` reads its commands in segments instead (spec/10 §7.2,
+  D-203): the `data-c` of each child of the element beside it that carries
+  `data-vis-stream`, as `Visualize.Render.Segments.json/2` writes them, drawn again when
+  `data-drawn` names another drawing. `Visualize.Components.Chart` draws this way.
+
   Every command of the `:json` output names a Canvas 2D method (`set_*` commands assign
   the property), so the hook needs no path helpers (D-37) — but `nonScalingLineWidth`, the
   width divided by the scale of the current transform (spec/09 §3.3.3, spec/14 §3.9), and
@@ -62,12 +67,24 @@ defmodule Visualize.Hooks.Canvas do
         return canvas;
       },
       render() {
+        if (this.el.dataset.stream !== undefined) return this.renderSegments();
         const commands = this.el.dataset.commands;
         const script = this.el.dataset.script;
         const key = commands || script;
         if (!key || key === this.lastKey) return;
         this.lastKey = key;
         this.parsed = commands ? JSON.parse(commands) : null;
+        this.draw();
+      },
+      // The commands in segments (spec/10 §7.1, D-203): each a run of the commands, the
+      // data-c of one child of the element beside this one carrying data-vis-stream, in
+      // order; data-drawn names the drawing, so the same drawing is not parsed again.
+      renderSegments() {
+        const list = this.el.parentNode && this.el.parentNode.querySelector('[data-vis-stream]');
+        const drawn = this.el.dataset.drawn;
+        if (!list || drawn === this.lastKey) return;
+        this.lastKey = drawn;
+        this.parsed = JSON.parse('[' + Array.from(list.children, (n) => n.dataset.c).join(',') + ']');
         this.draw();
       },
       // One replay of the last value; while a motion runs, one per animation frame.
