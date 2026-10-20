@@ -147,4 +147,55 @@ defmodule ExamplesWeb.ThemeLabLiveTest do
       assert socket.assigns.picked.violations == []
     end
   end
+
+  describe "cues and the stored form (#816)" do
+    test "each role's cue is the library's, and the chart draws every dash and glyph" do
+      assert ThemeLab.cues() == [
+               {:good, :circle, nil},
+               {:warning, :triangle, "6 3"},
+               {:bad, :cross, "2 3"},
+               {:info, :square, "8 3 2 3"},
+               {:neutral, :diamond, "1 4"}
+             ]
+
+      for theme <- [Theme.default(), Theme.print()] do
+        svg = ThemeLab.cues_svg(theme, "cues")
+
+        for {_role, _glyph, dash} <- ThemeLab.cues(),
+            dash != nil,
+            do: assert(svg =~ ~s(stroke-dasharray="#{dash}"))
+      end
+    end
+
+    test "the house is stored as JSON and read back equal; refused documents name their paths" do
+      %{json: json, round_trip: true} = ThemeLab.stored(ThemeLab.house())
+      assert json =~ ~s("$version": 3)
+      assert json =~ ~s("brand": "#0b6e4f")
+      assert json =~ ~s("$steps")
+
+      assert [{_, _, [newer]}, {_, _, faults}] = ThemeLab.refused()
+      assert newer =~ "needs schema v99"
+      assert Enum.any?(faults, &(&1 =~ ~s(theme.series[0]: "$colr" is not a tag)))
+      assert Enum.any?(faults, &(&1 =~ ~s(theme.axis: "$styles" was removed)))
+    end
+
+    test "both panels render, and the cue charts follow the grayscale switch" do
+      html = build_conn() |> get("/theme-lab") |> html_response(200)
+      assert html =~ ~s(id="panel-cues")
+      assert html =~ ~s(id="panel-json")
+      assert html =~ ~s(id="theme-lab-cues-print")
+      assert html =~ "equal to the house"
+
+      {:ok, socket} = ThemeLabLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+      {:noreply, socket} = ThemeLabLive.handle_event("gray", %{"mode" => "color"}, socket)
+
+      html =
+        Phoenix.LiveViewTest.rendered_to_string(
+          ThemeLabLive.render(Map.put(socket.assigns, :__changed__, %{}))
+        )
+
+      refute html =~ ~s(class="lab-pair lab-gray")
+      assert html =~ ~s(id="theme-lab-cues-default")
+    end
+  end
 end

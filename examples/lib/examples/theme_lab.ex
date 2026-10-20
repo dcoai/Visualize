@@ -4,14 +4,18 @@ defmodule Examples.ThemeLab do
   code, and what a theme of 0.7.0 holds — its color table and the names it adds, steps
   pinned from a brand's tokens, its ramps, the colors it resolves, the forced-colors block
   of its stylesheet, a palette of its own over the default's, its defaults, and the
-  contracts that refuse a theme which would break a meaning.
+  contracts that refuse a theme which would break a meaning; and, from before 0.7.0 (#781,
+  work item #816), the roles' cues besides hue and a theme's JSON form, round-tripped.
 
   Everything here is a value: the page (`ExamplesWeb.ThemeLabLive`) draws it.
   """
 
+  import Visualize.Chart.Build
   import Visualize.Color, only: [color: 1, shade: 2, saturate: 2, lighten: 2, alpha: 2]
 
+  alias Examples.Charts.Design
   alias Visualize.{Chart, Color, Theme}
+  alias Visualize.Chart.Theme, as: ChartTheme
 
   # The brand's tokens: a green the house adds, and two steps of red its design system
   # pins (`--vis-red-100`, `--vis-red-500`), the rest computed on the step curve.
@@ -260,6 +264,108 @@ defmodule Examples.ThemeLab do
   def case_code(id) do
     {^id, _title, theme} = List.keyfind(cases(), id, 0)
     "theme: " <> inspect(theme, pretty: true, width: 80)
+  end
+
+  @doc """
+  The roles' cues besides hue (spec/08 §7.5, spec/14 §21.7, D-142): `{role, glyph, dash}`
+  for each of `Theme.role_names/0`, as `Theme.cue/1` fixes them for every theme.
+  """
+  @spec cues() :: [{atom(), atom(), String.t() | nil}]
+  def cues do
+    for role <- Theme.role_names() do
+      %{glyph: glyph, dash: dash} = Theme.cue(role)
+      {role, glyph, dash}
+    end
+  end
+
+  @doc """
+  The cue chart: a line per role whose dash, and a symbol at its end whose glyph, bind the
+  row's `role` through an ordinal color scale onto the roles, so each draws its role's cue
+  (spec/14 §21.7) under whichever theme draws it.
+  """
+  @spec cues_design() :: map()
+  def cues_design do
+    roles = Theme.role_names()
+
+    Design.fold([
+      chart(
+        meta: %{
+          name: "Status by cue",
+          description: ["A line per role, drawn in its role's dash, its glyph at its end"]
+        }
+      ),
+      source(:status, [:t, :value, :role], types: %{t: :number, value: :number}),
+      source(:ends, [:t, :value, :role], types: %{t: :number, value: :number}),
+      style(:trace, stroke: %{color: {:field, :role}, width: 2, dash: {:field, :role}}),
+      style(:end,
+        symbol: {:field, :role},
+        symbol_size: 90,
+        fill: {:field, :role},
+        stroke: :background,
+        stroke_width: 1
+      ),
+      cartesian(margin: %{top: 16, right: 20, bottom: 28, left: 36}),
+      linear_scale(:x, domain: [0, 10]),
+      linear_scale(:y, domain: [0, 100]),
+      ordinal_scale(:color, domain: Enum.map(roles, &Atom.to_string/1), range: roles),
+      axis(:x, :bottom, ticks: 5),
+      axis(:y, :left, ticks: 4, grid: true),
+      line(:status, %{x: :t, y: :value, series: :role}, style: :trace),
+      symbol(:ends, %{x: :t, y: :value}, style: :end)
+    ])
+  end
+
+  @doc "The cue chart's rows: eleven readings per role, each role in its own band."
+  @spec cues_rows() :: [map()]
+  def cues_rows do
+    for {role, i} <- Enum.with_index(Theme.role_names()),
+        t <- 0..10,
+        do: %{t: t, value: 14 + i * 17 + 5 * :math.sin(t * 0.9 + i), role: Atom.to_string(role)}
+  end
+
+  @doc "The cue chart under `theme`, drawn as a document `<svg>`."
+  @spec cues_svg(Theme.t(), String.t()) :: String.t()
+  def cues_svg(theme, id) do
+    rows = cues_rows()
+
+    {:ok, applied} =
+      Chart.apply(cues_design(),
+        sources: %{status: rows, ends: Enum.filter(rows, &(&1.t == 10))},
+        theme: theme,
+        size: {380, 220}
+      )
+
+    Chart.render(applied, root: true, id: id)
+  end
+
+  @doc """
+  A theme stored as JSON (spec/14 §9.3): the document `Visualize.Chart.Theme.to_json/1`
+  writes, pretty-printed for the page, and whether `from_json/2` reads it back equal.
+  """
+  @spec stored(Theme.t()) :: %{json: String.t(), round_trip: boolean()}
+  def stored(theme) do
+    {:ok, json} = ChartTheme.to_json(theme)
+
+    %{
+      json: json |> Jason.decode!() |> Jason.encode!(pretty: true),
+      round_trip: ChartTheme.from_json(json) == {:ok, theme}
+    }
+  end
+
+  @doc """
+  Theme documents the reader refuses before it decodes a key (spec/14 §9.1, §11.2, D-182):
+  `{title, document, faults}`, each fault worded by `Visualize.Chart.Validator.format/1`.
+  """
+  @spec refused() :: [{String.t(), String.t(), [String.t()]}]
+  def refused do
+    for {title, document} <- [
+          {"Written by a newer library", ~s|{"$version": 99, "theme": {"axis": "#666666"}}|},
+          {"A tag misspelled, and one retired",
+           ~s|{"$version": 3, "theme": {"series": [{"$colr": "brand"}], "axis": {"$styles": "axis"}}}|}
+        ] do
+      {:error, faults} = ChartTheme.from_json(document)
+      {title, document, Enum.map(faults, &Chart.Validator.format/1)}
+    end
   end
 
   @doc """

@@ -4,7 +4,9 @@ defmodule ExamplesWeb.ThemeLabLive do
   in code, and what it holds — its color table, its pinned steps, a ramp, colors resolved
   in both modes and in OKLCH, the forced-colors block of its stylesheet, its palette and
   defaults drawn beside the default theme's, the contracts that refuse a theme, and the
-  print theme's hatched roles on a grayscale view.
+  print theme's hatched roles on a grayscale view; then the roles' cues besides hue, drawn
+  by a status chart under Default and Print, and the house stored as JSON, read back, and
+  documents the reader refuses (#781, work item #816).
 
   A chart page's theme comes in by key, `/theme-lab?theme=sunrise` (#792, work item #795):
   looked up in `Examples.Themes`' list, it is shown first, beside Default — its code, the
@@ -47,6 +49,11 @@ defmodule ExamplesWeb.ThemeLabLive do
        house_svg: ThemeLab.roles_svg(house, "theme-lab-house"),
        plain_svg: ThemeLab.roles_svg(Theme.default(), "theme-lab-plain"),
        print_svg: ThemeLab.roles_svg(Theme.print(), "theme-lab-print"),
+       cues: ThemeLab.cues(),
+       cues_default_svg: ThemeLab.cues_svg(Theme.default(), "theme-lab-cues-default"),
+       cues_print_svg: ThemeLab.cues_svg(Theme.print(), "theme-lab-cues-print"),
+       stored: ThemeLab.stored(house),
+       refused: ThemeLab.refused(),
        forced: "system",
        gray: "gray",
        picked: ThemeLab.picked(params["theme"])
@@ -430,6 +437,79 @@ defmodule ExamplesWeb.ThemeLabLive do
             </figure>
           </div>
         </Panel.panel>
+
+        <Panel.panel id="panel-cues">
+          <:title>Cues besides hue</:title>
+          <p class="panel-note">
+            Every role carries a glyph and a dash besides its hue, fixed by the library for
+            every theme (<code>Visualize.Theme.cue/1</code>), so a status reads in grayscale,
+            on a projector and to a reader who cannot tell red from green. A design binds them
+            as it binds a color: <code>stroke: %&#123;dash: &#123;:field, :role&#125;&#125;</code>
+            and <code>symbol: &#123;:field, :role&#125;</code>, read through the <code>:color</code>
+            scale onto the roles. The grayscale switch above holds here too.
+          </p>
+          <table class="lab-cues">
+            <tr>
+              <th>role</th>
+              <th>glyph</th>
+              <th>dash</th>
+              <th></th>
+            </tr>
+            <tr :for={{role, glyph, dash} <- @cues} data-role={role}>
+              <td><code>{name(role)}</code></td>
+              <td><code>{name(glyph)}</code></td>
+              <td><code>{inspect(dash)}</code></td>
+              <td>
+                <svg width="80" height="10" aria-hidden="true">
+                  <line
+                    x1="0"
+                    y1="5"
+                    x2="80"
+                    y2="5"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-dasharray={dash}
+                  />
+                </svg>
+              </td>
+            </tr>
+          </table>
+          <div class={"lab-pair" <> if(@gray == "gray", do: " lab-gray", else: "")}>
+            <figure>
+              {Phoenix.HTML.raw(@cues_default_svg)}
+              <figcaption>Visualize.Theme.default()</figcaption>
+            </figure>
+            <figure>
+              {Phoenix.HTML.raw(@cues_print_svg)}
+              <figcaption>Visualize.Theme.print()</figcaption>
+            </figure>
+          </div>
+        </Panel.panel>
+
+        <Panel.panel id="panel-json">
+          <:title>Stored as JSON</:title>
+          <p class="panel-note">
+            A theme is a stored, versioned value. <code>Visualize.Chart.Theme.to_json/1</code>
+            writes the house stamped <code>"$version"</code>: the name it adds is a plain
+            color, its pinned steps a <code>$steps</code>
+            tag and its roles <code>$ramp</code>
+            points of the status ramp. <code>from_json/2</code>
+            reads it back <strong class="lab-round-trip">{if @stored.round_trip,
+              do: "equal to the house",
+              else: "different from the house"}</strong>.
+          </p>
+          <div class="lab-json"><Highlight.code code={@stored.json} /></div>
+          <p class="panel-note">
+            The reader checks a document's version and its tags before it decodes a key, so a
+            document from a newer library, or one holding a tag the table lacks or has
+            retired, is refused at its path and makes no atom:
+          </p>
+          <div :for={{title, document, faults} <- @refused} class="lab-refused">
+            <h4>{title}</h4>
+            <Highlight.code code={document} />
+            <p :for={fault <- faults} class="lab-fault">{fault}</p>
+          </div>
+        </Panel.panel>
       </div>
     </main>
 
@@ -458,6 +538,8 @@ defmodule ExamplesWeb.ThemeLabLive do
       .theme-lab .lab-themes { display: flex; flex-wrap: wrap; gap: 0.3rem 0.8rem; margin: 0.5rem 0 1rem; font-size: 0.9rem; }
       .theme-lab .lab-themes [aria-current="page"] { font-weight: bold; text-decoration: none; color: inherit; }
       .theme-lab .lab-compare .lab-swatch + .lab-swatch { margin-left: -0.5rem; }
+      .theme-lab .lab-json { max-height: 22rem; overflow: auto; font-size: 0.75rem; }
+      .theme-lab .lab-cues td svg { vertical-align: middle; }
     </style>
     """
   end
