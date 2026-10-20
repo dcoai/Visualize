@@ -364,7 +364,9 @@ defmodule Examples.ChartsTest do
     svg = module.render([])
 
     assert svg =~ ~s(role="img")
-    assert svg =~ "<title id="
+    # Named by aria-label, never a <title> the browser shows on hover (D-201).
+    assert svg =~ ~s(aria-label=")
+    refute svg =~ "<title"
     assert svg =~ "<desc id="
     assert svg =~ module.title()
     assert svg =~ module.description()

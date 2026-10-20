@@ -120,10 +120,9 @@ defmodule Examples.SummaryTest do
     text = module |> Design.applied([]) |> Summary.text() |> escape()
     svg = Design.render(module, [])
 
-    assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-labelledby="\1-title"/,
-           inspect(module)
-
-    assert svg =~ ">#{escape(module.title())}</title>", inspect(module)
+    assert svg =~ ~r/aria-describedby="vis-[a-z0-9]+-desc" aria-label="/, inspect(module)
+    assert svg =~ ~s(aria-label="#{escape(module.title())}"), inspect(module)
+    refute svg =~ "<title", inspect(module)
     assert svg =~ "#{text}</desc>", inspect(module)
   end
 

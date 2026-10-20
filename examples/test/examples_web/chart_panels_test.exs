@@ -51,9 +51,11 @@ defmodule ExamplesWeb.ChartPanelsTest do
 
     # Three roots on one page, the chart above among them, and no two share an id: the
     # rule is scoped to its root's id, which the panel gives each drawing (D-188), so both
-    # keep the design's own title.
-    assert implicit =~ ~s(<title id="dark-mode-implicit-title">Colors</title>)
-    assert fixed =~ ~s(<title id="dark-mode-fixed-title">Colors</title>)
+    # keep the design's own name.
+    assert implicit =~ ~s(<desc id="dark-mode-implicit-desc">) and
+             implicit =~ ~s(aria-label="Colors")
+
+    assert fixed =~ ~s(<desc id="dark-mode-fixed-desc">) and fixed =~ ~s(aria-label="Colors")
     main = Design.render(ColorsChart, [])
     ids = Enum.map([implicit, fixed, main], &root_id/1)
     assert length(Enum.uniq(ids)) == 3

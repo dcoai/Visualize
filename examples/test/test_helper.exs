@@ -2,6 +2,19 @@
 # reductions with the same helper as the library's suite (spec/14 §12.6, #469).
 Code.require_file("../../test/support/work.ex", __DIR__)
 
+# The library's hook harness (spec/12 §6, #458), so the gallery's executed hook tests run
+# its pages' hooks over the markup they render (#805); without node they are excluded in
+# one printed line, as the library's suite excludes them.
+Code.require_file("../../test/support/js_hooks.ex", __DIR__)
+
+js =
+  if Visualize.JsHooks.node_path() do
+    []
+  else
+    IO.puts("Excluding the :js hook tests: no node on the path.")
+    [:js]
+  end
+
 # The measured tests run the resvg binary (spec/12 §4, D-121), found as the library's suite
 # finds it: VISUALIZE_RESVG, which must name an executable, else `resvg` on the PATH; with
 # neither the :resvg tests are excluded in one printed line (#489).
@@ -33,7 +46,7 @@ resvg =
 # and a long test crossed its timeout; measured, the suite takes as long either way
 # (spec/12 §6, #735).
 ExUnit.start(
-  exclude: resvg,
+  exclude: resvg ++ js,
   timeout: 60_000,
   assert_receive_timeout: 60_000,
   max_cases: System.schedulers_online()

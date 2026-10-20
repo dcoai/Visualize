@@ -111,7 +111,7 @@ defmodule Visualize.Board.ExportTest do
       %{gap: gap} = Board.layout(snapshot.board)
 
       assert String.starts_with?(svg, "<svg ") and svg =~ ~s(xmlns="http://www.w3.org/2000/svg")
-      assert svg =~ "Ops</title>" and svg =~ "Ops</text>"
+      assert svg =~ ~s(aria-label="Ops") and svg =~ "Ops</text>"
       assert svg =~ "2026-10-11 12:00:00 – 2026-10-11 13:00:00 (Etc/UTC)"
 
       {_, header_bottom} = placement(svg, :a)

@@ -356,16 +356,17 @@ defmodule Visualize.IR.Element do
     * `:responsive` - when true, `preserveAspectRatio="xMidYMid meet"` (unless given) and
       `style="width:100%;height:auto"`, so the `<svg>` fills its container's width at the
       drawing's aspect ratio while `width` and `height` stay its intrinsic size (D-54)
-    * `:title`, `:description` - the accessible name and description (D-56, D-142): a
-      `<title>` and a `<desc>` become the first children, each with an id;
-      `aria-labelledby` names the title and `aria-describedby` the description, so a
-      screen reader says a short name and then the description — a description alone
-      is named by `aria-labelledby`, as it is the only text the root has
+    * `:title`, `:description` - the accessible name and description (D-56, D-142,
+      D-201): the title is the root's `aria-label`, never a `<title>` child, which a
+      browser shows as a tooltip under the pointer; the description is a `<desc>` with an
+      id, the first child, which `aria-describedby` names, so a screen reader says a short
+      name and then the description — a description alone is named by
+      `aria-labelledby`, as it is the only text the root has
     * `:hidden` - `aria-hidden="true"` on the root: one layer of a picture another
       element names, as a hybrid chart's SVG layers are (spec/14 §21.4)
-    * `:id` - the root's id and the prefix of the two child ids (`<id>-title`,
-      `<id>-desc`); defaults to `vis-` and a hash of the two texts, and is only set when
-      a title or description is given
+    * `:id` - the root's id and the prefix of the description's id (`<id>-desc`);
+      defaults to `vis-` and a hash of the two texts, and is only set when a title or
+      description is given
   """
   @spec root(number(), number(), keyword()) :: t()
   def root(width, height, opts \\ []) do
@@ -382,18 +383,12 @@ defmodule Visualize.IR.Element do
       |> put_unless_nil(:preserve_aspect_ratio, ratio)
       |> put_unless_nil(:style, if(responsive, do: "width:100%;height:auto"))
       |> put_unless_nil(:id, ids.root)
-      |> put_unless_nil(:aria_labelledby, ids.labelledby)
+      |> put_unless_nil(:aria_label, title)
+      |> put_unless_nil(:aria_labelledby, if(title == nil, do: ids.labelledby))
       |> put_unless_nil(:aria_describedby, ids.describedby)
       |> put_unless_nil(:aria_hidden, if(Keyword.get(opts, :hidden, false), do: "true"))
 
-    labels =
-      Enum.reject(
-        [
-          title && set_attrs(title(title), %{id: ids.title}),
-          description && set_attrs(desc(description), %{id: ids.desc})
-        ],
-        &is_nil/1
-      )
+    labels = if description, do: [set_attrs(desc(description), %{id: ids.desc})], else: []
 
     new(:root, attrs: attrs, children: labels ++ Keyword.get(opts, :children, []))
   end

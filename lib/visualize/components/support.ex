@@ -182,7 +182,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
 
       font = ["font-family": Theme.resolve(theme, :font_family, :css)]
-      labeled = if ids.labelledby, do: ["aria-labelledby": ids.labelledby], else: []
+
+      # The name as `aria-label`, never a `<title>` a browser shows under the pointer
+      # (D-201); a description alone names the root through `aria-labelledby`.
+      labeled =
+        cond do
+          ids.label -> ["aria-label": ids.label]
+          ids.labelledby -> ["aria-labelledby": ids.labelledby]
+          true -> []
+        end
 
       labeled =
         labeled ++ if ids.describedby, do: ["aria-describedby": ids.describedby], else: []
@@ -191,9 +199,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc false
-    # The ids of the `<title>` and `<desc>` a titled component renders first (spec/10 §1.2),
-    # derived as `Visualize.IR.Element.root/3` derives them (D-56).
-    def label_ids(title, description), do: Element.label_ids(nil, title, description)
+    # The name and the id of the `<desc>` a titled component renders first (spec/10 §1.2),
+    # derived as `Visualize.IR.Element.root/3` derives them (D-56, D-201): `label` is the
+    # title, the `<svg>`'s `aria-label`.
+    def label_ids(title, description),
+      do: Map.put(Element.label_ids(nil, title, description), :label, title)
 
     @doc false
     # The `theme` assign as a struct: `nil` is the default theme (spec/10 §1.2).

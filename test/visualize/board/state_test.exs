@@ -69,7 +69,7 @@ defmodule Visualize.Board.StateTest do
 
         assert svg =~ ~s(data-vis-state="#{State.name(state)}")
         assert svg =~ ~s(role="img")
-        assert svg =~ "<title id=\"vis-" and svg =~ ">#{words}</title>"
+        assert svg =~ ~s(aria-label="#{words}") and not (svg =~ "<title")
         assert svg =~ "var(#{Theme.css_name(role)}, "
         assert svg =~ ~s(class="vis-cell-state-glyph")
         assert svg =~ ~s(fill="var(--vis-surface, )
