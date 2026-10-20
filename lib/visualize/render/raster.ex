@@ -21,6 +21,15 @@ defmodule Visualize.Render.Raster do
   # the SVG and closes resvg's stdin; resvg's stderr joins its stdout (spec/09 §9.5).
   @wrapper ~S(n="$1"; b="$2"; shift 2; head -c "$n" | exec "$b" "$@" - -c 2>&1)
 
+  # One round of the timeout's kill: the group `$1` leads, else the pid `$1` (spec/09 §9.5).
+  @kill ~S(kill -s KILL -- "-$1" 2>/dev/null || kill -s KILL -- "$1" 2>/dev/null)
+
+  # The kill is sent again every `@retry` ms until the port exits; after `@stop_bound` ms the
+  # port is closed, and its close awaited for at most `@close_bound` ms (spec/09 §9.5, D-213).
+  @retry 10
+  @stop_bound 5_000
+  @close_bound 1_000
+
   @font_keys [:font_dirs, :system_fonts, :generic_families]
   # The options `to_png/2` reads; every other option of an IR input reaches the SVG backend.
   @keys [:scale, :background, :font_family, :timeout | @font_keys]
@@ -124,10 +133,11 @@ defmodule Visualize.Render.Raster do
   @doc false
   # Runs `binary` with `args` over the wrapper, `input` on its stdin, and collects its
   # stdout until it exits: `{:exit, status, output}`, or `{:timeout, os_pid}` when it has
-  # not exited within `timeout` ms, its process group then killed (spec/09 §9.5).
-  @spec run(String.t(), [String.t()], binary(), pos_integer()) ::
+  # not exited within `timeout` ms, its processes then killed with `signal` (spec/09 §9.5).
+  # `signal` is a seam: a test passes one that loses a kill (D-213).
+  @spec run(String.t(), [String.t()], binary(), pos_integer(), (pos_integer() -> :ok)) ::
           {:exit, non_neg_integer(), binary()} | {:timeout, pos_integer()}
-  def run(binary, args, input, timeout) do
+  def run(binary, args, input, timeout, signal \\ &signal/1) do
     port =
       Port.open({:spawn_executable, "/bin/sh"}, [
         :binary,
@@ -140,42 +150,90 @@ defmodule Visualize.Render.Raster do
     {:os_pid, os_pid} = Port.info(port, :os_pid)
     timer = :erlang.start_timer(timeout, self(), :raster_timeout)
     true = Port.command(port, input)
-    collect(port, os_pid, timer, [])
+    collect(port, os_pid, timer, signal, [])
   end
 
-  defp collect(port, os_pid, timer, acc) do
+  defp collect(port, os_pid, timer, signal, acc) do
     receive do
       {^port, {:data, data}} ->
-        collect(port, os_pid, timer, [acc | data])
+        collect(port, os_pid, timer, signal, [acc | data])
 
       {^port, {:exit_status, status}} ->
         cancel(timer)
         {:exit, status, IO.iodata_to_binary(acc)}
 
       {:timeout, ^timer, :raster_timeout} ->
-        kill_group(os_pid)
-        await_exit(port)
+        stop(port, os_pid, signal, now() + @stop_bound)
         {:timeout, os_pid}
     end
   end
 
-  # The port's `sh` leads its own process group (OTP starts every port program in a new
-  # session), and `head` and resvg are in it: one signal to the group ends all three, where
-  # closing the port would leave resvg running to completion. The killed `sh` closes the
-  # port itself, so the port is never closed twice.
-  defp kill_group(os_pid) do
-    {_, _} =
-      System.cmd("/bin/sh", ["-c", ~S(kill -s KILL -- "-$1" 2>/dev/null), "sh", "#{os_pid}"])
+  # Kills the render until the port reports its exit, every `@retry` ms, and gives up at
+  # `deadline` by closing the port (spec/09 §9.5, D-213). A kill can land on nothing: the
+  # pid is reported once `erl_child_setup` has forked it, before it calls `setsid`, so a
+  # later round reaches the group the earlier one missed. The killed `sh` closes the port
+  # itself, so the port is closed here only when no exit came. The exit is looked for
+  # before each round, so a render that already ended is never signaled.
+  defp stop(port, os_pid, signal, deadline) do
+    cond do
+      exited?(port, now()) ->
+        :ok
 
+      now() >= deadline ->
+        close(port)
+
+      true ->
+        :ok = signal.(os_pid)
+
+        if exited?(port, min(now() + @retry, deadline)),
+          do: :ok,
+          else: stop(port, os_pid, signal, deadline)
+    end
+  end
+
+  # Whether the port reports its exit by `until` (monotonic ms), its output dropped. The
+  # wait is to a time, not a length, so output arriving cannot stretch it.
+  defp exited?(port, until) do
+    receive do
+      {^port, {:data, _}} -> exited?(port, until)
+      {^port, {:exit_status, _}} -> true
+    after
+      max(until - now(), 0) -> false
+    end
+  end
+
+  # Closes a port whose program did not exit, and waits a bounded time for the close to be
+  # confirmed. A port that closed meanwhile ignores the request, and its exit is the answer.
+  defp close(port) do
+    send(port, {self(), :close})
+    closed(port, now() + @close_bound)
+  end
+
+  defp closed(port, until) do
+    receive do
+      {^port, {:data, _}} -> closed(port, until)
+      {^port, :closed} -> :ok
+      {^port, {:exit_status, _}} -> :ok
+    after
+      max(until - now(), 0) -> :ok
+    end
+  end
+
+  @doc false
+  # One round of the kill (spec/09 §9.5): `SIGKILL` to the process group `os_pid` leads,
+  # and, when no such group exists yet, to `os_pid` itself. The port's `sh` leads its own
+  # group once OTP's `setsid` has run, and `head` and resvg are in it: one signal to the
+  # group ends all three, where closing the port would leave resvg running to completion.
+  # Before `setsid` the pid is the forked child that has not yet `exec`ed, and killing it
+  # ends the render before it starts. When neither kill lands, the render has ended or not
+  # yet reached its group, and the port's exit or the next round settles which.
+  @spec signal(pos_integer()) :: :ok
+  def signal(os_pid) do
+    {_, _} = System.cmd("/bin/sh", ["-c", @kill, "sh", Integer.to_string(os_pid)])
     :ok
   end
 
-  defp await_exit(port) do
-    receive do
-      {^port, {:data, _}} -> await_exit(port)
-      {^port, {:exit_status, _}} -> :ok
-    end
-  end
+  defp now, do: System.monotonic_time(:millisecond)
 
   defp cancel(timer) do
     if :erlang.cancel_timer(timer) == false do
