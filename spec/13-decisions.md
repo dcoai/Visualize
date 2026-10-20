@@ -2902,3 +2902,20 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A design that already drew stays valid. A number on a number channel satisfies the need, and a field whose type is unknown is not checked, as before.
 - Rows with no schema at application are still unchecked there, as D-153 left them. Only a schema, or a tool that types rows (the builder, a board), sees the fault before render.
 - The fault's words change for every type mismatch, scaled or not. They are the reason's wording only, and the reason is unchanged.
+
+## 216. D-216 — The drawing's heap is sized from outside it, by its own need, under a hard bound
+
+**Context.** #850. The examples server died after a run of Minesweeper moves on a 50 × 50 board: `eheap_alloc: Cannot allocate 104798136064 bytes`. D-206 sized each drawing's process by "the heap the last one used, and a quarter more", and the drawing measured that itself, with `Process.info(self(), :garbage_collection_info)`. Read by a process about itself, `heap_size` is the whole heap block, less the stack, not the words in use. So every drawing reported back the heap it had been handed. The next request was 1.25 times that, rounded up to the BEAM's next heap size, about 1.44 times a move, and nothing bounded it. Reproduced, the carried size went from 1.2 M words to 11.4 G words in 24 moves, and the 25th spawn died with the same slogan. One visitor playing a game could take down every page on the node. The moves stayed fast throughout, because pages a process never touches cost nothing. That is why the cost test, which counts one move, and the benchmark, nine, did not see it: the benchmark's ninth move already reserved 550 MB.
+
+**Decision.**
+- The LiveView measures the drawing, from outside, once the drawing has sent its parts and is waiting. Then it lets the drawing end.
+- The next size is a function of that one measurement, never of the size the drawing was given:
+  - a drawing that did not collect is given its heap and old heap in use, plus a quarter;
+  - one that collected is given 16 times the data its collections kept: its old heap, and what the last collection left on its young heap. The need is 3 to 9 times that on the cost test's boards, so a drawing sized this way does not collect, and the move after is sized exactly.
+- The size is under a bound that is not an option: 512 MiB in the system's words, about 15 times a 2,500-cell move's need, which is already the 100 ms budget of D-202. A size past the bound is not requested: that drawing is spawned unsized.
+- The drawing runs under `max_heap_size` of four times the bound, with `kill: true` and the logger's report. A runaway drawing then ends its own LiveView, to which it is linked, and leaves the node standing.
+
+**Consequences.**
+- The carried size settles at about 1.25 times one drawing's need within two moves and stays there: 5.5 M words a move at 50 × 50, however long the game. Two guards in `chart_cost_test.exs` hold this. One plays hundreds of moves on that board and asserts the size is flat and under the bound. The other gives `apart/2` a drawing that always collects and asserts its size does not grow. Both fail on D-206's sizing.
+- A chart whose drawing needs more than 512 MiB is drawn in a process the BEAM sizes, and collects as any large process does. One that needs more than 2 GiB of heap ends its page with a logged `max_heap_size` report. No interactive chart within D-202's budget comes near either.
+- Measuring from outside costs a `process_info` round trip and one message per move, microseconds against a move's tens of milliseconds.
