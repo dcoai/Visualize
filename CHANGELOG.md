@@ -107,6 +107,14 @@ release it merely follows.
   a struct you assemble by hand may leave it `nil`. `Visualize.IR.Path.format_number/1`
   now writes a float too large for four decimals (past about `1.0e253`) as its digits
   instead of raising.
+- **The examples app runs bandit 1.13.1** (#782, #815). Its lock pinned bandit 1.12.5,
+  which has two advisories, EEF-CVE-2026-105659 (HIGH: a peer trickling HTTP/2 frames
+  keeps stream processes alive indefinitely) and EEF-CVE-2026-105660 (MEDIUM: an HTTP/1
+  request target sets `conn.host` and `conn.port`). If you serve the gallery, update to
+  this lock. The library does not depend on bandit, so a consumer of the package is not
+  affected. The build now fails on any Hex security advisory or retired package in the
+  library's lock or the examples app's (`mix vis.advisories`, D-207), unless an entry in
+  `audit/advisories_allowlist.exs` allows it with a reason.
 
 ## [0.7.0] — 2026-10-20
 
