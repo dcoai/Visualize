@@ -179,6 +179,17 @@ defmodule Examples.Run do
   @spec resync(t()) :: t()
   def resync(%__MODULE__{} = run), do: %{run | needs_full: true}
 
+  @doc """
+  The run whose renderer was re-prepared at the page's new options (spec/14 §12.6, #796):
+  a theme, a size or a hex size changed mid-run. The frame in flight was asked under the
+  old options and is forgotten, so its answer is stale (`result/2`) and never shown; the
+  next tick asks again, answered after the re-preparation, and that frame is full. The
+  backend, its segment and the counters are untouched — `switch/2` is this with a backend.
+  """
+  @spec reprepared(t()) :: t()
+  def reprepared(%__MODULE__{} = run),
+    do: %{run | needs_full: true, render_id: nil, render_started: nil}
+
   @doc "The run's renderer stopped and its monitor dropped; nothing else changes."
   @spec cancel(t()) :: t()
   def cancel(%__MODULE__{renderer: pid, monitor: monitor} = run) when is_pid(pid) do

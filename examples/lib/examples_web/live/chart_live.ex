@@ -3,6 +3,7 @@ defmodule ExamplesWeb.ChartLive do
 
   alias Examples.{Compare, Frames, Gallery, Run}
   alias ExamplesWeb.{Highlight, PerformanceDrawer, ThemePicker}
+  alias ExamplesWeb.ChartLive.MidRun
 
   @doc """
   The gallery's charts by slug, for the performance view (#328): the map derived from the
@@ -223,7 +224,7 @@ defmodule ExamplesWeb.ChartLive do
     cond do
       measured(width, slug) != measured(was, slug) ->
         socket = assign(socket, width: width, motion: motion)
-        {:noreply, socket |> rescrolled() |> resized() |> still()}
+        {:noreply, socket |> rescrolled() |> reprepared() |> still()}
 
       motion != motion_was ->
         {:noreply, socket |> assign(motion: motion) |> still()}
@@ -253,11 +254,13 @@ defmodule ExamplesWeb.ChartLive do
     do: {:noreply, socket}
 
   # A theme picked (#792): the key looked up in the picker's own list, never an atom; the
-  # explain panel follows it, and what the chart draws of it is measured (#795).
+  # explain panel follows it, what the chart draws of it is measured (#795), and a run
+  # draws its next frame under it (#796).
   def handle_event("theme", %{"theme" => word}, %{assigns: %{module: module}} = socket) do
     key = ThemePicker.pick(socket.assigns.theme, word)
     panels = ExamplesWeb.ChartPanels.retheme(socket.assigns.panels, module, key)
-    {:noreply, socket |> assign(theme: key, panels: panels) |> still() |> ThemePicker.measure()}
+    socket = socket |> assign(theme: key, panels: panels) |> reprepared()
+    {:noreply, socket |> still() |> ThemePicker.measure()}
   end
 
   # Animate is the drawer's run on the page's backend (#362): one frame loop.
@@ -269,7 +272,7 @@ defmodule ExamplesWeb.ChartLive do
 
   def handle_event("change_hex_radius", %{"hex_radius" => radius_str}, socket) do
     radius = String.to_integer(radius_str)
-    {:noreply, socket |> assign(hex_radius: radius) |> still()}
+    {:noreply, socket |> assign(hex_radius: radius) |> reprepared() |> still()}
   end
 
   # The page's backend buttons and the drawer's are one choice (#362).
@@ -289,9 +292,11 @@ defmodule ExamplesWeb.ChartLive do
     %{module: module, run_backend: current, run: run} = socket.assigns
     backend = Enum.find(Frames.backends(module), &(Atom.to_string(&1) == name))
 
+    opts = run_opts(socket.assigns, socket.assigns.run_ticks)
+
     cond do
       backend in [nil, current] -> {:noreply, socket}
-      run.running -> {:noreply, switched(socket, backend)}
+      run.running -> {:noreply, MidRun.switched(socket, backend, opts)}
       true -> {:noreply, socket |> assign(run_backend: backend) |> still()}
     end
   end
@@ -470,7 +475,7 @@ defmodule ExamplesWeb.ChartLive do
 
         socket =
           socket
-          |> switched_markup()
+          |> MidRun.markup()
           |> assign(run: run, run_frame: frame, run_mode: words(frame))
 
         # One event per plot, each named by its frame (spec/10 §9.2, #432): a design of
@@ -585,39 +590,10 @@ defmodule ExamplesWeb.ChartLive do
 
   defp rescrolled(socket), do: socket
 
-  # A backend chosen mid-run (spec/14 §12.6, #502, D-128): the renderer re-prepares for it
-  # in place, carrying the easing, its rows, and the run's tick and window untouched; the
-  # run closes the old backend's segment, marks the sequence floor its acks fall under,
-  # forgets the frame in flight and draws the next one full. The view's own state for the
-  # markup is the new backend's from the first frame of it, so the page never lays one
-  # backend's furniture over another's frame.
-  defp switched(%{assigns: %{run: run} = assigns} = socket, backend) do
-    opts = run_opts(assigns, assigns.run_ticks)
-    Examples.Renderer.switch(run.renderer, backend, opts)
-
-    assign(socket,
-      run: Run.switch(run, backend),
-      run_backend: backend,
-      run_pending_state: {:state, Frames.prepare(assigns.module, opts, backend)}
-    )
-  end
-
-  # The first frame of a backend switched to mid-run brings its state into the markup.
-  defp switched_markup(%{assigns: %{run_pending_state: {:state, state}}} = socket),
-    do: assign(socket, run_state: state, run_pending_state: nil)
-
-  defp switched_markup(socket), do: socket
-
-  # A run goes on across a resize: its renderer re-prepares at the new size and carries
-  # the easing, and the run's counters are untouched (#434); its window is the plot drawn
-  # at the new size (#459).
-  defp resized(%{assigns: %{run: %Run{running: true, renderer: renderer}}} = socket)
-       when is_pid(renderer) do
-    Examples.Renderer.resize(renderer, run_opts(socket.assigns, socket.assigns.run_ticks))
-    socket
-  end
-
-  defp resized(socket), do: socket
+  # A control changed mid-run — a theme, a size, a hex size (spec/14 §12.6, #434, #796):
+  # the run's renderer re-prepares at the run's options under it and goes on (`MidRun`).
+  defp reprepared(socket),
+    do: MidRun.reprepared(socket, run_opts(socket.assigns, socket.assigns.run_ticks))
 
   # The chart's text alternative at the still frame (spec/14 §21, #557): the summary that
   # names the hybrid layers' wrapper and is shown under the chart, the hidden data table
