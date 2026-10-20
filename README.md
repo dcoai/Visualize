@@ -46,7 +46,7 @@ Visualize is on [Hex](https://hex.pm/packages/visualize):
 ```elixir
 def deps do
   [
-    {:visualize, "~> 0.6"},
+    {:visualize, "~> 0.7"},
     {:nx, "~> 0.9"}      # optional: binary canvas encoding and Nx-accelerated paths
   ]
 end
