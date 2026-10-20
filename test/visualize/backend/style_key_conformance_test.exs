@@ -218,9 +218,10 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
         %{type: :symbol, data: :s, channels: %{x: :x1, y: :y1}, style: "s"},
         %{type: :text, data: :s, channels: %{x: :x, y: :y1, value: :t}, style: "s"}
       ],
-      # A label of two lines in the style too: a text mark's lines take the default line
-      # height (#824), a label's its style's.
-      labels: [%{anchor: :title, text: ["one\ntwo"], style: "s", frame: :main}]
+      # A label in the style too, of one line: a label's placement reads `text.baseline`,
+      # `offset` and `angle` from its style (spec/14 §6.3), a text mark's from its label's.
+      # The text mark's two-line value is what shows the line height (D-210).
+      labels: [%{anchor: :title, text: ["one"], style: "s", frame: :main}]
     }
   end
 

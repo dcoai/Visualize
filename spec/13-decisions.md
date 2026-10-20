@@ -2802,6 +2802,7 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - SVG blends an element as a whole, and the canvas blends its fill and then its stroke. Where the two overlap they differ, as a paint's opacity already does (D-180).
 - What the binary stream still does not draw is listed in one table, text and class. A style key added to the schema fails the guard until either the binary canvas draws it or the table says why not.
 - The SVG-element encoder (`CanvasBinary.SVG`) reads no `clip-path`, `mask` or `mix-blend-mode`. It resolves no references, and no IR render goes through it. The audit on #788 lists it, and #825 proposes it.
+
 ## 209. D-209 — A `:tiles` mark is clipped to its frame's plot area
 
 **Context.** #826, found building #819. A `:tiles` mark covers the plot area with whole slippy-map tiles (spec/07 §8.3), so the tiles at its edges reach up to one tile past it on every side, and nothing clipped them. A chart of one frame hid this: the frame filled the `<svg>`, and the document's edge clipped the tiles. In a design of several frames (spec/14 §2.8, §4.2), one frame's basemap painted over its neighbors. *Grandma's Marathon* showed it at 960 × 620. The course frame's tiles ran 148 px into the right-hand column. The pack inset's reached 314 px below its plot, over the clock and the standings. Both covered the course frame's legend. The same held on a hybrid page, because each plot's backdrop document is the design's full size with the frame translated inside it.
@@ -2812,3 +2813,14 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - No tile paints outside its own frame's plot, on SVG or in a hybrid page's backdrop. Frames in a box can each carry a basemap.
 - A single-frame basemap chart draws exactly what it drew, since the document's edge was already clipping it. Its markup gains a `<clipPath>` definition and a `clip-path` on the tiles group, and the goldens that hold one change accordingly.
 - The binary canvas stream has no clip record, but it carries no tiles either: an image has no record there (spec/09 §4.4). So nothing on the binary canvas changes.
+
+## 210. D-210 — A text's line height is its effective style's
+
+**Context.** #824, found building the style-key guard of D-208: a frame label of two lines took its style's `font.line_height`, the second `tspan`'s `dy` that factor in em, but a `:text` mark's lines always took the default, `1.2em`, whatever its style said. `Visualize.Chart.Frame.Lines.split/1` read `:line_height` from the text element's own style. A label carries its style on its text; a mark carries its style on its group, and its texts inherit it from there, so the text's own style had no `:line_height`. Two fixes were open: the split reads the effective style, or every mark copies `:line_height` onto its texts.
+
+**Decision.** The split reads the effective line height: the text's own over its groups', nearest first, then the schema's default, `1.2` (spec/14 §7.1). It is the rule a canvas already follows for every key a group sets on its leaves (spec/09 §3.3, D-111), so the frame's pass follows it too, and no mark has to know that one key of its style is read off its texts. spec/09 §4.8's guard samples `font.line_height` on the `:text` mark, which now changes the SVG. Its label keeps one line, for the placement keys a label reads from its style.
+
+**Consequences.**
+- A `:text` mark whose values hold newlines and whose style sets `font.line_height` draws its lines that far apart on SVG and on the `:json` canvas, which steps by each `tspan`'s `dy`. A mark that sets none draws as before.
+- A text that sets its own line height keeps it under a group that sets another.
+- A key a group sets is read the same way wherever the library reads it from a tree: no mark copies a style key onto its leaves to be seen.

@@ -678,6 +678,62 @@ defmodule Visualize.Chart.FrameTest do
       assert_in_delta y1 - y0, 20, 0.01
       assert_in_delta y2 - y1, 20, 0.01
     end
+
+    test "a :text mark's lines take its style's line height, read off its group (D-210)" do
+      rows = [%{t: @t0, v: 3, n: 1, k: "Uptime\n24 h"}]
+
+      chart =
+        chart(%{scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}, %{
+          version: 3,
+          styles: %{"tall" => %{font: %{line_height: 2.5}}},
+          marks: [
+            %{type: :text, data: :primary, channels: %{x: :n, y: :v, value: :k}, style: "tall"}
+          ]
+        })
+
+      svg =
+        chart
+        |> Frame.new(sources: %{primary: rows}, size: @size)
+        |> Frame.generate(sources: %{primary: rows})
+        |> Render.to_string()
+
+      assert svg =~
+               ~r/<tspan x="[-\d.]+">Uptime<\/tspan><tspan dy="2.5em" x="[-\d.]+">24 h<\/tspan>/
+
+      # The canvas steps by the same: 2.5 of the label size its text is drawn at, 12 px.
+      js =
+        chart
+        |> Frame.new(sources: %{primary: rows}, size: @size)
+        |> Frame.generate(sources: %{primary: rows}, resolve: :literal)
+        |> Visualize.Backend.Canvas.render_element()
+        |> IO.iodata_to_binary()
+
+      [y0, y1] =
+        ~r/ctx\.fillText\('(?:Uptime|24 h)', [-\d.]+, ([-\d.]+)\);/
+        |> Regex.scan(js)
+        |> Enum.map(fn [_, y] -> y |> Float.parse() |> elem(0) end)
+
+      assert_in_delta y1 - y0, 30, 0.01
+    end
+
+    test "a text's own line height wins over its groups', the nearest group's over the outer" do
+      # An outer group of 3 around an inner one around the text; the second line's dy.
+      dy = fn inner, own ->
+        %Element{children: [%Element{children: [text]}]} =
+          [Element.text("a\nb", style: own)]
+          |> Element.group(style: inner)
+          |> List.wrap()
+          |> Element.group(style: %{line_height: 3})
+          |> Frame.Lines.split()
+
+        [_, second] = text.children
+        second.attrs.dy
+      end
+
+      assert dy.(%{line_height: 2}, %{line_height: 1.5}) == "1.5em"
+      assert dy.(%{line_height: 2}, %{}) == "2em"
+      assert dy.(%{}, %{}) == "3em"
+    end
   end
 
   describe "text position (spec/14 §3.1, §6.3, §5.5)" do
