@@ -56,6 +56,17 @@ release it merely follows.
 
 ### Added
 
+- **A frame can clip its marks to its plot area: `clip: true`** (#828, #831, D-212). Marks
+  are drawn where their scales and projection put them, so an inset `:geo` frame zoomed in
+  on part of a route drew the whole route over the frames beside it, and a host had to trim
+  its data to the box. With `clip: true` on a frame, every mark and its inline labels show
+  only inside the plot area; the grid, axes, legend and frame labels stay unclipped. It
+  holds on SVG, on both canvas formats and on every layer of a compiled chart (a binary
+  stream that draws a clipped mark is version 4, D-208). The key is opt-in: a frame without
+  it renders byte for byte as before.
+  *Before:* `%{kind: :geo, projection: %{fit: %{data: "field", …}}}` over a source the
+  host cut to the inset. *After:* `%{kind: :geo, clip: true, projection: %{…}}` over the
+  whole data.
 - **A drawing in keyed segments: `Visualize.Render.Segments`** (#813, D-203). `svg/2`,
   `json/2` and `binary/2` cut a backend's output into one segment per item and one per
   group start and end. Each segment is keyed by the item's identity, or by what it draws,

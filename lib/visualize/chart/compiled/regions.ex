@@ -243,6 +243,7 @@ defmodule Visualize.Chart.Compiled.Regions do
         |> Mark.generate(Enum.at(frame.marks, i), sources: sources, resolve: mode, index: i + 1)
         |> Defs.resolve(frame, mode)
         |> Lines.split()
+        |> Frame.clip_mark(frame)
       ]
     end
   end

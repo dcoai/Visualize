@@ -24,7 +24,7 @@ defmodule Visualize.Chart.Frame.Labels do
     frame.labels
     |> Enum.with_index()
     |> Enum.flat_map(fn {node, i} ->
-      path = [:labels, Enum.at(frame.label_paths, i, i)]
+      path = [:labels, Enum.at(frame.paths.labels, i, i)]
       frame |> label(node, mode) |> Enum.map(&Frame.stamp(&1, path, paths?))
     end)
   end
@@ -40,7 +40,7 @@ defmodule Visualize.Chart.Frame.Labels do
   defp label_path(frame, node) do
     case Enum.find_index(frame.labels, &(&1 == node)) do
       nil -> [:style]
-      i -> [:labels, Enum.at(frame.label_paths, i, i), :style]
+      i -> [:labels, Enum.at(frame.paths.labels, i, i), :style]
     end
   end
 

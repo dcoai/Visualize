@@ -53,6 +53,8 @@ defmodule Visualize.Chart.Schema.Frame do
       spec(:span, {:list, :integer}, :geometry),
       spec(:z, :integer, :geometry, default: 0),
       spec(:background, :color, :style),
+      # Every mark drawn inside the plot area (spec/14 §4.1, #828, D-212).
+      spec(:clip, :boolean, :geometry, default: false),
       # What the frame's elements inherit under their styles (spec/14 §3.8, #651).
       spec(:defaults, {:node, :defaults}, :style)
     ]
