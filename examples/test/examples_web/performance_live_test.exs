@@ -75,7 +75,7 @@ defmodule ExamplesWeb.PerformanceLiveTest do
   end
 
   defp assert_comparable(module) do
-    opts_for = fn tick -> [width: 700, height: 450, palette: :default, animation_tick: tick] end
+    opts_for = fn tick -> [width: 700, height: 450, animation_tick: tick] end
     rows = Compare.run(module, opts_for, 1)
     assert Enum.map(rows, & &1.backend) == Examples.Frames.backends(module)
     assert Enum.all?(rows, &(&1.ticks == 1 and &1.avg_bytes > 0))

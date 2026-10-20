@@ -2,14 +2,14 @@ defmodule Examples.LabelInkTest do
   @moduledoc """
   The gallery's labels on fills read (#486, D-123): every label a chart draws on a fill is
   inked `:contrast`, and holds WCAG AA — 4.5:1 — against the fill of the element it sits
-  on, in every palette and in both render modes; a label that does not fit its element is
+  on, under every theme of the picker and in both render modes; a label that does not fit its element is
   dropped or shortened, so none runs over another; and the gallery's themes carry a font
   stack rather than the bare generic family.
   """
   use ExUnit.Case, async: true
 
   alias Examples.Charts.Design
-  alias Examples.ColorPalettes
+  alias Examples.Themes
   alias Visualize.{Chart, Color}
   alias Visualize.IR.Element
 
@@ -34,7 +34,7 @@ defmodule Examples.LabelInkTest do
 
   @aa 4.5
 
-  defp tree(module, palette, mode, label_change \\ & &1) do
+  defp tree(module, key, mode, label_change \\ & &1) do
     {design, sources} = module.design([])
 
     design =
@@ -48,7 +48,7 @@ defmodule Examples.LabelInkTest do
     {:ok, applied} =
       Chart.apply(design,
         sources: sources,
-        theme: ColorPalettes.theme(palette),
+        theme: Themes.theme(key),
         size: Design.size(module, [])
       )
 
@@ -105,11 +105,11 @@ defmodule Examples.LabelInkTest do
     end
   end
 
-  test "every label on a fill holds 4.5:1 against its element, in every palette and both modes" do
-    for module <- @on_fills, palette <- ColorPalettes.list_palettes(), mode <- [:css, :literal] do
-      theme = ColorPalettes.theme(palette)
+  test "every label on a fill holds 4.5:1 against its element, under every theme and both modes" do
+    for module <- @on_fills, key <- Themes.keys(), mode <- [:css, :literal] do
+      theme = Themes.theme(key)
       # Every element labeled — `fit: :none` — so no label is excused by being hidden.
-      all = module |> tree(palette, mode, &Map.put(&1, :fit, :none)) |> labeled()
+      all = module |> tree(key, mode, &Map.put(&1, :fit, :none)) |> labeled()
       assert all != [], "#{inspect(module)}: no labels"
 
       for {element, group, text} <- all do
@@ -118,26 +118,26 @@ defmodule Examples.LabelInkTest do
         ratio = Color.contrast(ink, under)
 
         assert ratio >= @aa,
-               "#{inspect(module)} #{palette} #{mode}: #{text.content} in #{text.style.fill} " <>
+               "#{inspect(module)} #{key} #{mode}: #{text.content} in #{text.style.fill} " <>
                  "on #{Color.to_hex(under)} is #{Float.round(ratio, 2)}:1"
       end
 
       # The gallery's own drawing, fitted, draws a subset of those, inked alike.
       inks = MapSet.new(all, fn {_e, _g, text} -> {text.content, text.style.fill} end)
-      shown = module |> tree(palette, mode) |> texts()
+      shown = module |> tree(key, mode) |> texts()
 
       for text <- shown, not String.ends_with?(text.content, "…") do
-        assert {text.content, text.style.fill} in inks, "#{inspect(module)} #{palette}"
+        assert {text.content, text.style.fill} in inks, "#{inspect(module)} #{key}"
       end
     end
   end
 
-  test "the pale palette's labels are dark: the sunrise treemap is legible" do
-    theme = ColorPalettes.theme(:sunrise)
+  test "the pale theme's labels are dark: the sunrise treemap is legible" do
+    theme = Themes.theme("sunrise")
 
-    # The palette's own dark text, or black where a deep orange holds neither slot to AA.
+    # The theme's own dark text, or black where a deep orange holds neither slot to AA.
     inks =
-      for text <- Examples.Charts.TreemapChart |> tree(:sunrise, :css) |> texts(),
+      for text <- Examples.Charts.TreemapChart |> tree("sunrise", :css) |> texts(),
           do: text.style.fill
 
     assert inks != [] and Enum.all?(inks, &(&1 in [theme.text, "#000000"]))
@@ -167,7 +167,7 @@ defmodule Examples.LabelInkTest do
   test "no two labels drawn on fills overlap: the pie's small slices drop theirs" do
     for module <- @on_fills do
       boxes =
-        for text <- module |> tree(:default, :literal) |> texts(), do: box(text)
+        for text <- module |> tree("default", :literal) |> texts(), do: box(text)
 
       for {a, i} <- Enum.with_index(boxes), {b, j} <- Enum.with_index(boxes), i < j do
         refute overlap?(a, b), "#{inspect(module)}: #{inspect(a)} over #{inspect(b)}"
@@ -175,7 +175,7 @@ defmodule Examples.LabelInkTest do
     end
 
     names =
-      for text <- Examples.Charts.PieChart |> tree(:default, :literal) |> texts(),
+      for text <- Examples.Charts.PieChart |> tree("default", :literal) |> texts(),
           do: text.content
 
     assert "Chrome" in names and "Safari" in names
@@ -183,8 +183,8 @@ defmodule Examples.LabelInkTest do
   end
 
   test "the gallery's themes carry a font stack, and it reaches the SVG" do
-    for palette <- ColorPalettes.list_palettes() do
-      assert ColorPalettes.theme(palette).font_family =~ ~r/^Inter, system-ui, .*sans-serif$/
+    for key <- Themes.keys() do
+      assert Themes.theme(key).font_family =~ ~r/^Inter, system-ui, .*sans-serif$/
     end
 
     assert Examples.Charts.PieChart.render([]) =~

@@ -668,8 +668,8 @@ defmodule ExamplesWeb.ChartLiveDrawerTest do
     assert is_binary(canvas) and s.assigns.still_state.static =~ "<svg"
     assert html(s) =~ ~s(phx-hook="CanvasBinaryChart")
 
-    # A palette change re-renders it too; the page's backend buttons are the run's.
-    {:noreply, s} = ChartLive.handle_event("change_palette", %{"palette" => "dark"}, s)
+    # A theme change re-renders it too; the page's backend buttons are the run's.
+    {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "dark"}, s)
     assert plot(s.assigns.still_frame).dynamic_svg =~ "#e6e6e6"
     assert html(s) =~ ~s(phx-value-backend="svg")
     refute html(s) =~ "Canvas-Incremental"

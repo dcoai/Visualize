@@ -266,10 +266,10 @@ defmodule Examples.ChartsTest do
       end
     end
 
-    test "a streaming chart's paint follows the palette it is rendered under" do
+    test "a streaming chart's paint follows the theme it is rendered under" do
       for module <- [Examples.Charts.ScrollingSeries, Examples.Charts.IncrementalLine] do
-        light = svg_under(module, :default)
-        dark = svg_under(module, :dark)
+        light = svg_under(module, "default")
+        dark = svg_under(module, "dark")
 
         # The slot reaches the SVG as its CSS variable, and the fallback differs by theme.
         assert light =~ "var(--vis-series-1,"
@@ -284,8 +284,8 @@ defmodule Examples.ChartsTest do
       dark = Visualize.Theme.dark().surface
 
       for module <- [Examples.Charts.WorldMap, Examples.Charts.DayNightGps, Examples.Charts.Globe] do
-        light_svg = svg_under(module, :default)
-        dark_svg = svg_under(module, :dark)
+        light_svg = svg_under(module, "default")
+        dark_svg = svg_under(module, "dark")
 
         assert light_svg =~ ~s{fill="var(--vis-surface, #{light})"}
         assert dark_svg =~ ~s{fill="var(--vis-surface, #{dark})"}
@@ -294,18 +294,18 @@ defmodule Examples.ChartsTest do
       end
     end
 
-    test "every gallery palette gives a surface apart from its grid and its page" do
+    test "every gallery theme gives a surface apart from its grid and its page" do
       # Print is paper: its surface is the page on purpose, so a printer lays no ink under
       # the data (spec/08 §7.6, D-150).
-      for key <- Examples.ColorPalettes.list_palettes() -- [:print] do
-        theme = Examples.ColorPalettes.theme(key)
+      for key <- Examples.Themes.keys() -- ["print"] do
+        theme = Examples.Themes.theme(key)
         refute theme.surface in [theme.grid, theme.background], "#{key}: surface #{theme.surface}"
       end
 
-      print = Examples.ColorPalettes.theme(:print)
+      print = Examples.Themes.theme("print")
       assert print.surface == print.background and print.name == :print
 
-      assert Examples.ColorPalettes.theme(:dark).surface == Visualize.Theme.dark().surface
+      assert Examples.Themes.theme("dark").surface == Visualize.Theme.dark().surface
     end
   end
 
@@ -315,10 +315,10 @@ defmodule Examples.ChartsTest do
     assert found == [], "#{inspect(module)} names #{inspect(found)} instead of a theme slot"
   end
 
-  defp svg_under(module, palette) do
+  defp svg_under(module, key) do
     {design, sources} = module.design([])
     {:ok, chart} = Chart.from_map(design)
-    {:ok, applied} = Chart.apply(chart, sources: sources, theme: Design.theme(palette: palette))
+    {:ok, applied} = Chart.apply(chart, sources: sources, theme: Design.theme(theme: key))
     Chart.render(applied)
   end
 
@@ -392,26 +392,26 @@ defmodule Examples.ChartsTest do
   end
 
   # The charts that color by names of the theme's table — `color(:blue)`, `color(:info)` —
-  # rather than by its series (#705): a palette that changes only the series leaves a name
+  # rather than by its series (#705): a theme that changes only the series leaves a name
   # as it is, so these recolor under a theme that changes the names, the dark one.
   @named_colors [Examples.Charts.ColorsChart, Examples.Charts.PaintsChart]
 
-  describe "the palette option is the theme, so every chart recolors" do
+  describe "the theme option is the theme, so every chart recolors" do
     for module <- @charts -- @named_colors do
       test "#{inspect(module)}", do: assert_recolors(unquote(module))
     end
   end
 
   defp assert_recolors(module) do
-    assert module.render(palette: :sunrise) =~ "#ffd098"
-    refute module.render(palette: :sunrise) =~ "#3b6fa8"
+    assert module.render(theme: "sunrise") =~ "#ffd098"
+    refute module.render(theme: "sunrise") =~ "#3b6fa8"
   end
 
   test "a chart that colors by the theme's names recolors under a theme that changes them" do
     for module <- @named_colors do
       assert module.render([]) =~ "#3b6fa8"
-      assert module.render(palette: :dark) =~ "#7fb3e6"
-      refute module.render(palette: :dark) =~ "#3b6fa8"
+      assert module.render(theme: "dark") =~ "#7fb3e6"
+      refute module.render(theme: "dark") =~ "#3b6fa8"
     end
   end
 

@@ -24,7 +24,7 @@ defmodule Examples.GalleryCostTest do
   # Earth's 5,143 land positions, #499, and Day, Night and GPS over them); the heavy one,
   # Downsampling's 50,000 unreduced rows, about 30 million.
   @budget %{light: 4_000_000, heavy: 40_000_000}
-  @opts [width: 700, height: 450, palette: :default]
+  @opts [width: 700, height: 450]
 
   # How far two counts of one render may be apart: half a percent. Measured over every
   # chart counted four times in a CI suite (pipeline 6232), the widest spread is 0.18 %

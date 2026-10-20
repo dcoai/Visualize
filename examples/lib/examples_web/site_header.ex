@@ -2,14 +2,15 @@ defmodule ExamplesWeb.SiteHeader do
   @moduledoc """
   The one header of the examples (#329): the title, the subtitle *Liveview data
   visualizations*, and the tab bar — Charts, Performance Test, Client-side Interactions,
-  Chart Builder — the current one marked. Every page renders it; none draws its own.
+  Theme lab (#792), Chart Builder — the current one marked. Every page renders it; none
+  draws its own.
   """
 
   use Phoenix.Component
 
   attr(:tab, :atom,
     required: true,
-    doc: "the current tab: :charts, :performance, :interaction or :builder"
+    doc: "the current tab: :charts, :performance, :interaction, :theme_lab or :builder"
   )
 
   def header(assigns) do
@@ -40,6 +41,8 @@ defmodule ExamplesWeb.SiteHeader do
        ~s|<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 16 A8 8 0 0 1 20 16"/><path d="M12 16 L16 9"/><circle cx="12" cy="16" r="1.5" fill="currentColor" stroke="none"/></svg>|},
       {:interaction, "/interaction", "Client-side Interactions",
        ~s|<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18 L9 12 L13 15 L20 6"/><path d="M14 13 L20 15 L17 17 L19 21 L17 22 L15 18 L13 20 Z" fill="currentColor" stroke="none"/></svg>|},
+      {:theme_lab, "/theme-lab", "Theme lab",
+       ~s|<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 A9 9 0 1 0 12 21 C13.5 21 14 20 14 19 C14 17.5 12.8 17 12.8 15.8 C12.8 14.8 13.6 14 14.6 14 L17 14 A4 4 0 0 0 21 10 C21 6 17 3 12 3 Z"/><circle cx="7.5" cy="11" r="1.5" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="15.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/></svg>|},
       {:builder, "/builder", "Chart Builder",
        ~s|<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 16 L15 9 L17 11 L10 18 L7 18 Z" fill="currentColor" stroke="none"/></svg>|}
     ]
