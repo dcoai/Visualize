@@ -2865,3 +2865,21 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A timed-out render returns within its `:timeout` plus 6 s on any load, and normally within milliseconds. Only a process that `SIGKILL` cannot end, one in uninterruptible sleep, reaches the bound, and that process outlives the call.
 - Killing the pid could in principle reach a stranger: the pid would have to be reaped and reused between the port's exit and the next round. The mailbox check before each round leaves only the time between the reap and the delivery of the exit message, and the pid space would have to wrap within it.
 - A regression to a single unchecked kill fails the forced test every time, instead of showing as a slow test under load.
+
+## 214. D-214 — A tensor bound to a design's slot is read by the slot's declared fields
+
+**Context.** #830, found building the examples' data-sources page (#781). `Visualize.Data.Table.rows/1` reads a rank-2 `Nx` tensor as one tuple per row (D-52), which is what the shape generators' default accessors read. A design reads every field by name (spec/14 §1.4), and a tuple has no names. So a tensor bound to a slot passed `apply/2` with `{:ok, _}`. The type check saw no columns, the missing-field check saw no map rows, and every mark drew nothing, with nothing to say why. A map of rank-1 column tensors, the other shape an Nx user holds, raised `ArgumentError` inside `rows/1`, though a map of equal-length lists is a documented source. The CHANGELOG had said a tensor is accepted wherever a list of maps is, and for a design it was not.
+
+**Decision.**
+- `rows/1` reads a rank-1 tensor as a column wherever it reads a list as one, in a map of columns or a keyword list of them, the two mixed freely.
+- `Visualize.Data.Table.named/2` names a tensor's columns: column `i` under the `i`th name, a rank-1 tensor as one column. Its result is the column map `rows/1` reads. A width other than the number of names is `{:error, {:width, declared, given}}`, any other rank `{:error, {:rank, rank}}`, and any other source passes through unchanged. It never raises.
+- The declarative layer calls it with the slot's declared `fields`, in order, wherever a source is bound to a slot: at application (`Template.bind`), on every tick of a compiled chart, and in the builder's preview typing. At application the faults are errors at `[:sources, name]`, `{:width, …}` and `{:rank, rank}`. A slot that declares no fields refuses a tensor as `{:type, :named_rows}`. A tick has no error return, so there it raises `ArgumentError` naming the slot, as a stale schema does (D-136).
+- The declared order is the design's own explicit statement of the columns, so reading by it is not guessing. Without a declaration the layer does not invent names (`"0"`, `"1"`, …), which a design could not have written.
+- `Visualize.Chart.Frame.new/2` is not changed. It takes sources already bound, as `Visualize.Chart.Applied` holds them.
+
+**Consequences.**
+- The example of #830 draws three points, and `%{x: Nx.tensor(…), y: Nx.tensor(…)}` draws the same.
+- A bound tensor is held in `Visualize.Chart.Applied` as its named column map, not as the tensor. The tensor is converted once at application and once per tick, which is the cost of reading it as rows at all.
+- Spec/14 §7.3 used to say a rank-1 tensor stays a tensor for the dense path. The declarative layer has no dense path, so that sentence is gone. `Visualize.Shape.LineNx` and the binary path still take tensors directly (D-52, D-53).
+- Nx stays optional. The only Nx calls are in `Visualize.Data.Table` under its `no_warn_undefined`, and they are made only when a source is a tensor.
+- A list of tuple rows from the host is still unnamed and still draws nothing through a design. It is not a tensor, and a list is not checked row by row at binding.

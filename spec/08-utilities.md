@@ -516,9 +516,9 @@ Parameterized variants: `poly_in/2`, `poly_out/2` and `poly_in_out/2` take an ex
 | Source | Rows |
 |---|---|
 | A list of rows (maps or tuples) | The list itself: no copy, no traversal. |
-| A keyword list whose values are equal-length lists | One map per index, keyed by the keys. A keyword list is read as columns before rows, as `table` reads a list; `[{:a, [1]}]` is therefore one column. A keyword list whose lists differ in length is rows. |
-| A map whose values are equal-length lists | One map per index, keyed by the map's keys (atoms or strings, as given). Any other non-empty plain map raises `ArgumentError`. |
-| `%Nx.Tensor{}` of rank 2 | One tuple per row in column order, which is what the default `Visualize.Shape.Line` accessors read. Rank 1 yields the list of values; any other rank raises `ArgumentError`. |
+| A keyword list whose values are equal-length columns | One map per index, keyed by the keys. A column is a list or a rank-1 `Nx` tensor (D-214), the two mixed freely. A keyword list is read as columns before rows, as `table` reads a list; `[{:a, [1]}]` is therefore one column. A keyword list whose columns differ in length is rows. |
+| A map whose values are equal-length columns | One map per index, keyed by the map's keys (atoms or strings, as given). A column is a list or a rank-1 `Nx` tensor (D-214): `%{x: Nx.tensor([1, 2]), y: Nx.tensor([4.0, 5.0])}` is the same table as `%{x: [1, 2], y: [4.0, 5.0]}`. Any other non-empty plain map, a column of another rank among them, raises `ArgumentError`. |
+| `%Nx.Tensor{}` of rank 2 | One tuple per row in column order, which is what the default `Visualize.Shape.Line` accessors read. Rank 1 yields the list of values; any other rank raises `ArgumentError`. A tuple has no names: a design reads a tensor through `named/2` (6.4). |
 | `%Visualize.Data.Delivery{}` | The rows of the source it carries, read by this same table: a delivery is a feed's answer, its rows beside the facts of the answer (§10.4, #535). |
 | Any other struct | `Table.to_rows/1`: rows keyed by the reader's column names as it spells them (Explorer: strings), whether the reader traverses by rows or by columns. A struct with no `Table.Reader` impl raises `Protocol.UndefinedError`; a reader answering `:none` raises `ArgumentError`. |
 
@@ -536,17 +536,22 @@ A source names its columns with atoms or strings and a caller writes accessors i
 
 **In the examples: the Data sources page** (#781, work item #834). `/sources`, under the *Charts* tab and linked from the gallery, draws data a host holds in the shapes it holds it, one panel each (`Examples.Sources`, `ExamplesWeb.SourcesLive`):
 
-- **an Nx tensor** (6.1, D-52): two hundred `Nx.Random` normal samples, a rank-2 tensor, drawn by the function components of `Visualize.Components` written directly in the page's HEEx — `<.scatter_plot data={tensor} x={&elem(&1, 0)} y={&elem(&1, 1)} />`, and a `<.line_chart>` of a rank-2 cumulative walk — with no LiveComponent and no design, the accessors reading the tensor's tuple rows. A design names fields, which a tensor's tuples do not have, so the page draws no design over a tensor and says why (#830);
+- **an Nx tensor** (6.1, D-52): two hundred `Nx.Random` normal samples, a rank-2 tensor, drawn by the function components of `Visualize.Components` written directly in the page's HEEx — `<.scatter_plot data={tensor} x={&elem(&1, 0)} y={&elem(&1, 1)} />`, and a `<.line_chart>` of a rank-2 cumulative walk — with no LiveComponent and no design, the accessors reading the tensor's tuple rows — and the same samples through a design, a `:point` mark over a slot declaring `fields: [:x, :y]`, bound to the tensor itself: the slot's declared order names its columns (6.4, D-214);
 - **an Explorer data frame** (6.1, 6.2): a frame of sales by region and quarter, its columns named by strings, bound as a design's slot like a list of maps — a bar per region from the `:sum` step (spec/14 §8, `sum(from(:sales), :revenue, by: :region, as: :total)`), the `y` axis measured in `{iso4217:USD}` (spec/05 §4.1, D-155) so its ticks are dollars, and the region labels set at `text_angle: -30` with `vertical_align: :middle` — and the same frame through `<.bar_chart>` and `<.pie_chart>`, accessors reading its string keys;
 - **a density** (spec/14 §8): the `:density` step over the tensor's samples placed in plot pixels, its rings filled by value through a `:sequential` color scale, under an outline drawn with the closed curves `:cardinal_closed` and `:basis_closed` (spec/04), each closing on itself;
 - **quantities** (spec/05 §4, D-155..D-157): for a row of quantities, `Visualize.Quantity.kind/1`, `bounds/1` — and `bounds(:ratio, "%")` — and `additivity/2` as a gauge and as a counter; the `metric_kind` the telemetry feeds of `/board` declare (§10.1); and currency as a unit, `Visualize.Unit.currency/1` of `{iso4217:USD}`, the minor units of `USD`, `JPY` and `BHD`, and the refusal to convert one currency into another;
 - **a window box** (§11.1, §11.2, D-168): a synthetic feed of six vehicles' positions over the last five minutes (`Examples.Sources.Vehicles`, `vehicle` its identity and `t` its window field), which supports only `:window`, asked for a box `%{ranges: %{t: [from, to], x: [0, 50]}, latest: true}`: `Visualize.Feed.finish/3` trims the time range, the `x` region and keeps each vehicle's latest row, drawn as three panels — the window, the region, the latest — with the rows each holds.
 
-### 6.4 Functions
+### 6.4 Names for a tensor's columns
+
+A rank-2 tensor's rows are tuples, and a tuple has no names: a reader that reads a field by its name (`get/2`, and every channel of a design, spec/14 §1.4) finds nothing in them. `Visualize.Data.Table.named/2` gives a tensor's columns names, so a design can read it (#830, D-214). `named(tensor, names)` with `names` a list of column names is `{:ok, %{name => column}}`: column `i` of a rank-2 tensor, as a list, under `Enum.at(names, i)`, and a rank-1 tensor as one column under the one name. It is the column map 6.1 reads, so `rows/1` of it is one map per row, keyed by the names as given. The names are the caller's and are taken in order; nothing is guessed from the data. A tensor whose width (`Nx.axis_size(tensor, 1)`, `1` for rank 1) is not the number of names is `{:error, {:width, length(names), width}}`, and a tensor of any other rank is `{:error, {:rank, rank}}`. Neither raises. Any source that is not a tensor is `{:ok, source}`, the same term, so a caller passes every source through it. The declarative layer calls it with a slot's declared fields where the slot binds (spec/14 §7.3). Nx remains optional: the call is made only when the source is a tensor, and a tensor exists only where Nx does.
+
+### 6.5 Functions
 
 | Function | Contract |
 |---|---|
 | `Visualize.Data.Table.rows/1` | The row list of any source in 6.1; a list of rows is returned as-is. |
+| `Visualize.Data.Table.named/2` | A tensor's columns under the given names, in order (6.4, D-214): `{:ok, column_map}`, `{:error, {:width, declared, given}}` or `{:error, {:rank, rank}}`; any other source is `{:ok, source}`. |
 | `Visualize.Data.Table.get/2` | The named column of a map row by either spelling of the name (6.2); `nil` when absent. |
 | `Visualize.Data.Table.key/2` | The key of a map row that spells the name — the name itself, or the key of its other spelling — or `nil` (6.2, D-195); makes no atom. |
 | `Visualize.Data.Table.accessor/1` | `fn row -> get(row, name) end`; a function is returned unchanged. |
