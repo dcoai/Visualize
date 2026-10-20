@@ -72,6 +72,48 @@ defmodule Visualize.Backend.ClipBlendTest do
       end
     end
 
+    test "a clip is in its element's user space: the element's transform first (D-211)" do
+      moved = %{square() | transform: Visualize.IR.Transform.translate(50, 40)}
+      element = Element.clip(moved, moved, :inside)
+
+      # The shape is geometry alone: clip/3 drops its transform.
+      assert element.clip.shape.transform == nil
+
+      assert [
+               {:version, 4},
+               :save,
+               {:transform, :translate, {50.0, 40.0}},
+               {:rects, [{10.0, 10.0, 40.0, 20.0}]},
+               {:clip, :inside},
+               :save,
+               {:style, _},
+               {:rects, _},
+               :fill,
+               :stroke,
+               :restore,
+               :restore
+             ] = records(element)
+
+      assert [
+               {:save, []},
+               {:translate, [50, 40]},
+               {:beginPath, []},
+               {:rect, _},
+               {:clip, []} | rest
+             ] =
+               Canvas.render_element(element, format: :commands)
+
+      refute Enum.any?(rest, &match?({:translate, _}, &1))
+
+      # SVG resolves the clip under the element's transform, so the shape carries none.
+      svg = Visualize.Render.to_string(element)
+      assert [_, clip] = Regex.run(~r{<clipPath[^>]*>(.*?)</clipPath>}, svg)
+      refute clip =~ "transform"
+
+      assert svg =~
+               ~r{<rect clip-path="url\(#vis-clip-[0-9a-z]+\)"[^>]* transform="translate\(50,40\)"}
+    end
+
     test "a blend is a record after its style record; an underscore is the word's hyphen" do
       assert [{:version, 4}, :save, {:style, _}, {:blend, "multiply"} | _] =
                records(square(Map.put(@style, :blend, :multiply)))
@@ -151,9 +193,13 @@ defmodule Visualize.Backend.ClipBlendTest do
       json = CanvasEncoders.draws(Canvas, elements)
       binary = CanvasEncoders.draws(CanvasBinary, elements)
       incremental = CanvasEncoders.draws(Visualize.Backend.CanvasIncremental, elements)
+      # The SVG-element encoder reads the clip-path, the mask and the mix-blend-mode the
+      # markup carries (spec/09 §4.7, D-211).
+      svg_elements = CanvasEncoders.draws(CanvasBinary.SVG, elements)
 
       assert Enum.map(json, state) == Enum.map(binary, state)
       assert Enum.map(binary, state) == Enum.map(incremental, state)
+      assert Enum.map(binary, state) == Enum.map(svg_elements, state)
 
       assert [
                [{"fill", ["nonzero"], "source-over"}, {"stroke", ["nonzero"], "source-over"}],
@@ -256,6 +302,30 @@ defmodule Visualize.Backend.ClipBlendTest do
     {:ok, chart} = Chart.from_map(design)
     frame = Frame.new(chart, sources: sources, size: {300, 160})
     Element.root(300, 160, children: [Frame.generate(frame, sources: sources, resolve: :literal)])
+  end
+
+  describe "a translated clipped element draws (D-211)" do
+    @describetag :js_resvg
+
+    # A square at translate(50, 40) clipped to itself: SVG resolves the clip under the
+    # transform, so the square draws where it stands; before D-211 the shape carried the
+    # transform too, and SVG clipped it twice as far off and drew nothing.
+    test "resvg inks its middle, and every canvas clips it where it is drawn" do
+      moved = %{square(%{fill: "#336699"}) | transform: Visualize.IR.Transform.translate(50, 40)}
+      tree = Element.root(120, 100, children: [Element.clip(moved, moved, :inside)])
+
+      {:ok, png, []} = Visualize.Render.to_png(tree, scale: 1, background: "#ffffff")
+
+      assert {0x33, 0x66, 0x99, _} =
+               Visualize.PNGPixels.pixel(Visualize.PNGPixels.decode(png), 80, 60)
+
+      for encoder <- [Canvas, CanvasBinary, CanvasBinary.SVG] do
+        assert [[%{"name" => "fill", "m" => m, "clips" => [_]}]] =
+                 CanvasEncoders.draws(encoder, [tree])
+
+        assert {m["e"], m["f"]} == {50, 40}, "#{inspect(encoder)} draws the square elsewhere"
+      end
+    end
   end
 
   describe "the binary canvas's picture is resvg's raster of the SVG" do

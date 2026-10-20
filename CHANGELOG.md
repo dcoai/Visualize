@@ -161,6 +161,28 @@ release it merely follows.
   mark's lines always sat `1.2em` apart, whatever its style said. A text that sets its own
   line height keeps it under a group that sets another. A mark whose style sets no line
   height draws as before.
+- **A clipped element with a transform draws where it stands** (#825, D-211). A clip is
+  now resolved in the clipped element's own user space, as SVG resolves it. Before, a
+  `:symbol` with `stroke: %{placement: :inside}` or `:outside` drew nothing at all, on SVG
+  and on both canvases: SVG clipped it to a shape twice as far from the origin, and the
+  canvases to one at the origin. *Affects* code that reads the markup or the streams of a
+  clipped, transformed element: `Visualize.IR.Element.clip/3` drops the shape's
+  `transform`, so the `<clipPath>` or `<mask>` holds the shape without one; the `:json`
+  commands and the binary stream write the element's transform before the clip. An
+  element without a transform is unchanged, byte for byte.
+- **The SVG-element binary encoder draws what the IR encoder draws** (#825, D-211).
+  `Visualize.Backend.CanvasBinary.encode_element/2` on a `Visualize.SVG.Element` tree now
+  draws `<ellipse>`, `<polygon>` and `<polyline>`; a `clip-path` or `mask` that names a
+  `clipPath` of one shape or a white-and-black mask; `mix-blend-mode`, as an attribute or
+  in the inline `style`; a `filter` of one `feDropShadow` or `feGaussianBlur`; and
+  `vector-effect="non-scaling-stroke"`. Before, each was dropped without a word. What it
+  still does not draw is listed in spec/09 §4.7, among them a `url(#…)` fill, which draws
+  black. A stream that clips or blends is version 4, one that filters version 2.
+- **`Visualize.SVG.Element.from_ir/1` writes what `Visualize.Backend.SVG` writes** for a
+  clip, a blend, an effect and a vector effect (#825). Before, it wrote no clip, and wrote
+  `blend="multiply"`, `effect="shadow"`, `vector-effect="non_scaling_stroke"`,
+  `<fe_drop_shadow>` and `line-height`, which SVG ignores. A clipped element converted on
+  its own comes back as a `:g` holding the clip's definition and the element.
 
 ## [0.7.0] — 2026-10-20
 

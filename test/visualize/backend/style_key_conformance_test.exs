@@ -171,15 +171,18 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
 
   # -- spec/09 §4.8 ---------------------------------------------------------------------
 
-  # The table's rows, as each key or wildcard it names and whether it is drawn.
+  # The table's rows, as each key or wildcard it names and whether it is drawn on the binary
+  # stream and on the SVG-element stream (D-211).
   defp table do
     [_, section] = String.split(File.read!("spec/09-rendering-backends.md"), "### 4.8 ", parts: 2)
     [section | _] = String.split(section, ~r/^##+ /m, parts: 2)
+    drawn? = &(not String.starts_with?(&1, "**not drawn**"))
 
-    for [_, keys, status] <- Regex.scan(~r/^\| ([^|]*`[^|]*) \| ([^|]+) \|$/m, section),
+    for [_, keys, binary, svg] <-
+          Regex.scan(~r/^\| ([^|]*`[^|]*) \| ([^|]+) \| ([^|]+) \|$/m, section),
         [_, key] <- Regex.scan(~r/`([a-z_.*]+)`/, keys),
         into: %{},
-        do: {key, not String.starts_with?(status, "**not drawn**")}
+        do: {key, {drawn?.(binary), drawn?.(svg)}}
   end
 
   defp row(table, key) do
@@ -289,6 +292,25 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
 
   defp json(tree), do: IO.iodata_to_binary(Canvas.render_element(tree, format: :json))
   defp binary(tree), do: CanvasBinary.encode_element!(tree)
+  defp svg_elements(tree), do: CanvasEncoders.svg_elements(tree)
+
+  # A draw's color alphas times its global alpha, which it then leaves out: the SVG-element
+  # encoder folds an element's opacities into its colors (spec/09 §4.7), the IR encoders set
+  # the global alpha around the draw, and the two paint the same.
+  defp folded(draws) do
+    for {name, state} <- draws do
+      {alpha, state} = Map.pop(state, "globalAlpha", 1)
+
+      {name,
+       Map.new(state, fn
+         {k, {r, g, b, a}} when k in ["fillStyle", "strokeStyle"] ->
+           {k, {r, g, b, a / 255 * alpha}}
+
+         other ->
+           other
+       end)}
+    end
+  end
 
   describe "every style key the schema lists (spec/09 §4.8)" do
     test "has a row in spec/09 §4.8 and a sample here" do
@@ -325,7 +347,7 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
           {key, row(table, key), tree(without, :literal), tree(with, :literal)}
         end
 
-      for {key, drawn, without, with} <- cases do
+      for {key, {drawn, _on_svg}, without, with} <- cases do
         if drawn do
           assert binary(with) != binary(without),
                  "SVG draws #{key}; the binary stream does not carry it (spec/09 §4.8)"
@@ -337,9 +359,20 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
         end
       end
 
+      # The SVG-element encoder, given the markup `from_ir/1` makes of the tree (D-211).
+      for {key, {_drawn, on_svg}, without, with} <- cases do
+        if on_svg do
+          assert svg_elements(with) != svg_elements(without),
+                 "SVG draws #{key}; the SVG-element stream does not carry it (spec/09 §4.8)"
+        else
+          assert svg_elements(with) == svg_elements(without),
+                 "spec/09 §4.8 says #{key} is not drawn on the SVG-element stream, but it carries it"
+        end
+      end
+
       base = tree(%{}, :literal)
-      trees = [base | for({_key, true, _without, with} <- cases, do: with)]
-      names = ["the base style" | for({key, true, _, _} <- cases, do: key)]
+      trees = [base | for({_key, {true, _}, _without, with} <- cases, do: with)]
+      names = ["the base style" | for({key, {true, _}, _, _} <- cases, do: key)]
       on_json = CanvasEncoders.draws(Canvas, trees)
       on_binary = CanvasEncoders.draws(CanvasBinary, trees)
 
@@ -350,6 +383,19 @@ defmodule Visualize.Backend.StyleKeyConformanceTest do
         assert alike?(j, b),
                "#{name}: the binary canvas draws otherwise than the :json canvas\n" <>
                  "json:   #{inspect(j, limit: :infinity)}\nbinary: #{inspect(b, limit: :infinity)}"
+      end
+
+      trees = [base | for({_key, {_, true}, _without, with} <- cases, do: with)]
+      names = ["the base style" | for({key, {_, true}, _, _} <- cases, do: key)]
+      on_json = CanvasEncoders.draws(Canvas, trees)
+      on_svg = CanvasEncoders.draws(CanvasBinary.SVG, trees)
+
+      for {name, json_draws, svg_draws} <- Enum.zip([names, on_json, on_svg]) do
+        {j, s} = {folded(drawn(json_draws)), folded(drawn(svg_draws))}
+
+        assert alike?(j, s),
+               "#{name}: the SVG-element stream draws otherwise than the :json canvas\n" <>
+                 "json: #{inspect(j, limit: :infinity)}\nsvg:  #{inspect(s, limit: :infinity)}"
       end
     end
   end

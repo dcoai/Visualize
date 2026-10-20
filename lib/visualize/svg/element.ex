@@ -75,18 +75,39 @@ defmodule Visualize.SVG.Element do
   Converts an IR.Element to an SVG.Element.
   """
   @spec from_ir(IR.Element.t()) :: t()
-  def from_ir(%IR.Element{} = ir) do
-    tag = ir_type_to_tag(ir.type)
-    attrs = build_attrs(ir)
-    children = Enum.map(ir.children, &from_ir/1)
-    content = ir.content
+  # A clipped element converted alone is its definition and itself, which SVG keeps side by
+  # side, in a group (spec/02 §5.1); among siblings the two stand side by side as the
+  # backend writes them.
+  def from_ir(%IR.Element{clip: %{}} = ir),
+    do: %__MODULE__{tag: :g, attrs: %{}, children: clipped(ir), content: nil}
 
+  # `vector-effect` does not inherit (spec/09 §2.5, spec/14 §3.9): a group's is written on
+  # each child that does not set its own, never on the group, as the backend writes it.
+  def from_ir(%IR.Element{type: :group, style: %{vector_effect: effect} = style} = ir) do
+    children =
+      Enum.map(ir.children, &%{&1 | style: Map.put_new(&1.style, :vector_effect, effect)})
+
+    from_ir(%{ir | style: Map.delete(style, :vector_effect), children: children})
+  end
+
+  def from_ir(%IR.Element{} = ir) do
     %__MODULE__{
-      tag: tag,
-      attrs: attrs,
-      children: children,
-      content: content
+      tag: ir_type_to_tag(ir.type),
+      attrs: build_attrs(ir),
+      children: Enum.flat_map(ir.children, &converted/1),
+      content: ir.content
     }
+  end
+
+  defp converted(%IR.Element{clip: %{}} = ir), do: clipped(ir)
+  defp converted(%IR.Element{} = ir), do: [from_ir(ir)]
+
+  # A clipped element: its definition — a `clipPath` or a `mask` — then the element
+  # referring to it, the definition the one `Visualize.Backend.SVG` writes (spec/09 §2.3).
+  defp clipped(%IR.Element{clip: %{shape: shape, keep: keep}} = ir) do
+    {tag, attrs, children, reference} = Visualize.Backend.SVG.clip_definition(shape, keep)
+    definition = %__MODULE__{tag: tag, attrs: attrs, children: Enum.map(children, &from_ir/1)}
+    [definition | converted(IR.Element.set_attrs(%{ir | clip: nil}, reference))]
   end
 
   defp ir_type_to_tag(:group), do: :g
@@ -94,6 +115,8 @@ defmodule Visualize.SVG.Element do
   defp ir_type_to_tag(:clip_path), do: :clipPath
   defp ir_type_to_tag(:linear_gradient), do: :linearGradient
   defp ir_type_to_tag(:radial_gradient), do: :radialGradient
+  defp ir_type_to_tag(:fe_drop_shadow), do: :feDropShadow
+  defp ir_type_to_tag(:fe_gaussian_blur), do: :feGaussianBlur
   defp ir_type_to_tag(type), do: type
 
   defp build_attrs(%IR.Element{} = ir) do
@@ -139,14 +162,13 @@ defmodule Visualize.SVG.Element do
 
   defp style_to_attrs(style) when map_size(style) == 0, do: %{}
 
+  # Each key an attribute but those the backend writes none of, a `nil` left out, and the
+  # blend and the effect as the backend writes them (spec/02 §5.1, D-211).
   defp style_to_attrs(style) do
-    style
-    |> Enum.map(fn {key, value} ->
-      svg_key = style_key_to_svg(key)
-      svg_value = style_value_to_svg(value)
-      {svg_key, svg_value}
-    end)
-    |> Map.new()
+    for {key, value} <- style,
+        value != nil and not Visualize.Backend.SVG.not_attribute?(key),
+        into: Visualize.Backend.SVG.effect_attrs(style),
+        do: {style_key_to_svg(key), style_value_to_svg(key, value)}
   end
 
   defp style_key_to_svg(:stroke_width), do: :"stroke-width"
@@ -164,6 +186,10 @@ defmodule Visualize.SVG.Element do
   defp style_key_to_svg(:stop_color), do: :"stop-color"
   defp style_key_to_svg(:stop_opacity), do: :"stop-opacity"
   defp style_key_to_svg(key), do: key
+
+  defp style_value_to_svg(:vector_effect, :non_scaling_stroke), do: "non-scaling-stroke"
+  defp style_value_to_svg(_key, %IR.Paint{} = paint), do: IR.Paint.url(paint)
+  defp style_value_to_svg(_key, value), do: style_value_to_svg(value)
 
   defp style_value_to_svg(:none), do: "none"
   defp style_value_to_svg(:current_color), do: "currentColor"

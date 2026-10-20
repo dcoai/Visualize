@@ -497,10 +497,12 @@ defmodule Visualize.IR.Element do
   @spec clip(t(), t(), :inside | :outside) :: t()
   def clip(%__MODULE__{} = element, %__MODULE__{} = shape, keep)
       when keep in [:inside, :outside] do
-    # The shape is geometry alone: its style, its own clip and its data attributes go.
+    # The shape is geometry alone, in the element's own user space (spec/02 §2.1, D-211):
+    # its style, its transform, its own clip and its data attributes go.
     geometry = %{
       shape
       | style: %{},
+        transform: nil,
         clip: nil,
         attrs: Map.filter(shape.attrs, fn {k, _} -> is_atom(k) end)
     }
