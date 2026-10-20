@@ -332,7 +332,9 @@ The table and the steps above describe a scale without a zone. A zoned scale rea
 
 ### 9.1 Struct
 
-`%Visualize.Scale.Band{domain: [], range: [0, 1], padding_inner: 0, padding_outer: 0, align: 0.5, round?: false}`.
+`%Visualize.Scale.Band{domain: [], range: [0, 1], padding_inner: 0, padding_outer: 0, align: 0.5, round?: false, slots: %{}, layout: {0, 0, 0, false}}`.
+
+`slots` and `layout` are derived, never set: every setter of §9.2 and `domain/2` and `range/2` lays the bands out again (d3-scale's `rescale`) and stores the result — `layout` is `{start, step, bandwidth, reverse}` of §9.3 and `slots` maps each category to its band's slot along the ascending range — so a scale is built once and read many times (#809, D-202). `inspect/1` leaves both out. A struct built by hand rather than by the setters has no slots, and places nothing.
 
 ### 9.2 Setters and Guards
 
@@ -354,6 +356,8 @@ This is d3-scale's `rescale` (D-17). With `n = length(domain)`, `pi = padding_in
 - Otherwise `step = (hi − lo) / max(1, n − pi + 2·po)`, floored when `round?`; `start = lo + (hi − lo − step · (n − pi)) · align`; `bandwidth = step · (1 − pi)`; when `round?`, `start` and `bandwidth` are rounded (from the floored step) and every position is therefore an integer-valued float.
 - Position of the category at index `i` is `start + i · step`, or `start + (n − 1 − i) · step` when `reverse`: a descending range lays the bands out in reverse with positive `step` and `bandwidth`.
 - `step/1` returns `step` (floored when `round?`); `bandwidth/1` returns `bandwidth`.
+
+**`apply/2`, `bandwidth/1` and `step/1` cost the same whatever the domain's length** (#809): `apply/2` reads the category's slot from `slots` and returns `start + slot · step`; nothing of the domain is walked and nothing of the layout is recomputed per call. Before #809, `apply/2` found the category with a linear search and recomputed the layout on every call, so a chart of `n` items over a domain of `n` categories cost `O(n²)`: a 50 × 50 grid spent a fifth of its drawing searching its two domains. A category repeated in the domain keeps its first index's slot, as the linear search found it, and categories equal by `==` are one category: an integral float is looked up as its integer, so `1` finds `1.0` and `-0.0` finds `0`. `test/visualize/scale/band_test.exs` holds `apply/2` over a 1,000-category domain to the reductions of one over 10.
 
 `apply/2` returns `nil` for a value not in the domain. `ticks/2` returns the domain; `invert/2` returns `nil`; `nice/1`, `clamp/2` identity. Under `round?` the rounded start plus the rounded bandwidth MAY overshoot the range by under one unit, as in D3.
 
