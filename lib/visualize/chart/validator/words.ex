@@ -200,6 +200,7 @@ defmodule Visualize.Chart.Validator.Words do
   end
 
   def words({:invalid_for, type}), do: "is not read by #{inspect(type)}"
+  def words({:same_name, key}), do: "is the same name as `#{key}`"
 
   def words({:unsupported_version, v}) do
     "version #{inspect(v)} is not supported; the current version is #{Migration.current()}"

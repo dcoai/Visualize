@@ -5,7 +5,9 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   drawing it landed on — handed to the page's `Visualize.Components.Chart`, which resolves
   it to a `Visualize.Event` whose item is the cell's declared identity (D-167, D-170) and
   sends it to the page, whose clause makes the next game. A seeded game is played so to a
-  win and to a loss.
+  win and to a loss, on SVG, the JSON canvas and the binary canvas: a click resolves to
+  the same event on each (D-197). A right-click, a long-press or the Menu key sends
+  `flag` (D-199), which flags in either mode.
 
   The examples carry no LiveView test DOM, so the page and its component are driven as
   LiveView drives them — mount, update, the event, the message — as the other pages'
@@ -14,6 +16,7 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   use ExUnit.Case, async: true
 
   import Phoenix.ConnTest
+  import Phoenix.LiveViewTest, only: [render_component: 2]
 
   alias Examples.Minesweeper
   alias ExamplesWeb.MinesweeperLive
@@ -37,12 +40,12 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   # A click on the cell `{r, c}`: the page's chart drawn by its component, the click the
   # hook sends on that drawing — the rect mark (the frame's first) and the cell's ordinal
   # among the rows, row by row — resolved by the component, and its message handled by the
-  # page. `modifiers` are the keys held.
-  defp click(socket, {r, c}, modifiers \\ []) do
+  # page. `modifiers` are the keys held; `event` is `"flag"` for a secondary gesture.
+  defp click(socket, {r, c}, modifiers \\ [], event \\ "cell_click") do
     component = drawn(socket)
 
     params = %{
-      "event" => "cell_click",
+      "event" => event,
       "frame" => "main",
       "mark" => 0,
       "row" => r * 9 + c,
@@ -60,10 +63,21 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
   defp drawn(socket) do
     {:ok, component} = Component.mount(%Socket{assigns: %{__changed__: %{}}})
 
-    {:ok, component} =
-      Component.update(%{id: "mines-chart", chart: socket.assigns.chart}, component)
-
+    {:ok, component} = Component.update(assigns(socket), component)
     component
+  end
+
+  # The component's assigns as the page renders them, on the page's backend.
+  defp assigns(socket) do
+    {_name, _label, opts} =
+      Enum.find(MinesweeperLive.backends(), &(elem(&1, 0) == socket.assigns.backend))
+
+    Map.merge(%{id: "mines-chart", chart: socket.assigns.chart}, Map.new(opts))
+  end
+
+  defp on(socket, backend) do
+    {:noreply, socket} = MinesweeperLive.handle_event("backend", %{"backend" => backend}, socket)
+    socket
   end
 
   # The game the page plays, opened as the page opens it, to read the layout from.
@@ -93,7 +107,7 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
 
     # 81 cells, each keyed to its row and carrying its identity, row and column together;
     # the motion it has plays through MotionHook.
-    assert length(Regex.scan(~r/<rect data-datum="state"/, html)) == 81
+    assert length(Regex.scan(~r/<rect data-datum="state count"/, html)) == 81
     assert html =~ ~s(data-vis-id="main.1.col=4&amp;row=4")
     assert html =~ ~s(phx-hook="MotionHook")
   end
@@ -140,7 +154,17 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
     refute_received {:visualize_event, _, _}
   end
 
-  test "a seeded game played to a win" do
+  test "a seeded game played to a win, on every backend" do
+    for {backend, _label, _opts} <- MinesweeperLive.backends() do
+      game = layout()
+      socket = page() |> on(backend) |> click(@first)
+
+      safe = for cell <- Minesweeper.cells(game), not Minesweeper.mine?(game, cell), do: cell
+      socket = Enum.reduce(safe, socket, &click(&2, &1))
+
+      assert socket.assigns.game.status == :won, backend
+    end
+
     game = layout()
     socket = click(page(), @first)
 
@@ -207,6 +231,42 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
 
     {:noreply, socket} = MinesweeperLive.handle_event("new", %{}, socket)
     assert {:noreply, ^socket} = MinesweeperLive.handle_info({:tick, started}, socket)
+  end
+
+  test "a secondary gesture flags in either mode, and Enter's key is a click's" do
+    socket = click(page(), @first)
+
+    # The flag event, as a right-click, a long-press or the Menu key sends it, in Reveal mode.
+    socket = click(socket, {0, 0}, [], "flag")
+    assert states(socket)[{0, 0}] == "flagged"
+    socket = click(socket, {0, 0}, [], "flag")
+    assert states(socket)[{0, 0}] == "hidden"
+
+    # The keyboard reaches every cell, by row and column, each keyed as its click (D-198).
+    keys = Visualize.Hooks.Keyboard.attrs(socket.assigns.chart)["data-keyboard-points"]
+    assert keys =~ ~s("grid":true)
+    assert keys =~ ~s({"event":"cell_click","context":"flag","frame":"main","mark":0,"row":0})
+    assert keys =~ ~s(cells, 41 of 81: col 4, row 4, revealed")
+  end
+
+  test "the backend switch draws on a canvas with the hit index, and refuses a name it lacks" do
+    socket = page()
+
+    for {backend, hook} <- [{"json", "CanvasChart"}, {"binary", "CanvasBinaryChart"}] do
+      html = socket |> on(backend) |> assigns() |> then(&render_component(Component, &1))
+      assert html =~ ~s(phx-hook="#{hook}"), backend
+
+      assert html =~
+               ~s(data-vis-items="[{&quot;event&quot;:&quot;cell_click&quot;,&quot;context&quot;:&quot;flag&quot;),
+             backend
+
+      assert html =~ ~s(phx-hook="KeyboardHook"), backend
+    end
+
+    assert on(socket, "webgl").assigns.backend == "svg"
+    html = build_conn() |> get("/minesweeper?seed=#{@seed}") |> html_response(200)
+    assert html =~ ~s(phx-value-backend="binary")
+    refute html =~ "Drawn as SVG only"
   end
 
   test "the design validates, and its cells require the identity the schema declares" do

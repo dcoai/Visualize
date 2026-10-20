@@ -81,8 +81,13 @@ defmodule Visualize.Hooks.Keyboard do
 
   defp key(nil), do: "null"
 
-  defp key(%{event: event, frame: frame, mark: mark, row: row}),
-    do: ~s({"event":#{string(event)},"frame":#{string(frame)},"mark":#{mark},"row":#{row}})
+  defp key(%{event: event, context: context, frame: frame, mark: mark, row: row}) do
+    ~s({"event":#{nullable(event)},"context":#{nullable(context)},) <>
+      ~s("frame":#{string(frame)},"mark":#{mark},"row":#{row}})
+  end
+
+  defp nullable(nil), do: "null"
+  defp nullable(text), do: string(text)
 
   defp cell(nil), do: "null"
   defp cell({column, row}), do: "[#{column},#{row}]"
@@ -226,6 +231,8 @@ defmodule Visualize.Hooks.Keyboard do
           case 'End': next = this.clamp(at ? at.series : 0, Infinity); break;
           case 'Escape': this.escape(); return;
           case 'Enter': this.pick(at, e); return;
+          case 'ContextMenu': this.context(at, e); return;
+          case 'F10': if (e.shiftKey) this.context(at, e); return;
           default: return;
         }
         e.preventDefault();
@@ -261,7 +268,7 @@ defmodule Visualize.Hooks.Keyboard do
         if (!at) return;
         const point = this.series[at.series].points[at.index];
         const key = point[3];
-        if (key) {
+        if (key && key.event) {
           if (e && e.preventDefault) e.preventDefault();
           const where = point[0] === null || point[1] === null ? null : { x: point[0], y: point[1] };
           VisualizeItems.send(this, this.tooltip(), Object.assign({}, key, { at: where }), e);
@@ -313,11 +320,26 @@ defmodule Visualize.Hooks.Keyboard do
         this.push(this.pickName, { series: best.series, index: best.index });
       },
 
+      // The Menu key or Shift+F10 at a point whose mark declares a context event: that
+      // event, as a right-click on the item (D-199). Shift+F10's Shift is the gesture's, so
+      // it is not among the modifiers sent. Anywhere else the key is the browser's.
+      context(at, e) {
+        if (!at) return;
+        const point = this.series[at.series].points[at.index];
+        const key = point[3];
+        if (!key || !key.context) return;
+        if (e && e.preventDefault) e.preventDefault();
+        const where = point[0] === null || point[1] === null ? null : { x: point[0], y: point[1] };
+        const held = { altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.key !== 'F10' && e.shiftKey };
+        VisualizeItems.send(this, this.tooltip(),
+          { event: key.context, frame: key.frame, mark: key.mark, row: key.row, at: where }, held);
+      },
+
       // The point a key names, as `{series, index}`; null when no point carries it.
       find(key) {
         for (let s = 0; s < this.series.length; s++) {
           const i = this.series[s].points.findIndex((p) => p[3] && p[3].mark === key.mark &&
-            p[3].row === key.row && p[3].frame === key.frame && p[3].event === key.event);
+            p[3].row === key.row && p[3].frame === key.frame);
           if (i >= 0) return { series: s, index: i };
         }
         return null;

@@ -5,7 +5,8 @@ defmodule Visualize.Hooks.Tooltip.Items do
   # under the same `data-mark` — as its shape in the chart's user units, so `TooltipHook`
   # resolves a click on a canvas, which draws no element, to the key the SVG would send.
   #
-  # One entry per mark, in drawing order: `{"event", "frame", "mark", "items"}`, and each
+  # One entry per mark, in drawing order: `{"event", "context", "frame", "mark", "items"}`
+  # — the click's and the secondary gesture's names, either `null` (D-199) — and each
   # item `[row, kind, …]`, also in drawing order, so the last item under the pointer is
   # the one drawn on top:
   #
@@ -44,10 +45,14 @@ defmodule Visualize.Hooks.Tooltip.Items do
   defp marks(%Element{} = el, m, paint, acc) do
     {m, paint} = enter(el, m, paint)
 
-    case {Map.get(el.attrs, "data-tooltip-event"), Map.get(el.attrs, "data-mark")} do
-      {event, mark} when is_binary(event) and is_binary(mark) ->
+    event = Map.get(el.attrs, "data-tooltip-event")
+    context = Map.get(el.attrs, "data-tooltip-context-event")
+
+    case {event || context, Map.get(el.attrs, "data-mark")} do
+      {name, mark} when is_binary(name) and is_binary(mark) ->
         entry = %{
           event: event,
+          context: context,
           frame: Map.get(el.attrs, "data-frame"),
           mark: String.to_integer(mark),
           items: []
@@ -241,8 +246,8 @@ defmodule Visualize.Hooks.Tooltip.Items do
 
   # -- JSON -------------------------------------------------------------------------------
 
-  defp mark_json(%{event: event, frame: frame, mark: mark, items: items}) do
-    ~s({"event":#{string(event)},"frame":#{string(frame)},"mark":#{mark},"items":[) <>
+  defp mark_json(%{event: event, context: context, frame: frame, mark: mark, items: items}) do
+    ~s({"event":#{string(event)},"context":#{string(context)},"frame":#{string(frame)},"mark":#{mark},"items":[) <>
       Enum.map_join(items, ",", &item_json/1) <> "]}"
   end
 
