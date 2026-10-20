@@ -148,6 +148,15 @@ defmodule Visualize.Chart.Fragment do
   def singular(:composite), do: nil
   def singular(key), do: Map.get(@singular, key)
 
+  @doc false
+  # The node kind a singular wrapper's body is written, read and named as (spec/14 §19.2,
+  # #823): the kind it names, a gradient's the paint it stores. `nil` for any other key — a
+  # composite and a board among them, whose bodies are no node of the design schema.
+  @spec body_kind(term()) :: atom() | nil
+  def body_kind(:gradient), do: :paint
+  def body_kind(key) when key in [:composite, :board], do: nil
+  def body_kind(key), do: Map.get(@singular, key)
+
   @doc """
   A singular-wrapper body as `{kind, body}` — `%{style: %{…}}` is `{:style, %{…}}` — or `nil`
   for anything else, a composite included (spec/14 §19.2).

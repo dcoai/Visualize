@@ -208,15 +208,9 @@ defmodule Visualize.Chart.Migration do
         type
 
       nil ->
-        case kind == :design && Visualize.Chart.Fragment.singular(k) do
-          :gradient ->
-            {:node, :paint}
-
-          wrapped when wrapped in [:style, :scale, :source, :axis, :mark, :label, :var] ->
-            {:node, wrapped}
-
-          _other ->
-            :term
+        case kind == :design && Visualize.Chart.Fragment.body_kind(k) do
+          body when is_atom(body) and body not in [nil, false] -> {:node, body}
+          _other -> :term
         end
     end
   end
