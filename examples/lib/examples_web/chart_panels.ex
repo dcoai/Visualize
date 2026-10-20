@@ -12,20 +12,20 @@ defmodule ExamplesWeb.ChartPanels do
 
   use Phoenix.Component
 
-  alias ExamplesWeb.ChartPanels.{DarkMode, Explain, Units, Zoom}
+  alias ExamplesWeb.ChartPanels.{DarkMode, Explain, Formats, Units, Zoom}
 
-  @panels %{dark_mode: DarkMode, zoom: Zoom, units: Units, explain: Explain}
+  @panels %{dark_mode: DarkMode, zoom: Zoom, units: Units, explain: Explain, formats: Formats}
 
   @doc """
   The panels of `module`'s page: those it names, in its order — none for a module without
-  `panels/0` — then `:explain`, which every chart page carries.
+  `panels/0` — then `:explain` and `:formats`, which every chart page carries.
   """
   @spec of(module()) :: [atom()]
   def of(module) do
     named =
       if Code.ensure_loaded?(module) and function_exported?(module, :panels, 0) do
         for name <- module.panels() do
-          (Map.has_key?(@panels, name) and name != :explain) ||
+          (Map.has_key?(@panels, name) and name not in [:explain, :formats]) ||
             raise ArgumentError, "#{inspect(module)} names no chart panel #{inspect(name)}"
 
           name
@@ -34,7 +34,7 @@ defmodule ExamplesWeb.ChartPanels do
         []
       end
 
-    named ++ [:explain]
+    named ++ [:explain, :formats]
   end
 
   @doc """
@@ -89,6 +89,7 @@ defmodule ExamplesWeb.ChartPanels do
       <Zoom.panel :if={name == :zoom} id={"chart-panel-#{name}-#{@slug}"} state={state} />
       <Units.panel :if={name == :units} id={"chart-panel-#{name}-#{@slug}"} state={state} />
       <Explain.panel :if={name == :explain} id={"chart-panel-#{name}-#{@slug}"} state={state} />
+      <Formats.panel :if={name == :formats} id={"chart-panel-#{name}-#{@slug}"} state={state} />
     <% end %>
     """
   end

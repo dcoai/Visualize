@@ -35,8 +35,8 @@ defmodule ExamplesWeb.ChartPanelsTest do
   doctest ExamplesWeb.ChartPanels.Explain
 
   test "a module names its panels, and every page explains" do
-    assert ChartPanels.of(ColorsChart) == [:dark_mode, :explain]
-    assert ChartPanels.of(BarChart) == [:explain]
+    assert ChartPanels.of(ColorsChart) == [:dark_mode, :explain, :formats]
+    assert ChartPanels.of(BarChart) == [:explain, :formats]
 
     assert html(mounted("colors")) =~ ~s(id="chart-panel-dark_mode-colors")
     refute html(mounted("bar")) =~ "chart-panel-dark_mode"
@@ -100,16 +100,16 @@ defmodule ExamplesWeb.ChartPanelsTest do
       ChartLive.handle_event("chart_panel", %{"panel" => "dark_mode", "scheme" => "dark"}, s)
 
     {:noreply, kept} = ChartLive.handle_event("theme", %{"theme" => "dark"}, s)
-    assert [dark_mode: %{scheme: :dark}, explain: _] = kept.assigns.panels
+    assert [dark_mode: %{scheme: :dark}, explain: _, formats: _] = kept.assigns.panels
 
     {:noreply, stepped} = ChartLive.handle_params(%{"chart" => "paints"}, "/chart/paints", s)
-    assert [explain: %{open: false}] = stepped.assigns.panels
+    assert [explain: %{open: false}, formats: %{open: false}] = stepped.assigns.panels
     {:noreply, back} = ChartLive.handle_params(%{"chart" => "colors"}, "/chart/colors", stepped)
-    assert [dark_mode: %{scheme: :system}, explain: _] = back.assigns.panels
+    assert [dark_mode: %{scheme: :system}, explain: _, formats: _] = back.assigns.panels
   end
 
   test "the Composition chart is drawn under ZoomHook, its budget line non-scaling" do
-    assert ChartPanels.of(CompositionChart) == [:zoom, :units, :explain]
+    assert ChartPanels.of(CompositionChart) == [:zoom, :units, :explain, :formats]
     s = mounted("composition")
     page = html(s)
 
