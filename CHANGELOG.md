@@ -115,6 +115,22 @@ release it merely follows.
   affected. The build now fails on any Hex security advisory or retired package in the
   library's lock or the examples app's (`mix vis.advisories`, D-207), unless an entry in
   `audit/advisories_allowlist.exs` allows it with a reason.
+- **The binary canvas draws a stroke's placement and a blend as SVG does** (#788, #817,
+  D-208). Before, on `CanvasBinaryChart`, which is every compiled chart's canvas, a stroke
+  with `placement: :inside` or `:outside` drew at twice its width, centered on the edge.
+  A `blend:` such as `:multiply` was dropped. Both now draw as they do on SVG and on the
+  `:json` canvas. A stream that clips or blends begins with a **version 4** record
+  (`0x00 0x04`) and carries the new `clip` (`0x56`) and `blend` (`0x57`) records, which
+  the shipped hooks read. *Affects* a page that runs an older copy of the hook JavaScript
+  against such a stream: it throws at the version record instead of drawing the stroke
+  doubled. Rebuild your assets with this version's hooks. Every stream that neither clips
+  nor blends is unchanged, byte for byte. `Visualize.Backend.CanvasBinary.Decoder.decode/1`
+  returns `{:clip, :inside | :outside}` and `{:blend, word}` for the new records.
+- **A blend whose atom has an underscore is written as its CSS word** (#817). On SVG and on
+  the `:json` canvas, `blend: :color_dodge` is now `color-dodge`, which `mix-blend-mode`
+  and `globalCompositeOperation` accept. Before, they got `color_dodge` and ignored it. The
+  schema's own blends (`:multiply`, `:screen`, `:overlay`, `:darken`, `:lighten`) are
+  unchanged.
 
 ## [0.7.0] — 2026-10-20
 

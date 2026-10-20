@@ -20,6 +20,8 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     [{at, {r, g, b, a}}]}}` and `{:box, {x, y, w, h}}` (spec/09 §4.3.11–4.3.13)
   - `{:transform, :translate, {tx, ty}}`, `{:transform, :translate_scale, {tx, ty, sx, sy}}`,
     `{:transform, :matrix, {a, b, c, d, e, f}}`
+  - the version 4 records `{:clip, :inside | :outside}` and `{:blend, word}`, the word the
+    CSS `mix-blend-mode` one (§4.3.18, §4.3.19, #788)
   - `:save`, `:restore`, `:fill`, `:stroke`
   - `{:incremental, mode, dx, dy, {x, y, w, h}, [{{x, y, w, h}, records}]}` and `{:full_redraw, viewport, records}`
     for the `0x60` records of `Visualize.Backend.CanvasIncremental`
@@ -142,7 +144,7 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
        do: decode(rest, [{:transform, :matrix, {a, b, c, d, e, f}} | acc])
 
   # Version 2 (spec/09 §4.3.11–4.3.13): the version, a paint, a box.
-  defp decode(<<0x00, version::8, rest::binary>>, acc) when version in [1, 2, 3],
+  defp decode(<<0x00, version::8, rest::binary>>, acc) when version in [1, 2, 3, 4],
     do: decode(rest, [{:version, version} | acc])
 
   defp decode(<<0x00, version::8, _rest::binary>>, _acc),
@@ -213,6 +215,18 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     decode(rest, [{:paint_state, state} | acc])
   end
 
+  # Version 4 (spec/09 §4.3.18–4.3.19, #788): the current path made the clip, and a blend.
+  defp decode(<<0x56, keep::8, rest::binary>>, acc),
+    do: decode(rest, [{:clip, Map.fetch!(%{0x01 => :inside, 0x02 => :outside}, keep)} | acc])
+
+  defp decode(<<0x57, mode::8, rest::binary>>, acc) do
+    words = ~w(multiply screen overlay darken lighten color-dodge color-burn hard-light
+               soft-light difference exclusion hue saturation color luminosity)
+
+    word = if mode in 1..length(words), do: Enum.at(words, mode - 1), else: unknown_blend(mode)
+    decode(rest, [{:blend, word} | acc])
+  end
+
   defp decode(<<0x30, rest::binary>>, acc), do: decode(rest, [:save | acc])
   defp decode(<<0x31, rest::binary>>, acc), do: decode(rest, [:restore | acc])
   defp decode(<<0x40, rest::binary>>, acc), do: decode(rest, [:fill | acc])
@@ -234,6 +248,9 @@ defmodule Visualize.Backend.CanvasBinary.Decoder do
     mode = Enum.at([:full_redraw, :scroll_x, :scroll_y, :scroll_xy], mode)
     decode(rest, [{:incremental, mode, dx, dy, viewport(viewport), regions} | acc])
   end
+
+  defp unknown_blend(mode),
+    do: raise(ArgumentError, "canvas binary blend mode #{mode} is not known")
 
   defp viewport(
          <<x::little-float-32, y::little-float-32, w::little-float-32, h::little-float-32>>

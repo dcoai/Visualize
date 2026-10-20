@@ -46,11 +46,14 @@ const Stub = (() => {
   // Every context method is a recorder; every assignment is recorded and kept. The
   // transform is tracked beside, and `getTransform()` reads it without being recorded.
   // `save` and `restore` scope the assigned properties as they scope the transform, as a
-  // browser's context does (#679), the line dash `setLineDash` sets among them (#744).
+  // browser's context does (#679), the line dash `setLineDash` sets among them (#744), and
+  // the clips: each `clip` call's fill rule, which `restore` takes back (#788).
   function context(canvas) {
     // A context starts with the values a browser's does (#653): a motion reads them as targets.
     const props = {globalAlpha: 1, lineWidth: 1, fillStyle: "#000000", strokeStyle: "#000000",
-      lineCap: 'butt', lineJoin: 'miter', lineDash: []};
+      lineCap: 'butt', lineJoin: 'miter', lineDash: [], globalCompositeOperation: 'source-over',
+      shadowColor: 'rgba(0, 0, 0, 0)', shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0,
+      filter: 'none', clips: []};
     const state = {m: identity(), stack: []};
     const saved = [];
     return new Proxy(props, {
@@ -80,12 +83,16 @@ const Stub = (() => {
             Object.assign(props, back);
           }
           if (name === 'setLineDash') props.lineDash = [...args[0]];
+          if (name === 'clip') props.clips = [...props.clips, args[0] || 'nonzero'];
           transforms(state, name, args);
           if (drawCalls.has(name)) {
             draws.push({on: canvas.id, name, m: {...state.m}, globalAlpha: props.globalAlpha,
               fillStyle: props.fillStyle, strokeStyle: props.strokeStyle,
               lineWidth: props.lineWidth, lineCap: props.lineCap, lineJoin: props.lineJoin,
-              lineDash: props.lineDash});
+              lineDash: props.lineDash, globalCompositeOperation: props.globalCompositeOperation,
+              shadowColor: props.shadowColor, shadowBlur: props.shadowBlur,
+              shadowOffsetX: props.shadowOffsetX, shadowOffsetY: props.shadowOffsetY,
+              filter: props.filter, clips: props.clips});
           }
           log.push({on: canvas.id, kind: 'call', name, args});
         },

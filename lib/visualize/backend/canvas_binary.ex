@@ -35,6 +35,8 @@ defmodule Visualize.Backend.CanvasBinary do
   | `motion` | `0x53` | `length:u16` then the UTF-8 JSON of a motion span's arguments, `[id, box, transitions]` |
   | `motion_end` | `0x54` | the motion span ends |
   | `paint_state` | `0x55` | version 3: `flags:u8`, then the fill's and the stroke's alpha (f32), the cap and the join (u8), the dash (`count:u8` and f32 lengths) the flags select |
+  | `clip` | `0x56` | version 4: `keep:u8`, the current path the clip, `0x01` inside it, `0x02` outside it (even-odd against a ±100000 rectangle) |
+  | `blend` | `0x57` | version 4: `mode:u8`, the composite operation, one of the CSS `mix-blend-mode` words but `normal` |
 
   The point-list record is used only for a path that is one `M` followed by `L`
   commands, and the cubic run only for one `M` followed by `C` commands — the shapes
@@ -55,6 +57,12 @@ defmodule Visualize.Backend.CanvasBinary do
   (spec/09 §4.3.17, D-180): its style record is followed by a `paint_state` record, which
   the hook keeps as state that `save` and `restore` scope. A stream without one is as it
   was.
+
+  A tree that clips an element or a style that blends makes the stream **version 4**
+  (spec/09 §4.3.18–4.3.19, D-208): a clipped element is `save`, its clip shape's geometry
+  record, a `clip` record and its own records, then `restore`, in the order the `:json`
+  commands give it; a blend is a `blend` record after the style record. A stream without
+  either is as it was.
 
   ## Performance
 
@@ -229,6 +237,10 @@ defmodule Visualize.Backend.CanvasBinary do
   def segment(%Element{attrs: %{"data-vis-id" => _}} = element, ctx, inherited),
     do: {:leaf, do_encode_element(element, ctx, inherited)}
 
+  # A clipped element, a group among them, is drawn inside its clip: one segment (D-208).
+  def segment(%Element{clip: %{}} = element, ctx, inherited),
+    do: {:leaf, do_encode_element(element, ctx, inherited)}
+
   def segment(%Element{type: :group, children: children, style: style} = group, ctx, inherited) do
     transform =
       if group.transform && group.transform.operations != [],
@@ -316,28 +328,27 @@ defmodule Visualize.Backend.CanvasBinary do
     ])
   end
 
+  # A clipped element (spec/02 §2.1, spec/09 §4.3.18, D-208): its clip shape's geometry made
+  # the clip — kept inside it, or outside it — around the element's own records, inside a
+  # save/restore pair, as the `:json` commands draw it.
+  defp do_encode_element(%Element{clip: %{shape: shape, keep: keep}} = element, ctx, inherited) do
+    IO.iodata_to_binary([
+      <<Opcodes.save()::8>>,
+      clip_geometry(shape, ctx.precision),
+      <<Opcodes.clip()::8, Map.fetch!(%{inside: 0x01, outside: 0x02}, keep)::8>>,
+      do_encode_element(%{element | clip: nil}, ctx, inherited),
+      <<Opcodes.restore()::8>>
+    ])
+  end
+
   defp do_encode_element(%Element{type: :path, path: path} = element, ctx, inherited),
     do: leaf(element, do_encode_path(path.commands, ctx.precision), ctx, inherited)
 
-  defp do_encode_element(%Element{type: :circle, attrs: attrs} = element, ctx, inherited) do
-    %{cx: cx, cy: cy, r: r} = attrs
+  defp do_encode_element(%Element{type: :circle} = element, ctx, inherited),
+    do: leaf(element, circle_record(element), ctx, inherited)
 
-    circle =
-      <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
-        r::little-float-64>>
-
-    leaf(element, circle, ctx, inherited)
-  end
-
-  defp do_encode_element(%Element{type: :rect, attrs: attrs} = element, ctx, inherited) do
-    %{x: x, y: y, width: w, height: h} = attrs
-
-    rect =
-      <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
-        w::little-float-64, h::little-float-64>>
-
-    leaf(element, rect, ctx, inherited)
-  end
+  defp do_encode_element(%Element{type: :rect} = element, ctx, inherited),
+    do: leaf(element, rect_record(element), ctx, inherited)
 
   # A group's style is the state its children draw in, scoped by the save/restore, and
   # what they inherit for their draw records (spec/09 §4.4, D-111).
@@ -402,6 +413,28 @@ defmodule Visualize.Backend.CanvasBinary do
       setup -> IO.iodata_to_binary([<<Opcodes.save()::8>>, setup, body, <<Opcodes.restore()::8>>])
     end
   end
+
+  defp circle_record(%Element{attrs: %{cx: cx, cy: cy, r: r}}),
+    do:
+      <<Opcodes.circles()::8, 1::little-32, cx::little-float-64, cy::little-float-64,
+        r::little-float-64>>
+
+  defp rect_record(%Element{attrs: %{x: x, y: y, width: w, height: h}}),
+    do:
+      <<Opcodes.rects()::8, 1::little-32, x::little-float-64, y::little-float-64,
+        w::little-float-64, h::little-float-64>>
+
+  # A clip shape's geometry alone — the record it is drawn with, no style, no transform, no
+  # draw (spec/09 §4.3.18): a path, a rectangle or a circle as itself, an ellipse or a
+  # polygon as the path it is; a shape of another type is not one spec/02 §2.1 allows.
+  defp clip_geometry(%Element{type: :path, path: path}, precision),
+    do: do_encode_path(path.commands, precision)
+
+  defp clip_geometry(%Element{type: :rect} = shape, _precision), do: rect_record(shape)
+  defp clip_geometry(%Element{type: :circle} = shape, _precision), do: circle_record(shape)
+
+  defp clip_geometry(%Element{type: type} = shape, precision) when type in [:ellipse, :polygon],
+    do: clip_geometry(%{shape | type: :path, path: as_path(shape)}, precision)
 
   # A line is a two-point path; a polyline a move and its lines; a polygon the same,
   # closed; an ellipse four cubic quarter-arcs with the control distance κ of each radius.
@@ -516,7 +549,10 @@ defmodule Visualize.Backend.CanvasBinary do
     {flags, parts} = paint_field(style[:stroke], 0x40, paints, {flags, parts})
 
     <<Opcodes.style()::8, flags::8>> <>
-      IO.iodata_to_binary(parts) <> effect_record(style) <> paint_state_record(style)
+      IO.iodata_to_binary(parts) <>
+      effect_record(style) <>
+      paint_state_record(style) <>
+      blend_record(style)
   end
 
   # Version 2: a shadow's radius, offset and color, or a blur's radius, after the style record
@@ -534,6 +570,34 @@ defmodule Visualize.Backend.CanvasBinary do
     do: <<Opcodes.effect()::8, 0x02::8, style[:effect_radius] || 3::little-float-32>>
 
   defp effect_record(_style), do: <<>>
+
+  # Version 4: the composite operation a style's blend draws with, after the style record
+  # (spec/09 §4.3.19, D-208): the byte of its CSS `mix-blend-mode` word, an IR atom's
+  # underscore the word's hyphen; nothing for `:normal`, an absent blend or another word.
+  @blends %{
+    multiply: 0x01,
+    screen: 0x02,
+    overlay: 0x03,
+    darken: 0x04,
+    lighten: 0x05,
+    color_dodge: 0x06,
+    color_burn: 0x07,
+    hard_light: 0x08,
+    soft_light: 0x09,
+    difference: 0x0A,
+    exclusion: 0x0B,
+    hue: 0x0C,
+    saturation: 0x0D,
+    color: 0x0E,
+    luminosity: 0x0F
+  }
+
+  defp blend_record(style) do
+    case Map.get(@blends, style[:blend]) do
+      nil -> <<>>
+      mode -> <<Opcodes.blend()::8, mode::8>>
+    end
+  end
 
   @caps %{butt: 0, round: 1, square: 2}
   @joins %{miter: 0, round: 1, bevel: 2}
@@ -630,15 +694,22 @@ defmodule Visualize.Backend.CanvasBinary do
     end
   end
 
-  # The least version whose records the stream uses (spec/09 §4.2): 3 with a paint's
-  # state (D-180), 2 with a paint, an effect or a motion span (D-175), else 1.
+  # The least version whose records the stream uses (spec/09 §4.2): 4 with a clip or a
+  # blend (D-208), 3 with a paint's state (D-180), 2 with a paint, an effect or a motion
+  # span (D-175), else 1.
   defp version(element, paints) do
     cond do
+      clips_or_blends?(element) -> 4
       paint_state?(element) -> 3
       paints != [] or effects?(element) or spans?(element) -> 2
       true -> 1
     end
   end
+
+  defp clips_or_blends?(%Element{clip: clip, style: style, children: children}),
+    do:
+      clip != nil or Map.has_key?(@blends, style[:blend]) or
+        Enum.any?(children, &clips_or_blends?/1)
 
   defp effects?(%Element{style: style, children: children}),
     do: style[:effect] in [:shadow, :blur] or Enum.any?(children, &effects?/1)
