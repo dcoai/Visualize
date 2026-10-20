@@ -136,11 +136,11 @@ defmodule ExamplesWeb.ThemePickerTest do
         ChartLive.handle_event("chart_panel", %{"panel" => "explain", "action" => "open"}, s)
 
       {:noreply, s} = ChartLive.handle_event("pick", %{"node" => "marks[0]"}, s)
-      [explain: was] = s.assigns.panels
+      [explain: was, formats: _] = s.assigns.panels
       assert was.svg =~ "var(--vis-series-1, #{hd(Visualize.Theme.default().series)})"
 
       {:noreply, s} = ChartLive.handle_event("theme", %{"theme" => "sunrise"}, s)
-      [explain: now] = s.assigns.panels
+      [explain: now, formats: _] = s.assigns.panels
       sunrise = Themes.theme("sunrise")
 
       assert now.open and now.node == "marks[0]" and now.look != nil
@@ -162,7 +162,7 @@ defmodule ExamplesWeb.ThemePickerTest do
 
       # A step to another chart keeps the theme for its explain panel too.
       {:noreply, s} = ChartLive.handle_params(%{"chart" => "line"}, "/chart/line", s)
-      [explain: line] = s.assigns.panels
+      [explain: line, formats: _] = s.assigns.panels
 
       assert ExamplesWeb.ChartPanels.Explain.event(line, %{"action" => "open"}).svg =~
                hd(sunrise.series)
