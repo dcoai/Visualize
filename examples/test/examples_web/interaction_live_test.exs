@@ -388,6 +388,7 @@ defmodule ExamplesWeb.InteractionLiveTest do
     {"panel-legend", "Legend toggling", "legend-chart"},
     {"panel-motion", "Motion by identity", "motion-chart"},
     {"panel-animations", "Animations", "animations-chart-0"},
+    {"panel-force", "A simulation, live", "force-graph"},
     {"panel-minesweeper", "Minesweeper", "mines-panel-chart"},
     {"panel-code", "The design and the markup", nil}
   ]

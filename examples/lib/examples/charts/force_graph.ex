@@ -79,7 +79,9 @@ defmodule Examples.Charts.ForceGraph do
         tick -> 100 + 12 * :math.sin(tick * 0.1)
       end
 
-    layout = [nodes: :nodes, strength: -400, distance: distance]
+    # A running chart keeps the layout warm (#527, D-132): each tick reheats it to `alpha`
+    # and runs `ticks` iterations from where it was. These are the defaults, written out.
+    layout = [nodes: :nodes, strength: -400, distance: distance, alpha: 0.3, ticks: 3]
 
     design =
       Design.fold([
@@ -112,7 +114,9 @@ defmodule Examples.Charts.ForceGraph do
 
     # A graph is two tables: the links are the mark's source, the nodes a second one the
     # step reads through `nodes:` (spec/14 §5.4.3), so a laid-out node carries its group.
-    layout = [nodes: :nodes, strength: -400, distance: 100]
+    # Animated, the layout is warm: each tick reheats it to `alpha` and runs `ticks`
+    # iterations from where it was (#527), so the graph settles in place.
+    layout = [nodes: :nodes, strength: -400, distance: 100, alpha: 0.3, ticks: 3]
 
     {:ok, design} =
       Visualize.Chart.compose([
