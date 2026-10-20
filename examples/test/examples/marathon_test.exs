@@ -218,7 +218,9 @@ defmodule Examples.MarathonTest do
         assert pack =~ ~r{<g class="#{class}"[^>]* clip-path="url\(#vis-clip-}, class
       end
 
-      # Every marker is drawn, the off-plot ones clipped, each with its inset label.
+      # Every marker is drawn under the clip, each with its inset label. Off the inset its
+      # circle is culled (#839), but not its label, whose size is a theme slot a stylesheet
+      # may set: all 26 are sent.
       assert length(Regex.scan(~r{>mile \d+<}, pack)) == 26
       # The course frame clips nothing but its tiles.
       [_, course] = String.split(svg, ~s(class="frame frame-course"), parts: 2)
@@ -258,6 +260,85 @@ defmodule Examples.MarathonTest do
       end
     end
   end
+
+  describe "the inset culls what it cannot show (#839)" do
+    test "it sends only the course near the inset, not all of it" do
+      applied = Design.applied(Marathon, animation_tick: 120)
+      pack = Visualize.Chart.Frame.generate(applied.frames["pack"], sources: applied.sources)
+      [line] = for %{style: %{class: "mark mark-line"}} = m <- pack.children, do: m
+      [%{path: path}] = line.children
+      assert length(path.commands) < length(Course.rows()) / 4
+    end
+
+    test "the Canvas page ticks its compiled charts rather than compiling them again" do
+      # Labeled marks in four frames: compared raw, the page found them changed on every
+      # tick and compiled the whole design again, the inset's course with it (#839).
+      state = Examples.Frames.prepare(Marathon, [animation_tick: 0], :canvas)
+      {design, _sources} = Marathon.design(animation_tick: 7)
+      assert Examples.Frames.same_marks?(state.compiled, design)
+
+      moved = update_in(design.marks, &Enum.reverse/1)
+      refute Examples.Frames.same_marks?(state.compiled, moved)
+    end
+
+    @tag :resvg
+    test "the culled inset is pixel for pixel the unculled clipped one" do
+      for tick <- [0, 60, 120, 230] do
+        culled = Design.applied(Marathon, animation_tick: tick)
+        assert pixels(culled) == pixels(unculled(tick)), "tick #{tick}"
+      end
+    end
+  end
+
+  # The design with the inset unclipped and so unculled; `pixels/1` then gives each of its
+  # marks the plot's clip, as `clip: true` does before it culls, so only the cull differs.
+  defp unculled(tick) do
+    {design, sources} = Marathon.design(animation_tick: tick)
+    design = put_in(design, [:frames, "pack", :clip], false)
+
+    {:ok, applied} =
+      Visualize.Chart.apply(design, sources: sources, size: Marathon.size())
+
+    applied
+  end
+
+  defp pixels(%{frames: %{"pack" => %{plot: plot}}} = applied) do
+    clip =
+      Visualize.IR.Element.clip(
+        Visualize.IR.Element.group([]),
+        Visualize.IR.Element.rect(0, 0, plot.width, plot.height),
+        :inside
+      ).clip
+
+    root = Visualize.Chart.generate(applied, root: true, resolve: :literal)
+    root = clip_pack(root, clip)
+
+    {:ok, png, _tile_warnings} =
+      Visualize.Render.to_png(root,
+        scale: 1,
+        background: "#ffffff",
+        font_dirs: ["../test/support/fonts"],
+        system_fonts: false,
+        generic_families: [sans_serif: "DejaVu Sans"]
+      )
+
+    png
+  end
+
+  # Each mark group of the pack frame, clipped to the plot; a group already clipped keeps it.
+  defp clip_pack(%{style: %{class: "frame frame-pack"}} = frame, clip) do
+    %{
+      frame
+      | children:
+          Enum.map(frame.children, fn
+            %{style: %{class: "mark " <> _}, clip: nil} = mark -> %{mark | clip: clip}
+            other -> other
+          end)
+    }
+  end
+
+  defp clip_pack(%{children: children} = element, clip),
+    do: %{element | children: Enum.map(children, &clip_pack(&1, clip))}
 
   defp projection(applied, frame) do
     projection = applied.frames[frame].projection

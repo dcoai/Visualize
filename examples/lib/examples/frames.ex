@@ -236,14 +236,28 @@ defmodule Examples.Frames do
   # The fresh compilation carries the last one's state (`carry/2`): the easing, and the
   # force graph's warm layout, which is what makes it one graph moving rather than a new
   # graph every frame (#527, D-132).
+  #
+  # The marks are compared as the compiled charts hold them: normalized, as application
+  # reads the design (an inline label's text parsed, #839), and each frame's in design
+  # order. Compared raw, a labeled mark never matched, nor did a design of several frames
+  # whose drawing order was not its marks' order, and every tick compiled the chart again.
   defp recompiled(compiled, design, module, opts, backend) do
-    drawn = Enum.flat_map(compiled, fn {_name, one} -> one.chart.marks end)
-
-    if design.marks == drawn do
+    if same_marks?(compiled, design) do
       compiled
     else
       carry(%{compiled: compiled}, prepare(module, opts, backend)).compiled
     end
+  end
+
+  @doc false
+  # Whether the compiled charts draw the design's marks, as `recompiled/5` asks.
+  @spec same_marks?([{String.t(), Compiled.t()}], map()) :: boolean()
+  def same_marks?(compiled, design) do
+    marks = Chart.from_map!(design).marks
+
+    Enum.all?(compiled, fn {name, one} ->
+      one.chart.marks == Enum.filter(marks, &(Map.get(&1, :frame, name) == name))
+    end)
   end
 
   defp svg_frame(svg, sources) do

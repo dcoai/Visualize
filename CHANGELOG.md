@@ -74,6 +74,12 @@ release it merely follows.
   before, and the default `0` changes nothing.
   *Before:* a host source widened by hand. *After:*
   `fit: %{data: "runners", fields: ["lon", "lat"], min_span: 500}`.
+- **A clipped frame sends only what can show** (#839). With `clip: true`, a line's
+  runs of points far past one edge of the plot are cut to their two ends, and points,
+  shapes and labels wholly outside are left out, before the frame is drawn, so an inset
+  over a long route builds and sends a few hundred points rather than thousands. The
+  picture is pixel for pixel the same. A text sized by a theme slot, which a stylesheet
+  may change, is always kept. A frame without `clip` is unchanged.
 - **A drawing in keyed segments: `Visualize.Render.Segments`** (#813, D-203). `svg/2`,
   `json/2` and `binary/2` cut a backend's output into one segment per item and one per
   group start and end. Each segment is keyed by the item's identity, or by what it draws,
