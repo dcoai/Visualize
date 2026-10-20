@@ -2,7 +2,7 @@ defmodule ExamplesWeb.ChartPanels.Formats do
   @moduledoc """
   **Stored forms** (spec/14 §9, §11, §19.7, §12.6, #781, work item #820): the chart's design
   as the JSON a host stores — `Visualize.Chart.to_json/1`, read back by `from_json/2` —
-  one of its styles as a fragment a host's library keeps (`Visualize.Chart.Fragment`), and
+  one of its styles as the entry a host's library keeps (`Visualize.Chart.Fragment`), and
   the chart's own document refused two ways before a key of it is decoded: stamped a newer
   version, and holding a misspelled and a retired tag (D-182).
 
@@ -47,13 +47,14 @@ defmodule ExamplesWeb.ChartPanels.Formats do
     }
   end
 
-  # The first of the design's named styles, as a fragment a host's library stores: a
-  # design's `styles` holding that one entry. `nil` for a design that names none.
+  # The first of the design's named styles, as the entry a host's library stores: the
+  # singular `%{style: node}`, its typed values tagged as the design writes them (#823).
+  # `nil` for a design that names none.
   defp fragment(%Chart{styles: styles}) when map_size(styles) == 0, do: nil
 
   defp fragment(%Chart{styles: styles}) do
     name = styles |> Map.keys() |> Enum.min()
-    entry = %{styles: %{name => Map.fetch!(styles, name)}}
+    entry = %{style: Map.fetch!(styles, name)}
     {:ok, json} = Fragment.to_json(entry)
 
     %{
@@ -121,15 +122,15 @@ defmodule ExamplesWeb.ChartPanels.Formats do
         <div class="formats-json"><Highlight.code code={@state.forms.json} /></div>
 
         <%= if @state.forms.fragment do %>
-          <h4>A style, as a fragment</h4>
+          <h4>A style, as a library entry</h4>
           <p class="panel-note">
             The style <code>{inspect(@state.forms.fragment.name)}</code>
             as a library keeps it, <code>Visualize.Chart.Fragment.to_json/1</code>;
             <code>from_json/2</code>
             reads it back <strong class="formats-fragment-round-trip">{if @state.forms.fragment.round_trip,
               do: "equal",
-              else: "different"}</strong>. A stored style entry, the singular <code>%&#123;style: …&#125;</code>, cannot be written yet when it holds a typed
-            value (#823).
+              else: "different"}</strong>. The entry is the singular <code>%&#123;style: …&#125;</code>, and its body is the JSON the
+            same style is inside the design.
           </p>
           <div class="formats-json"><Highlight.code code={@state.forms.fragment.json} /></div>
         <% end %>
