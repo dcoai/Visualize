@@ -201,6 +201,27 @@ defmodule Examples.MarathonTest do
     end
   end
 
+  describe "the basemaps stay inside their frames (#826, D-209)" do
+    test "each fitted frame's tiles are clipped to that frame's plot" do
+      applied = Design.applied(Marathon, [])
+      svg = Marathon.render([])
+
+      for frame <- ["course", "pack"] do
+        %{width: w, height: h} = applied.frames[frame].plot
+        [_, group] = String.split(svg, ~s(class="frame frame-#{frame}"), parts: 2)
+
+        [id] =
+          Regex.run(~r{<g class="mark mark-tiles" clip-path="url\(#([^)]+)\)"}, group,
+            capture: :all_but_first
+          )
+
+        [rect] = Regex.run(~r{<clipPath id="#{id}"><rect [^>]*>}, group)
+        assert rect =~ ~s(width="#{w / 1}") or rect =~ ~s(width="#{trunc(w)}")
+        assert rect =~ ~s(height="#{h / 1}") or rect =~ ~s(height="#{trunc(h)}")
+      end
+    end
+  end
+
   defp projection(applied, frame) do
     projection = applied.frames[frame].projection
     {projection.scale, projection.translate}

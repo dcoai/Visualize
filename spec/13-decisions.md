@@ -2802,3 +2802,13 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - SVG blends an element as a whole, and the canvas blends its fill and then its stroke. Where the two overlap they differ, as a paint's opacity already does (D-180).
 - What the binary stream still does not draw is listed in one table, text and class. A style key added to the schema fails the guard until either the binary canvas draws it or the table says why not.
 - The SVG-element encoder (`CanvasBinary.SVG`) reads no `clip-path`, `mask` or `mix-blend-mode`. It resolves no references, and no IR render goes through it. The audit on #788 lists it, and #825 proposes it.
+## 209. D-209 — A `:tiles` mark is clipped to its frame's plot area
+
+**Context.** #826, found building #819. A `:tiles` mark covers the plot area with whole slippy-map tiles (spec/07 §8.3), so the tiles at its edges reach up to one tile past it on every side, and nothing clipped them. A chart of one frame hid this: the frame filled the `<svg>`, and the document's edge clipped the tiles. In a design of several frames (spec/14 §2.8, §4.2), one frame's basemap painted over its neighbors. *Grandma's Marathon* showed it at 960 × 620. The course frame's tiles ran 148 px into the right-hand column. The pack inset's reached 314 px below its plot, over the clock and the standings. Both covered the course frame's legend. The same held on a hybrid page, because each plot's backdrop document is the design's full size with the frame translated inside it.
+
+**Decision.** The `:tiles` mark's group carries a clip to the plot's rectangle, `[0, 0, width, height]` in the plot area's coordinates (`Visualize.IR.Element.clip/3`, `:inside`). The clip is on the group rather than on the images alone. A hybrid page splits the group, the images going to the backdrop document and the attribution to the SVG layer (spec/14 §12.4, D-120), and each half keeps the clip. The attribution lies inside the plot already, so the clip changes nothing for it. Only the tiles are clipped. A frame-wide clip of every mark (a frame `clip: true`) is a separate proposal. It is #828, which the binary canvas clip record of D-208 makes possible.
+
+**Consequences.**
+- No tile paints outside its own frame's plot, on SVG or in a hybrid page's backdrop. Frames in a box can each carry a basemap.
+- A single-frame basemap chart draws exactly what it drew, since the document's edge was already clipping it. Its markup gains a `<clipPath>` definition and a `clip-path` on the tiles group, and the goldens that hold one change accordingly.
+- The binary canvas stream has no clip record, but it carries no tiles either: an image has no record there (spec/09 §4.4). So nothing on the binary canvas changes.
