@@ -179,14 +179,51 @@ defmodule Examples.MarathonTest do
       refute tiles(svg_a, "pack") == tiles(svg_b, "pack")
     end
 
-    test "the inset's stretch of course holds every runner" do
-      {_design, sources} = Marathon.design(animation_tick: 120)
-      field = Enum.map(sources["field"], &{&1["lon"], &1["lat"]})
+    test "the inset fits the runners themselves, every one inside its padding (#828)" do
+      for tick <- [0, 40, 120, 180] do
+        {_design, sources} = Marathon.design(animation_tick: tick)
+        assert Map.keys(sources) |> Enum.sort() == ["clock", "course", "markers", "runners"]
+        pack = Design.applied(Marathon, animation_tick: tick).frames["pack"]
+        %{width: w, height: h} = pack.plot
 
-      for runner <- sources["runners"] do
-        nearest = field |> Enum.map(&meters(&1, {runner["lon"], runner["lat"]})) |> Enum.min()
-        assert nearest < 10, runner["bib"]
+        points =
+          for r <- sources["runners"],
+              do: Visualize.Geo.Projection.project(pack.projection, r["lon"], r["lat"])
+
+        # Inside the 32 px padding, and touching it on the tighter axis unless the span binds.
+        assert Enum.all?(points, fn {x, y} ->
+                 x >= 32 - 1.0e-6 and x <= w - 32 + 1.0e-6 and y >= 32 - 1.0e-6 and
+                   y <= h - 32 + 1.0e-6
+               end),
+               "tick #{tick}"
       end
+    end
+
+    test "the inset keeps an extent of at least 500 m when everyone stands at the finish" do
+      {_design, sources} = Marathon.design(animation_tick: 230)
+      assert Enum.all?(sources["runners"], & &1["finished"])
+      pack = Design.applied(Marathon, animation_tick: 230).frames["pack"]
+      %{width: w, height: h} = pack.plot
+      {_, top} = Visualize.Geo.Projection.invert(pack.projection, w / 2, 32)
+      {_, bottom} = Visualize.Geo.Projection.invert(pack.projection, w / 2, h - 32)
+      assert_in_delta meters({0, top}, {0, bottom}), 500, 2
+    end
+
+    test "the inset draws the whole course and every marker, clipped to its plot (D-212)" do
+      svg = Marathon.render(animation_tick: 120)
+      [_, pack] = String.split(svg, ~s(class="frame frame-pack"), parts: 2)
+      [pack | _] = String.split(pack, ~s(class="frame frame-), parts: 2)
+
+      for class <- ["mark mark-line", "mark mark-circle", "mark mark-symbol"] do
+        assert pack =~ ~r{<g class="#{class}"[^>]* clip-path="url\(#vis-clip-}, class
+      end
+
+      # Every marker is drawn, the off-plot ones clipped, each with its inset label.
+      assert length(Regex.scan(~r{>mile \d+<}, pack)) == 26
+      # The course frame clips nothing but its tiles.
+      [_, course] = String.split(svg, ~s(class="frame frame-course"), parts: 2)
+      [course | _] = String.split(course, ~s(class="frame frame-), parts: 2)
+      assert length(Regex.scan(~r{clip-path=}, course)) == 1
     end
 
     test "the animation runs the clock forward from five minutes in, round to 2:40:00" do

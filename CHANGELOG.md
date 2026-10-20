@@ -67,6 +67,13 @@ release it merely follows.
   *Before:* `%{kind: :geo, projection: %{fit: %{data: "field", …}}}` over a source the
   host cut to the inset. *After:* `%{kind: :geo, clip: true, projection: %{…}}` over the
   whole data.
+- **A `fit` can keep a minimum span: `min_span`** (#828, #832, D-212), in meters on the
+  ground. A `:geo` frame fitted to points that coincide, such as runners all at the finish,
+  had no extent to fit and zoomed in without bound. With `min_span: 500` the view shows at
+  least 500 m across both axes, about the points' center; points that reach farther fit as
+  before, and the default `0` changes nothing.
+  *Before:* a host source widened by hand. *After:*
+  `fit: %{data: "runners", fields: ["lon", "lat"], min_span: 500}`.
 - **A drawing in keyed segments: `Visualize.Render.Segments`** (#813, D-203). `svg/2`,
   `json/2` and `binary/2` cut a backend's output into one segment per item and one per
   group start and end. Each segment is keyed by the item's identity, or by what it draws,

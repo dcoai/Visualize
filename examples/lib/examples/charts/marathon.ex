@@ -23,12 +23,10 @@ defmodule Examples.Charts.Marathon do
     women. The legend is keyed by bib and name, and the bib's letter is the division.
   - **`pack`**: the inset, a second `:geo` frame **fitted to the field**. At the whole
     course's zoom the leaders are within a pixel or a few of each other for much of the
-    race. The inset's fit reads the stretch of course from the last runner to the leader,
-    a little either side, so it follows the field and its projection and its tiles change
-    every tick. It fits that stretch rather than the runners' points alone for two
-    reasons. The runners all lie on the stretch, and a frame's marks are not clipped to
-    its plot (§5.2), so the course line it draws must not reach past the inset. The
-    stretch also keeps an extent when every runner stands at the finish.
+    race. The inset's fit reads the runners themselves, so it follows the field and its
+    projection and its tiles change every tick. It draws the whole course and every mile
+    marker under `clip: true` (§4.1, D-212), so only the stretch over the inset shows, and
+    its fit's `min_span` keeps an extent when every runner stands at the finish.
   - **`clock`**: the race clock, a text over a one-row source.
   - **`standings`**: one bar per runner of the miles covered, in order, the leader on top,
     each labeled with its gap to the leader in time.
@@ -68,8 +66,9 @@ defmodule Examples.Charts.Marathon do
   @first 300
   @last 9_600
 
-  # How far either side of the field the inset's stretch of course reaches, in meters.
-  @reach 250
+  # The least ground the inset shows, in meters: when the field is bunched at the start or
+  # stands at the finish, its points alone have no extent to fit (spec/14 §4.6, D-212).
+  @min_span 500
 
   @doc "The size this chart is drawn at when the caller names none (spec/14 §4.2)."
   def size, do: {960, 620}
@@ -100,7 +99,7 @@ defmodule Examples.Charts.Marathon do
           chart(meta: %{name: title(), description: [description()]}),
           layout(columns: [3, 2], rows: [6, 1, 6], gap: 8),
           source("course", ["lon", "lat"]),
-          source("markers", ["lon", "lat", "mile", "label"]),
+          source("markers", ["lon", "lat", "mile", "label", "inset"]),
           source("runners", [
             "bib",
             "runner",
@@ -111,8 +110,6 @@ defmodule Examples.Charts.Marathon do
             "place",
             "gap"
           ]),
-          source("field", ["lon", "lat"]),
-          source("field_markers", ["lon", "lat", "mile", "label"]),
           source("clock", ["clock"]),
           style("route", fill: :none, stroke: %{width: 3, opacity: 0.85}, curve: :linear),
           style("marker", fill: :background, stroke: %{color: :text, width: 1}),
@@ -131,8 +128,6 @@ defmodule Examples.Charts.Marathon do
        "course" => Course.rows(),
        "markers" => Course.markers(),
        "runners" => runners,
-       "field" => field(runners),
-       "field_markers" => field_markers(runners),
        "clock" => [%{"clock" => Field.duration(clock)}]
      }}
   end
@@ -171,23 +166,25 @@ defmodule Examples.Charts.Marathon do
     ]
   end
 
-  # The inset: the stretch of course the field is on, fitted afresh every tick.
+  # The inset: fitted to the runners afresh every tick, drawing the whole course and every
+  # marker under its clip, so only what lies over the inset shows (spec/14 §4.1, D-212).
   defp pack_frame do
     [
       geo(
         cell: [1, 0],
         margin: @zero_margin,
+        clip: true,
         projection: %{
           type: :mercator,
-          fit: %{data: "field", fields: ["lon", "lat"], padding: 20}
+          fit: %{data: "runners", fields: ["lon", "lat"], padding: 32, min_span: @min_span}
         }
       ),
       runner_colors(),
-      line(projection(from("field"), ["lon", "lat"]), %{x: :x, y: :y}, style: "route"),
-      circle(projection(from("field_markers"), ["lon", "lat"]), %{x: :x, y: :y},
+      line(projection(from("course"), ["lon", "lat"]), %{x: :x, y: :y}, style: "route"),
+      circle(projection(from("markers"), ["lon", "lat"]), %{x: :x, y: :y},
         options: %{radius: 3.5},
         style: "marker",
-        label: %{text: [{:field, "label"}], anchor: :left, style: "tag"}
+        label: %{text: [{:field, "inset"}], anchor: :left, style: "tag"}
       ),
       runner_marks(label: %{text: [{:field, "bib"}], anchor: :right, style: "tag"}),
       tiles(nil, %{}, tiles: @tiles)
@@ -247,32 +244,6 @@ defmodule Examples.Charts.Marathon do
     ]
   end
 
-  # The stretch of course from the last runner to the leader, `@reach` either side.
-  defp field(runners) do
-    {lo, hi} = extent(runners)
-    Course.stretch(lo - @reach, hi + @reach)
-  end
-
-  # The mile markers on that stretch.
-  defp field_markers(runners) do
-    {lo, hi} = extent(runners)
-    mile = Course.mile()
-
-    Course.markers()
-    |> Enum.filter(fn %{"mile" => m} -> m * mile >= lo - @reach and m * mile <= hi + @reach end)
-    |> Enum.map(&Map.put(&1, "label", inset_label(&1)))
-  end
-
-  # Every marker on the stretch is labeled there: the inset is zoomed in enough to read them.
-  defp inset_label(%{"label" => label}) when label in ["Start", "Finish"], do: label
-  defp inset_label(%{"mile" => mile}), do: "mile #{round(mile)}"
-
-  defp extent(runners) do
-    runners
-    |> Enum.map(&(&1["miles"] * Course.mile()))
-    |> Enum.min_max()
-  end
-
   def sample_code do
     ~S"""
     import Visualize.Chart.Build
@@ -294,7 +265,6 @@ defmodule Examples.Charts.Marathon do
           layout(columns: [3, 2], rows: [1, 1], gap: 8),
           source("course", ["lon", "lat"]),
           source("runners", ["runner", "lon", "lat", "miles", "place", "gap"]),
-          source("field", ["lon", "lat"]),
           style("route", fill: :none, stroke: %{width: 3}),
           style("runner", fill: {:field, "runner"}, stroke: %{color: :background}),
           in_frame("course", [
@@ -309,12 +279,13 @@ defmodule Examples.Charts.Marathon do
             tiles(nil, %{}, tiles: tiles)
           ]),
           in_frame("pack", [
-            # The inset follows the field: its fit reads the stretch of course the runners
-            # are on, which the host recomputes every tick, so its tiles move with it.
-            geo(cell: [1, 0], margin: %{top: 0, right: 0, bottom: 0, left: 0},
-              projection: %{type: :mercator, fit: %{data: "field", fields: ["lon", "lat"], padding: 20}}),
+            # The inset follows the field: its fit reads the runners, at least 500 m of
+            # ground, and it draws the whole course clipped to its plot (spec/14 §4.1).
+            geo(cell: [1, 0], margin: %{top: 0, right: 0, bottom: 0, left: 0}, clip: true,
+              projection: %{type: :mercator,
+                fit: %{data: "runners", fields: ["lon", "lat"], padding: 32, min_span: 500}}),
             colors,
-            line(projection(from("field"), ["lon", "lat"]), %{x: :x, y: :y}, style: "route"),
+            line(projection(from("course"), ["lon", "lat"]), %{x: :x, y: :y}, style: "route"),
             circle(dots, %{x: :x, y: :y}, options: %{radius: 5}, style: "runner"),
             tiles(nil, %{}, tiles: tiles)
           ]),
@@ -334,11 +305,9 @@ defmodule Examples.Charts.Marathon do
       )
 
     # course: about 4,200 %{"lon", "lat"} fixes; runners: one row per runner at the race
-    # clock, leader first; field: the stretch of course from the last runner to the leader.
+    # clock, leader first.
     {:ok, applied} =
-      Visualize.Chart.apply(design,
-        sources: %{"course" => course, "runners" => runners, "field" => field}
-      )
+      Visualize.Chart.apply(design, sources: %{"course" => course, "runners" => runners})
 
     Visualize.Chart.render(applied)
     """

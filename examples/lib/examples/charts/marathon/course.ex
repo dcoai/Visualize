@@ -218,29 +218,10 @@ defmodule Examples.Charts.Marathon.Course do
   end
 
   @doc """
-  The stretch of the course from `from` to `to` meters, as rows: the point at each end and
-  every fix between. The pack inset fits and draws this stretch.
-  """
-  @spec stretch(number(), number()) :: [map()]
-  def stretch(from, to) do
-    from = max(from, 0.0)
-    to = min(to, @length)
-
-    inner =
-      for i <- (index(from) + 1)..index(to)//1,
-          {m, lon, lat} = elem(@fixes, i),
-          m > from and m < to,
-          do: {lon, lat}
-
-    Enum.map([at(from) | inner] ++ [at(to)], fn {lon, lat} ->
-      %{"lon" => Float.round(lon, 6), "lat" => Float.round(lat, 6)}
-    end)
-  end
-
-  @doc """
   The mile markers as rows: the start, miles 1 to 26 and the finish, each at its distance
-  along the course, with `mile` and a `label` every five miles and at the start and finish
-  (`nil` on the others).
+  along the course, with `mile`, a `label` every five miles and at the start and finish
+  (`nil` on the others), and an `inset` label on every one, which the pack inset draws
+  where it is zoomed in enough to read them all.
   """
   @spec markers() :: [map()]
   def markers do
@@ -256,10 +237,14 @@ defmodule Examples.Charts.Marathon.Course do
         "lon" => Float.round(lon, 6),
         "lat" => Float.round(lat, 6),
         "mile" => Float.round(meters / @mile, 1),
-        "label" => label
+        "label" => label,
+        "inset" => inset(meters, label)
       }
     end
   end
+
+  defp inset(_meters, label) when label in ["Start", "Finish"], do: label
+  defp inset(meters, _label), do: "mile #{round(meters / @mile)}"
 
   defp point(i) do
     {_m, lon, lat} = elem(@fixes, i)
