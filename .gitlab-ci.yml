@@ -196,6 +196,8 @@ examples:test:
   variables:
     MIX_ENV: test
   script:
+    # node for the gallery's executed hook tests (spec/12 §6, #805), as verify:hooks has it.
+    - apt-get install -y -qq --no-install-recommends nodejs
     - cd examples
     # The examples member's dependencies, pulled from the store and pushed after a green
     # run by the one job that builds them (#342).

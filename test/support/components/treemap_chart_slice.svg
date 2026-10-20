@@ -1,7 +1,6 @@
 <svg width="800" height="600" font-family="var(--vis-font-family, sans-serif)" role="img" viewBox="0 0 800 600">
   
   
-  
     <rect x="0" y="0" width="800" height="400" fill="#111" stroke="var(--vis-background, #ffffff)" stroke-width="1"></rect>
     
   

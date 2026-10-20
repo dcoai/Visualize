@@ -169,17 +169,19 @@ defmodule Visualize.ComponentsTest do
              String.replace(plain, ~r/<svg[^>]*>/, "")
   end
 
-  describe "accessibility (spec/10 §1.2, D-56)" do
-    test "every <svg> is role=img; a titled one names itself first" do
+  describe "accessibility (spec/10 §1.2, D-56, D-201)" do
+    test "every <svg> is role=img; a titled one is named by aria-label, never a <title>" do
       plain = render_case(Keyword.fetch!(cases(), :bar_chart))
       assert plain =~ ~s| role="img" |
       refute plain =~ "aria-labelledby"
       refute plain =~ "<title"
 
       titled = render_case(Keyword.fetch!(cases(), :line_chart_points))
-      [_, id] = Regex.run(~r/aria-labelledby="([^"]+)-title/, titled)
-      assert titled =~ ~s|role="img" aria-labelledby="#{id}-title" aria-describedby="#{id}-desc"|
-      assert titled =~ ~s|<title id="#{id}-title">Points</title>|
+      [_, id] = Regex.run(~r/aria-describedby="([^"]+)-desc/, titled)
+      assert titled =~ ~s|role="img" aria-label="Points" aria-describedby="#{id}-desc"|
+      # A browser shows an SVG's <title> under the pointer (D-201).
+      refute titled =~ "<title"
+      refute titled =~ "aria-labelledby"
       assert titled =~ ~s|<desc id="#{id}-desc">Four points on a monotone curve</desc>|
       assert titled =~ ~s|<g class="x-axis" transform="translate(0, 350)"><g aria-hidden="true"|
 
@@ -192,6 +194,7 @@ defmodule Visualize.ComponentsTest do
 
       assert only_desc =~ ~r/aria-labelledby="vis-[a-z0-9]+-desc"/
       refute only_desc =~ "aria-describedby"
+      refute only_desc =~ "aria-label="
       refute only_desc =~ "<title"
       assert only_desc =~ ~r/<desc id="vis-[a-z0-9]+-desc">Three slices<\/desc>/
     end

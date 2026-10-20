@@ -80,10 +80,26 @@ defmodule Visualize.Components.ChartTest do
     assert hover ==
              "{&quot;stroke&quot;:&quot;#333333&quot;,&quot;stroke-width&quot;:&quot;2&quot;}"
 
-    assert html =~ "<title id=\"vis-"
-    assert html =~ ">Sales</title>"
+    assert html =~ ~s(aria-label="Sales")
+    refute html =~ "<title"
     assert html =~ ~s(data-frame="main" data-mark="0" data-tooltip-event="point_click")
     assert html =~ ~s(data-row="2")
+  end
+
+  # #803, D-201: a browser shows an SVG's <title> under the pointer, so the name is an
+  # aria-label on every backend, and nothing in the markup is a <title>.
+  test "every backend names the chart by aria-label and writes no <title>" do
+    for opts <- [[], [backend: :canvas], [backend: :canvas, canvas_format: :json]] do
+      html =
+        render_component(
+          Component,
+          [id: "sales", chart: applied(), render: [title: "Sales"]] ++ opts
+        )
+
+      assert html =~ ~s(role="img"), inspect(opts)
+      assert html =~ ~s(aria-label="Sales"), inspect(opts)
+      refute html =~ "<title", inspect(opts)
+    end
   end
 
   test "a click reaches the page as one Visualize.Event with its row typed" do

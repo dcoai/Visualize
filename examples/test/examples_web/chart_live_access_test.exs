@@ -27,7 +27,7 @@ defmodule ExamplesWeb.ChartLiveAccessTest do
     assert page =~ ~s(data-keyboard-points="[{&quot;name&quot;:&quot;y&quot;)
 
     assert page =~
-             ~r/<svg aria-describedby="vis-[a-z0-9]+-desc" aria-labelledby="vis-[a-z0-9]+-title"/
+             ~r/<svg aria-describedby="vis-[a-z0-9]+-desc" aria-label="Line Chart"/
 
     assert page =~ ~s(<div class="vis-data-table" id="chart-data" style="position:absolute;)
     assert page =~ "<strong>Text alternative:</strong> Line chart, 1 series (y) of 51 points."

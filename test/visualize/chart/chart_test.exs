@@ -198,16 +198,17 @@ defmodule Visualize.ChartTest do
       assert svg =~ ~r/^<svg /
       assert String.ends_with?(svg, bare <> "</svg>")
       assert svg =~ ~s(role="img") and svg =~ ~s(viewBox="0 0 300 200")
-      assert svg =~ ~s(<title id="vis-) and svg =~ ">Rain</title>"
+      assert svg =~ ~s(aria-label="Rain") and not (svg =~ "<title")
       # The design's description, then the generated summary (spec/14 §21.2, D-142).
       # The frame declares no scale, so its marks draw pixels and no value (§21.1).
       assert svg =~ ">Rain in mm. Line chart, 2 points.</desc>"
-      assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-labelledby="\1-title"/
+      assert svg =~ ~r/aria-describedby="(vis-[a-z0-9]+)-desc" aria-label="Rain"/
       assert length(String.split(svg, "<svg ")) == 2
 
       root = Chart.generate(applied, root: true)
-      # Title, description, the automatic dark mode (#668), the group.
-      assert root.type == :root and length(root.children) == 4
+      # The description, the automatic dark mode (#668), the group: the name is an
+      # attribute (D-201).
+      assert root.type == :root and length(root.children) == 3
       assert Chart.generate(applied) == List.last(root.children)
     end
 
@@ -229,7 +230,7 @@ defmodule Visualize.ChartTest do
 
     test "an empty meta is named by the kind and described by the summary; the options override them" do
       svg = Chart.render(applied(%{}), root: true)
-      assert svg =~ ">Line chart</title>"
+      assert svg =~ ~s(aria-label="Line chart")
 
       assert svg =~
                ">Line chart, 2 points.</desc>"
@@ -237,13 +238,13 @@ defmodule Visualize.ChartTest do
       assert svg =~ ~s(role="img")
 
       svg = Chart.render(applied(%{name: "Rain"}), root: true, title: "Snow", description: "cm")
-      assert svg =~ ">Snow</title>" and svg =~ ">cm. Line chart, 2 points.</desc>"
+      assert svg =~ ~s(aria-label="Snow") and svg =~ ">cm. Line chart, 2 points.</desc>"
 
       svg = Chart.render(applied(%{name: "Rain"}), root: true, description: "cm", summary: false)
       assert svg =~ ">cm</desc>"
 
       svg = Chart.render(applied(%{}), root: true, summary: "Two readings.")
-      assert svg =~ ">Line chart</title>" and svg =~ ">Two readings.</desc>"
+      assert svg =~ ~s(aria-label="Line chart") and svg =~ ">Two readings.</desc>"
       assert Chart.render(applied(%{}), root: true, responsive: true) =~ "width:100%;height:auto"
     end
 

@@ -112,11 +112,14 @@ defmodule ExamplesWeb.MinesweeperLive do
         channels: %{x0: :col, x1: :col, y0: :row, y1: :row},
         options: %{corner_radius: 3},
         style: [:cell, {:field, :state}],
+        # The cell's events with nothing under the pointer (D-200); the template is the
+        # keyboard readout's text for the cell (D-198).
         tooltip: %{
           fields: [:state, :count],
           template: "{state} {count}",
           event: :cell_click,
-          context_event: :flag
+          context_event: :flag,
+          show: false
         }
       },
       %{
@@ -388,8 +391,10 @@ defmodule ExamplesWeb.MinesweeperLive do
     # A rect per cell on two band scales; each cell's state names its style.
     %{type: :rect, data: :cells, channels: %{x0: :col, x1: :col, y0: :row, y1: :row},
       style: [:cell, {:field, :state}],
+      # show: false — the events, and nothing following the pointer; the template is
+      # what the keyboard readout says for the cell.
       tooltip: %{fields: [:state, :count], template: "{state} {count}",
-                 event: :cell_click, context_event: :flag}}
+                 event: :cell_click, context_event: :flag, show: false}}
 
     # The counts, colored through a threshold scale whose range is typed colors.
     %{type: :text, data: %{source: :cells, transforms: [%{op: :filter, field: :count, test: :present}]},

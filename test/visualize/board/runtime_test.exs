@@ -112,7 +112,7 @@ defmodule Visualize.Board.RuntimeTest do
 
       a = view_until(:a, &(&1.state == :live))
       assert a.title == "A" and a.note == nil and a.frames >= 1
-      assert a.svg =~ ~s(<title id=) and a.svg =~ "A</title>"
+      assert a.svg =~ ~s(aria-label="A")
       assert a.svg =~ ~s(class="mark mark-line")
       assert a.size == {596.0, 256}
       assert a.crosshair["data-xs"] =~ "[0,"
@@ -359,9 +359,9 @@ defmodule Visualize.Board.RuntimeTest do
         )
 
       Server.subscribe(board)
-      assert view_until(:a, &(&1.state == :live)).svg =~ "first</title>"
+      assert view_until(:a, &(&1.state == :live)).svg =~ ~s(aria-label="first")
       assert Server.vars(board, %{name: "second"}) == :ok
-      assert view_until(:a, &(&1.svg =~ "second")).svg =~ "second</title>"
+      assert view_until(:a, &(&1.svg =~ "second")).svg =~ ~s(aria-label="second")
     end
   end
 

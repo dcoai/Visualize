@@ -312,6 +312,12 @@ defmodule ExamplesWeb.InteractionLiveTest do
     assert tag =~ ~s(phx-hook="TooltipHook")
     assert rest =~ ~s(data-tooltip-event="cell_click" )
     assert rest =~ ~s(data-tooltip-context-event="flag")
+    # Nothing follows the pointer (#803): no hover text or outline (D-200), and the chart
+    # is named by aria-label rather than a <title> the browser shows on hover (D-201).
+    assert rest =~ ~s(data-tooltip-show="false")
+    [svg] = Regex.run(~r/<svg [^>]*>/, rest)
+    assert svg =~ ~s(aria-label="Minesweeper")
+    refute rest =~ "<title"
     # One tab stop whose cells the arrows reach by row and column (D-198).
     {keys, _rest} = element(html, "mines-panel-chart-keys")
     assert keys =~ ~s(phx-hook="KeyboardHook")

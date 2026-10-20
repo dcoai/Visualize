@@ -123,7 +123,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
-        <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{@margin.left}, #{@margin.top})"}>
           <path :for={d <- @links} d={d} fill="none" stroke={@link_stroke} stroke-width="1.5" {@transition} />
@@ -216,7 +215,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
-        <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <%= for cell <- @cells do %>
           <rect x={cell.x} y={cell.y} width={cell.width} height={cell.height} fill={cell.fill} stroke={cell.stroke} stroke-width={cell.stroke_width} {@transition} />
@@ -306,7 +304,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       ~H"""
       <svg width={@width} height={@height} {Support.svg_attrs(@class, @responsive, @theme, @ids, @animate)} viewBox={"0 0 #{@width} #{@height}"}>
-        <title :if={@ids.title} id={@ids.title}>{@title}</title>
         <desc :if={@ids.desc} id={@ids.desc}>{@description}</desc><style :if={@animate}><%= Support.reduced_motion() %></style>
         <g transform={"translate(#{elem(@center, 0)}, #{elem(@center, 1)})"}>
           <%= for a <- @arcs do %>

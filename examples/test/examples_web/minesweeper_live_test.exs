@@ -112,6 +112,59 @@ defmodule ExamplesWeb.MinesweeperLiveTest do
     assert html =~ ~s(phx-hook="MotionHook")
   end
 
+  # #803: nothing follows the pointer over the grid. The page's chart, drawn by its
+  # component on each backend, runs under the library's hook harness (spec/12 §6): a
+  # pointer over a cell shows no tooltip and no outline (D-200), the markup holds no
+  # <title> a browser would show on hover (D-201), and the click and the flag still push.
+  @tag :js
+  test "nothing follows the pointer over the grid on every backend; clicks and flags push" do
+    for {backend, _label, _opts} <- MinesweeperLive.backends() do
+      html = render_component(Component, assigns(on(page(), backend)))
+      svg? = backend == "svg"
+
+      refute html =~ "<title", backend
+      assert html =~ ~s(aria-label="Minesweeper"), backend
+
+      scenario = """
+      const el = #{Visualize.JsHooks.markup(html)};
+      const chart = el.querySelector('svg') || el.querySelector('canvas');
+      chart.rect = {left: 0, top: 0, width: 500, height: 500};
+      const tipEl = el.querySelector('[data-tooltip-drawn]');
+      const hook = Stub.mount(TooltipHook, tipEl);
+      // The cell {0, 0}, the top-left: its rect on an SVG, the canvas on a canvas.
+      const cell = #{svg?} ? tipEl.querySelectorAll('[data-row]').filter((n) => n.getAttribute('data-row') === '0')[0] : chart;
+      if (cell !== chart) cell.rect = {left: 6, top: 6, width: 50, height: 50};
+      document.elementFromPoint = () => cell;
+      const at = {target: cell, pageX: 30, pageY: 30, clientX: 30, clientY: 30};
+      const shown = () => [hook.tip.style.display,
+        document.body.querySelectorAll('.vis-tooltip-hover').filter((o) => o.style.display === 'block').length];
+      Stub.fire(tipEl, 'mousemove', at);
+      const report = {moved: shown()};
+      Stub.fire(tipEl, 'touchmove', {target: cell, touches: [{clientX: 30, clientY: 30, pageX: 30, pageY: 30}]});
+      report.touched = shown();
+      Stub.mark('click');
+      Stub.fire(tipEl, 'click', at);
+      Stub.mark('flag');
+      Stub.fire(tipEl, 'contextmenu', Object.assign({preventDefault: () => {}}, at));
+      Stub.done(report);
+      """
+
+      assert {:ok, %{"log" => log, "report" => report}} = Visualize.JsHooks.run(scenario),
+             backend
+
+      assert report["moved"] == ["none", 0], backend
+      assert report["touched"] == ["none", 0], backend
+
+      pushed = fn mark ->
+        for %{"kind" => "push"} = p <- Visualize.JsHooks.after_mark(log, mark),
+            do: {p["payload"]["event"], p["payload"]["row"]}
+      end
+
+      assert pushed.("click") == [{"cell_click", 0}], backend
+      assert pushed.("flag") == [{"flag", 0}], backend
+    end
+  end
+
   test "a click is resolved to the cell's identity, and Shift or Flag mode flags" do
     socket = click(page(), @first)
     assert states(socket)[@first] == "revealed"

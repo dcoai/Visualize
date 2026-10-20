@@ -22,7 +22,7 @@ defmodule Visualize.Chart.RootIdTest do
     b = Chart.render(applied(), root: true, id: "chart-b")
 
     assert root_id(a) == "chart-a" and root_id(b) == "chart-b"
-    assert a =~ ~s(<title id="chart-a-title">) and a =~ ~s(aria-labelledby="chart-a-title")
+    assert a =~ ~s(<desc id="chart-a-desc">) and a =~ ~s(aria-describedby="chart-a-desc")
     assert b =~ ~s(<desc id="chart-b-desc">) and b =~ ~s(aria-describedby="chart-b-desc")
 
     assert scoped(a) == ["#chart-a"]

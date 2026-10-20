@@ -15,6 +15,22 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.7.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Breaking
+
+- **A chart's name is its `aria-label`, not a `<title>`** (#803, #805, D-201). Browsers
+  show an SVG's `<title>` as a tooltip when the pointer rests on it, so every chart the
+  library drew showed its name under the cursor. *Affects* code that reads, styles or
+  tests the `<title>` in a chart's markup: `Visualize.Chart.render/2` and `generate/2`
+  with `root: true`, `Visualize.IR.Element.root/3` with `title:`, every component of
+  `Visualize.Components` and `Visualize.Components.Tree`, `Visualize.Components.Chart`,
+  and board cells. *Before:* `<svg … aria-labelledby="vis-…-title"><title
+  id="vis-…-title">Sales</title><desc …>`. *After:* `<svg … aria-label="Sales"><desc …>`.
+  The `<desc>`, `aria-describedby`, `role="img"` and the root's `id` are unchanged, and a
+  root with only a description is still named by it through `aria-labelledby`. Screen
+  readers read the name as before. Canvas output already used `aria-label` and is
+  unchanged. If you want a hover name on a hand-built root, prepend
+  `Visualize.IR.Element.title/1` yourself.
+
 ### Added
 
 - **A mark's events with nothing under the pointer: `tooltip.show: false`** (#803, #804,
