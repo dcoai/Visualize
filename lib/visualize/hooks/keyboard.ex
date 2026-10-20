@@ -49,11 +49,18 @@ defmodule Visualize.Hooks.Keyboard do
   The data attributes of spec/10 §17.2 for an applied chart, computed once: its name, its
   points by series with their readouts and positions, its size, and the focus marker's
   style, the palette's `:focused` as the chart's design and theme resolve it (§4.4).
+
+  ## Options
+
+    * `:placements` - `Visualize.Chart.placements/1` of the same chart, which a caller that
+      also draws it passes to both, so each point is placed once (#811)
   """
-  @spec attrs(Applied.t()) :: %{String.t() => String.t()}
-  def attrs(%Applied{frame: frame} = applied) do
+  @spec attrs(Applied.t(), keyword()) :: %{String.t() => String.t()}
+  def attrs(%Applied{frame: frame} = applied, opts \\ []) do
+    points = Summary.points(applied, Keyword.get(opts, :placements))
+
     series =
-      Enum.map_join(Summary.points(applied), ",", fn %{name: name, points: points} = series ->
+      Enum.map_join(points, ",", fn %{name: name, points: points} = series ->
         grid = if Map.get(series, :grid, false), do: ~s(,"grid":true), else: ""
 
         ~s({"name":#{string(name)}#{grid},"points":[) <>

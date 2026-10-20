@@ -123,6 +123,12 @@ defmodule Visualize.Chart do
   @type layer :: t() | map() | {term(), t() | map()}
 
   @typedoc """
+  A chart's items placed once (`placements/1`, spec/14 §21.5, #811): opaque, and passed
+  only with the chart it was made of.
+  """
+  @type placements :: %{optional(term()) => map()}
+
+  @typedoc """
   One leaf of a stack, with the layer that set it and the layers it overrode (spec/14 §17.1).
 
   `layer` is a layer's name, or its zero-based position in the list when it was given
@@ -929,6 +935,16 @@ defmodule Visualize.Chart do
     end
   end
 
+  @doc """
+  The chart's items placed once (spec/14 §21.5, #811): every data mark of a cartesian
+  frame, its rows and their pixels. `generate/2` and `render/2` take it as `placements:`,
+  and so does `Visualize.Hooks.Keyboard.attrs/2`, so a chart drawn with its keyboard
+  points places each item once rather than twice. Pass it only with the chart it was made
+  of; what it holds is opaque.
+  """
+  @spec placements(Applied.t()) :: placements()
+  def placements(%Applied{} = applied), do: Visualize.Chart.Placements.new(applied)
+
   @doc "As `generate/2` with `[]` options."
   @spec generate(Applied.t()) :: Element.t()
   def generate(%Applied{} = applied), do: generate(applied, [])
@@ -956,6 +972,9 @@ defmodule Visualize.Chart do
     * `:id` - the root's id, the stem of its title's and description's ids and the selector
       of its scoped rules (spec/14 §4.7, #712, D-188); default `vis-` and a hash of the
       title and description, which two alike charts on one page share
+    * `:placements` - `placements/1` of this same chart: the marks read their rows and
+      pixels from it rather than placing them again, so a caller that also builds the
+      chart's keyboard points (`Visualize.Hooks.Keyboard.attrs/2`) places once (#811)
   """
   @spec generate(Applied.t(), keyword()) :: Element.t()
   def generate(
@@ -1035,7 +1054,7 @@ defmodule Visualize.Chart do
   # (spec/14 §4.7, #383): one group per frame, the design's own group when there is only
   # one so a single-frame design renders exactly what it always did.
   defp frames_group(frames, sources, opts) do
-    draw = Keyword.take(opts, [:resolve, :paths]) ++ [sources: sources]
+    draw = Keyword.take(opts, [:resolve, :paths, :placements]) ++ [sources: sources]
 
     case Map.values(frames) do
       [only] ->
@@ -1094,8 +1113,8 @@ defmodule Visualize.Chart do
   @doc """
   The applied chart drawn: `generate/2` serialized through `Visualize.Render.to_string/2`
   — `backend:` and `resolve:` (default `Visualize.Theme.mode/1` of the backend), and
-  `paths:`, `root:`, `id:`, `title:`, `description:`, `summary:`, `responsive:` and
-  `color_scheme:` as `generate/2` takes them.
+  `paths:`, `root:`, `id:`, `title:`, `description:`, `summary:`, `responsive:`,
+  `color_scheme:` and `placements:` as `generate/2` takes them.
   """
   @spec render(Applied.t(), keyword()) :: String.t()
   def render(%Applied{} = applied, opts) do
@@ -1111,7 +1130,8 @@ defmodule Visualize.Chart do
         :description,
         :summary,
         :responsive,
-        :color_scheme
+        :color_scheme,
+        :placements
       ])
 
     applied

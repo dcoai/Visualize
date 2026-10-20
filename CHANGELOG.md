@@ -42,6 +42,13 @@ release it merely follows.
   but the keyboard readout still says it for each item. A design without `show`, or with
   `show: true`, renders exactly as before.
 
+- **One placement pass for a chart and its keyboard: `Visualize.Chart.placements/1`**
+  (#809, #811). `Visualize.Hooks.Keyboard.attrs/1` placed every item again after the
+  drawing had. Make the pass once and hand it to both — `Visualize.Chart.render/2` or
+  `generate/2` with `placements:`, and the new `Visualize.Hooks.Keyboard.attrs/2` with
+  `placements:` — and each item is placed once. The output is the same byte for byte.
+  `Visualize.Components.Chart` does this on every update.
+
 ### Changed
 
 - **A band scale places a category in constant time** (#809, #810). `Visualize.Scale.Band`
