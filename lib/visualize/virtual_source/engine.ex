@@ -73,8 +73,8 @@ defmodule Visualize.VirtualSource.Engine do
   The engine over virtual sources by path, defined (spec/15 §14.1): `{:ok, engine}`, or
   `{:error, errors}` — every input that resolves to nothing, every host function the
   registry lacks, then every cycle by name. Options: `feeds:` (the feeds' names, `[]`),
-  `functions:` (the registry, `%{}`), `debounce:` (milliseconds, `0`), `timeout:` and
-  `max_heap:` (each call's limits, spec/08 §10.5.4).
+  `functions:` (the registry, `%{}`), `debounce:` (milliseconds, `0`), `max_reductions:`,
+  `timeout:` and `max_heap:` (each call's limits, spec/08 §10.5.4).
   """
   @spec new(%{path() => VirtualSource.t()}, keyword()) :: {:ok, t()} | {:error, [error(), ...]}
   def new(sources, opts \\ []) when is_map(sources) do
@@ -83,7 +83,8 @@ defmodule Visualize.VirtualSource.Engine do
         feeds: [],
         functions: %{},
         debounce: 0,
-        timeout: 1_000,
+        max_reductions: 100_000_000,
+        timeout: 30_000,
         max_heap: 10_000_000
       )
 
@@ -109,7 +110,7 @@ defmodule Visualize.VirtualSource.Engine do
           inputs: inputs,
           functions: functions,
           debounce: opts[:debounce],
-          run_opts: Keyword.take(opts, [:timeout, :max_heap])
+          run_opts: Keyword.take(opts, [:max_reductions, :timeout, :max_heap])
         }
 
         {:ok, engine |> rank() |> compile()}

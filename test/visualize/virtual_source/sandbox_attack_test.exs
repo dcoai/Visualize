@@ -197,18 +197,18 @@ defmodule Visualize.VirtualSource.SandboxAttackTest do
     assert {:error, :raised, _exception} = call(source, [%{at: DateTime.utc_now()}])
   end
 
-  test "resources: the heap limit, the timeout and a raise end the call, never the caller" do
+  test "resources: the heap limit, the reductions cap and a raise end the call, never the caller" do
     assert {:error, :memory, 200_000} =
              call("fn _ -> Enum.to_list(1..100_000_000_000) end", [nil], max_heap: 200_000)
 
     assert {:error, :memory, 200_000} =
              call("fn _ -> for x <- 1..100_000_000_000, do: {x, x} end", [nil], max_heap: 200_000)
 
-    assert {:error, :timeout, 30} =
+    assert {:error, :reductions, 1_000_000} =
              call(
                "fn _ -> Enum.reduce(1..100_000_000_000_000, 0, fn x, acc -> rem(acc + x, 7) end) end",
                [nil],
-               timeout: 30
+               max_reductions: 1_000_000
              )
 
     assert {:error, :raised, ArithmeticError} = call("fn x -> 1 / x end", [0])

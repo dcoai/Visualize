@@ -257,13 +257,28 @@ defmodule Visualize.VirtualSource.SandboxTest do
                call("fn _ -> Enum.to_list(1..100_000_000_000) end", [nil], max_heap: 100_000)
     end
 
-    test "the timeout kills the process" do
-      assert {:error, :timeout, 20} =
+    test "the reductions cap kills a runaway" do
+      assert {:error, :reductions, 1_000_000} =
                call(
                  "fn _ -> Enum.reduce(1..100_000_000_000_000, 0, fn x, acc -> rem(acc + x, 7) end) end",
                  [nil],
-                 timeout: 20
+                 max_reductions: 1_000_000
                )
+    end
+
+    test "a call that answers over the cap is over it, its value dropped" do
+      {:ok, compiled} =
+        Sandbox.compile("fn n -> Enum.reduce(1..n, 0, fn x, acc -> acc + x end) end")
+
+      assert {:ok, 5_000_050_000} = Sandbox.run(compiled, [100_000])
+
+      assert {:error, :reductions, 1_000} =
+               Sandbox.run(compiled, [100_000], max_reductions: 1_000)
+    end
+
+    test "a host's function blocked in receive is hung at the liveness bound" do
+      assert {:error, :hung, 20} =
+               Sandbox.run(fn -> receive(do: (:never_sent -> :ok)) end, [], timeout: 20)
     end
 
     test "a host's function runs bounded too" do
@@ -315,7 +330,8 @@ defmodule Visualize.VirtualSource.SandboxTest do
           {1, {:pattern, :+}},
           {1, {:fn_arity, [1, 2]}},
           {nil, {:compile, "no"}},
-          {nil, {:compile, {:timeout, 1}}}
+          {nil, {:compile, {:reductions, 1}}},
+          {nil, {:compile, {:hung, 1}}}
         ] do
       assert is_binary(Sandbox.format_error(fault))
     end

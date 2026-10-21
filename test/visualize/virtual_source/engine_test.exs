@@ -11,6 +11,12 @@ defmodule Visualize.VirtualSource.EngineTest do
 
   doctest Visualize.VirtualSource.Engine
 
+  # A host's function that never answers: blocked in `receive`, it spends no reductions.
+  defmodule Blocked do
+    use Visualize.VirtualSources
+    defsource(blocked(_inputs), do: receive(do: (:never_sent -> [])))
+  end
+
   @names ~w(hosts host cpu n a b c d sum total state health trend load x)a
   setup_all do
     {:ok, names: @names}
@@ -184,11 +190,27 @@ defmodule Visualize.VirtualSource.EngineTest do
 
   describe "faults (spec/15 §14.3)" do
     defp chain(elixir) do
-      a = source(:a, [hosts: nil], elixir)
+      a =
+        if elixir == :blocked,
+          do:
+            VirtualSource.new!(
+              id: :a,
+              from: [hosts: nil],
+              schema: %{n: %{type: :number}},
+              function: :blocked
+            ),
+          else: source(:a, [hosts: nil], elixir)
+
       d = source(:d, [a: nil], "fn %{a: [%{n: n}]} -> [%{n: n + 1}] end")
 
       {:ok, engine} =
-        Engine.new(%{["a"] => a, ["d"] => d}, feeds: [:hosts], timeout: 50, max_heap: 200_000)
+        Engine.new(%{["a"] => a, ["d"] => d},
+          feeds: [:hosts],
+          functions: Visualize.VirtualSources.registry([Blocked]),
+          max_reductions: 1_000_000,
+          timeout: 50,
+          max_heap: 200_000
+        )
 
       engine
     end
@@ -211,10 +233,11 @@ defmodule Visualize.VirtualSource.EngineTest do
       assert Engine.outputs(engine)[["d"]].rows == [%{"n" => 11.0}]
     end
 
-    test "the five kinds" do
+    test "the six kinds" do
       kinds = %{
-        timeout:
+        reductions:
           "fn _ -> Enum.reduce(1..100_000_000_000_000, 0, fn x, acc -> rem(acc + x, 7) end) end",
+        hung: :blocked,
         memory: "fn _ -> Enum.to_list(1..100_000_000_000) end",
         raised: "fn _ -> Map.fetch!(%{}, :n) end",
         nonconforming: "fn _ -> [%{n: :none}] end",
