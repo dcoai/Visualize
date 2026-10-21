@@ -172,8 +172,10 @@ defmodule Visualize.Chart.Builder.BoardSources do
   # A host function is named by its string and its registry read by spelling (D-195).
   defp host_text(name, functions) do
     with {:ok, module} <- Names.fetch(functions, name),
-         {_name, text} <-
-           Enum.find(module.__virtual_sources__(), fn {own, _} -> Names.same?(own, name) end) do
+         {_name, _arity, text} <-
+           Enum.find(module.__virtual_sources__(), fn {own, _arity, _text} ->
+             Names.same?(own, name)
+           end) do
       text
     else
       _none -> ""

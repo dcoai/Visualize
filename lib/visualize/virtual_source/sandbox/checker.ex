@@ -6,8 +6,10 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   # form held to `Visualize.VirtualSource.Sandbox.Allowlist`. It evaluates nothing.
   #
   # The walk threads one state: the faults found, the variables bound in the scope being
-  # walked, the fields a map read may name and the line last seen. A construct that opens
-  # a scope (a clause, a comprehension) walks inside it and restores the outer variables.
+  # walked, the fields a map read may name, the context's variables a literal read may
+  # name, the variable a clause binds its context to and the line last seen. A construct
+  # that opens a scope (a clause, a comprehension) walks inside it and restores the outer
+  # variables.
 
   alias Visualize.VirtualSource.Sandbox.{Allowlist, Names}
 
@@ -36,11 +38,10 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     max = Keyword.fetch!(opts, :max_source)
     arity = Keyword.fetch!(opts, :arity)
 
-    fields =
-      case Keyword.fetch!(opts, :fields) do
-        nil -> nil
-        fields -> MapSet.new(fields, &to_string/1)
-      end
+    known = %{
+      fields: names(Keyword.fetch!(opts, :fields)),
+      vars: names(Keyword.fetch!(opts, :vars))
+    }
 
     if byte_size(source) > max do
       {:error, [{nil, {:too_long, max, byte_size(source)}}]}
@@ -51,15 +52,18 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
              static_atoms_encoder: Names.encoder(),
              existing_atoms_only: true
            ) do
-        {:ok, quoted} -> read(quoted, arity, fields)
+        {:ok, quoted} -> read(quoted, arity, known)
         {:error, {meta, message, token}} -> {:error, [parse_fault(meta, message, token)]}
       end
     end
   end
 
-  defp read(quoted, arity, fields) do
+  defp names(nil), do: nil
+  defp names(names), do: MapSet.new(names, &to_string/1)
+
+  defp read(quoted, arity, known) do
     case Names.read(quoted) do
-      {:ok, read} -> function(read, arity, fields)
+      {:ok, read} -> function(read, arity, known)
       {:error, reason} -> {:error, [{nil, reason}]}
     end
   end
@@ -77,14 +81,33 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   defp message_text(text) when is_binary(text), do: text
   defp message_text(other), do: inspect(other)
 
-  # One `fn`, every clause of `arity` arguments; then the walk.
-  defp function({:fn, meta, clauses} = quoted, arity, fields) when is_list(clauses) do
-    state = %{faults: [], vars: MapSet.new(), fields: fields, line: meta[:line]}
+  # One `fn`, its clauses of one arity `arity` holds (an integer or a list, D-228); then
+  # the walk, each clause with the variable its head binds the context to.
+  defp function({:fn, meta, clauses} = quoted, arity, known) when is_list(clauses) do
+    state = %{
+      faults: [],
+      vars: MapSet.new(),
+      fields: known.fields,
+      context_vars: known.vars,
+      context: nil,
+      line: meta[:line]
+    }
+
+    arities = clauses |> Enum.map(&clause_arity/1) |> Enum.uniq()
 
     state =
-      if Enum.all?(clauses, &(clause_arity(&1) == arity)),
-        do: expr(quoted, state),
-        else: fault(state, {:not_a_function, arity})
+      cond do
+        nil in arities ->
+          fault(state, {:not_a_function, arity})
+
+        match?([_one], arities) and hd(arities) in List.wrap(arity) ->
+          Enum.reduce(clauses, at(state, meta), fn clause, acc ->
+            %{clause(clause, %{acc | context: context_var(clause)}) | context: nil}
+          end)
+
+        true ->
+          fault(state, {:fn_arity, arities})
+      end
 
     case state.faults do
       [] -> {:ok, quoted}
@@ -92,7 +115,7 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
     end
   end
 
-  defp function(quoted, arity, _fields) do
+  defp function(quoted, arity, _known) do
     {:error, [{line_of(quoted), {:not_a_function, arity}}]}
   end
 
@@ -108,6 +131,17 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
   # A clause's patterns, without its guard.
   defp heads([{:when, _meta, args}]), do: Enum.drop(args, -1)
   defp heads(args), do: args
+
+  # The variable a two-argument clause binds its context to, or `nil` for a pattern.
+  defp context_var({:->, _meta, [args, _body]}) do
+    case heads(args) do
+      [_inputs, {name, _m, context}] when is_atom(name) and is_atom(context) and name != :_ ->
+        name
+
+      _other ->
+        nil
+    end
+  end
 
   # -- state -------------------------------------------------------------------------------
 
@@ -294,6 +328,9 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
             module == Enum and name == :into and not literal_target?(Enum.at(args, 1)) ->
               fault(state, {:into, :literal})
 
+            module == Access and name == :get and arity == 2 ->
+              context_read(args, state)
+
             true ->
               state
           end
@@ -304,9 +341,11 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
         exprs(args, fault(state, {:restricted, {written, shown(name, meta), length(args)}}))
 
       :value when args == [] ->
-        if meta[:no_parens],
-          do: expr(receiver, field(name, state)),
-          else: expr(receiver, fault(state, {:dynamic_call, shown(name, meta)}))
+        cond do
+          !meta[:no_parens] -> expr(receiver, fault(state, {:dynamic_call, shown(name, meta)}))
+          context?(receiver, state) -> expr(receiver, context_read([receiver, name], state))
+          true -> expr(receiver, field(name, state))
+        end
 
       :value ->
         exprs(args, expr(receiver, fault(state, {:dynamic_call, shown(name, meta)})))
@@ -334,6 +373,53 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
       do: state,
       else: fault(state, {:unknown_field, name})
   end
+
+  # -- the context (D-228) -----------------------------------------------------------------
+
+  # A read rooted at the clause's context variable: the variable, or a map read or `[]`
+  # read of one. It reads the context, not a row, so `fields:` does not hold it.
+  defp context?(_quoted, %{context: nil}), do: false
+
+  defp context?({name, _meta, context}, state) when is_atom(name) and is_atom(context),
+    do: name == state.context
+
+  defp context?({{:., _m, [receiver, name]}, meta, []}, state)
+       when is_atom(name) or is_binary(name),
+       do: meta[:no_parens] == true and context?(receiver, state)
+
+  defp context?({{:., _m, [Access, :get]}, _meta, [receiver, _key]}, state),
+    do: context?(receiver, state)
+
+  defp context?(_quoted, _state), do: false
+
+  # `context["vars"]["x"]`, `context.vars.x` or the two mixed: a literal variable's name is
+  # one `vars:` holds, by its string; a key that is not a literal is read when it runs.
+  defp context_read([receiver, key], %{context_vars: %MapSet{} = vars} = state)
+       when is_binary(key) or (is_atom(key) and key not in [nil, true, false]) do
+    if vars_read?(receiver, state) and not MapSet.member?(vars, to_string(key)),
+      do: fault(state, {:unknown_var, key}),
+      else: state
+  end
+
+  defp context_read(_args, state), do: state
+
+  defp vars_read?({{:., _m, [receiver, name]}, meta, []}, state)
+       when is_atom(name) or is_binary(name),
+       do: meta[:no_parens] == true and vars_key?(name) and context_root?(receiver, state)
+
+  defp vars_read?({{:., _m, [Access, :get]}, _meta, [receiver, key]}, state),
+    do: vars_key?(key) and context_root?(receiver, state)
+
+  defp vars_read?(_quoted, _state), do: false
+
+  defp vars_key?(key) when is_atom(key) or is_binary(key), do: to_string(key) == "vars"
+  defp vars_key?(_key), do: false
+
+  defp context_root?({name, _meta, context}, %{context: own})
+       when is_atom(name) and is_atom(context),
+       do: own != nil and name == own
+
+  defp context_root?(_quoted, _state), do: false
 
   defp literal_target?({:%{}, _meta, []}), do: true
   defp literal_target?([]), do: true
@@ -634,7 +720,11 @@ defmodule Visualize.VirtualSource.Sandbox.Checker do
         Enum.reduce(args, state, &guard/2)
 
       :value when args == [] ->
-        if call_meta[:no_parens], do: guard(receiver, field(name, state)), else: expr(call, state)
+        cond do
+          !call_meta[:no_parens] -> expr(call, state)
+          context?(receiver, state) -> guard(receiver, context_read([receiver, name], state))
+          true -> guard(receiver, field(name, state))
+        end
 
       _other ->
         case expr(call, state) do

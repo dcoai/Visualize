@@ -93,7 +93,7 @@ defmodule ExamplesWeb.BoardLiveTest do
   test "the trend is the host's own function, tested as any function" do
     rows = for cpu <- [10, 12, 30], do: %{cpu: cpu}
     assert Examples.BoardDemo.Sources.trend(rows) == %{trend: :increasing}
-    assert [trend: source] = Examples.BoardDemo.Sources.__virtual_sources__()
+    assert [{:trend, 1, source}] = Examples.BoardDemo.Sources.__virtual_sources__()
     assert source =~ "Visualize.Data.slope()"
     assert Examples.BoardDemo.Sources.trend([%{cpu: 40}]) == %{trend: :neutral}
     assert Examples.BoardDemo.Sources.trend([%{cpu: 40}, %{cpu: 39.5}]) == %{trend: :neutral}
