@@ -2991,3 +2991,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Breaking: `{:error, :timeout, ms}` is gone from `Sandbox.run/3` and `compile/2`, the engine's fault kinds and the board's `{:virtual_source, id, kind}`. In its place are `:reductions` and `:hung`. The six kinds of spec/15 §14.3 are `:restricted`, `:reductions`, `:hung`, `:memory`, `:raised` and `:nonconforming`.
 - `virtual_source_timeout:` and the runner's `timeout:` default to 30 s. A host function that blocks now holds a pulse that long before it is reported. Its meaning is "has not answered", so a board that set it low to cap work sets `virtual_source_reductions:` instead.
 - A call that runs past 10 ms is read every 10 ms. A call that answers sooner is never read.
+
+## 221. D-221 — The conformance kit's timeout is liveness, and a cost claim is the feed author's budget in reductions
+
+**Context.** #852. `Visualize.Feed.Conformance` ran every callback under `timeout:` (1 s of wall clock) and reported `{:timeout, call}` as a fault of the feed. `examples/test/examples/board_demo_feeds_test.exs`'s `Latest` failed on a loaded CI runner (#845's pipeline 6620) with "fetch(feed, nil, nil) did not answer within the timeout". Its fetch costs 368 reductions and about 10 µs, the same idle or saturated. The second went to waiting for a scheduler and to the first call's module loading. The kit is a public API that consumers put in their own suites (spec/08 §12), so it shipped the flake to them, and it judged the host's load as the feed's fault.
+
+**Decision.**
+- **The kit runs each callback through D-220's bounded runner.** It gets one process per callback, the caller in `$callers`, the count, and the two kills.
+- **`timeout:` is liveness.** Its default is 30 s, and its finding is `{:hung, call, timeout}`, worded as "did not answer: it is blocked (hung), not slow". The push check's wait for the first delivery reads the same bound.
+- **Cost is a budget the feed author states, in reductions.** `reductions:` (`nil` by default) holds each of the four callbacks to that many reductions of its process. A callback over it is `{:reductions, call, spent, budget}`, and so is a runaway, killed at the first 10 ms reading over the budget. With no budget the kit makes no speed claim, as D-114 and D-148 rule for a test. The `push:` function and the reading of a delivery's rows are held to liveness only.
+- **The stated limit, and a way past it.** The count is the callback's own process. `processes:` names the processes whose reductions during the call are added: the reading before the call, and the reading after it answers. That reading includes whatever else those processes did in the meantime, and spec/08 §12.2 says so.
+
+**Rejected.**
+- **A longer wall-clock timeout as a speed bound.** It is still a claim about the machine, and it moves the flake rather than removing it.
+- **A default budget.** A feed's cost depends on its rows and its provider. Any number the kit chose would be a claim made on the author's behalf, and the measured feeds range from 19 to 21,141 reductions a callback.
+- **Counting a feed's server by tracing its calls.** Tracing is node-global state that a consumer's own tooling may hold, and a `GenServer.call/2` is not the only way a feed reaches another process. Naming the process is explicit, and the limit is stated where it holds.
+
+**Consequences.**
+- Breaking: the finding `{:timeout, call}` is now `{:hung, call, timeout}`, and `timeout:` defaults to 30 s (was 1 s). A suite that passed `timeout:` to cap a callback's speed passes `reductions:` instead.
+- A correct feed passes the kit with every scheduler saturated, and the kit's own suite shows it (spec/08 §12.4). A feed that hangs costs its suite up to 30 s before failing. A suite that wants a hang reported sooner may lower `timeout:`, giving up the margin a loaded host needs. The kit's own suite does that only for a callback that never answers, so the bound only decides when the hang is reported, never whether.
+- `conformance.ex` loses its own spawn-and-wait.

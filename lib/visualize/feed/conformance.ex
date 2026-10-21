@@ -20,7 +20,9 @@ defmodule Visualize.Feed.Conformance do
   The kit drives the feed through `Visualize.Feed` alone and calls every callback in a
   process of its own, so a callback that raises is a finding (`{:raised, call, reason}`),
   not a crash of the check. It references no ExUnit function itself: `describe`, `test`
-  and `flunk` appear only in the code `use` writes into the caller's module.
+  and `flunk` appear only in the code `use` writes into the caller's module. A callback
+  is judged by the reductions its process spends, never by the clock, so a loaded host
+  changes no verdict (#852, D-221).
 
   ## Options
 
@@ -30,7 +32,12 @@ defmodule Visualize.Feed.Conformance do
     * `budgets:` — the budgets each window is fetched with, `[nil, 5]`.
     * `push:` — a function of the feed that makes it push; a feed naming `:push` needs one.
     * `down:` — a feed of the same provider that cannot answer, held to error values.
-    * `timeout:` — milliseconds a callback may take, and the wait for a first push (`1000`).
+    * `timeout:` — the liveness bound: milliseconds before a callback that has not answered
+      is hung — blocked, not slow — and the wait for a first push (`30_000`).
+    * `reductions:` — the most reductions one callback may spend, the feed author's cost
+      budget; `nil`, the default, makes no cost claim.
+    * `processes:` — pids or registered names whose reductions during a callback count
+      toward its budget, for a feed that does its work in a server (`[]`).
     * `quiet:` — milliseconds of silence that end a push (`100`).
     * `name:` — to `use` only: the `describe` block's name, `"feed conformance"`.
 
@@ -45,12 +52,21 @@ defmodule Visualize.Feed.Conformance do
 
   alias Visualize.Data.{Delivery, Schema, Table}
   alias Visualize.Feed
-  alias Visualize.Feed.Conformance.{Box, Words}
+  alias Visualize.Feed.Conformance.{Box, Call, Words}
   alias Visualize.Feed.Window
 
   @checks [:describe, :deliveries, :supports, :push, :errors, :unsubscribe]
 
-  @defaults [windows: [nil], budgets: [nil, 5], push: nil, down: nil, timeout: 1000, quiet: 100]
+  @defaults [
+    windows: [nil],
+    budgets: [nil, 5],
+    push: nil,
+    down: nil,
+    timeout: 30_000,
+    reductions: nil,
+    processes: [],
+    quiet: 100
+  ]
 
   @titles %{
     describe: "a valid schema and a stable version",
@@ -987,33 +1003,7 @@ defmodule Visualize.Feed.Conformance do
 
   # -- isolation -----------------------------------------------------------------------------
 
-  # A callback run in a process of its own, monitored, with the caller in `$callers`:
-  # `{:ok, answer}`, or `{:error, finding}` for a raise, an exit or a hang (spec/08 §12.2).
-  defp call(fun, call, o) do
-    parent = self()
-    tag = make_ref()
-    callers = [parent | Process.get(:"$callers", [])]
-
-    {pid, monitor} =
-      spawn_monitor(fn ->
-        Process.put(:"$callers", callers)
-        send(parent, {tag, fun.()})
-      end)
-
-    receive do
-      {^tag, answer} ->
-        Process.demonitor(monitor, [:flush])
-        {:ok, answer}
-
-      {:DOWN, ^monitor, :process, ^pid, reason} ->
-        {:error, {:raised, call, reason}}
-    after
-      o.timeout ->
-        Process.exit(pid, :kill)
-        Process.demonitor(monitor, [:flush])
-        {:error, {:timeout, call}}
-    end
-  end
+  defp call(fun, call, o), do: Call.run(fun, call, o)
 
   # -- words ---------------------------------------------------------------------------------
 
