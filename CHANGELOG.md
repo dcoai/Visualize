@@ -96,6 +96,17 @@ release it merely follows.
 
 ### Added
 
+- **A legend can be shown only from a number of entries: `min_entries`** (#761, #861,
+  D-223). `legend: %{position: :top, min_entries: 2}` draws the key when there are two
+  series to tell apart and nothing when there is one, whose key would only repeat the
+  title. Below the minimum the legend is not drawn, takes no margin, and
+  `Visualize.Chart.Frame.legend_extent/1` is `%{width: 0, height: 0}`. It is decided at
+  every realization, so a compiled chart whose color domain follows its rows gains and
+  loses its legend as series come and go, and a top or bottom legend in its margin gives
+  each tick its margin. The entries are the legend's own: its `values`, else its scale's
+  domain or ticks. The key defaults to `1`; the validator refuses one that is not an
+  integer at least 1 (`{:type, :pos_integer}`). `Visualize.Chart.Build.legend/2` takes it,
+  and the builder shows it on the legend's geometry tab.
 - **A bundle can be written to a file and read back: `Bundle.to_json/1` and `from_json/2`**
   (#818, #851, D-217), with `to_map/1` and `from_map/2` beneath them. A board bundle exists
   to travel from the host that authored the board to the host that shows it, but
@@ -280,6 +291,12 @@ release it merely follows.
 
 ### Changed
 
+- **A legend with no entries is no longer drawn** (#861, D-223). A legend whose scale had
+  an empty domain, or whose `values` was empty, was drawn as an empty group: a top or
+  bottom legend with `inside: false` grew a margin under 20 to 20, and a side one needed
+  24 of its margin or raised. Under the default `min_entries: 1` it is not drawn and
+  takes no margin. *Affects* a chart that drew a legend over no data: its plot keeps the
+  margin the design gave.
 - **The examples app's GPS view is now Grandma's Marathon** (#783, #819). *GPS Track*
   (`/chart/gps_track`), one runner round Central Park, is replaced by *Grandma's
   Marathon* (`/chart/grandmas_marathon`). It is a reference for several moving things on

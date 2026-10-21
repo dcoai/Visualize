@@ -4,7 +4,8 @@ defmodule Visualize.Chart.Frame.Legend do
   # swatch in the scale's color beside the value's label, stacked or in rows at one of
   # the eight positions inside the plot area — or, with `inside: false`, in the margin the
   # position names (#136). A top or bottom legend wraps to the plot's width, and in its
-  # margin grows that margin to hold its rows (#630, D-169).
+  # margin grows that margin to hold its rows (#630, D-169). Below its `min_entries` it is
+  # not drawn and takes no margin (D-223).
 
   alias Visualize.{Axis, Scale, Theme}
   alias Visualize.Chart.Frame
@@ -20,38 +21,45 @@ defmodule Visualize.Chart.Frame.Legend do
   @horizontal [:top, :bottom]
 
   @doc false
-  # The legend group, or `[]` when the frame has no legend; stamped `frames.<name>.legend` when
-  # `paths?` (spec/14 §4.7).
+  # The legend group, or `[]` when the frame has no legend or its legend is below its
+  # `min_entries` (D-223); stamped `frames.<name>.legend` when `paths?` (spec/14 §4.7).
   @spec generate(map(), atom(), boolean()) :: [Element.t()]
   def generate(frame, mode, paths? \\ false)
 
   def generate(%{legend: nil}, _mode, _paths?), do: []
 
   def generate(frame, mode, paths?) do
-    layout =
-      layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, mode)
+    case layout(frame, mode) do
+      :below ->
+        []
 
-    {x, y} = place(layout, frame.plot)
+      layout ->
+        {x, y} = place(layout, frame.plot)
 
-    [
-      Element.group(layout.elements,
-        style: Map.put(layout.group_style, :class, "legend"),
-        transform: Transform.translate(x, y)
-      )
-      |> Frame.stamp([:frames, frame.name, :legend], paths?)
-    ]
+        [
+          Element.group(layout.elements,
+            style: Map.put(layout.group_style, :class, "legend"),
+            transform: Transform.translate(x, y)
+          )
+          |> Frame.stamp([:frames, frame.name, :legend], paths?)
+        ]
+    end
   end
 
   @doc false
   # The box the legend is laid out in, `%{width:, height:}` (spec/14 §4.5, D-169): the
   # widest row and its rows for a top or bottom legend, the estimated width and its rows
-  # for a stacked one; the 8 between it and the plot is not counted.
+  # for a stacked one; the 8 between it and the plot is not counted. No box with no legend,
+  # nor below the legend's `min_entries` (D-223).
   @spec extent(map()) :: %{width: number(), height: number()}
   def extent(%{legend: nil}), do: %{width: 0, height: 0}
 
-  def extent(frame),
-    do:
-      layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, :literal).extent
+  def extent(frame) do
+    case layout(frame, :literal) do
+      :below -> %{width: 0, height: 0}
+      layout -> layout.extent
+    end
+  end
 
   @doc false
   # The margin a frame takes for its legend (spec/14 §4.5, D-169): the given one, with a top
@@ -59,7 +67,8 @@ defmodule Visualize.Chart.Frame.Legend do
   # `ArgumentError` for what cannot be fitted — a side margin narrower than the legend's
   # estimated width, a top or bottom margin grown past the box (D-222), a row too wide for
   # the plot with `wrap: false`, a single cell wider than the plot — naming the side and
-  # the size needed.
+  # the size needed. A legend below its `min_entries` takes no margin and raises nothing
+  # (D-223).
   @spec fit!(map(), map()) :: map()
   def fit!(%{legend: nil}, margin), do: margin
 
@@ -67,6 +76,9 @@ defmodule Visualize.Chart.Frame.Legend do
     layout = layout(node, scales, plot.width, styles(frame), theme, :literal)
 
     cond do
+      layout == :below ->
+        margin
+
       layout.inside? ->
         margin
 
@@ -113,9 +125,6 @@ defmodule Visualize.Chart.Frame.Legend do
 
   # -- layout ---------------------------------------------------------------------------
 
-  # The legend laid out against the plot's width: its elements, where it sits and its
-  # extent. The one place every question about the legend's shape is answered, so the
-  # frame's margin and the drawing cannot disagree.
   # The frame's styles, and the defaults its containers lay under the legend's style: the
   # part defaults alone, a legend being furniture (spec/14 §3.8).
   # A generator in the legend's style is resolved with no datum (spec/14 §3.13).
@@ -124,14 +133,28 @@ defmodule Visualize.Chart.Frame.Legend do
     {frame.styles, Defaults.at(frame, nil, nil), pick}
   end
 
-  defp layout(node, scales, plot_width, {styles, base, pick}, theme, mode) do
+  # The legend laid out against the plot's width: its elements, where it sits and its
+  # extent — or `:below`, when it has fewer entries than its `min_entries` and is neither
+  # drawn nor given margin (D-223). The one place every question about the legend's shape
+  # is answered, so the frame's margin and the drawing cannot disagree.
+  defp layout(frame, mode),
+    do: layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, mode)
+
+  defp layout(node, scales, plot_width, {styles, _base, _pick} = styled, theme, mode) do
+    entries = entries(node, scales, styles, theme, mode)
+
+    if length(entries) < min_entries(node),
+      do: :below,
+      else: lay_out(node, entries, plot_width, styled, theme, mode)
+  end
+
+  defp lay_out(node, entries, plot_width, {styles, base, pick}, theme, mode) do
     stack = Map.get(node, :style, Schema.default(:legend, :style))
     style_node = Style.over(base, styles, stack, pick)
     style = Style.resolve(style_node, theme, mode)
     title = text(Map.get(node, :title, []))
     position = Map.get(node, :position, Schema.default(:legend, :position))
     inside? = Map.get(node, :inside, Schema.default(:legend, :inside))
-    entries = entries(node, scales, styles, theme, mode)
     font_size = font_size(style_node, theme)
 
     base = %{
@@ -164,6 +187,19 @@ defmodule Visualize.Chart.Frame.Legend do
         width: width,
         extent: %{width: width, height: if(count == 0, do: 0, else: (count - 1) * @row + @swatch)}
       })
+    end
+  end
+
+  # The fewest entries the legend is drawn with, a count at least 1 (spec/14 §4.5, D-223).
+  defp min_entries(node) do
+    case Map.get(node, :min_entries, Schema.default(:legend, :min_entries)) do
+      n when is_integer(n) and n >= 1 ->
+        n
+
+      other ->
+        raise ArgumentError,
+              "a legend's min_entries is a count of entries of at least 1, not " <>
+                "#{inspect(other)} (spec/14 §4.5)"
     end
   end
 
