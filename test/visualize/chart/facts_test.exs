@@ -360,14 +360,14 @@ defmodule Visualize.Chart.FactsTest do
 
       assert {[:sources, "primary", :requires, "other"], {:undeclared, :field, "other"}} in errors
 
-      assert {[:sources, "primary", :requires, "latency", 0], {:enum, Schema.attributes()}} in errors
+      assert {[:sources, "primary", :requires, "latency", 0], {:enum, Fact.keys()}} in errors
     end
 
     test "a fact names a declared slot, one of its fields and an attribute" do
       bad = [
         {fact(:nope, :latency, :unit), {:undeclared, :source, "nope"}},
         {fact(:primary, :nope, :unit), {:undeclared_field, "primary", "nope"}},
-        {fact(:primary, :latency, :color), {:enum, Schema.attributes()}}
+        {fact(:primary, :latency, :color), {:enum, Fact.keys()}}
       ]
 
       for {f, reason} <- bad do

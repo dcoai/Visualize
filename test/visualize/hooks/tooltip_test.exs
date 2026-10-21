@@ -53,8 +53,17 @@ defmodule Visualize.Hooks.TooltipTest do
   test "fields come from data-datum in order and data-datum-<field> with _ as -" do
     js = Tooltip.js_hook()
     assert js =~ "el.getAttribute('data-datum')"
-    assert js =~ "el.getAttribute('data-datum-' + name.replace(/_/g, '-'))"
+    assert js =~ "const attribute = name.replace(/_/g, '-');"
+    assert js =~ "el.getAttribute('data-datum-' + attribute)"
     assert js =~ "values[name] = value === null ? '' : value;"
+  end
+
+  test "a field's declared name, data-named-<field>, is shown in place of its value (D-225)" do
+    js = Tooltip.js_hook()
+    assert js =~ "const named = el.getAttribute('data-named-' + attribute);"
+
+    assert js =~
+             "const value = named !== null ? named : el.getAttribute('data-datum-' + attribute);"
   end
 
   test "the nearest template formats {field} placeholders; without one, field: value lines" do

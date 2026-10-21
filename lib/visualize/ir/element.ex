@@ -535,6 +535,10 @@ defmodule Visualize.IR.Element do
   value, with every `_` in the name as `-`, and a `nil` value writes no attribute. The keys
   are strings, so no atom is created from a row's names.
 
+  `names`, a map from a field to its value's display name, writes `data-named-<field>`
+  beside `data-datum-<field>` for each field written that it holds (spec/10 §12.2, D-225):
+  the tooltip shows the name, and the value stays the value. `datum/2` writes none.
+
   ## Examples
 
       iex> Visualize.IR.Element.circle(1, 2, 3)
@@ -549,19 +553,35 @@ defmodule Visualize.IR.Element do
         r: 3
       }
 
+      iex> Visualize.IR.Element.circle(1, 2, 3)
+      ...> |> Visualize.IR.Element.datum([state: "degraded", n: 2], %{state: "Degraded"})
+      ...> |> Map.fetch!(:attrs)
+      ...> |> Map.take(["data-datum-state", "data-named-state", "data-named-n"])
+      %{"data-datum-state" => "degraded", "data-named-state" => "Degraded"}
+
   """
-  @spec datum(t(), map() | keyword()) :: t()
-  def datum(%__MODULE__{} = element, fields) when is_map(fields) or is_list(fields) do
+  @spec datum(t(), map() | keyword(), map()) :: t()
+  def datum(%__MODULE__{} = element, fields, names \\ %{})
+      when (is_map(fields) or is_list(fields)) and is_map(names) do
     pairs = if is_map(fields), do: Enum.sort(fields), else: fields
-    names = Enum.map_join(pairs, " ", fn {field, _value} -> to_string(field) end)
+    listed = Enum.map_join(pairs, " ", fn {field, _value} -> to_string(field) end)
 
     attrs =
-      for {field, value} <- pairs, value != nil, into: %{"data-datum" => names} do
-        {"data-datum-" <> :binary.replace(to_string(field), "_", "-", [:global]),
-         to_string(value)}
+      for {field, value} <- pairs,
+          value != nil,
+          {prefix, text} <- [{"data-datum-", to_string(value)} | named(names, field)],
+          into: %{"data-datum" => listed} do
+        {prefix <> :binary.replace(to_string(field), "_", "-", [:global]), text}
       end
 
     set_attrs(element, attrs)
+  end
+
+  defp named(names, field) do
+    case Map.fetch(names, field) do
+      {:ok, name} when is_binary(name) -> [{"data-named-", name}]
+      _none -> []
+    end
   end
 
   @doc """

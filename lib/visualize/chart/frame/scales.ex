@@ -344,28 +344,42 @@ defmodule Visualize.Chart.Frame.Scales do
   defp mark_columns(mark, kind, sources, styles, ctx, inferring) do
     rows = mark_rows(mark, sources, ctx)
 
+    for {scale, read} <- reads(mark, kind, styles, inferring), do: {scale, values(read, rows)}
+  end
+
+  @doc false
+  # What a mark reads into each scale (spec/14 §4.3): `{scale, read}` per channel naming a
+  # scale — its value as written — per `{:field, f}` color of its style on its color scale,
+  # and per offset field, `read` the field's name. Only the scales `among` holds, or every
+  # one with `:all`. `styles` is the frame's styles and the defaults its containers lay.
+  @spec reads(map(), atom(), {map(), list()}, MapSet.t() | :all) :: [{String.t(), term()}]
+  def reads(mark, kind, styles, among \\ :all) do
     channels =
       for {channel, value} <- Map.get(mark, :channels, %{}),
           scale = scale_for(kind, mark, channel),
-          scale in inferring,
-          do: {scale, values(value, rows)}
+          among?(scale, among),
+          do: {scale, value}
 
     color = color_scale(mark)
 
     colors =
       for key <- [:fill, :stroke],
-          color in inferring,
+          among?(color, among),
           {:field, field} <- [Map.get(style_node(mark, styles), key)],
-          do: {color, column(rows, field)}
+          do: {color, field}
 
     # An offset field's values are its offset scale's domain (spec/14 §4.3).
     offsets =
       for {family, field} <- Map.get(mark, :offset, %{}),
-          offset_scale(mark, family) in inferring,
-          do: {offset_scale(mark, family), column(rows, field)}
+          among?(offset_scale(mark, family), among),
+          do: {offset_scale(mark, family), field}
 
     channels ++ colors ++ offsets
   end
+
+  defp among?(nil, _among), do: false
+  defp among?(_scale, :all), do: true
+  defp among?(scale, among), do: scale in among
 
   defp values(%Var{name: name}, _rows), do: Style.unresolved!(name)
   # A constant contributes its number once the mark has a row to draw it on; with none it

@@ -182,8 +182,11 @@ defmodule ExamplesWeb.BoardLiveTest do
 
     # The timeline's stretches are colored by the feed's own meaning of each state.
     assert views.status.svg =~ ~s(class="mark mark-band")
-    assert views.status.svg =~ ~r/class="band" fill="var\(--vis-(good|warning|bad)/
-    for state <- ~w(ok degraded down), do: assert(views.status.svg =~ ">#{state}<")
+    assert views.status.svg =~ ~r/class="band"[^>]* fill="var\(--vis-(good|warning|bad)/
+    # The legend shows each state by the name its feed declares (D-225); a stretch's tooltip
+    # carries the name beside the raw value.
+    for state <- ~w(OK Degraded Down), do: assert(views.status.svg =~ ">#{state}<")
+    assert views.status.svg =~ ~s(data-datum-state="ok" data-named-state="OK")
   end
 
   test "the station's readings are written in the page's system, from the page's own loop" do

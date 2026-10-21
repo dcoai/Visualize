@@ -8,7 +8,6 @@ defmodule Visualize.Chart.Validator.Types do
   alias Visualize.Chart.{Fact, Schema, Text, Var}
   alias Visualize.Chart.Validator
   alias Visualize.Chart.Validator.{Colors, Context, Generators, Palette, Units}
-  alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
   @frame_anchors [:title, :subtitle, :caption]
@@ -289,18 +288,18 @@ defmodule Visualize.Chart.Validator.Types do
   defp text_part({:field, _}, path, _ctx), do: [{path, {:invalid_for, :label}}]
   defp text_part(_, path, _ctx), do: [{path, {:type, :text}}]
 
-  # A fact of a feed's schema (spec/14 §7.4): a declared slot, one of its fields and an
-  # attribute; in a text, an attribute written as words, never `order`'s list or
-  # `status`'s map. Whether the schema gives it is application's question.
+  # A fact of a feed's schema (spec/14 §7.4): a declared slot, one of its fields and a fact
+  # key (D-225); in a text, one written as words, never `order`'s list or the maps of
+  # `status`, `names` and `colors`. Whether the schema gives it is application's question.
   defp fact(%Fact{source: s, field: f, key: k}, path, ctx, text?) do
     cond do
       not (name?(s) and name?(f) and name?(k)) ->
         [{path, {:type, :fact}}]
 
-      k not in FeedSchema.attributes() ->
-        [{path, {:enum, FeedSchema.attributes()}}]
+      k not in Fact.keys() ->
+        [{path, {:enum, Fact.keys()}}]
 
-      text? and k in [:order, :status] ->
+      text? and k in [:order, :status, :names, :colors] ->
         [{path, {:invalid_for, :text}}]
 
       true ->

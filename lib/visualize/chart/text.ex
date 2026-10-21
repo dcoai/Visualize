@@ -25,7 +25,7 @@ defmodule Visualize.Chart.Text do
 
   alias Visualize.Chart.{Fact, Var}
 
-  @attributes Visualize.Vocabulary.table(Visualize.Data.Schema.attributes())
+  @attributes Visualize.Vocabulary.table(Fact.keys())
 
   @typedoc "One part of a text: a string, a variable, a datum's field, or a schema's fact."
   @type part :: String.t() | Var.t() | {:field, String.t()} | Fact.t()

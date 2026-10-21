@@ -44,6 +44,7 @@ defmodule Visualize.Hooks.Tooltip do
   Data attributes on the elements, written by the server (spec/10 §12.2):
   - `data-datum` - the field names, space-separated, in order
   - `data-datum-<field>` - the value of each field, `_` in the name as `-`
+  - `data-named-<field>` - the value's declared name, shown in place of the value (D-225)
   - `data-tooltip-template` - the text with `{field}` placeholders; the nearest wins
   - `data-tooltip-event` - the declared event a click delivers; absent, nothing is pushed
   - `data-tooltip-show` - `"false"`: the element's mark takes clicks with nothing shown
@@ -346,13 +347,16 @@ defmodule Visualize.Hooks.Tooltip do
         return this.nearest(el, 'data-tooltip-show') !== 'false';
       },
 
-      // The field names in the server's order and each one's attribute value, '' when
-      // the value was nil and the attribute absent.
+      // The field names in the server's order and each one's shown value: its declared
+      // name where the server wrote one (D-225), else its value, '' when the value was nil
+      // and the attribute absent.
       fields(el) {
         const names = (el.getAttribute('data-datum') || '').split(' ').filter((n) => n !== '');
         const values = {};
         names.forEach((name) => {
-          const value = el.getAttribute('data-datum-' + name.replace(/_/g, '-'));
+          const attribute = name.replace(/_/g, '-');
+          const named = el.getAttribute('data-named-' + attribute);
+          const value = named !== null ? named : el.getAttribute('data-datum-' + attribute);
           values[name] = value === null ? '' : value;
         });
         return { names, values };

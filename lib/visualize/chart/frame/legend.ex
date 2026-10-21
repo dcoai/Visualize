@@ -7,10 +7,13 @@ defmodule Visualize.Chart.Frame.Legend do
   # margin grows that margin to hold its rows (#630, D-169). Below its `min_entries` it is
   # not drawn and takes no margin (D-223).
 
-  alias Visualize.{Axis, Scale, Theme}
-  alias Visualize.Chart.Frame
-  alias Visualize.Chart.{Schema, Style, Text, Var}
+  import Visualize.Chart.Names, only: [is_name: 1]
+
+  alias Visualize.{Axis, Event, Scale, Theme}
+  alias Visualize.Chart.{Coverage, Frame, Names, Schema, Style, Text, Var}
+  alias Visualize.Chart.Frame.Scales
   alias Visualize.Chart.Style.{Defaults, Generated}
+  alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.IR.{Element, Transform}
 
   @swatch 12
@@ -72,8 +75,8 @@ defmodule Visualize.Chart.Frame.Legend do
   @spec fit!(map(), map()) :: map()
   def fit!(%{legend: nil}, margin), do: margin
 
-  def fit!(%{legend: node, scales: scales, plot: plot, theme: theme} = frame, margin) do
-    layout = layout(node, scales, plot.width, styles(frame), theme, :literal)
+  def fit!(%{legend: node, plot: plot, theme: theme} = frame, margin) do
+    layout = layout(node, frame, plot.width, styles(frame), theme, :literal)
 
     cond do
       layout == :below ->
@@ -138,10 +141,10 @@ defmodule Visualize.Chart.Frame.Legend do
   # drawn nor given margin (D-223). The one place every question about the legend's shape
   # is answered, so the frame's margin and the drawing cannot disagree.
   defp layout(frame, mode),
-    do: layout(frame.legend, frame.scales, frame.plot.width, styles(frame), frame.theme, mode)
+    do: layout(frame.legend, frame, frame.plot.width, styles(frame), frame.theme, mode)
 
-  defp layout(node, scales, plot_width, {styles, _base, _pick} = styled, theme, mode) do
-    entries = entries(node, scales, styles, theme, mode)
+  defp layout(node, frame, plot_width, {styles, _base, _pick} = styled, theme, mode) do
+    entries = entries(node, frame.scales, namer(frame), {styles, theme, mode})
 
     if length(entries) < min_entries(node),
       do: :below,
@@ -224,17 +227,69 @@ defmodule Visualize.Chart.Frame.Legend do
 
   # One entry per tick: the value, its label with the legend's prefix and unit around it
   # (spec/14 §4.5, #135) cut to `max_label` (D-169), the full label when it was cut, and
-  # its swatch.
-  defp entries(%{values: values} = node, _scales, styles, theme, mode) when is_list(values) do
-    values(values, node, styles, theme, mode)
+  # its swatch. A value with a declared name is labeled by it (D-225).
+  defp entries(%{values: values} = node, _scales, named, {styles, theme, mode})
+       when is_list(values) do
+    values(values, node, named, styles, theme, mode)
   end
 
-  defp entries(node, scales, _styles, theme, mode),
-    do: entries(Map.fetch!(scales, node.scale), node, theme, mode)
+  defp entries(node, scales, named, {_styles, theme, mode}),
+    do: entries(Map.fetch!(scales, node.scale), node, named, theme, mode)
+
+  # The declared name of a value the legend shows, or `nil` (spec/14 §4.5, D-225): looked up
+  # through the frame's schemas in the fields its marks show the legend's values by — each
+  # read through the legend's scale, and for a legend of `values` each mapped by — in the
+  # schema of the slot the mark reads, the first in design order that names the value.
+  defp namer(%{schemas: schemas, marks: marks} = frame) when map_size(schemas) > 0 do
+    node = frame.legend
+    styles = {frame.styles, frame.defaults}
+
+    maps =
+      for mark <- marks,
+          %FeedSchema{} = schema <- [Event.schema_of(schemas, mark)],
+          field <- shown(mark, node, frame.kind, styles),
+          names = FeedSchema.value_names(schema, field),
+          map_size(names) > 0,
+          do: names
+
+    # A value is a declared one by its spelling (spec/14 §9.4).
+    fn value ->
+      Enum.find_value(maps, fn names ->
+        case Names.fetch(names, value) do
+          {:ok, name} -> name
+          :error -> nil
+        end
+      end)
+    end
+  end
+
+  defp namer(_frame), do: fn _value -> nil end
+
+  defp shown(mark, node, kind, styles) do
+    scale = Map.get(node, :scale)
+
+    read =
+      for {name, read} <- Scales.reads(mark, kind, styles),
+          scale != nil and Names.same?(name, scale),
+          field = field(read),
+          field != nil,
+          do: field
+
+    mapped =
+      if is_list(Map.get(node, :values)),
+        do: for({_kind, field} <- Coverage.fields(mark), do: field),
+        else: []
+
+    read ++ mapped
+  end
+
+  defp field({:field, field}) when is_name(field), do: field
+  defp field(field) when is_name(field), do: field
+  defp field(_read), do: nil
 
   # A legend of declared values (spec/14 §4.5, D-194): one entry per value, in order,
   # swatched by the fill of the style the value names, else its stroke, else the series'.
-  defp values(values, node, styles, theme, mode) do
+  defp values(values, node, named, styles, theme, mode) do
     prefix = Map.get(node, :prefix) || ""
     unit = Map.get(node, :unit) || ""
     max_label = Map.get(node, :max_label, Schema.default(:legend, :max_label))
@@ -243,7 +298,7 @@ defmodule Visualize.Chart.Frame.Legend do
     values
     |> Enum.with_index(1)
     |> Enum.map(fn {value, i} ->
-      {label, full} = cut(prefix <> to_string(value) <> unit, max_label)
+      {label, full} = cut(prefix <> (named.(value) || to_string(value)) <> unit, max_label)
       {value, label, full, named_swatch(named(names, value), styles, i, theme, mode)}
     end)
   end
@@ -268,7 +323,7 @@ defmodule Visualize.Chart.Frame.Legend do
     end
   end
 
-  defp entries(scale, node, theme, mode) do
+  defp entries(scale, node, named, theme, mode) do
     prefix = Map.get(node, :prefix) || ""
     unit = Map.get(node, :unit) || ""
     max_label = Map.get(node, :max_label, Schema.default(:legend, :max_label))
@@ -277,7 +332,8 @@ defmodule Visualize.Chart.Frame.Legend do
     |> Scale.ticks(5)
     |> Enum.with_index(1)
     |> Enum.map(fn {value, i} ->
-      {label, full} = cut(prefix <> Axis.default_label(value) <> unit, max_label)
+      label = named.(value) || Axis.default_label(value)
+      {label, full} = cut(prefix <> label <> unit, max_label)
       {value, label, full, swatch(Scale.apply(scale, value), i, theme, mode)}
     end)
   end

@@ -6,7 +6,10 @@ defmodule Examples.BoardDemo.Status do
 
   The schema says what each state *means* — `status: %{"ok" => :good, …}` — so a design
   colors the stretches by the feed's own word (`fact(:status, :state, :status)`) and every
-  theme draws that meaning in its own tones (#565, D-143). A stretch has two instants;
+  theme draws that meaning in its own tones (#565, D-143). Each state also declares its
+  display name (`%{value: "ok", name: "OK"}`, D-224), which a legend and a tooltip show in
+  place of the value (D-225); the design's own range outranks any color a state could
+  declare, so none is. A stretch has two instants;
   `until` is the window field, so a stretch still running when a window opens is kept, and
   the connector clips each stretch to the window it was asked for.
   """
@@ -17,6 +20,7 @@ defmodule Examples.BoardDemo.Status do
 
   @slot 30
   @states ["ok", "degraded", "down"]
+  @names %{"ok" => "OK", "degraded" => "Degraded", "down" => "Down"}
 
   defstruct [:schema, clock: &DateTime.utc_now/0]
 
@@ -32,7 +36,7 @@ defmodule Examples.BoardDemo.Status do
           state: %{
             type: :category,
             label: "State",
-            values: @states,
+            values: Enum.map(@states, &%{value: &1, name: Map.fetch!(@names, &1)}),
             status: %{"ok" => :good, "degraded" => :warning, "down" => :bad}
           }
         })

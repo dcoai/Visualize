@@ -29,19 +29,28 @@ defmodule Visualize.Chart.Coverage do
   defp mappings(%{data: data} = mark, i) do
     slot = slot(data)
 
-    styled =
-      for {:field, f} <- List.wrap(Map.get(mark, :style)), is_name(f), do: {i, slot, :style, f}
-
-    chosen =
-      case mark do
-        %{type: :choose, on: f} when is_name(f) -> [{i, slot, :choose, f}]
-        _other -> []
-      end
-
-    if is_name(slot), do: styled ++ chosen, else: []
+    if is_name(slot),
+      do: for({kind, f} <- fields(mark), do: {i, slot, kind, f}),
+      else: []
   end
 
   defp mappings(_mark, _i), do: []
+
+  @doc false
+  # The fields one mark maps by, in order: `{:style, f}` per style stack entry `{:field, f}`,
+  # then `{:choose, f}` for a `:choose` mark's `on` (spec/14 §3.6, §5.2).
+  @spec fields(map()) :: [{:style | :choose, atom() | String.t()}]
+  def fields(mark) do
+    styled = for {:field, f} <- List.wrap(Map.get(mark, :style)), is_name(f), do: {:style, f}
+
+    chosen =
+      case mark do
+        %{type: :choose, on: f} when is_name(f) -> [{:choose, f}]
+        _other -> []
+      end
+
+    styled ++ chosen
+  end
 
   defp slot(%{source: source}), do: source
   defp slot(source), do: source
