@@ -1,9 +1,10 @@
 defmodule Visualize.Board.Server.Budgets do
   @moduledoc false
-  # The board process's budgets (spec/15 §8.2, #864, #865, D-226, D-227): every bound
-  # slot's and every feed's, recomputed when the width or the variables move, a slot's
-  # delivery reduced to its own, and a slot over the ceiling handed without its rows. The
-  # arithmetic is `Visualize.Board.Budget`'s; this is the state it is held in.
+  # The board process's budgets (spec/15 §8.2, #864, #865, #873, D-226, D-227, D-230):
+  # every bound slot's, a feed's or a virtual source's, and every feed's, recomputed when
+  # the width or the variables move, a slot's delivery or a source's output reduced to its
+  # own, and a slot over the ceiling handed without its rows. The arithmetic is
+  # `Visualize.Board.Budget`'s; this is the state it is held in.
 
   alias Visualize.Board
   alias Visualize.Board.Budget
@@ -46,6 +47,19 @@ defmodule Visualize.Board.Server.Budgets do
       do: Feed.reduce(delivery, schema, budget, state.monitor.reduce),
       else: delivery
   end
+
+  # A virtual source's output at a slot's budget (spec/15 §8.2, #873, D-230): reduced as a
+  # feed's that does not name `:budget` is, `reduced_by: :visualize`, by the monitor's
+  # method. A source promises no budget and its output is never pre-reduced, so it is
+  # reduced whenever it holds more rows than the slot's budget; `Feed.reduce/4` hands back
+  # as it is an output within the budget, or with no `:number` field besides the window
+  # field, which `over_budget/2` then holds to the ceiling.
+  @doc false
+  def source(_state, _key, nil, _schema), do: nil
+  def source(_state, _key, delivery, nil), do: delivery
+
+  def source(state, key, delivery, schema),
+    do: Feed.reduce(delivery, schema, Map.get(state.budgets, key), state.monitor.reduce)
 
   # A slot whose delivery, at its own budget, still holds more rows than the ceiling
   # (spec/15 §8.2, D-227): handed with no delivery, so its cell never holds the rows, and

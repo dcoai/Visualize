@@ -75,12 +75,39 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
     end
   end
 
-  test "a source's answer over the board's ceiling is over budget, as a feed's is (D-227)" do
-    tripled = %{@doubled | elixir: "fn %{raw: rows} -> rows ++ rows ++ rows end"}
+  # A union of its input with itself, three times: 15 rows from 5, past a ceiling of 10.
+  defp tripled(elixir \\ "fn %{raw: rows} -> rows ++ rows ++ rows end", schema \\ nil),
+    do: %{@doubled | elixir: elixir, schema: schema || @doubled.schema}
+
+  defp held(board, cell),
+    do: :sys.get_state(Server.info(board).cells[cell].pid).slots["primary"]
+
+  test "a source's answer over the board's ceiling is reduced to the slot's budget and drawn (D-230)" do
+    {{:ok, board}, _agent} =
+      start(
+        board: board(%{tripled: tripled()}),
+        budget: 10,
+        binding: Binding.new(%{{:a, :primary} => :tripled})
+      )
+
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+
+    view = view_until(:a, &(&1.state == :live))
+    assert view.svg =~ ~s(class="mark mark-line") and view.note == nil
+
+    %{delivery: delivery, status: :live} = held(board, "a")
+    assert length(delivery.rows) <= 10 and delivery.reduced_by == :visualize
+  end
+
+  test "a source's answer with no field to reduce by, over the ceiling, is over budget (D-227, D-230)" do
+    # Only the time field and a category: `Feed.reduce/4` has no number to reduce by.
+    labels = "fn %{raw: rows} -> Enum.map(rows ++ rows ++ rows, &%{t: &1.t, v: \"up\"}) end"
+    schema = %{t: %{type: :time}, v: %{type: :category}}
 
     {{:ok, board}, _agent} =
       start(
-        board: board(%{tripled: tripled}),
+        board: board(%{tripled: tripled(labels, schema)}),
         budget: 10,
         binding: Binding.new(%{{:a, :primary} => :tripled})
       )
@@ -90,6 +117,7 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
 
     view = view_until(:a, &match?({:over_budget, _, _}, &1.state))
     assert view.state == {:over_budget, 15, 10} and view.svg == nil
+    assert %{delivery: nil, status: {:over_budget, 15, 10}} = held(board, "a")
   end
 
   test "a cell bound to a virtual source draws its answer" do

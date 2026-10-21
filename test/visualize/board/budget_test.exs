@@ -105,6 +105,33 @@ defmodule Visualize.Board.BudgetTest do
       assert Budget.feeds([:f, :g], budgets, refs, [:g], 1000) == %{f: 400, g: 1000}
       assert Budget.feeds([:f], %{budgets | {"a", "p"} => nil}, refs, [], 1000) == %{f: nil}
     end
+
+    test "every bound slot has a budget, a virtual source's as a feed's; an unbound one none (D-230)" do
+      components = Map.new(~w(a b c), &{&1, %{chart: chart([@line]), vars: %{}}})
+      needs = %{"a" => ["primary"], "b" => ["primary"], "c" => ["primary"]}
+      refs = %{{"a", "primary"} => {:feed, :f}, {"b", "primary"} => {:source, ["s"]}}
+      boxes = %{"a" => {0, 0, 560, 300}, "b" => {0, 0, 260, 300}, "c" => {0, 0, 560, 300}}
+
+      assert Budget.slots(components, needs, refs, boxes, nil) ==
+               %{{"a", "primary"} => 2000, {"b", "primary"} => 800}
+
+      assert Budget.slots(components, needs, refs, boxes, 1000) ==
+               %{{"a", "primary"} => 1000, {"b", "primary"} => 800}
+    end
+
+    test "a feed's budget counts only the feed-bound slots; a source's slots are in none (D-230)" do
+      refs = %{
+        {"a", "p"} => {:feed, :f},
+        {"b", "p"} => {:source, ["s"]},
+        {"c", "p"} => {:source, ["c", "s"]}
+      }
+
+      budgets = %{{"a", "p"} => 100, {"b", "p"} => 900, {"c", "p"} => nil}
+
+      # `:g` is read by the source: it is asked the ceiling, whatever the source's slots ask.
+      assert Budget.feeds([:f, :g], budgets, refs, [:g], 1000) == %{f: 100, g: 1000}
+      assert Budget.feeds([:f, :g], budgets, refs, [:g], nil) == %{f: 100, g: nil}
+    end
   end
 
   describe "the design key (spec/14 §2.10)" do
