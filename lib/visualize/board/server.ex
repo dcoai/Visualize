@@ -79,8 +79,10 @@ defmodule Visualize.Board.Server do
     * `:virtual_sources` - the modules of the host's virtual-source functions
       (`use Visualize.VirtualSources`), beside `config :visualize, virtual_sources:`
       (default `[]`, spec/15 §14.6)
-    * `:virtual_source_timeout` - milliseconds a virtual source's call may run
-      (default `1_000`)
+    * `:virtual_source_reductions` - the reductions a virtual source's call may spend
+      (default `100_000_000`, spec/08 §10.5.4)
+    * `:virtual_source_timeout` - milliseconds before a virtual source's call that has
+      not answered is hung: the liveness bound, not a speed limit (default `30_000`)
     * `:virtual_source_heap` - words a virtual source's call may hold (default
       `10_000_000`)
     * `:id` - the board's id, each cell's chart root `<id>-<cell>-chart` (default
@@ -157,7 +159,8 @@ defmodule Visualize.Board.Server do
         max_heap: 25_000_000,
         clock: &DateTime.utc_now/0,
         virtual_sources: [],
-        virtual_source_timeout: 1_000,
+        virtual_source_reductions: 100_000_000,
+        virtual_source_timeout: 30_000,
         virtual_source_heap: 10_000_000
       ])
 
@@ -201,6 +204,7 @@ defmodule Visualize.Board.Server do
       feeds: Map.keys(opts[:feeds]),
       functions: VirtualSources.registry(opts[:virtual_sources]),
       debounce: opts[:debounce],
+      max_reductions: opts[:virtual_source_reductions],
       timeout: opts[:virtual_source_timeout],
       max_heap: opts[:virtual_source_heap]
     ]

@@ -361,7 +361,8 @@ children = [
 | `boards:` | `%{}` | the boards the cells' drill targets may name, as `Visualize.Board.validate/3` takes them (§3.2, §13.3) |
 | `debounce:` | `250` | milliseconds a brushed window waits for the next before it is applied (§13.1), and a virtual source's pulse waits for more changes (§14.2); `0` applies each at once |
 | `virtual_sources:` | `[]` | the modules of the host's virtual-source functions (§14.6) |
-| `virtual_source_timeout:` | `1_000` | milliseconds a virtual source's call may run (§14.3) |
+| `virtual_source_reductions:` | `100_000_000` | the reductions a virtual source's call may spend (§14.3) |
+| `virtual_source_timeout:` | `30_000` | milliseconds before a virtual source's call that has not answered is hung (§14.3) |
 | `virtual_source_heap:` | `10_000_000` | words a virtual source's call may hold (§14.3) |
 | `id:` | `vis-board-<h>`, `<h>` the lower-case base-36 `:erlang.phash2/1` of the board's `meta` and its cells' names, sorted | the board's id: each cell's chart root is `<id>-<cell>-chart` (§8.3), so two cells that draw one component never share a root's ids or a scoped rule (spec/14 §4.7, #712, D-188); a host placing two copies of one board on a page gives each its own — the component's `id` (§9.1) serves |
 | `name:` | none | a registered name, as `GenServer.start_link/3` takes it |
@@ -864,7 +865,7 @@ After a pulse the board hands its cells their data as a turn does (§8.2), so a 
 
 ### 14.3 Faults
 
-A source's call is one bounded call (spec/08 §10.5.4), with the board's `virtual_source_timeout:` and `virtual_source_heap:`. **When it fails, the source keeps its last good output, and the pulse does not propagate past it**: the sources that read it are not marked by it (#643, settled question 4). Its state is `{:down, {:virtual_source, id, kind}}`, `kind` one of spec/08 §10.5.4's five — `:restricted`, `:timeout`, `:memory`, `:raised`, `:nonconforming` — and a cell bound to it draws its last output under the down banner (§8.4). The fault's **detail** — the checker's faults, the limit, the exception's module, the row and field of a nonconforming answer (spec/08 §10.5.7) — never a value of the rows, is in `info/1`. The next pulse that marks the source runs it again; a good answer clears the fault.
+A source's call is one bounded call (spec/08 §10.5.4), with the board's `virtual_source_reductions:`, `virtual_source_timeout:` and `virtual_source_heap:`: a runaway is stopped by the reductions it spends, never by the clock, so a source's verdict is the same on a loaded host (#852, D-220). **When it fails, the source keeps its last good output, and the pulse does not propagate past it**: the sources that read it are not marked by it (#643, settled question 4). Its state is `{:down, {:virtual_source, id, kind}}`, `kind` one of spec/08 §10.5.4's six — `:restricted`, `:reductions`, `:hung`, `:memory`, `:raised`, `:nonconforming` — and a cell bound to it draws its last output under the down banner (§8.4). The fault's **detail** — the checker's faults, the limit, the exception's module, the row and field of a nonconforming answer (spec/08 §10.5.7) — never a value of the rows, is in `info/1`. The next pulse that marks the source runs it again; a good answer clears the fault.
 
 ### 14.4 Per identity
 
@@ -879,7 +880,8 @@ A binding names a virtual source as it names a feed: a cell's slot bound to a na
 | Option | Default | Meaning |
 |---|---|---|
 | `virtual_sources:` | `[]` | the modules of the host's functions (`use Visualize.VirtualSources`, spec/08 §10.5.8), beside `config :visualize, virtual_sources:` |
-| `virtual_source_timeout:` | `1_000` | milliseconds a source's call may run (spec/08 §10.5.4) |
+| `virtual_source_reductions:` | `100_000_000` | the reductions a source's call may spend (spec/08 §10.5.4) |
+| `virtual_source_timeout:` | `30_000` | milliseconds before a source's call that has not answered is hung — the liveness bound, not a speed limit (spec/08 §10.5.4) |
 | `virtual_source_heap:` | `10_000_000` | words a source's call may hold (spec/08 §10.5.4) |
 | `debounce:` | `250` | §8.2's option: milliseconds a pulse waits for more changes |
 
@@ -894,7 +896,7 @@ A binding names a virtual source as it names a feed: a cell's slot bound to a na
 | Function | Contract |
 |---|---|
 | `Visualize.VirtualSource.Engine.new/1` | `new(sources, [])`. |
-| `Visualize.VirtualSource.Engine.new/2` | `new(sources, opts)`: the engine over virtual sources by path, defined (§14.1) — `{:ok, engine}` or `{:error, [{path, at, reason}]}`; options `feeds:` (the feeds' names), `functions:` (the registry), `debounce:`, `timeout:`, `max_heap:`. |
+| `Visualize.VirtualSource.Engine.new/2` | `new(sources, opts)`: the engine over virtual sources by path, defined (§14.1) — `{:ok, engine}` or `{:error, [{path, at, reason}]}`; options `feeds:` (the feeds' names), `functions:` (the registry), `debounce:`, `max_reductions:`, `timeout:`, `max_heap:` (each call's limits, spec/08 §10.5.4). |
 | `Visualize.VirtualSource.Engine.push/4` | `push(engine, deliveries, schemas, now)`: the sources that read a changed feed marked, and the next pulse due (§14.2). |
 | `Visualize.VirtualSource.Engine.run/2` | `run(engine, now)`: the due pulse run, in rank order, each marked source at most once; the engine unchanged when none is due (§14.2). |
 | `Visualize.VirtualSource.Engine.due/1` | The monotonic millisecond the next pulse is due, or `nil`. |

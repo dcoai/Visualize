@@ -6,7 +6,7 @@ defmodule Visualize.VirtualSource.Sandbox.Cache do
 
   An entry is keyed by the SHA-256 of the source, the arity and the fields it was checked
   against, and holds the compilation's answer, a refusal included, so a source is checked
-  and compiled once. A compilation the runner cut short (`:timeout`, `:memory`) is not
+  and compiled once. A compilation the runner cut short (`:reductions`, `:hung`, `:memory`) is not
   kept, since it says nothing about the source. The cache never evicts.
   """
 

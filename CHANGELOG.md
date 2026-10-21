@@ -54,6 +54,29 @@ release it merely follows.
   unchanged. If you want a hover name on a hand-built root, prepend
   `Visualize.IR.Element.title/1` yourself.
 
+- **A virtual source's call is limited by the work it does, not by the clock** (#852,
+  #856, D-220). Before, a call that took longer than 1 s failed as `:timeout`. On a busy
+  host that was correct work: one second buys about a quarter of the work it buys on an
+  idle host, so the same function passed idle and failed loaded. Now the limit is the
+  number of reductions the call's process spends, which load does not change. A
+  separate, generous wall-clock bound catches only a call that never answers. *Affects*
+  code that matches on the fault kinds or sets the limits:
+  - **The kind `:timeout` is gone.** `Visualize.VirtualSource.Sandbox.run/3` and
+    `compile/2`, the engine's faults and a board's `{:virtual_source, id, kind}` state
+    now report `{:error, :reductions, cap}` for a call that did too much work (new option
+    `max_reductions:`, default `100_000_000`). A call that has not answered within
+    `timeout:` (a host function blocked in `receive`) is `{:error, :hung, ms}`.
+    *Before:* `{:error, :timeout, 1000}`. *After:* `{:error, :reductions, 100_000_000}`
+    for a runaway, or `{:error, :hung, 30_000}` for a blocked call.
+  - **`timeout:` now means "has not answered", and its default is 30 s** (was 1 s), in
+    `Sandbox.run/3`, `Visualize.VirtualSource.Engine.new/2` and the board's
+    `virtual_source_timeout:`. A host function that blocks now holds a pulse up to 30 s
+    before it is reported. If you set the timeout low to cap work, set the new
+    `virtual_source_reductions:` (board) or `max_reductions:` (engine, sandbox) instead.
+  - The default cap is about 4,500 times what the costliest real stored function costs
+    to compile, and about 150 times a source near the 10 kB limit. A per-identity batch
+    fits some 180,000 rows at the board demo's cost (#852 has the measurements).
+
 ### Added
 
 - **A bundle can be written to a file and read back: `Bundle.to_json/1` and `from_json/2`**

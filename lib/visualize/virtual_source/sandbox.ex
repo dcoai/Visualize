@@ -16,20 +16,22 @@ defmodule Visualize.VirtualSource.Sandbox do
       iex> reason
       {:restricted, {"File", "read", 1}}
 
-  Nothing is rescued: a raise, a heap overrun and a timeout are read from the process the
-  call ran in, through its monitor.
+  A call's cost is the reductions its process spends, held to `max_reductions:`, so a
+  runaway's verdict is the same on a loaded host; a call blocked in `receive` is `:hung` at
+  a separate, generous `timeout:` (#852, D-220). Nothing is rescued: a raise, a heap overrun,
+  a runaway and a hang are read from the process the call ran in, through its monitor.
   """
 
   alias Visualize.VirtualSource.Sandbox.{Checker, Compiled}
 
   @check_opts [arity: 1, fields: nil, max_source: 10_000]
-  @run_opts [timeout: 1_000, max_heap: 10_000_000]
+  @run_opts [max_reductions: 100_000_000, timeout: 30_000, max_heap: 10_000_000]
 
   @typedoc "A checker fault: the source line, or `nil`, and the reason (spec/08 §10.5.1)."
   @type fault :: {pos_integer() | nil, term()}
 
   @typedoc "What a call can end in besides a value (spec/08 §10.5.4)."
-  @type kind :: :timeout | :memory | :raised
+  @type kind :: :reductions | :hung | :memory | :raised
 
   @doc "As `check/2` with no options."
   @spec check(String.t()) :: {:ok, Macro.t()} | {:error, [fault(), ...]}
@@ -154,11 +156,12 @@ defmodule Visualize.VirtualSource.Sandbox do
 
   @doc """
   A function called with `args` in a process of its own (spec/08 §10.5.4): `{:ok, value}`,
-  or `{:error, kind, detail}` — `{:error, :timeout, ms}` when it did not answer within
-  `timeout:` (`1_000` ms), `{:error, :memory, words}` when its heap passed `max_heap:`
-  (`10_000_000` words) and the VM killed it, `{:error, :raised, module}` with the
-  exception's module when it raised. The process is spawned with its heap limit set and
-  monitored; a killed process is waited for before the call returns.
+  or `{:error, kind, detail}` — `{:error, :reductions, cap}` when its process spent more
+  than `max_reductions:` (`100_000_000`), `{:error, :hung, ms}` when it had not answered
+  within `timeout:` (`30_000` ms) — blocked, not slow — `{:error, :memory, words}` when its
+  heap passed `max_heap:` (`10_000_000` words) and the VM killed it, `{:error, :raised,
+  module}` with the exception's module when it raised. The process is spawned with its heap
+  limit set and monitored; a killed process is waited for before the call returns.
   """
   @spec run(Compiled.t() | function(), list(), keyword()) ::
           {:ok, term()} | {:error, kind(), term()}
@@ -177,48 +180,24 @@ defmodule Visualize.VirtualSource.Sandbox do
     end
   end
 
-  # The bounded runner: a monitored process with its heap limit set at the spawn, killed
-  # when the timeout passes; the outcome read from its result or its `:DOWN`.
+  # The bounded runner (`Visualize.Bounded`): a monitored process with its heap limit set at
+  # the spawn, its reductions held to the cap and its answer awaited for `timeout` ms.
   defp bounded(thunk, opts) do
-    timeout = Keyword.fetch!(opts, :timeout)
     max_heap = Keyword.fetch!(opts, :max_heap)
-    parent = self()
-    tag = make_ref()
-
+    cap = Keyword.fetch!(opts, :max_reductions)
+    timeout = Keyword.fetch!(opts, :timeout)
     limit = %{size: max_heap, kill: true, error_logger: false, include_shared_binaries: true}
 
-    {pid, monitor} =
-      :erlang.spawn_opt(fn -> send(parent, {tag, thunk.()}) end, [
-        :monitor,
-        {:max_heap_size, limit}
-      ])
-
-    receive do
-      {^tag, value} ->
-        Process.demonitor(monitor, [:flush])
-        {:ok, value}
-
-      {:DOWN, ^monitor, :process, ^pid, :killed} ->
-        {:error, :memory, max_heap, :killed}
-
-      {:DOWN, ^monitor, :process, ^pid, reason} ->
-        {:error, :raised, raised(reason), reason}
-    after
-      timeout ->
-        Process.exit(pid, :kill)
-
-        receive do
-          {:DOWN, ^monitor, :process, ^pid, _reason} -> :ok
-        end
-
-        # A result sent as the timer fired is dropped with the call.
-        receive do
-          {^tag, _value} -> :ok
-        after
-          0 -> :ok
-        end
-
-        {:error, :timeout, timeout, :timeout}
+    case Visualize.Bounded.run(thunk,
+           reductions: cap,
+           timeout: timeout,
+           spawn: [{:max_heap_size, limit}]
+         ) do
+      {:ok, value, _spent} -> {:ok, value}
+      {:reductions, _spent} -> {:error, :reductions, cap, :reductions}
+      :hung -> {:error, :hung, timeout, :hung}
+      {:down, :killed} -> {:error, :memory, max_heap, :killed}
+      {:down, reason} -> {:error, :raised, raised(reason), reason}
     end
   end
 
