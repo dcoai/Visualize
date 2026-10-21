@@ -605,6 +605,23 @@ defmodule Visualize.VirtualSource.Engine do
   @spec outputs(t()) :: %{path() => Delivery.t()}
   def outputs(%__MODULE__{outputs: outputs}), do: outputs
 
+  @doc """
+  The feeds some source reads, sorted: a board asks each of them its ceiling, since a
+  source's function reads the rows it is given (spec/15 §8.2, D-226).
+  """
+  @spec feeds_read(t()) :: [term()]
+  def feeds_read(%__MODULE__{inputs: inputs}) do
+    inputs
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.flat_map(fn
+      {_key, _name, {:feed, feed}, _window} -> [feed]
+      _other -> []
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @doc "Every source's output schema, by path."
   @spec schemas(t()) :: %{path() => Schema.t()}
   def schemas(%__MODULE__{sources: sources}),

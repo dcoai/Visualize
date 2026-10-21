@@ -179,7 +179,7 @@ defmodule Visualize.Feed do
     |> trim(schema, box, :window in supports)
     |> region(schema, box, :region in supports)
     |> latest(schema, box, :latest in supports)
-    |> reduce(schema, opts[:budget], opts[:reduce], :budget in supports)
+    |> budgeted(schema, opts[:budget], opts[:reduce], :budget in supports)
   end
 
   defp box!(window, schema) do
@@ -255,11 +255,42 @@ defmodule Visualize.Feed do
     if Window.time?(value), do: Window.position(value)
   end
 
-  defp reduce(delivery, _schema, nil, _method, _honored), do: delivery
-  defp reduce(delivery, _schema, _budget, _method, true), do: delivery
+  # A budget-honoring feed is not reduced again to the budget it was asked (spec/08 §11.2).
+  defp budgeted(delivery, _schema, _budget, _method, true), do: delivery
 
-  defp reduce(delivery, schema, budget, method, false)
-       when is_integer(budget) and budget > 0 and method in [:lttb, :m4] do
+  defp budgeted(delivery, schema, budget, method, false),
+    do: reduce(delivery, schema, budget, method)
+
+  @doc "As `reduce/4` by `:lttb`."
+  @spec reduce(Delivery.t(), Schema.t(), budget()) :: Delivery.t()
+  def reduce(%Delivery{} = delivery, %Schema{} = schema, budget),
+    do: reduce(delivery, schema, budget, :lttb)
+
+  @doc """
+  The delivery reduced to `budget` rows by `method`, `:lttb` or `:m4` (spec/08 §11.2),
+  recording `reduced_by: :visualize`, whatever the feed honors: the step `finish/3` takes
+  where `supports:` lacks `:budget`. Each series — the rows sharing every `:category`
+  field's value — is reduced field by field against the window field, and the union of
+  the kept rows returned whole, in their order. A `nil` budget, a delivery within it and a
+  schema with no `:number` field come back as they are.
+
+  A reader that wants fewer rows than a feed was asked reduces with it: a board's slot
+  whose budget is below the largest its feed serves (spec/15 §8.2, D-226).
+
+      iex> alias Visualize.Data.{Delivery, Schema}
+      iex> schema = Schema.new!(%{t: %{type: :number, window: true}, v: %{type: :number}})
+      iex> delivery = Delivery.new(for t <- 1..100, do: %{t: t, v: rem(t * 7, 5)})
+      iex> reduced = Visualize.Feed.reduce(delivery, schema, 10)
+      iex> {length(reduced.rows), reduced.reduced_by}
+      {10, :visualize}
+
+  """
+  @spec reduce(Delivery.t(), Schema.t(), budget(), :lttb | :m4) :: Delivery.t()
+  def reduce(%Delivery{} = delivery, %Schema{}, nil, method) when method in [:lttb, :m4],
+    do: delivery
+
+  def reduce(%Delivery{} = delivery, %Schema{} = schema, budget, method)
+      when is_integer(budget) and budget > 0 and method in [:lttb, :m4] do
     rows = Table.rows(delivery)
     clock = window_field(schema)
     numbers = for {name, %{type: :number}} <- schema.fields, name != clock, do: name

@@ -80,6 +80,51 @@ defmodule Visualize.Feed.MonitorTest do
       assert length(Monitor.deliveries(monitor).a.rows) == 5
       assert Feeds.calls(agent, :fetch) == 2
     end
+
+    test "each feed is asked its own budget by name, a name absent asked none (D-226)" do
+      test = self()
+
+      answer = fn _window, budget ->
+        send(test, {:asked, budget})
+        {rows(1..100), []}
+      end
+
+      {a, _} = Feeds.scripted(schema: @v1, rows: answer)
+      {b, _} = Feeds.scripted(schema: @v1, rows: rows(1..100))
+      {c, _} = Feeds.scripted(schema: @v1, rows: rows(1..100))
+
+      monitor = Monitor.new(%{a: a, b: b, c: c}, budget: %{a: 30, b: 10}) |> Monitor.tick(now: 0)
+      assert_received {:asked, 30}
+      %{a: da, b: db, c: dc} = Monitor.deliveries(monitor)
+      assert {length(da.rows), length(db.rows), length(dc.rows)} == {30, 10, 100}
+      assert {da.reduced_by, dc.reduced_by} == {:visualize, nil}
+
+      assert_raise ArgumentError, ~r/budget:/, fn -> Monitor.new(%{a: a}, budget: %{a: 0}) end
+    end
+
+    test "a new budget refetches a feed that honors one, and refinishes any other (D-226)" do
+      answer = fn _window, budget -> {rows(1..(budget || 100)), [reduced_by: :feed]} end
+
+      {honors, honors_agent} =
+        Feeds.scripted(schema: @v1, supports: [:budget, :push], rows: answer)
+
+      {plain, plain_agent} = Feeds.scripted(schema: @v1, supports: [:push], rows: rows(1..100))
+
+      monitor =
+        Monitor.new(%{h: honors, p: plain}, budget: %{h: 40, p: 40}) |> Monitor.tick(now: 0)
+
+      assert {Feeds.calls(honors_agent, :fetch), Feeds.calls(plain_agent, :fetch)} == {1, 1}
+
+      # An unchanged budget asks nothing again.
+      monitor = monitor |> Monitor.budget(%{h: 40, p: 40}) |> Monitor.tick(now: 1)
+      assert {Feeds.calls(honors_agent, :fetch), Feeds.calls(plain_agent, :fetch)} == {1, 1}
+
+      monitor = monitor |> Monitor.budget(%{h: 20, p: 20}) |> Monitor.tick(now: 2)
+      assert {Feeds.calls(honors_agent, :fetch), Feeds.calls(plain_agent, :fetch)} == {2, 1}
+      %{h: h, p: p} = Monitor.deliveries(monitor)
+      assert {length(h.rows), h.reduced_by} == {20, :feed}
+      assert {length(p.rows), p.reduced_by} == {20, :visualize}
+    end
   end
 
   describe "errors and staleness are states" do

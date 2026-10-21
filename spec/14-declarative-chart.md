@@ -38,7 +38,7 @@ Collections are lists (`marks`, `axes`, `labels`, `transforms`); named declarati
 
 | Facet | Keys that |
 |---|---|
-| `:binding` | name a source, a slot, a variable, or a field of a source: `sources`, `vars`, `data`, `source`, `transforms`, `field`, `by` |
+| `:binding` | name a source, a slot, a variable, or a field of a source, or say how much of a slot to ask for: `sources`, `vars`, `budget`, `data`, `source`, `transforms`, `field`, `by` |
 | `:channel` | map a field onto a scale: `marks`, `channels` and every key of the channels node |
 | `:geometry` | fix a size, position, extent, angle, scale or tick geometry: `frames`, `box`, `kind`, `margin`, `scales`, `axes`, `side`, `ticks`, `options`, `render` |
 | `:style` | choose presentation: `theme`, `styles`, `style` and every key of the style grammar (§3) |
@@ -68,6 +68,7 @@ A container's facet is the facet of what it holds: `marks` is `:channel` because
 | `:range` | a scale's range given as a list (§4.3, #710, D-185): each entry a **position** — a number, a `DateTime`, a variable or a fact — or a **color position**, a `:color` of any form that type accepts, typed colors and transforms among them. A bare atom here is canonicalized to `{:color, atom}` (§9), as in every color position: a range's entries are what the scale maps *to*, so an atom in one can only be a color. It is not the domain's `:extent`, whose atoms are categories |
 | `:key_order` | `{:keys, [n, …]}` with every `n` a `:name`: a stacking order fixed by the series keys, bottom first (§5.4.1, #492) |
 | `:adopted` | `{:frame, f, s}`, the scale `s` of the frame `f` (§4.3): what a frame writes under a scale name in place of a node of its own |
+| `:budget` | a positive integer, rows; or `{:per_px, k}` with `k` a positive number, rows per pixel of plot width (§2.10, #864) |
 | `:text` | a string with interpolation: `#{var(:name)}` stands for a variable and `#{field(:name)}` for a datum's field, a literal `#{` is `\#{` (§7.1); a list of parts — strings, variables and `:field_ref`s, the form an earlier draft wrote — is read and written back as the string (§9) |
 | `:anchor` | `:title`, `:subtitle`, `:caption`; `{:axis, s}` with `s` a `{:ref, :scale}`; `{:frame, c}` with `c` one of `:top_left`, `:top_right`, `:bottom_left`, `:bottom_right`, `:center`; or `{:data, [x, y]}` with `x` and `y` values in the domains of the frame's position scales (§6.3) |
 | `:color` | a color string, `:none`, or a **typed color** ([08-utilities](08-utilities.md) §1.9, #664, D-173): `{:color, name}` from the theme's color table — the roles `:good`, `:warning`, `:bad`, `:info` and `:neutral`, the furniture and `:series_k` among its names — `{:series, i}`, a ramp position `{:ramp, name, t}` with `name` one of the theme's four ramps and `t` a number in `0..1` (§7.5), the contrast ink `{:contrast, c}` (§3.2), or a transform of colors. A bare atom here is canonicalized to `{:color, atom}` (§9) |
@@ -115,6 +116,7 @@ A `%Visualize.Chart.Var{}` (§7.1) is accepted wherever a value of any type is e
 | `defaults` | `{:node, :defaults}` | `:style` | `nil` | `:override` |
 | `layout` | `{:node, :layout}` | `:geometry` | `%{}` | `:override` |
 | `interaction` | `{:node, :interaction}` | `:binding` | `%{}` | `:override` |
+| `budget` | `:budget` | `:binding` | `nil` | `:override` |
 | `frames` | `{:map, {:node, :frame}}` | `:geometry` | required | `:deep` |
 | `marks` | `{:list, {:node, :mark}}` | `:channel` | `[]` | `:concat` |
 | `labels` | `{:list, {:node, :label}}` | `:content` | `[]` | `:concat` |
@@ -224,6 +226,20 @@ A `frame` that names no frame of the design is `{:undeclared, :frame, name}`, as
 | `data-vis-brush-extent` | `x0,y0,x1,y1`: the frame's plot area in the chart's coordinates — its left edge the frame's box offset plus its left margin, its top the box offset plus the top margin, and its right and bottom a plot width and a plot height further — the area the brush captures and the band spans |
 
 `Visualize.Chart.Frame.brush_attrs/1` computes them, `%{}` for a frame that is not the brush frame; `Visualize.Chart.Frame.generate/2` and `Visualize.Chart.generate/2` write them where they write the sync group's, and a page drawing a compiled chart on a canvas puts them on its container as it puts the sync group's (`Visualize.Hooks.Crosshair.attrs/3`). `BrushHook` reads them from the first descendant that carries `data-vis-brush` when its own element does not give the type or the extent (spec/10 §6.5), and it pushes the window in domain units, `"domain" => [lo, hi]`, with every `brush_select` it can map — so the host's handler reads the window and knows nothing of margins. A design without `brush` writes nothing, so its markup is the same byte for byte. The brush frame is held to what a sync frame is held to, for the same reason — the hook inverts a pixel by linear interpolation: a frame that is not `:cartesian` is `{:brush, :frame_kind, kind}` and an `x` that is not `:linear` or `:time` is `{:brush, :x_scale, kind}`, both at `[:interaction, :brush]`.
+
+### 2.10 Budget
+
+**Implemented** (#760, #864, D-226). `budget` is the design's own say in how many rows each of its slots is asked for on a board. A board derives every bound slot's budget from what the cell draws at its size — the plot width of each mark that reads the slot, and the mark's type (spec/15 §8.2) — and a design gives `budget` only to say otherwise: a chart that wants coarser or finer data than its marks' kinds imply.
+
+| Value | The slot's budget |
+|---|---|
+| `nil` (the default) | derived (spec/15 §8.2) |
+| `n`, a positive integer | `n` rows, for every slot of the design, whatever its width |
+| `{:per_px, k}`, `k` a positive number | `ceil(k × w)` rows, at least `1`, with `w` the plot width spec/15 §8.2 derives the slot's budget from: a design that follows its plot as the derivation does, at its own rate |
+
+**An override is intent, and the board's ceiling still caps it.** A design's `budget` replaces the derivation, never the board's `budget:` option, which is the ceiling every slot's budget is held under (spec/15 §8.2). Outside a board nothing reads the key: `apply/2`, `render/2` and a compiled chart draw the rows they are given, and a host that asks its own feeds reads the key itself.
+
+A `budget` that is not a positive integer or `{:per_px, k}` with a positive number `k` is `{:type, :budget}` at `[:budget]`. Its JSON is the integer, or `{"$per_px": k}` (§11.2).
 
 ## 3. The style grammar
 
@@ -1739,6 +1755,7 @@ The resolution, binding and schema faults are reported by `Visualize.Chart.apply
 | `{:axis, :y}` | `{"$axis": "y"}` |
 | `{:frame, :top_left}` | `{"$frame": "top_left"}` |
 | `{:frame, :main, :x}`, a scale adopted from another frame (§4.3) | `{"$adopted": ["main", "x"]}`, the frame and the scale (#480) |
+| `{:per_px, 0.5}`, a design's budget in rows per pixel (§2.10, #864) | `{"$per_px": 0.5}`, the number; any other value under the tag is left as the object it is, refused by the validator as `{:type, :budget}` |
 | `{:keys, [:pop, :rock]}`, a stack's fixed order (§5.4.1) | `{"$keys": ["pop", "rock"]}`, the keys in order (#492) |
 | `{:data, [x, y]}` | `{"$data": [x, y]}`, the two values as terms |
 | `{:generate, :tenant_style, [{:field, :tenant}]}`, a generator (§3.13) | `{"$generate": ["tenant_style", [{"$field": "tenant"}]]}`: the name, then the arguments as terms (#654); a name that is not lower-case letters, digits and `_`, or a shape other than `[name, list]`, is left as the object it was read as, never made into an atom, and the validator refuses it at its path (#645's rule) |
@@ -3466,7 +3483,7 @@ A composite is a fragment whose content is a list of use sites and its own `vars
 
 | The site's kind | Lands at | Identity |
 |---|---|---|
-| `theme`, `meta`, `layout`, `interaction`, `defaults` | the design key of that name | the position |
+| `theme`, `meta`, `layout`, `interaction`, `defaults`, `budget` | the design key of that name | the position |
 | `frame` | cascades into `frame` (§8.2) | the position |
 | `mark`, `label`, `axis` | appended under `marks`, `labels`, the frame's `axes` | its own — `id`, `id`, `{scale, side}` — as the cascade already merges them |
 | `style`, `scale`, `source`, `var`, `gradient` | `styles[key]`, the frame's `scales[key]`, `sources[key]`, `vars[key]`, `defs[key]` | the site's `key` (§19.3); a style's body may be a node or a list of entries (§3.6, #658, #713), placed alike |

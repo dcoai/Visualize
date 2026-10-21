@@ -21,7 +21,7 @@ defmodule Visualize.Chart.Codec.Tags do
   # operation of `Visualize.Color.Typed.ops/0`, so a new operation is a tag by construction.
   @live ~w($var $field $generate $paint $ramp $color $blend $contrast $steps $colors
            $series $unit $scale $axis $frame $data $adopted $keys $fact $use $id $time $atom
-           $datum $absent $version) ++ Enum.map(@unary, &"$#{&1}")
+           $per_px $datum $absent $version) ++ Enum.map(@unary, &"$#{&1}")
 
   # A tag no longer written, refused with what replaced it.
   @retired %{

@@ -54,6 +54,9 @@ defmodule Visualize.Chart.Schema.Design do
       spec(:layout, {:node, :layout}, :geometry, default: %{}),
       # How the chart behaves beside others on a page: its sync group (spec/14 §2.9, #466).
       spec(:interaction, {:node, :interaction}, :binding, default: %{}),
+      # How many rows a board asks for each slot, in place of its derived budget (spec/14
+      # §2.10, spec/15 §8.2, D-226).
+      spec(:budget, :budget, :binding),
       spec(:frames, {:map, {:node, :frame}}, :geometry, required: true, merge: :deep),
       spec(:marks, {:list, {:node, :mark}}, :channel, default: [], merge: :concat),
       spec(:labels, {:list, {:node, :label}}, :content, default: [], merge: :concat)

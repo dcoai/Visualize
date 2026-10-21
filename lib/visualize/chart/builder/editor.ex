@@ -213,6 +213,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     defp read(type, string) when type in [:color, :size, :font], do: {:ok, loose(string)}
 
+    # A design's budget (spec/14 §2.10): rows as a whole number, or `{:per_px, k}` — the
+    # tag is matched by its spelling here, as the literal reader would not know the word.
+    defp read(:budget, string) do
+      with :error <- integer(string) do
+        case Regex.run(~r/^\{\s*:per_px\s*,\s*([0-9.]+)\s*\}$/, string) do
+          [_, k] -> with {:ok, k} <- number(k), do: {:ok, {:per_px, k}}
+          nil -> :error
+        end
+      end
+    end
+
     defp read({:enum, allowed}, string) do
       case Enum.find(allowed, &(to_string(&1) == string)) do
         nil -> :error

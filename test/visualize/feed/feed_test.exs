@@ -181,6 +181,21 @@ defmodule Visualize.FeedTest do
       delivery = Delivery.new(for t <- 1..100, do: %{t: t, s: "x"})
       assert Feed.finish(delivery, schema, budget: 10) == delivery
     end
+
+    test "reduce/4 is finish's reduction alone, whatever the feed honors (D-226)" do
+      delivery = Delivery.new(rows(400, ["/a", "/b"]), reduced_by: :feed)
+
+      # A budget-honoring feed's delivery is left alone by finish, and reduce/4 reduces it.
+      assert Feed.finish(delivery, @schema, supports: [:budget], budget: 40) == delivery
+      reduced = Feed.reduce(delivery, @schema, 40, :lttb)
+      assert reduced == Feed.finish(%{delivery | reduced_by: nil}, @schema, budget: 40)
+      assert reduced.reduced_by == :visualize and length(reduced.rows) <= 40
+
+      assert Feed.reduce(delivery, @schema, 40) == reduced
+      assert length(Feed.reduce(delivery, @schema, 40, :m4).rows) <= 40
+      assert Feed.reduce(delivery, @schema, nil, :lttb) == delivery
+      assert Feed.reduce(delivery, @schema, 10_000, :lttb) == delivery
+    end
   end
 
   describe "Window" do

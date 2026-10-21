@@ -203,6 +203,8 @@ defmodule Visualize.Chart.Codec do
   defp value(:adopted, {:frame, f, s}) when is_name(f) and is_name(s),
     do: Tags.tag("$adopted", [spell(f), spell(s)])
 
+  defp value(:budget, {:per_px, k}) when is_number(k), do: Tags.tag("$per_px", k)
+
   defp value(:key_order, {:keys, keys}) when is_list(keys),
     do: Tags.tag("$keys", Enum.map(keys, &value(:name, &1)))
 
@@ -549,6 +551,10 @@ defmodule Visualize.Chart.Codec do
 
   defp read(:anchor, %{"$data" => [x, y]} = v) when map_size(v) == 1,
     do: {:data, [read_term(x), read_term(y)]}
+
+  # Only a number under the tag is a budget per pixel; anything else is left for the validator.
+  defp read(:budget, %{"$per_px" => k} = v) when map_size(v) == 1 and is_number(k),
+    do: {:per_px, k}
 
   defp read(:key_order, %{"$keys" => keys} = v) when map_size(v) == 1 and is_list(keys),
     do: {:keys, Enum.map(keys, &read(:name, &1))}
