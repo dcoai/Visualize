@@ -65,8 +65,24 @@ defmodule Visualize.Board.Budget do
 
   @doc """
   Every bound slot's budget, by `{cell, slot}`: each slot of `needs` (a cell's slots by
-  name) that `slot_refs` binds to a feed, in its cell's box of `boxes`
-  (`Visualize.Board.boxes/2`), its component's chart and variables from `components`.
+  name) that `slot_refs` binds — to a feed, `{:feed, name}`, or to a virtual source,
+  `{:source, path}` — in its cell's box of `boxes` (`Visualize.Board.boxes/2`), its
+  component's chart and variables from `components`. A budget is what the cell draws,
+  whoever produces the rows (spec/15 §8.2, D-230).
+
+      iex> chart = Visualize.Chart.from_map!(%{
+      ...>   version: 3,
+      ...>   sources: %{primary: %{fields: [:t, :v]}},
+      ...>   frames: %{main: %{kind: :cartesian, margin: %{left: 40, right: 20}}},
+      ...>   marks: [%{type: :line, data: :primary, channels: %{x: :t, y: :v}}]
+      ...> })
+      iex> components = %{a: %{chart: chart, vars: %{}}, b: %{chart: chart, vars: %{}}}
+      iex> needs = %{a: ["primary"], b: ["primary"]}
+      iex> refs = %{{:a, "primary"} => {:feed, :f}, {:b, "primary"} => {:source, ["s"]}}
+      iex> boxes = %{a: {0, 0, 560, 200}, b: {0, 0, 160, 200}}
+      iex> Visualize.Board.Budget.slots(components, needs, refs, boxes, nil)
+      %{{:a, "primary"} => 2000, {:b, "primary"} => 400}
+
   """
   @spec slots(map(), %{term() => [String.t()]}, map(), map(), t()) :: %{
           {term(), String.t()} => t()
@@ -74,7 +90,7 @@ defmodule Visualize.Board.Budget do
   def slots(components, needs, slot_refs, boxes, ceiling) do
     for {cell, slots} <- needs,
         slot <- slots,
-        match?({:ok, {:feed, _}}, Map.fetch(slot_refs, {cell, slot})),
+        bound?(Map.fetch(slot_refs, {cell, slot})),
         %{chart: chart, vars: vars} = Map.fetch!(components, cell),
         {_x, _y, w, h} = Map.fetch!(boxes, cell),
         into: %{},
@@ -82,16 +98,33 @@ defmodule Visualize.Board.Budget do
   end
 
   @doc """
-  Each feed's budget, the largest of the bound slots' it fills (`nil`, no bound, the
+  Each feed's budget, the largest of the feed-bound slots' it fills (`nil`, no bound, the
   largest of all): a feed of `feeds` that no slot binds, or that a virtual source reads
-  (`read`), is asked the ceiling.
+  (`read`), is asked the ceiling. A slot of `budgets` bound to a virtual source is in no
+  feed's: its source's inputs are asked the ceiling, and its output is reduced to the
+  slot's budget where it is handed (spec/15 §8.2, D-230).
+
+      iex> refs = %{
+      ...>   {:a, "p"} => {:feed, :f},
+      ...>   {:b, "p"} => {:feed, :f},
+      ...>   {:c, "p"} => {:source, ["s"]}
+      ...> }
+      iex> budgets = %{{:a, "p"} => 300, {:b, "p"} => 800, {:c, "p"} => 2000}
+      iex> Visualize.Board.Budget.feeds([:f, :g], budgets, refs, [], 5000)
+      %{f: 800, g: 5000}
+
   """
   @spec feeds([term()], %{{term(), String.t()} => t()}, map(), [term()], t()) :: %{
           term() => t()
         }
   def feeds(feeds, budgets, slot_refs, read, ceiling) do
     by_feed =
-      Enum.group_by(budgets, fn {key, _b} -> feed_of(slot_refs, key) end, &elem(&1, 1))
+      for(
+        {key, budget} <- budgets,
+        {:feed, feed} <- [Map.fetch!(slot_refs, key)],
+        do: {feed, budget}
+      )
+      |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
 
     Map.new(feeds, fn feed ->
       asked = Map.get(by_feed, feed, [])
@@ -100,10 +133,11 @@ defmodule Visualize.Board.Budget do
     end)
   end
 
-  defp feed_of(slot_refs, key) do
-    {:feed, feed} = Map.fetch!(slot_refs, key)
-    feed
-  end
+  # A slot is bound when the binding resolves it to a feed or to a virtual source; an
+  # unbound one is down (`{:down, {:unbound, slot}}`) and draws nothing.
+  defp bound?({:ok, {:feed, _feed}}), do: true
+  defp bound?({:ok, {:source, _path}}), do: true
+  defp bound?(:error), do: false
 
   defp largest(budgets), do: if(nil in budgets, do: nil, else: Enum.max(budgets))
 

@@ -59,13 +59,16 @@ defmodule Visualize.Board.Server do
   (`Visualize.Board.Budget`, spec/15 §8.2, D-226): its marks' plot widths and types, or
   the design's `budget`, capped by `:budget`. Each feed is fetched once, at the largest
   budget of the slots it fills, and each slot whose budget is smaller is handed the
-  delivery reduced to its own (`Visualize.Feed.reduce/4`, `reduced_by: :visualize`). A
-  resize, or new variables, recompute the budgets; a feed that honors `:budget` and
-  whose budget changed is fetched again.
+  delivery reduced to its own (`Visualize.Feed.reduce/4`, `reduced_by: :visualize`); a
+  slot bound to a virtual source is handed the source's output reduced to its own the
+  same way (D-230), the source's inputs asked the ceiling. A resize, or new variables,
+  recompute the budgets; a feed that honors `:budget` and whose budget changed is fetched
+  again.
 
   The ceiling is the one hard bound (D-227): a slot whose delivery, at its own budget,
-  still holds more rows than `:budget` — a `:budget` feed that over-delivers — is handed
-  to its cell without them, and the cell is `{:over_budget, rows, ceiling}`, never drawn.
+  still holds more rows than `:budget` — a `:budget` feed that over-delivers, or an output
+  `Visualize.Feed.reduce/4` cannot reduce — is handed to its cell without them, and the
+  cell is `{:over_budget, rows, ceiling}`, never drawn.
 
   ## Options
 
@@ -814,9 +817,13 @@ defmodule Visualize.Board.Server do
   defp read(state, cell, slot, deliveries, statuses, cache) do
     case Map.fetch(state.slot_refs, {cell, slot}) do
       {:ok, {:source, path}} ->
+        delivery = Map.get(Engine.outputs(state.engine), path)
+        schema = Map.fetch!(Engine.schemas(state.engine), path)
+        delivery = Budgets.source(state, {cell, slot}, delivery, schema)
+
         %{
-          delivery: Map.get(Engine.outputs(state.engine), path),
-          schema: Map.fetch!(Engine.schemas(state.engine), path),
+          delivery: delivery,
+          schema: schema,
           status: Map.fetch!(Engine.status(state.engine), path)
         }
 
