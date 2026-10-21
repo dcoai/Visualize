@@ -197,6 +197,20 @@ release it merely follows.
   enumerated value is now its plain string. *Before:*
   `{"scale":{"kind":{"$atom":"linear"}}}`. *After:* `{"scale":{"kind":"linear"}}`.
   `from_json/2` still reads an entry written the old way to the same fragment.
+- **A `url(#…)` gradient or hatch draws on the SVG-element binary stream** (#837, D-218).
+  `Visualize.Backend.CanvasBinary.encode_element/2` on a `Visualize.SVG.Element` tree
+  drew a `fill` or `stroke` of `url(#…)` black. It now draws the `linearGradient`,
+  `radialGradient` or hatch `pattern` the reference names, as SVG and the IR encoder draw
+  it: the stream carries the same `paint` records the IR encoder writes, so the markup
+  `from_ir/1` makes of a chart draws its gradients and hatches. `gradientUnits`,
+  `gradientTransform` and stops given as attributes or inline `style` are read. A
+  gradient the records cannot hold — a `reflect` or `repeat` spread, a radial focus off
+  its center, an elliptical radial in user units, an `href` — and a reference to
+  nothing paint the fallback color after the `url(…)`, or nothing, as SVG does (spec/09
+  §4.7). *Affects* code that decodes the stream: a tree with a paint reference is a
+  version 2 stream (at least) with its paint records first, and an unresolvable fill
+  without a fallback now draws no fill instead of black. A tree without a reference is
+  unchanged, byte for byte.
 
 ### Changed
 
@@ -274,8 +288,8 @@ release it merely follows.
   `clipPath` of one shape or a white-and-black mask; `mix-blend-mode`, as an attribute or
   in the inline `style`; a `filter` of one `feDropShadow` or `feGaussianBlur`; and
   `vector-effect="non-scaling-stroke"`. Before, each was dropped without a word. What it
-  still does not draw is listed in spec/09 §4.7, among them a `url(#…)` fill, which draws
-  black. A stream that clips or blends is version 4, one that filters version 2.
+  still does not draw is listed in spec/09 §4.7; a `url(#…)` fill draws since #837
+  (under Fixed). A stream that clips or blends is version 4, one that filters version 2.
 - **`Visualize.SVG.Element.from_ir/1` writes what `Visualize.Backend.SVG` writes** for a
   clip, a blend, an effect and a vector effect (#825). Before, it wrote no clip, and wrote
   `blend="multiply"`, `effect="shadow"`, `vector-effect="non_scaling_stroke"`,
