@@ -495,6 +495,25 @@ defmodule Visualize.Board do
     Map.merge(vars, cells |> Map.fetch!(Names.name(cell)) |> Map.get(:vars, %{}))
   end
 
+  @doc """
+  Every scope's own variables by scope (spec/15 §5, §14.2, D-229): the board's under `[]`
+  and each cell's under `[cell]`, every cell present — what the board shows its virtual
+  sources' engine (`Visualize.VirtualSource.Engine.vars/3`), which holds the cascade.
+
+      iex> board = Visualize.Board.from_map!(%{
+      ...>   vars: %{service: "api"},
+      ...>   cells: %{a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 1}, vars: %{service: "web"}}}
+      ...> })
+      iex> Visualize.Board.own_vars(board)
+      %{[] => %{"service" => "api"}, ["a"] => %{"service" => "web"}}
+  """
+  @spec own_vars(t()) :: %{[String.t()] => %{String.t() => term()}}
+  def own_vars(%__MODULE__{vars: vars, cells: cells}) do
+    cells
+    |> Map.new(fn {name, cell} -> {[name], Map.get(cell, :vars, %{})} end)
+    |> Map.put([], vars)
+  end
+
   # -- interaction (spec/15 §13) ------------------------------------------------------------
 
   @doc """

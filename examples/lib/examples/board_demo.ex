@@ -35,6 +35,11 @@ defmodule Examples.BoardDemo do
     selection; **stale**, **no_data**, **capped**, **invalid** and **over_budget** are the
     *Line Chart* over feeds made to be in that state (`Examples.BoardDemo.States`), so
     every cell state of spec/15 §8.4 is on the page (#781, work item #821, #865).
+  - **histogram** is the *Wave* signal's values in ten bins, the answer of the cell's own
+    virtual source `bins`, the host's `Examples.BoardDemo.Sources.wave_bins/2`: a function
+    of two arguments, given its context, so it bins over the cell's variable `bin_domain`
+    when the page sets it and over the data's extent otherwise, and the cell's `x` scale
+    reads the same variable (#871, D-229). `bin_domains/0` are the page's choices.
 
   The board shares one window, the last five minutes by default, in UTC and shown in the
   board's zone; one sync group joins the time charts' hover and brush. The board is
@@ -219,7 +224,27 @@ defmodule Examples.BoardDemo do
         no_data: %{x: 3, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "No data"},
         capped: %{x: 6, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Capped"},
         invalid: %{x: 9, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Invalid binding"},
-        over_budget: %{x: 0, y: 25, w: 6, h: 3, ref: {:composite, 2}, title: "Over budget"}
+        over_budget: %{x: 0, y: 25, w: 6, h: 3, ref: {:composite, 2}, title: "Over budget"},
+        histogram: %{
+          x: 6,
+          y: 25,
+          w: 6,
+          h: 3,
+          ref: {:composite, 14},
+          title: "Wave, binned: a source that reads its cell's variable",
+          sync: false,
+          virtual_sources: %{
+            bins: %{
+              from: [{:wave, nil}],
+              schema: %{
+                lo: %{type: :number, label: "From"},
+                hi: %{type: :number, label: "To"},
+                count: %{type: :number, label: "Readings"}
+              },
+              function: :wave_bins
+            }
+          }
+        }
       },
       virtual_sources: virtual_sources()
     })
@@ -293,8 +318,47 @@ defmodule Examples.BoardDemo do
       {:composite, 10} => status(),
       {:composite, 11} => endpoints(),
       {:composite, 12} => colored(),
-      {:composite, 13} => links()
+      {:composite, 13} => links(),
+      {:composite, 14} => wave_bins()
     }
+  end
+
+  @bin_domains [{"the data's extent", "extent", :auto}, {"0 to 100", "fixed", [0, 100]}]
+
+  @doc """
+  The bounds a viewer may bin *Wave, binned* over, each `{name, key, value}`: the value is
+  the cell's `bin_domain`, `:auto` the data's extent (D-229).
+  """
+  def bin_domains, do: @bin_domains
+
+  @doc """
+  The `bin_domain` a page's key names, `:auto` for anything else: the key is a person's,
+  so it is matched against the choices, never made an atom.
+  """
+  @spec bin_domain(String.t() | nil) :: :auto | [number()]
+  def bin_domain(key) do
+    Enum.find_value(@bin_domains, :auto, fn {_name, own, value} -> if own == key, do: value end)
+  end
+
+  # A histogram over the cell's own source `bins`: a bar per bin from its `lo` to its `hi`.
+  # The `x` scale's domain is the cell's `bin_domain`, the bounds the source bins over, so
+  # the bars fill the axis whichever the viewer chose; `:auto` infers it from the bins.
+  defp wave_bins do
+    Design.fold([
+      chart(meta: %{name: "Wave, binned"}),
+      source(:bins, [:lo, :hi, :count], types: %{lo: :number, hi: :number, count: :number}),
+      var(:bin_domain, :auto),
+      style(:bin, fill: %{color: :series_2}, stroke: %{color: :background, width: 1}),
+      cartesian(margin: %{top: 10, right: 16, bottom: 26, left: 40}),
+      linear_scale(:x, domain: Visualize.Chart.var(:bin_domain)),
+      linear_scale(:y, domain: [0, :auto], nice: true),
+      axis(:x, :bottom, ticks: 5),
+      axis(:y, :left, ticks: 3, grid: true),
+      rect(:bins, %{x0: :lo, x1: :hi, y0: 0, y1: :count},
+        style: :bin,
+        tooltip: %{fields: [:lo, :hi, :count], template: "{lo} to {hi}: {count} readings"}
+      )
+    ])
   end
 
   # A line per service over time; with a service, only that one's rows (a `:filter` step
@@ -574,7 +638,8 @@ defmodule Examples.BoardDemo do
       {:no_data, :points} => :no_data,
       {:capped, :points} => :capped,
       {:invalid, :points} => :invalid,
-      {:over_budget, :points} => :over_budget
+      {:over_budget, :points} => :over_budget,
+      {:histogram, :bins} => :bins
     })
   end
 

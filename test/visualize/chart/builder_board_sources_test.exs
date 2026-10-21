@@ -47,7 +47,22 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
     @moduledoc false
     use Visualize.VirtualSources
     defsource(tripled(inputs), do: Enum.map(inputs["feed_1"], &%{v: &1.v * 3}))
+
+    # A function of two arguments (D-228): its scope's variables shape its answer.
+    defsource scaled(inputs, context) do
+      %{"k" => k, "unit" => unit} = context["vars"]
+      Enum.map(inputs["feed_1"], &%{v: &1.v * k, unit: unit})
+    end
   end
+
+  @scaled %{
+    from: [{:feed_1, nil}],
+    schema: %{v: %{type: :number}, unit: %{type: :category}},
+    function: :scaled
+  }
+
+  # A stored function of two arguments reading a variable no scope gives (D-229).
+  @unknown ~S|fn %{feed_1: rows}, context -> Enum.map(rows, fn r -> %{v: r.v * context["vars"]["nope"]} end) end|
 
   @t0 ~U[2026-10-16 00:00:00Z]
   @doubled "fn %{feed_1: rows} -> Enum.map(rows, fn r -> %{v: r.v * 2} end) end"
@@ -59,10 +74,25 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
     board =
       %{
         meta: %{name: "Ops"},
-        cells: %{a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 1}}},
+        vars: %{k: 5, unit: "%"},
+        cells: %{
+          a: %{
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 3,
+            ref: {:composite, 1},
+            vars: %{unit: "ms"},
+            virtual_sources: %{
+              scaled: @scaled,
+              unknown: %{from: [{:feed_1, nil}], schema: %{v: %{type: :number}}, elixir: @unknown}
+            }
+          }
+        },
         virtual_sources: %{
           doubled: %{from: [{:feed_1, nil}], schema: %{v: %{type: :number}}, elixir: @doubled},
-          tripled: %{from: [{:feed_1, nil}], schema: %{v: %{type: :number}}, function: :tripled}
+          tripled: %{from: [{:feed_1, nil}], schema: %{v: %{type: :number}}, function: :tripled},
+          scaled: @scaled
         }
       }
       |> Board.from_map!()
@@ -155,6 +185,47 @@ defmodule Visualize.Chart.Builder.BoardSourcesTest do
     doubled = source(s, "doubled")
     refute doubled.draft?
     assert doubled.cells == [["10"], ["20"], ["30"], ["40"], ["50"]]
+  end
+
+  test "a source of two arguments previews with the board's variables, a cell's over them (D-229)" do
+    s = opened()
+
+    board = source(s, "scaled")
+    assert board.state == "live"
+    assert board.cells == [["%", "5"], ["%", "10"], ["%", "15"], ["%", "20"], ["%", "25"]]
+
+    # The cell's own `unit` over the board's, the board's `k` beneath it.
+    cell = source(s, "a.scaled")
+    assert cell.state == "live"
+    assert cell.cells == [["ms", "5"], ["ms", "10"], ["ms", "15"], ["ms", "20"], ["ms", "25"]]
+  end
+
+  test "a literal read of a variable the scope does not give is the fault the board would show" do
+    s = opened()
+
+    unknown = source(s, "a.unknown")
+    assert unknown.state == "restricted"
+    assert "line 1: nope is not a variable of the virtual source's scope" in unknown.faults
+
+    # Written from the page, the text is checked against the scope's variables too.
+    reads_k =
+      ~S|fn %{feed_1: rows}, context -> Enum.map(rows, fn r -> %{v: r.v * context["vars"]["k"]} end) end|
+
+    {:noreply, s} =
+      Builder.handle_event("board_source", %{"source" => "a.unknown", "elixir" => reads_k}, s)
+
+    s = BoardMode.keep(s)
+    unknown = source(s, "a.unknown")
+    refute unknown.draft?
+    assert unknown.state == "live"
+    assert unknown.cells == [["5"], ["10"], ["15"], ["20"], ["25"]]
+
+    {:noreply, s} =
+      Builder.handle_event("board_source", %{"source" => "doubled", "elixir" => @unknown}, s)
+
+    doubled = source(BoardMode.keep(s), "doubled")
+    assert doubled.draft?
+    assert ["line 1: nope is not a variable of the virtual source's scope"] = doubled.faults
   end
 
   test "the panel shows the section: a text box for a stored function, the host's read-only" do

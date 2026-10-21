@@ -24,4 +24,24 @@ defmodule Examples.BoardDemo.Sources do
 
     %{trend: trend}
   end
+
+  @doc """
+  The wave's values in ten bins (metresis #505, D-228, D-229): over the cell's variable
+  `bin_domain` when it is a pair of numbers, the panel's own bounds, else over the data's
+  extent. A function of two arguments, so the board gives it its context, and a change to
+  the variable re-runs it; the cell's `x` scale reads the same variable, so the bins and
+  the axis agree either way.
+  """
+  defsource wave_bins(inputs, context) do
+    values = Enum.map(inputs["wave"], & &1.y)
+
+    domain =
+      case context["vars"]["bin_domain"] do
+        [lo, hi] when is_number(lo) and is_number(hi) and lo < hi -> [lo, hi]
+        _unset -> nil
+      end
+
+    for bin <- Visualize.Data.bin(values, thresholds: 10, domain: domain),
+        do: %{lo: bin.x0, hi: bin.x1, count: length(bin.values)}
+  end
 end

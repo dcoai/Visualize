@@ -369,8 +369,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       # are a function of; and what a pass reads of the run for its binding, kept by that
       # and the binding, so a binding changed does not run them again (D-219).
       ran_key =
-        {board.virtual_sources, cell_sources(board), sources, assigns[:catalog],
-         assigns[:virtual_sources]}
+        {board.virtual_sources, cell_sources(board), Board.own_vars(board), sources,
+         assigns[:catalog], assigns[:virtual_sources]}
 
       {ran, ran_entry, ran?} =
         BoardKept.facts(kept[:ran], ran_key, fn ->
