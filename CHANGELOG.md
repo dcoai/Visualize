@@ -112,6 +112,18 @@ release it merely follows.
 
 ### Fixed
 
+- **A long game on a large `Visualize.Components.Chart` no longer exhausts the node's
+  memory** (#850, D-216). Each move asked for a drawing heap about half again as large
+  as the last move's, whatever the chart needed. On a 50 × 50 board the request passed
+  500 MB by the tenth move. After a few dozen moves the BEAM was asked for 104 GB and
+  the whole node died (`eheap_alloc: Cannot allocate …`), taking every page with it.
+  Now each drawing's heap is sized from what the drawing before it actually used, and
+  the size stays the same from move to move: 5.5 M words (44 MB) at 50 × 50, for as
+  long as the game lasts. The size is capped at 512 MiB. A chart that would need more
+  is drawn in a heap the BEAM grows as it needs. A drawing whose heap passes 2 GiB is
+  killed and reported, which ends that page's LiveView instead of the node. None of
+  these sizes is an option.
+
 - **A `to_png/2` timeout always stops the render and returns** (#845, D-213). On a busy
   host, a timeout that fired just as resvg was starting could miss it. resvg then rendered
   to the end, and `to_png/2` waited for it, past its `:timeout`. Now the kill is checked
