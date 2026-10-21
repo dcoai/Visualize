@@ -157,7 +157,8 @@ defmodule Visualize.Chart.Frame do
   `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, a legend in a side margin that cannot hold it, a top or
   bottom legend with a row or a single entry wider than the plot, or a `max_label` below 1
   (spec/14 §4.5). A top or bottom legend in a margin too small for its rows grows that
-  margin, and the plot is that much shorter (D-169).
+  margin, and the plot is that much shorter (D-169); a need that would leave the plot no
+  height raises, naming the side, the need and the box (D-222).
   """
   @spec new(Chart.t(), keyword()) :: t()
   def new(%Chart{} = chart, opts \\ []) do

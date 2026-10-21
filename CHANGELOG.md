@@ -164,6 +164,22 @@ release it merely follows.
 
 ### Fixed
 
+- **A compiled chart's axes stay with its marks when a tick's legend grows its margin**
+  (#859, #860, D-222). A `:top` or `:bottom` legend with `inside: false` grows its margin
+  to hold its rows, and on an inferred color scale the rows follow the tick's series. A
+  compiled chart kept the margin it was compiled with, so stepped from one series to
+  twelve its marks were drawn on the smaller plot under axes left on the larger one. Now
+  `Visualize.Chart.Compiled.tick/3` and `step/3` return the chart on the tick's `margin`,
+  `plot` and `box`, its static regions redrawn there, and `render/2` and `svg/2` draw on
+  it too. A tick on the compiled plot changes no byte. *Affects* a page that sends
+  `Compiled.static/1` once: send it again when the returned chart's `margin` changes. A
+  viewport's incremental canvas repaints whole on a tick that changes the plot.
+- **A legend that grows its margin past the chart raises** (#860, D-222). A top or
+  bottom legend whose rows left the plot a height of 0 or less drew a plot of negative
+  height, with no fault. `Visualize.Chart.Frame.new/2`, and so `Visualize.Chart.render/2`,
+  `compile/2` and every tick, now raise `ArgumentError`: "the legend at :top outside the
+  plot needs 196 in the top margin, which leaves the plot no height in a box 200 high".
+  Set `max_label`, show fewer entries or give the chart more height.
 - **A long game on a large `Visualize.Components.Chart` no longer exhausts the node's
   memory** (#850, D-216). Each move asked for a drawing heap about half again as large
   as the last move's, whatever the chart needed. On a 50 × 50 board the request passed
