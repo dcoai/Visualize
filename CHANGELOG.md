@@ -15,6 +15,17 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.8.1-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Fixed
+
+- **A virtual source over the board's ceiling is reduced, not shown over budget** (#872,
+  #873, D-230). Since 0.8.0 a feed's slot is reduced to the budget its cell derives, but a
+  slot bound to a virtual source was handed the source's output whole, so a union of
+  feeds, or a source that adds rows, past the board's `budget:` made its cell
+  `{:over_budget, rows, ceiling}` and undrawn. Now each such slot is derived a budget and
+  the output reduced to it, `reduced_by: :visualize`, as a feed's that does not name
+  `:budget` is. Only an output with no `:number` field besides the window field, which
+  cannot be reduced, is still over budget past the ceiling.
+
 ## [0.8.0] — 2026-10-21
 
 ### Breaking
