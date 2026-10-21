@@ -280,8 +280,8 @@ defmodule Visualize.Chart.TypesTest do
              ]
 
       assert Validator.format(hd(errors)) ==
-               ~s(marks[0].channels.y: field "v" of slot "primary" is a category, and the scale ) <>
-                 "it is read through needs a number"
+               ~s(marks[0].channels.y: field "v" of slot "primary" is a category, and the design ) <>
+                 "reads it as a number"
     end
 
     test "a schema that does not resolve leaves the types unchecked, and the frame raises" do
@@ -368,7 +368,7 @@ defmodule Visualize.Chart.TypesTest do
 
       assert State.words({:invalid, @errors}) ==
                ~s(Wrong binding: marks[0].channels.x: field "t" of slot "primary" is a category, ) <>
-                 "and the scale it is read through needs a number"
+                 "and the design reads it as a number"
 
       svg = State.render({:invalid, @errors}, Visualize.Theme.default(), {400, 200})
       assert svg =~ ~s(data-vis-state="invalid")

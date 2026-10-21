@@ -2883,3 +2883,22 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Spec/14 §7.3 used to say a rank-1 tensor stays a tensor for the dense path. The declarative layer has no dense path, so that sentence is gone. `Visualize.Shape.LineNx` and the binary path still take tensors directly (D-52, D-53).
 - Nx stays optional. The only Nx calls are in `Visualize.Data.Table` under its `no_warn_undefined`, and they are made only when a source is a tensor.
 - A list of tuple rows from the host is still unnamed and still draws nothing through a design. It is not a tensor, and a list is not checked row by row at binding.
+
+## 215. D-215 — A channel read as a number with no scale between is typed `:number`
+
+**Context.** #835, found building the examples' data-sources page (#781). The type check of a binding (D-153) gives a need only to a field read through a scale. A `:circle` mark's `value` is its radius, and it names no scale. Bound to a text field, an easy slip since `value` is what a color scale reads on most marks, it passed `from_map/1`, `apply/2` and `check_types/2`, then raised `ArithmeticError` at render. A board cell over it crashed where D-153 says it draws `{:invalid, errors}`. The same gap is open wherever a channel is drawn as its reading:
+- the channels a frame kind's table maps to no scale: a `:circle`'s, `:symbol`'s and `:arc`'s `value` (radius, size, share), every position of a `:geo` frame, and an `:arc`'s `start`, `end`, `inner` and `outer` outside a polar frame;
+- a channel naming a scale the frame does not declare, which spec/14 §5.2 draws in pixels.
+
+**Decision.**
+- Such a channel's need is `:number`. The reading is a radius, a size, a share, an angle in radians or a pixel, and each of those is a number.
+- Four readings are not numbers and stay unchecked: `series` and `path`, read raw on every mark; a `:text` mark's `value`, its content; and a `:rect` mark's `value`, its color.
+- A channel whose family an `offset` places is unchecked too. It is placed by two band scales, not drawn at its reading.
+- The fault is D-153's own `{:type_mismatch, slot, field, :number, given}` at the channel's path, so every caller of the check reports it unchanged: `check_types/2`, application's schema step, the board's binding check and the builder's previews.
+- The reason's words now say what is true of both kinds of read: "field \"v\" of slot \"primary\" is a category, and the design reads it as a number". They used to name "the scale it is read through", which a radius does not have.
+
+**Consequences.**
+- The design of #835 is refused at `[:marks, 0, :channels, :value]`, and a board cell over it draws `{:invalid, errors}`.
+- A design that already drew stays valid. A number on a number channel satisfies the need, and a field whose type is unknown is not checked, as before.
+- Rows with no schema at application are still unchecked there, as D-153 left them. Only a schema, or a tool that types rows (the builder, a board), sees the fault before render.
+- The fault's words change for every type mismatch, scaled or not. They are the reason's wording only, and the reason is unchanged.
