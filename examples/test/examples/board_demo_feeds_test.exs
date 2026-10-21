@@ -168,3 +168,20 @@ defmodule Examples.BoardDemo.FeedsTest.StatesInvalid do
     feed: Examples.BoardDemo.States.new(:invalid, clock: Feeds.clock()),
     windows: [nil, Feeds.window()]
 end
+
+# A feed made to over-deliver on purpose (#865, D-227): it names :budget and serves more,
+# so it is no conformance module of its own; the kit is shown to name its overrun.
+defmodule Examples.BoardDemo.FeedsTest.StatesOverBudget do
+  use ExUnit.Case, async: true
+  require Examples.BoardDemo.FeedsTest, as: Feeds
+
+  alias Visualize.Feed.Conformance
+
+  test "the kit names the overrun, and the overrun only" do
+    feed = Examples.BoardDemo.States.new(:over_budget, clock: Feeds.clock())
+    findings = Conformance.check(feed, windows: [nil, Feeds.window()])
+
+    assert [_ | _] = findings
+    assert Enum.all?(findings, &match?({:supports, {:over_budget, {_window, 5}, 6000}}, &1))
+  end
+end

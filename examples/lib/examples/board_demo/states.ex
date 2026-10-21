@@ -8,7 +8,11 @@ defmodule Examples.BoardDemo.States do
   - `:no_data` — a feed that answers, with no rows;
   - `:capped` — only the newest twelve readings, the delivery `capped: true`;
   - `:invalid` — `y` is text where the design reads a number, so application reports the
-    type mismatch and the cell draws the binding's fault.
+    type mismatch and the cell draws the binding's fault;
+  - `:over_budget` — names `:budget` and ships 6,000 readings over the window whatever it
+    is asked, past the board's ceiling (spec/15 §8.2, D-227), so the board hands the cell
+    no rows and it draws the over-budget panel. It breaks the feed contract on purpose:
+    the conformance kit names the overrun (spec/08 §12.3).
 
   Each answers the board's window as `Examples.BoardDemo.Clock` reads it, and an error value
   for a window it cannot read, as every feed of the demo does.
@@ -18,10 +22,11 @@ defmodule Examples.BoardDemo.States do
   alias Examples.BoardDemo.Clock
   alias Visualize.Data.{Delivery, Schema}
 
-  @modes [:stale, :no_data, :capped, :invalid]
+  @modes [:stale, :no_data, :capped, :invalid, :over_budget]
   @every 5
   @quiet 90
   @newest 12
+  @overrun 6_000
 
   @enforce_keys [:mode, :schema]
   defstruct [:mode, :schema, clock: &DateTime.utc_now/0]
@@ -41,6 +46,9 @@ defmodule Examples.BoardDemo.States do
   end
 
   @impl true
+  def describe(%__MODULE__{mode: :over_budget, schema: schema}),
+    do: {Schema.version(schema), schema, [:window, :budget]}
+
   def describe(%__MODULE__{schema: schema}), do: {Schema.version(schema), schema, [:window]}
 
   @impl true
@@ -56,6 +64,17 @@ defmodule Examples.BoardDemo.States do
   end
 
   defp rows(:no_data, from, to, _now), do: {[], [from, to], false}
+
+  # Evenly over the window, every one of them, whatever budget the feed was asked.
+  defp rows(:over_budget, from, to, _now) do
+    span = DateTime.diff(to, from, :microsecond)
+
+    rows =
+      for i <- 0..(@overrun - 1),
+          do: reading(DateTime.add(from, div(span * i, @overrun - 1), :microsecond))
+
+    {rows, [from, to], false}
+  end
 
   # The feed went quiet `@quiet` seconds ago: nothing after then, however late the window.
   defp rows(:stale, from, to, now) do

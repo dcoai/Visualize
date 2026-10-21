@@ -60,19 +60,24 @@ defmodule ExamplesWeb.BoardLifecycleTest do
     assert "iface" in Enum.map(fields, &to_string/1)
   end
 
-  test "the conformance kit passes every feed but the unreachable one" do
+  test "the conformance kit passes every feed but the unreachable and the over-delivering one" do
     rows = Lifecycle.conformance()
 
     assert Enum.map(rows, &elem(&1, 0)) ==
              Enum.sort(Enum.map(Map.keys(Examples.BoardDemo.feeds()), &to_string/1))
 
     for {feed, checks} <- rows,
-        feed != "offline",
+        feed not in ["offline", "over_budget"],
         {check, findings} <- checks,
         do: assert(findings == [], "#{feed} #{check}: #{inspect(findings)}")
 
     {"offline", checks} = List.keyfind(rows, "offline", 0)
     assert [_ | _] = Keyword.fetch!(checks, :deliveries)
+
+    # Serving more than the budget it names, on purpose (D-227): the kit says so.
+    {"over_budget", checks} = List.keyfind(rows, "over_budget", 0)
+    assert [_ | _] = overruns = Keyword.fetch!(checks, :supports)
+    assert Enum.all?(overruns, &(&1 =~ "the feed names :budget and served 6000"))
   end
 
   test "the page renders the panel, and its buttons are the page's own events" do

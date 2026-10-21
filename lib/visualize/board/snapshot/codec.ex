@@ -148,6 +148,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp value_entry(value), do: Codec.encode_term(value)
 
   defp status({:down, reason}), do: %{"down" => reason}
+  defp status({:over_budget, rows, ceiling}), do: %{"over_budget" => [rows, ceiling]}
   defp status(status), do: Atom.to_string(status)
 
   # -- decode ---------------------------------------------------------------------------
@@ -268,6 +269,9 @@ defmodule Visualize.Board.Snapshot.Codec do
   end
 
   defp read_status(%{"down" => reason} = term) when map_size(term) == 1, do: {:down, reason}
+
+  defp read_status(%{"over_budget" => [rows, ceiling]} = term) when map_size(term) == 1,
+    do: {:over_budget, rows, ceiling}
 
   defp read_status(status) when is_binary(status),
     do: Vocabulary.read(@status_table, status)
