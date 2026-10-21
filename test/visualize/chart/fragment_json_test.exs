@@ -96,6 +96,83 @@ defmodule Visualize.Chart.FragmentJsonTest do
     assert {:error, _reason} = Fragment.from_json("{not json")
   end
 
+  describe "a singular entry's body is the node of its kind (spec/14 §11.2, §19.2, #823)" do
+    import Visualize.Color, only: [color: 1]
+
+    @entries [
+      %{style: %{fill: %{color: color(:red)}, stroke: %{width: {1.5, :pt}}}},
+      %{
+        style: %{
+          fill: %{color: {:lighten, color(:steelblue), 0.2}},
+          stroke: %{color: {:blend, [color(:red), color(:blue)]}, dash: [{2, :mm}, {1, :mm}]},
+          curve: :step_after
+        }
+      },
+      %{style: %{fill: %{color: {:paint, "sky"}}, stroke: %{color: {:ramp, :sequential, 0.4}}}},
+      %{scale: %{kind: :linear, domain: [0, 1], nice: true}},
+      %{axis: %{scale: "x", side: :bottom}},
+      %{source: %{fields: ["t", "v"]}},
+      %{mark: %{type: :line, data: "s", channels: %{x: "t", y: "v"}, style: "series"}},
+      %{label: %{text: "peak"}},
+      %{var: %{default: :series_1}},
+      %{
+        gradient: %{
+          type: :linear,
+          stops: [%{at: 0, color: color(:red)}, %{at: 1, color: {:darken, color(:blue), 0.1}}]
+        }
+      }
+    ]
+
+    test "every singular kind round-trips with its typed values" do
+      for entry <- @entries do
+        assert round_trip(entry) == Migration.names(entry), inspect(entry)
+      end
+    end
+
+    test "a typed color and a unit are tagged, an enumerated atom is its string" do
+      entry = %{style: %{fill: %{color: color(:red)}, stroke: %{width: {1.5, :pt}}}}
+      assert {:ok, json} = Fragment.to_json(entry)
+      assert json =~ ~s("$color":"red")
+      assert json =~ ~s("$unit":[1.5,"pt"])
+      assert Fragment.from_json(json) == {:ok, entry}
+
+      assert {:ok, json} = Fragment.to_json(%{scale: %{kind: :linear, domain: [0, 1]}})
+      assert Jason.decode!(json)["scale"]["kind"] == "linear"
+    end
+
+    test "the singular and the plural forms write the same body" do
+      for {key, plural} <- [style: :styles, source: :sources, var: :vars] do
+        [body | _] = for %{^key => body} <- @entries, do: body
+        {:ok, singular} = Fragment.to_json(%{key => body})
+        {:ok, design} = Fragment.to_json(%{plural => %{"one" => body}})
+
+        assert Jason.decode!(singular)[to_string(key)] ==
+                 Jason.decode!(design)[to_string(plural)]["one"]
+      end
+    end
+
+    test "a body that is no object is a term, as before" do
+      for entry <- [%{style: [{:style, 11}, %{fill: {:style, 3}}]}, %{style: {:style, 3}}] do
+        assert round_trip(entry) == entry
+      end
+    end
+
+    test "an entry written before #823, every atom a $atom, still reads" do
+      legacy = [
+        {~s({"$version":3,"scale":{"domain":[0,1],"kind":{"$atom":"linear"}}}),
+         %{scale: %{kind: :linear, domain: [0, 1]}}},
+        {~s({"$version":3,"style":{"curve":{"$atom":"step_after"},"fill":{"color":{"$atom":"red"}},"stroke":{"width":2}}}),
+         %{style: %{curve: :step_after, fill: %{color: :red}, stroke: %{width: 2}}}},
+        {~s({"$version":3,"axis":{"scale":"x","side":{"$atom":"bottom"}}}),
+         %{axis: %{scale: "x", side: :bottom}}}
+      ]
+
+      for {json, fragment} <- legacy do
+        assert Fragment.from_json(json) == {:ok, fragment}, json
+      end
+    end
+  end
+
   describe "a stack's fixed key order (spec/14 §11.2, #492)" do
     @streams %{
       version: 2,

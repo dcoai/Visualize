@@ -52,11 +52,24 @@ defmodule Visualize.Chart.Codec do
   defp node(kind, map) do
     Map.new(map, fn {k, v} ->
       case type_of(kind, k, flat?(kind, k, not part?(v))) do
-        nil -> {key(k), term(v)}
+        nil -> {key(k), unknown(kind, k, v)}
         type -> {key(k), value(type, v)}
       end
     end)
   end
+
+  # A singular wrapper's body (`%{style: …}`, spec/14 §19.2) is the node of its kind,
+  # written by the typed path a design's `styles` entry takes, so a typed color or a unit
+  # in a stored entry has its tag and the body is the one the same node writes inside a
+  # design (#823). Any other key no node has is a term.
+  defp unknown(:design, k, v) do
+    case Fragment.body_kind(k) do
+      nil -> term(v)
+      kind -> value({:node, kind}, v)
+    end
+  end
+
+  defp unknown(_kind, _k, v), do: term(v)
 
   # The type a key is written and read by: the schema's, or — for a style's flat keys of an
   # earlier version, and `fill`, `stroke`, `curve` and `effect` written as a shorthand
@@ -323,9 +336,16 @@ defmodule Visualize.Chart.Codec do
 
   defp palette_series(name), do: name
 
-  # A fragment's body is read as a term (spec/14 §19.7).
+  # A singular wrapper's body is read as the node of its kind (#823), and a composite's —
+  # or a body that is no object — as a term (spec/14 §19.7). A body written before #823,
+  # every atom in it a `$atom`, reads the same: a typed position takes a `$atom` as the
+  # atom it spells.
   defp unknown_value(:design, k, v) do
-    if k == :composite or Fragment.singular(k), do: read_term(v), else: v
+    case Fragment.body_kind(k) do
+      nil -> if k == :composite or Fragment.singular(k), do: read_term(v), else: v
+      kind when is_map(v) -> if tagged?(v), do: read_term(v), else: read_node(kind, v)
+      _kind -> read_term(v)
+    end
   end
 
   defp unknown_value(_kind, _k, v), do: v
@@ -417,6 +437,10 @@ defmodule Visualize.Chart.Codec do
 
       [{"$series", i}] ->
         {:series, i}
+
+      # A color a stored entry wrote before #823, as the atom's term.
+      [{"$atom", name}] when is_binary(name) ->
+        read_term(v)
 
       [{"$" <> _tag, _value}] ->
         v

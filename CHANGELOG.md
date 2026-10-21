@@ -175,6 +175,16 @@ release it merely follows.
   class="mark mark-tiles" clip-path="url(#vis-clip-…)"><image …>`. A chart of one frame
   draws exactly what it drew. The SVG backend now also keeps a clip on any group it
   draws whole, as it already did for a group it cut into segments.
+- **`Visualize.Chart.Fragment.to_json/1` writes a library entry that holds a typed value**
+  (#823, #842). A singular entry — `%{style: node}`, `%{scale: node}`, `%{axis: node}`,
+  `%{gradient: node}`, … — raised `FunctionClauseError` when it held a typed color
+  (`Visualize.Color.color(:red)`, a `$lighten`, a `$blend`), a unit (`{1.5, :pt}`), a
+  paint or a ramp position, so a style the builder makes could not be stored as JSON.
+  The body is now written as the node of its kind, exactly as the same node is written
+  inside a design. *Affects* code that reads or compares the JSON of a singular entry: an
+  enumerated value is now its plain string. *Before:*
+  `{"scale":{"kind":{"$atom":"linear"}}}`. *After:* `{"scale":{"kind":"linear"}}`.
+  `from_json/2` still reads an entry written the old way to the same fragment.
 
 ### Changed
 
