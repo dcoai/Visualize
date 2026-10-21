@@ -24,6 +24,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     alias Visualize.Board
     alias Visualize.Board.Validator, as: BoardValidator
+    alias Visualize.Chart.Builder.Bundle.Codec
     alias Visualize.Chart.Builder.Store
     alias Visualize.Chart.{Composite, Fragment, Limits, Migration, Var}
 
@@ -94,6 +95,68 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end
       end
     end
+
+    # -- the map and JSON forms (spec/14 §19.7, #818, D-217) ------------------------------
+
+    @doc """
+    The bundle as plain data: `provenance`, `entries` as `%{id, name, fragment}` — an
+    entry's `kind` is derived from its fragment (spec/14 §19.8), so the form leaves it out —
+    and `board`, the board's map form or `nil`.
+    """
+    @spec to_map(t()) :: map()
+    def to_map(%__MODULE__{} = bundle), do: Codec.to_map(bundle)
+
+    @doc """
+    The bundle of a map (spec/14 §19.7), or every fault of it by path.
+
+    The provenance's `schema` is gated first (`{:newer_schema, needs, this}` at
+    `[:provenance, :schema]`), then the map is held to the `depth` and `items` limits —
+    `limits:` as `Visualize.Board.from_map/2` takes them — then every key is read: the
+    provenance's `store` (any JSON-representable term), `exported_at` (a UTC `DateTime`) and
+    `schema`; each entry's `id` (an id of a kind a fragment has, carried once), `name` and
+    `fragment`; the board by `Visualize.Board.from_map/2`, kept in its map form, its faults
+    under `[:board]`. An entry's `kind` is derived from its fragment. A fragment is not
+    validated as a design: `import_board/3` checks what a board's import needs.
+    `from_map(to_map(b))` is `{:ok, b}`.
+
+        iex> Visualize.Chart.Builder.Bundle.from_map(%{provenance: %{schema: 9}, entries: []})
+        {:error, [{[:provenance, :schema], {:newer_schema, 9, 3}}]}
+    """
+    @spec from_map(term(), keyword()) :: {:ok, t()} | {:error, [Board.error(), ...]}
+    def from_map(map, opts \\ []), do: Codec.from_map(map, opts)
+
+    @doc """
+    The bundle as one JSON document stamped `"$version"` (spec/14 §19.7, D-217): the
+    provenance with `exported_at` in ISO 8601, each entry's `id` as `Store.encode_id/1`
+    writes it and its `fragment` as the document `Fragment.to_json/1` writes, and the board
+    in its own JSON form (spec/15 §2.2). A store named by a string or an atom is written as
+    the name's string; any other term as its tagged term (spec/14 §11.2), and one the table
+    has no form for is `{:error, [{[:provenance, :store], {:type, :term}}]}`.
+    `{:error, {:missing_dependency, :jason}}` without Jason.
+    """
+    @spec to_json(t()) ::
+            {:ok, String.t()} | {:error, [Board.error(), ...] | {:missing_dependency, :jason}}
+    def to_json(%__MODULE__{} = bundle), do: Codec.to_json(bundle)
+
+    @doc """
+    The bundle of a JSON document `to_json/1` wrote, with `limits:` as `from_map/2` takes
+    them. The document's `"$version"` and the provenance's `schema` are gated, and the
+    whole document held to the limits, before a key is decoded; then each part is read by
+    its own reader — an entry's fragment by the fragment's, gated and held to the tag table
+    (D-182), its faults under `[:entries, i, :fragment]`; the board by the board's — and the
+    map read as `from_map/2` reads it. An id is read by `Store.decode_id/1`, so no atom is
+    made from a document's kind (D-195). Text that is not a JSON object is
+    `{:error, [{[], {:json, message}}]}`.
+
+    `from_json(to_json(b))` is `{:ok, b}` with each fragment as `Fragment.from_json/2`
+    reads it and a store named by an atom as its string.
+
+        iex> Visualize.Chart.Builder.Bundle.from_json(~s({"$version": 9, "entries": []}))
+        {:error, [{["$version"], {:newer_schema, 9, 3}}]}
+    """
+    @spec from_json(String.t(), keyword()) ::
+            {:ok, t()} | {:error, [Board.error(), ...] | {:missing_dependency, :jason}}
+    def from_json(json, opts \\ []) when is_binary(json), do: Codec.from_json(json, opts)
 
     # -- a board (spec/15 §11) ------------------------------------------------------------
 

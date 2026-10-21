@@ -40,6 +40,11 @@ defmodule ExamplesWeb.BoardLifecycleTest do
 
   test "the board carried in a bundle arrives under ids the receiving library issues" do
     assert {:ok, carried} = Lifecycle.carry()
+    # It traveled as the file another host receives: stamped, and read back from the text.
+    assert %{"$version" => _, "provenance" => %{"store" => "examples /board"}, "board" => _} =
+             Jason.decode!(carried.file)
+
+    assert carried.bytes > 0
     # The receiving library held two designs of its own; every carried one is new.
     assert length(carried.before) == 2
     assert length(carried.after) == 2 + length(carried.carried)
@@ -103,6 +108,7 @@ defmodule ExamplesWeb.BoardLifecycleTest do
 
     assert shown =~ "Reopened:"
     assert shown =~ "designs carried at schema v"
+    assert shown =~ "The bundle as a file"
     assert shown =~ ~s(data-feed="wave")
   end
 end

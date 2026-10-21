@@ -6,6 +6,8 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
   """
   use ExUnit.Case, async: true
 
+  doctest Visualize.Chart.Builder.Bundle
+
   import Visualize.Chart, only: [var: 1]
 
   alias Visualize.Board
@@ -319,5 +321,148 @@ defmodule Visualize.Chart.Builder.BundleBoardTest do
     bundle = Bundle.export(src.store, src.line, :metresis)
     assert bundle.board == nil
     assert {:ok, %{outside: []}} = Store.import(Memory.start(), bundle)
+  end
+
+  describe "the JSON form (spec/14 §19.7, #818, D-217)" do
+    # A bundle as a file: written, read back.
+    defp travel(bundle) do
+      assert {:ok, json} = Bundle.to_json(bundle)
+      assert {:ok, read} = Bundle.from_json(json)
+      read
+    end
+
+    test "written, read back and imported, a board bundle gives the in-memory import" do
+      src = source()
+      board = board(src)
+      bundle = Bundle.export_board(src.store, board, :metresis)
+
+      to_memory = Memory.start()
+      to_file = Memory.start()
+      {:ok, _} = Store.put(to_file, entry("Theirs::one", %{style: %{stroke_width: 9}}))
+      {:ok, _} = Store.put(to_memory, entry("Theirs::one", %{style: %{stroke_width: 9}}))
+
+      assert {:ok, in_memory} = Bundle.import_board(to_memory, bundle)
+      assert {:ok, from_file} = Bundle.import_board(to_file, travel(bundle))
+
+      assert from_file == in_memory
+      assert rendered(from_file.board, to_file) == rendered(board, src.store)
+    end
+
+    test "the document is the parts' own forms, and reads back to itself" do
+      src = source()
+      bundle = Bundle.export_board(src.store, board(src), :metresis)
+      {:ok, json} = Bundle.to_json(bundle)
+      document = Jason.decode!(json)
+
+      assert document["$version"] == Visualize.Chart.Migration.current()
+      assert document["provenance"]["store"] == "metresis"
+
+      assert document["provenance"]["exported_at"] ==
+               DateTime.to_iso8601(bundle.provenance.exported_at)
+
+      assert Enum.map(document["entries"], & &1["id"]) ==
+               Enum.map(bundle.entries, &Store.encode_id(&1.id))
+
+      thick = Enum.find(document["entries"], &(&1["id"] == Store.encode_id(src.thick)))
+
+      assert Fragment.from_json(Jason.encode!(thick["fragment"])) ==
+               {:ok, %{style: %{stroke_width: 3}}}
+
+      assert {:ok, _board} = Board.from_json(Jason.encode!(document["board"]))
+
+      read = travel(bundle)
+      assert read.provenance == %{bundle.provenance | store: "metresis"}
+      assert read.board == bundle.board
+
+      assert Enum.map(read.entries, &{&1.id, &1.name, &1.kind}) ==
+               Enum.map(bundle.entries, &{&1.id, &1.name, &1.kind})
+
+      # Read once, each fragment is in its read form, and a second trip keeps it.
+      assert travel(read) == read
+    end
+
+    test "an entry holding a typed value travels" do
+      import Visualize.Color, only: [color: 1]
+      {_module, _agent} = store = Memory.start()
+      style = %{style: %{fill: %{color: color(:red)}, stroke: %{width: {1.5, :pt}}}}
+      {:ok, id} = Store.put(store, entry("Styles::typed", style))
+      bundle = Bundle.export(store, id, "here")
+
+      assert %Bundle{entries: [%{id: ^id, kind: :style, fragment: ^style}], board: nil} =
+               travel(bundle)
+    end
+
+    test "the map form round-trips, and a store named by any term the table writes travels" do
+      src = source()
+      bundle = Bundle.export_board(src.store, board(src), :metresis)
+      assert Bundle.from_map(Bundle.to_map(bundle)) == {:ok, bundle}
+
+      named = put_in(bundle.provenance.store, ["exio", 2])
+      assert travel(named).provenance.store == ["exio", 2]
+    end
+
+    test "a store the tag table cannot write is refused, not written" do
+      bundle = Bundle.export(Memory.start(), [], {:host, make_ref()})
+      assert Bundle.to_json(bundle) == {:error, [{[:provenance, :store], {:type, :term}}]}
+    end
+
+    defp document(src) do
+      {:ok, json} = Bundle.to_json(Bundle.export_board(src.store, board(src), :metresis))
+      Jason.decode!(json)
+    end
+
+    defp refused(document, opts \\ []),
+      do: document |> Jason.encode!() |> Bundle.from_json(opts)
+
+    test "a newer stamp, or a newer schema, is refused before a key is read" do
+      doc = document(source())
+
+      assert refused(Map.put(doc, "$version", 99)) ==
+               {:error, [{["$version"], {:newer_schema, 99, 3}}]}
+
+      assert refused(put_in(doc, ["provenance", "schema"], 99)) ==
+               {:error, [{[:provenance, :schema], {:newer_schema, 99, 3}}]}
+    end
+
+    test "a document over the limits is refused at its path" do
+      assert {:error, errors} = refused(document(source()), limits: [items: 3])
+      assert {["entries"], {:limit, :items, 3, 4}} in errors
+    end
+
+    test "an unknown tag in an entry's fragment is refused at its path" do
+      doc =
+        update_in(document(source()), ["entries", Access.at(0), "fragment"], fn fragment ->
+          Map.put(fragment, "style", %{"stroke_width" => %{"$feild" => "w"}})
+        end)
+
+      assert {:error, [{[:entries, 0, :fragment | path], {:unknown_tag, "$feild"}}]} =
+               refused(doc)
+
+      assert path == ["style", "stroke_width"]
+    end
+
+    test "an id of no kind is refused, and no atom is made of it" do
+      doc = put_in(document(source()), ["entries", Access.at(0), "id"], "no_such_kind_818:1")
+      assert refused(doc) == {:error, [{[:entries, 0, :id], {:type, :id}}]}
+      assert_raise ArgumentError, fn -> String.to_existing_atom("no_such_kind_818") end
+    end
+
+    test "an id carried twice, and an unknown key, are each at their path" do
+      doc = document(source())
+      [first | _] = doc["entries"]
+      twice = Map.update!(doc, "entries", &(&1 ++ [first]))
+      id = elem(Store.decode_id(first["id"]), 1)
+      n = length(doc["entries"])
+
+      assert refused(twice) == {:error, [{[:entries, n, :id], {:duplicate, id}}]}
+
+      assert refused(Map.put(doc, "no_such_key_818", 1)) ==
+               {:error, [{["no_such_key_818"], :unknown_key}]}
+    end
+
+    test "text that is not a JSON object is a fault, not a crash" do
+      assert {:error, [{[], {:json, _message}}]} = Bundle.from_json("{not json")
+      assert {:error, [{[], {:json, _message}}]} = Bundle.from_json("[]")
+    end
   end
 end

@@ -331,9 +331,7 @@ defmodule Visualize.Chart.Fragment do
   @spec to_json(map()) :: {:ok, String.t()} | {:error, {:missing_dependency, :jason}}
   def to_json(fragment) when is_map(fragment) and not is_struct(fragment) do
     if Code.ensure_loaded?(Jason) do
-      {:ok, json} =
-        fragment |> encoded() |> Map.put(@stamp, Migration.current()) |> Jason.encode()
-
+      {:ok, json} = fragment |> document() |> Jason.encode()
       {:ok, json}
     else
       {:error, {:missing_dependency, :jason}}
@@ -397,6 +395,20 @@ defmodule Visualize.Chart.Fragment do
       {:error, {:missing_dependency, :jason}}
     end
   end
+
+  @doc false
+  # The document `to_json/1` writes, before it is text: what a bundle carries as an entry's
+  # fragment (spec/14 §19.7, #818).
+  @spec document(map()) :: map()
+  def document(fragment) when is_map(fragment) and not is_struct(fragment),
+    do: fragment |> encoded() |> Map.put(@stamp, Migration.current())
+
+  @doc false
+  # A parsed fragment document read as `read_json/2` reads one, for a reader that holds it
+  # inside a document of its own — a bundle's entry (#818).
+  @spec read_document(map(), keyword()) :: {:ok, map(), pos_integer()} | {:error, term()}
+  def read_document(term, opts) when is_map(term),
+    do: read(term, opts |> Keyword.get(:limits, []) |> Limits.new())
 
   defp read(term, limits) do
     {stamp, term} = Map.pop(term, @stamp)

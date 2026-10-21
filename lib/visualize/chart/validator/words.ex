@@ -247,6 +247,9 @@ defmodule Visualize.Chart.Validator.Words do
   # A board bundle's import (spec/15 §11.3, D-147).
   def words({:not_carried, id}), do: "refers to #{inspect(id)}, which the bundle does not carry"
 
+  def words({:duplicate, id}),
+    do: "is #{inspect(id)}, the id of an earlier entry: a bundle carries each entry once"
+
   def words({:theme_taken, name}),
     do: "is the theme #{inspect(name)}, a name the store already gives a different theme"
 
@@ -437,6 +440,11 @@ defmodule Visualize.Chart.Validator.Words do
 
   defp type_words(:utc_datetime), do: "a DateTime in Etc/UTC"
   defp type_words(:board), do: "a board map"
+  defp type_words(:bundle), do: "a bundle map"
+  defp type_words(:provenance), do: "a provenance map: store, exported_at and schema"
+  defp type_words(:entry), do: "an entry map: id, name and fragment"
+  defp type_words(:fragment), do: "a fragment map"
+  defp type_words(:id), do: "an id {kind, n} of a kind a fragment has, written \"kind:n\""
   defp type_words(:snapshot), do: "a snapshot map"
   defp type_words(:row), do: "a row map"
   defp type_words(:status), do: "one of :loading, :live, :stale or {:down, words}"

@@ -56,6 +56,18 @@ release it merely follows.
 
 ### Added
 
+- **A bundle can be written to a file and read back: `Bundle.to_json/1` and `from_json/2`**
+  (#818, #851, D-217), with `to_map/1` and `from_map/2` beneath them. A board bundle exists
+  to travel from the host that authored the board to the host that shows it, but
+  `%Visualize.Chart.Builder.Bundle{}` had no wire form, so each host had to invent one. The
+  document is stamped `"$version"`; each entry's fragment is the document
+  `Fragment.to_json/1` writes and the board is in its own JSON form, so a host can store an
+  entry's fragment as it arrives. `from_json/2` gates the stamp and the provenance's
+  `schema` and applies `limits:` before a key is decoded, makes no atom from the document,
+  and reports every fault at its path. Read back and passed to `import_board/3`, a bundle
+  gives what the in-memory bundle gives. *Note:* a store named by an atom in
+  `export/3`'s `source` (`:metresis`) is written as its string and reads back as
+  `"metresis"`; name stores with strings to compare them unchanged.
 - **A frame can clip its marks to its plot area: `clip: true`** (#828, #831, D-212). Marks
   are drawn where their scales and projection put them, so an inset `:geo` frame zoomed in
   on part of a route drew the whole route over the frames beside it, and a host had to trim
