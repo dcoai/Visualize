@@ -195,6 +195,97 @@ defmodule Visualize.Components.ChartCostTest do
     end
   end
 
+  # The words one drawing of `chart` uses, read from outside it as D-216 reads them, in a
+  # process whose heap is large enough that it never collects.
+  defp need(chart, backend, last) do
+    parent = self()
+    ref = make_ref()
+
+    pid =
+      :erlang.spawn_opt(
+        fn ->
+          send(parent, {ref, Component.drawn(chart, [], backend, last)})
+
+          receive do
+            ^ref -> :ok
+          end
+        end,
+        min_heap_size: 40_000_000,
+        min_bin_vheap_size: 1_000_000_000
+      )
+
+    receive do
+      {^ref, _drawn} ->
+        {:garbage_collection_info, info} = Process.info(pid, :garbage_collection_info)
+        send(pid, ref)
+        assert info[:recent_size] == 0, "the measuring drawing collected"
+        info[:heap_size] + info[:old_heap_size]
+    end
+  end
+
+  # #850: D-206's drawing measured its own heap, which a process reads as its whole block,
+  # so each move asked for half as much again as the last was given, and a long game on
+  # this board asked the node for 104 GB. The size a drawing carries to the next is a
+  # function of its own need (D-216): flat, within a quarter or so of the need, and
+  # never past the bound, move after move.
+  test "the drawing's heap stays flat over hundreds of moves on a 2,500-cell board" do
+    {before, now} = move(50, 50)
+    last = Map.take(Component.drawn(before, [], :svg, @empty), Map.keys(@empty))
+    need = need(now, :svg, last)
+    bound = Component.heap_bound()
+    {:ok, socket} = Component.mount(%Socket{assigns: %{__changed__: %{}}})
+
+    sizes =
+      Enum.map_reduce(1..300, socket, fn i, socket ->
+        socket = updated(socket, if(rem(i, 2) == 1, do: now, else: before), [])
+        heap = socket.assigns.heap
+
+        # Asserted at every move, so a growing size fails here, long before it asks the
+        # node for more than it has.
+        assert heap == nil or heap <= bound,
+               "move #{i} carries a heap of #{heap} words, past the bound of #{bound}"
+
+        {heap, socket}
+      end)
+      |> elem(0)
+
+    # The first drawing is sized by the BEAM and the second from what the first kept;
+    # from the third on, each is sized by the one before it.
+    settled = Enum.drop(sizes, 2)
+
+    assert Enum.all?(settled, &(&1 != nil and &1 >= need and &1 <= div(3 * need, 2))),
+           "one move needs #{need} words; the settled sizes run " <>
+             "#{inspect(Enum.min_max(settled))}"
+
+    {low, high} = Enum.min_max(settled)
+    assert high <= low + div(low, 10), "the size drifts from #{low} to #{high} words"
+  end
+
+  # A drawing that collects tells the size it was given nothing about its need: the next
+  # size comes from what it kept, so one that always collects is given the same size
+  # every time, where D-206 doubled it.
+  test "a drawing that always collects is not given a larger heap" do
+    drawing = fn ->
+      kept = Enum.to_list(1..100_000)
+      _dropped = Enum.map(1..200_000, &{&1})
+      :erlang.garbage_collect(self(), type: :minor)
+      length(kept)
+    end
+
+    {100_000, first} = Component.apart(drawing, nil)
+    assert first != nil and first <= Component.heap_bound()
+
+    # Asserted at every drawing, so a growing size fails here, before it is requested.
+    Enum.reduce(2..40, first, fn i, heap ->
+      {100_000, next} = Component.apart(drawing, heap)
+
+      assert next != nil and next <= first + div(first, 10),
+             "drawing #{i} is given #{inspect(next)} words where the first was given #{first}"
+
+      next
+    end)
+  end
+
   @tag :benchmark
   test "a 2,500-cell move takes at most 100 ms, a 480-cell one 25, on every backend" do
     for {rows, cols, budget} <- [{50, 50, 100}, {16, 30, 25}],

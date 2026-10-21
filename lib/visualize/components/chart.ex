@@ -131,35 +131,72 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> assign(drawn)
     end
 
-    # The drawing is made in a process of its own, sized to the heap the last one used
-    # (spec/10 §19.3, D-206): a large chart allocates tens of megabytes it drops at once,
-    # and collecting them in the LiveView's process, around its state, tripled the time of
-    # a move. Sized by the last drawing, with a margin, the process collects nothing — its
-    # binaries do not trigger a collection either — and its heap is freed whole when it
-    # ends; only what it returns is copied back. The first drawing is sized by the BEAM, as
-    # any process is, and a drawing that still collected doubles the next one's heap, so
-    # the size settles within a few moves. It is linked, so a fault in it is the
-    # LiveView's, as it was in place.
-    defp apart(fun, heap) do
+    # The drawing is made in a process of its own (spec/10 §19.3, D-206): a large chart
+    # allocates tens of megabytes it drops at once, and collecting them in the LiveView's
+    # process, around its state, tripled the time of a move. Sized to the drawing's need,
+    # the process collects nothing — its binaries do not trigger a collection either — and
+    # its heap is freed whole when it ends; only what it returns is copied back. It is
+    # linked, so a fault in it is the LiveView's, as it was in place.
+    #
+    # The need is measured from outside (#850, D-216): a process reading its own
+    # `heap_size` gets its heap block, so a drawing measuring itself reported the heap it
+    # was given, and the size grew by half a move without bound. Once the drawing has
+    # sent its parts it waits, and its heap in use is read here before it is let go.
+    # `heap` is the size `next_heap/1` made of the last drawing, or `nil`: unsized.
+    @doc false
+    @spec apart((-> result), pos_integer() | nil) :: {result, pos_integer() | nil}
+          when result: term()
+    def apart(fun, heap) do
       parent = self()
       ref = make_ref()
       sized = if heap, do: [min_heap_size: heap, min_bin_vheap_size: @bin_vheap], else: []
 
-      :erlang.spawn_opt(
-        fn ->
-          result = fun.()
-          {:garbage_collection_info, info} = Process.info(self(), :garbage_collection_info)
-          {:garbage_collection, gc} = Process.info(self(), :garbage_collection)
-          used = info[:heap_size] + info[:old_heap_size]
-          next = if gc[:minor_gcs] > 0, do: 2 * max(heap || 0, used), else: used + div(used, 4)
-          send(parent, {ref, result, next})
-        end,
-        [:link | sized]
-      )
+      pid =
+        :erlang.spawn_opt(
+          fn ->
+            send(parent, {ref, fun.()})
+
+            receive do
+              ^ref -> :ok
+            end
+          end,
+          [:link, {:max_heap_size, max_heap()} | sized]
+        )
 
       receive do
-        {^ref, result, size} -> {result, size}
+        {^ref, result} ->
+          {:garbage_collection_info, info} = Process.info(pid, :garbage_collection_info)
+          send(pid, ref)
+          {result, next_heap(info)}
       end
+    end
+
+    @doc false
+    # The next drawing's minimum heap, from one drawing's own measurement (D-216): the
+    # words it used and a quarter more when it never collected; when it did, what it used
+    # is only a lower bound, and 16 times the data its collections kept — its old heap and
+    # what the last one left on its young heap — is over its need (3–9 times on the cost
+    # test's boards). Never a function of the heap it was given, and never past the bound:
+    # past it, unsized.
+    @spec next_heap(keyword()) :: pos_integer() | nil
+    def next_heap(info) do
+      used = info[:heap_size] + info[:old_heap_size]
+      # Data a collection kept: none in a drawing that never collected.
+      kept = info[:recent_size] + info[:old_heap_size]
+      next = if kept > 0, do: 16 * kept, else: used + div(used, 4)
+      if next <= heap_bound(), do: next
+    end
+
+    @doc false
+    # The most a drawing's minimum heap is: 512 MiB in this system's words, about 15
+    # times a 2,500-cell move's need (spec/10 §19.3, D-216). Not an option.
+    @spec heap_bound() :: pos_integer()
+    def heap_bound, do: div(512 * 1024 * 1024, :erlang.system_info(:wordsize))
+
+    # A drawing whose heap passes four times the bound is killed and reported, and takes
+    # its LiveView with it, not the node (D-216).
+    defp max_heap do
+      %{size: 4 * heap_bound(), kill: true, error_logger: true, include_shared_binaries: false}
     end
 
     @doc false
