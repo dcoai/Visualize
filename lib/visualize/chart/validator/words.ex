@@ -393,6 +393,7 @@ defmodule Visualize.Chart.Validator.Words do
     do: "generate(name, args): a name (an atom) and a list of terms and {:field, name}"
 
   defp type_words(:fact), do: "fact(source, field, key), each a name"
+  defp type_words(:budget), do: "a positive integer, or {:per_px, k} with k a positive number"
   defp type_words(:key_order), do: "{:keys, [name, …]}, the series keys bottom first"
   defp type_words(:channel), do: "a field name, a number or {:field, name}"
   defp type_words(:extent), do: "an extent: :auto, [lo, hi] or a list of categories"

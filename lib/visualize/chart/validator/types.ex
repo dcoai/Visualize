@@ -114,6 +114,11 @@ defmodule Visualize.Chart.Validator.Types do
 
   def check(:adopted, _value, path, _ctx), do: [{path, {:type, :adopted}}]
 
+  # A design's budget (spec/14 §2.10, D-226): rows, or rows per pixel of plot width.
+  def check(:budget, n, _path, _ctx) when is_integer(n) and n > 0, do: []
+  def check(:budget, {:per_px, k}, _path, _ctx) when is_number(k) and k > 0, do: []
+  def check(:budget, _value, path, _ctx), do: [{path, {:type, :budget}}]
+
   # A stack's fixed order (spec/14 §5.4.1, #492): series keys, which need not be the
   # step's fields — a listed key the stack lacks is ignored, never a fault.
   def check(:key_order, {:keys, keys}, path, _ctx) when is_list(keys) do

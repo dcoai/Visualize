@@ -81,6 +81,7 @@ defmodule Visualize.Chart do
     :defaults,
     :layout,
     :interaction,
+    :budget,
     :frames,
     :marks,
     :labels
@@ -96,6 +97,7 @@ defmodule Visualize.Chart do
             defaults: nil,
             layout: %{},
             interaction: %{},
+            budget: nil,
             frames: nil,
             marks: [],
             labels: []
@@ -111,6 +113,7 @@ defmodule Visualize.Chart do
           defaults: map() | nil,
           layout: map(),
           interaction: map(),
+          budget: pos_integer() | {:per_px, number()} | nil,
           frames: %{atom() => map()} | nil,
           marks: [map()],
           labels: [map()]
@@ -234,12 +237,13 @@ defmodule Visualize.Chart do
 
   @doc "The design map of a chart: every design-level key, nested nodes as stored."
   @spec to_map(t()) :: map()
-  # A design that declares no defaults carries no key for them (spec/14 §3.8), so its map
-  # and its JSON are what they were before defaults existed.
-  def to_map(%__MODULE__{defaults: nil} = chart),
-    do: chart |> Map.from_struct() |> Map.delete(:defaults)
-
-  def to_map(%__MODULE__{} = chart), do: Map.from_struct(chart)
+  # A design that declares no defaults, or no budget, carries no key for them (spec/14
+  # §2.10, §3.8), so its map and its JSON are what they were before either existed.
+  def to_map(%__MODULE__{} = chart) do
+    chart
+    |> Map.from_struct()
+    |> Map.reject(fn {key, value} -> key in [:defaults, :budget] and value == nil end)
+  end
 
   @doc """
   The chart of a JSON document (spec/14 §11), with `limits:`, `urls:` and `generators:` as

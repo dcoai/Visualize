@@ -354,7 +354,7 @@ children = [
 | `assigns:` | `%{}` | the host's assigns every generator's context carries: the viewer's, so a host whose generators read the viewer runs a board per viewer, as for `system:` |
 | `width:` | `1200` | the container width in pixels, until a `resize/2` |
 | `tick:` | `1000` | the data rate: milliseconds between two turns of the loop; `nil` turns only on `tick/1` |
-| `budget:` | `nil` | the point budget asked of every feed (spec/08 §11.2) |
+| `budget:` | `nil` | the **ceiling** on every slot's budget (below, spec/08 §11.2): a slot is asked the lesser of the budget its cell derives or its design declares and this; `nil` caps nothing, and the derived budget stands |
 | `max_heap:` | `25_000_000` | each cell's heap limit, in words (200 MB on a 64-bit host) |
 | `clock:` | `DateTime.utc_now/0` | the board's "now": a function of no argument answering a UTC `DateTime` |
 | `limits:` | the defaults | the limits the components' designs are read under (spec/14 §9.2) |
@@ -378,11 +378,29 @@ children = [
 - **The sync group** is written into the components when they are prepared (§1.5), so the cells' frames carry it.
 - **The brushed window and the selection** (§13). `brush(board, window)` sets the window as `window/2` does, after the debounce. `reset_window(board)` restores the window the board was started with. `select(board, identity)` holds the board's one selection and sends it to every cell.
 
-**It owns the feeds.** The board holds a `Visualize.Feed.Monitor` (spec/08 §11.4, D-140) over `feeds:`, with `every:` the board's tick, `stale_after:` the board's `stale_after` in milliseconds and `budget:` the option. It is the monitor's owner as that section says: it ticks the monitor at the start of every turn with its own monotonic clock, routes every `{:visualize_feed, ref, message}` in its mailbox to `handle_message/2`, and `stop/1`s the monitor when it terminates. A feed is fetched once however many slots it fills.
+**It owns the feeds.** The board holds a `Visualize.Feed.Monitor` (spec/08 §11.4, D-140) over `feeds:`, with `every:` the board's tick, `stale_after:` the board's `stale_after` in milliseconds and `budget:` each feed's budget, the largest of its slots' (below). It is the monitor's owner as that section says: it ticks the monitor at the start of every turn with its own monotonic clock, routes every `{:visualize_feed, ref, message}` in its mailbox to `handle_message/2`, and `stop/1`s the monitor when it terminates. A feed is fetched once however many slots it fills, at the largest of their budgets (below).
+
+**Each slot's budget is derived from what its cell draws** (#760, #864, D-226). A cell of a dashboard is as wide as its place on the grid, and a chart that draws a mark per row needs as many rows as its plot has pixels to fill, no more: a wide cell needs more than a narrow one, and a bar chart of fifty series over a month at hourly resolution is 36,000 bars that no plot shows. So the board asks each bound slot a budget of its own, computed from the cell's box (§1.6) and the component's marks — knowledge the library holds, which no host repeats per panel:
+
+- **The marks that read the slot** are those whose `data` names it, as the source itself or as the data node's `source` (spec/14 §5.4). Each is drawn in its frame — the one it names, or the design's only frame — and the mark's **plot width** `w` is that frame's box at the cell's size less its left and right margins, `ceil`ed to whole pixels and at least `1`: the arithmetic `Visualize.Chart.Frame.new/2` realizes the plot by (spec/14 §4.2), through `Visualize.Chart.Frame.box_of/3` and the margin with the schema's defaults filled. A legend grows only a top or a bottom margin (D-169), so this is the width the cell's compiled chart draws at, read from the design without applying it. A box, a cell or a margin a variable gives is read at the cell's variables (§5), else the variable's declared default, else the schema's default.
+- **Each mark needs rows by its type**, at its plot width:
+
+  | Marks | Rows | Why |
+  |---|---|---|
+  | `:line`, `:area`, `:percentile_band` | `4 × w` | a continuous shape: M4's lossless bound, a pixel column's first, last, minimum and maximum rows (spec/08 §5.2), so the reduced line draws the pixels the whole one does |
+  | `:rect`, `:band`, `:rose` | `ceil(w / 2)` | a bar: one per two pixels, the narrowest bar that still reads as one with a gap beside it (metresis's mark budget) |
+  | every other mark that draws rows | `w` | one mark per pixel: a point, a symbol, a text, a rule |
+  | `:tiles` | none | a basemap draws no rows |
+
+- **A slot's budget is the largest of its marks' needs**, not their sum. Marks that read one slot read the same rows, and a budget counts rows, not marks: the most demanding mark's rows serve every other, as a line drawn with its points reads one delivery. A sum would count the shared rows once per mark, and spec/08 §11.2 already shares one budget among the delivery's series and fields, whatever reads them. The budget bounds the whole delivery, however many series it holds.
+- **A design may say otherwise** with its `budget` (spec/14 §2.10): `n` is the slot's budget, and `{:per_px, k}` is `ceil(k × w)` with `w` the widest plot width among the slot's marks. Declared intent wins over the derivation.
+- **The board's `budget:` is the ceiling.** A slot's budget is the lesser of the derived or declared one and the ceiling; with no ceiling the derived budget stands. A slot no mark reads, whose design declares no integer, is asked the ceiling.
+
+**One fetch per feed, at the largest budget.** The monitor asks each feed the largest budget among the slots it fills (`nil`, no budget, being the largest of all). A feed a virtual source reads (§14), or one no slot binds, is asked the ceiling: a virtual source's function reads the rows it is given, and the feed's rows were what it was given before slots had budgets of their own. **Each slot is then reduced to its own**: a slot whose budget is less than its feed was asked is handed the feed's delivery reduced to it by `Visualize.Feed.reduce/4`, with the monitor's reduction (`:lttb`), the same reduction `Visualize.Feed.finish/3` makes, and the delivery handed to that slot records `reduced_by: :visualize`. A slot whose budget is the one its feed was asked is handed the delivery as the monitor finished it, so a budget-honoring feed's delivery is not reduced again to the budget it honored (spec/08 §11.2). A slot bound to a virtual source is handed the source's output as it is.
 
 **Each turn**, after the tick, the board hands each cell its data: for each of the cell's slots, the delivery of the feed the binding names, the schema that delivery's version resolves to in the monitor's cache, and the feed's status. A slot the binding does not bind has the status `{:down, {:unbound, slot}}`. The message goes to the cell only when it differs from the last one sent, and always with the turn's now. It is a `send`, never a call, so a slow cell never holds the board.
 
-**Resizing.** `resize(board, width)` recomputes every cell's box at the new width (§1.6, `boxes/2`) and sends each cell whose size changed its new size. A board process draws at **one** width, the last one given. A second viewer at another width is drawn the same frames, scaled by the root's `viewBox`.
+**Resizing.** `resize(board, width)` recomputes every cell's box at the new width (§1.6, `boxes/2`) and sends each cell whose size changed its new size. It **recomputes every slot's budget** at the new boxes and gives the monitor the feeds' new budgets (`Visualize.Feed.Monitor.budget/2`): a feed whose largest budget changed and that honors `:budget` is **refetched** at the next turn, since a feed that serves a budget can only serve a new one if it is asked (the reason a window a person sets re-asks every feed, above), and any other is finished again for the new budget from what it holds. New board variables (`vars/2`) recompute the budgets likewise, since a component's margins and its `budget` may read them. A board process draws at **one** width, the last one given. A second viewer at another width is drawn the same frames, scaled by the root's `viewBox`.
 
 **Subscribers.** `subscribe(board, pid)` adds a subscriber, monitored and dropped when it exits, and answers `{:ok, info}`. Every cell then sends the newcomer its present view, so a page that subscribes late draws at once. `unsubscribe/2` removes one. The board sends the subscriber list to its cells whenever it changes, and **a cell sends its frames straight to the subscribers**, so no frame passes through the board's mailbox. Every message is `{:visualize_board, board, message}`, `board` the board process's pid:
 
@@ -467,13 +485,16 @@ The first row that holds is the state, in this order: a cell whose feed is down 
 | `Visualize.Board.Server.pick/4` | `pick(board, cell, series, index)`: the row behind a cell's keyboard point, its identity, its item and its frame, `{:ok, %{row: row, identity: {field, value} \| %{field => value} \| nil, item: {mark, identity} \| nil, frame: name}}` — `item` as a `Visualize.Event`'s (spec/10 §19.1, D-170) — or `:error` for a cell or a point there is not (§13.2). |
 | `Visualize.Board.Server.event/3` | `event(board, cell, click)`: a click a cell's `TooltipHook` pushed (`Visualize.Event.decode/1`, spec/10 §19.2) resolved by the cell's process against the drawing it holds, `{:ok, %Visualize.Event{}}` with the cell, the declared name, the typed row and its item, or `:error` for a cell that is not running, a click on a drawing it no longer holds, a key it has no row for, a name the mark does not declare, or `pick` (§9.2, D-170). Asked as `pick/4` asks, never holding the board. |
 | `Visualize.Board.Server.vars/2` | Board variables merged and every cell prepared again: `:ok`, or `{:error, errors}`. |
-| `Visualize.Board.Server.resize/2` | The container width set and every cell's box recomputed; `:ok`. |
+| `Visualize.Board.Server.resize/2` | The container width set, every cell's box and every slot's budget recomputed, a `:budget` feed whose budget changed refetched; `:ok` (§8.2). |
 | `Visualize.Board.Server.tick/1` | One turn of the loop now; `:ok` once it is done. |
 | `Visualize.Board.Server.info/1` | The board's present state (§8.2). |
 | `Visualize.Board.Server.snapshot/1` | The board frozen as it stands: a `Visualize.Board.Snapshot` (§12.2). |
 | `Visualize.Board.Server.export/2` | As `export/3` with `[]` options. |
 | `Visualize.Board.Server.export/3` | `export(board, format, opts)`: the board's snapshot drawn by `Visualize.Board.Export` as `:svg`, `:png`, `:pages` or `:html`, with the board's own `generators:`, `assigns:` and `system:`, an option given winning over each; one call to the board process (§12.2, D-181). |
 | `Visualize.Board.Server.stop/1` | The board and its cells stopped; `:ok`. |
+| `Visualize.Board.Budget.slot/5` | `slot(chart, vars, slot, {w, h}, ceiling)`: a slot's budget in a cell of that size — the design's `budget`, else the largest need of the marks that read it at their plot widths (lines and areas `4 × w`, bars `ceil(w / 2)`, others `w`), capped by the ceiling; the ceiling for a slot no mark reads (§8.2, D-226). |
+| `Visualize.Board.Budget.slots/5` | `slots(components, needs, slot_refs, boxes, ceiling)`: every slot bound to a feed's budget, by `{cell, slot}`, each in its cell's box (§8.2). |
+| `Visualize.Board.Budget.feeds/5` | `feeds(feeds, budgets, slot_refs, read, ceiling)`: each feed's budget, the largest of its slots' (`nil` the largest), the ceiling for a feed no slot binds or a virtual source reads (§8.2). |
 | `Visualize.Board.Cell.child_spec/1` | A cell's child spec, `restart: :temporary`: the board starts its cells and restarts them itself (§8.3). |
 | `Visualize.Board.State.render/3` | A state drawn as the whole cell, an SVG root string (§8.4). |
 | `Visualize.Board.State.banner/3` | A state drawn as a banner across a chart, an SVG root string, or `nil` for `:live` (§8.4). |
@@ -901,6 +922,7 @@ A binding names a virtual source as it names a feed: a cell's slot bound to a na
 | `Visualize.VirtualSource.Engine.run/2` | `run(engine, now)`: the due pulse run, in rank order, each marked source at most once; the engine unchanged when none is due (§14.2). |
 | `Visualize.VirtualSource.Engine.due/1` | The monotonic millisecond the next pulse is due, or `nil`. |
 | `Visualize.VirtualSource.Engine.resolve/3` | `resolve(engine, scope, name)`: `{:source, path}`, `{:feed, name}` or `:error`: what a name read from a scope names (§14.5). |
+| `Visualize.VirtualSource.Engine.feeds_read/1` | The feeds some source reads, sorted: each is asked the board's ceiling (§8.2, D-226). |
 | `Visualize.VirtualSource.Engine.outputs/1` | Every source's last good output, a `%Visualize.Data.Delivery{}`, by path. |
 | `Visualize.VirtualSource.Engine.schemas/1` | Every source's output schema, by path. |
 | `Visualize.VirtualSource.Engine.status/1` | Every source's state by path: `:loading`, `:live` or `{:down, {:virtual_source, id, kind}}` (§14.3). |

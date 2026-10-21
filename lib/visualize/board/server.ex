@@ -48,6 +48,16 @@ defmodule Visualize.Board.Server do
   recomputes the sources that read what changed, in rank order, each once. A cell's slot
   bound to a virtual source's name is handed its last good output as it is handed a feed's.
 
+  ## Budgets
+
+  Each bound slot's budget is derived from what its cell draws at its size
+  (`Visualize.Board.Budget`, spec/15 §8.2, D-226): its marks' plot widths and types, or
+  the design's `budget`, capped by `:budget`. Each feed is fetched once, at the largest
+  budget of the slots it fills, and each slot whose budget is smaller is handed the
+  delivery reduced to its own (`Visualize.Feed.reduce/4`, `reduced_by: :visualize`). A
+  resize, or new board variables, recompute the budgets; a feed that honors `:budget` and
+  whose budget changed is fetched again.
+
   ## Options
 
     * `:board` - the `%Visualize.Board{}` (required)
@@ -67,7 +77,9 @@ defmodule Visualize.Board.Server do
     * `:width` - the container width in pixels until a `resize/2` (default `1200`)
     * `:tick` - the data rate, milliseconds between turns; `nil` turns only on `tick/1`
       (default `1000`)
-    * `:budget` - the point budget asked of every feed (default `nil`)
+    * `:budget` - the ceiling on every slot's budget: each bound slot is asked the
+      budget its cell's plot width and marks derive, or its design declares, capped by
+      this; `nil` caps nothing (default `nil`, spec/15 §8.2, D-226)
     * `:max_heap` - each cell's heap limit in words (default `25_000_000`)
     * `:clock` - the board's now, a function of no argument answering a UTC `DateTime`
       (default `DateTime.utc_now/0`)
@@ -93,8 +105,9 @@ defmodule Visualize.Board.Server do
   use GenServer, restart: :transient
 
   alias Visualize.Board
-  alias Visualize.Board.{Binding, Cell, Draw, Export, Snapshot, State, View}
+  alias Visualize.Board.{Binding, Budget, Cell, Draw, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
+  alias Visualize.Feed
   alias Visualize.Feed.Monitor
   alias Visualize.VirtualSource.{Engine, Join}
   alias Visualize.VirtualSources
@@ -426,11 +439,13 @@ defmodule Visualize.Board.Server do
     {:ok, cells_sup} = DynamicSupervisor.start_link(strategy: :one_for_one)
     board = prepared.board
 
+    {budgets, asked} = budgets(prepared, prepared.components, prepared.width, prepared.budget)
+
     monitor =
       Monitor.new(prepared.feeds,
         # Turned only by `tick/1`, the board polls its pull feeds on every turn.
         every: prepared.tick || 0,
-        budget: prepared.budget,
+        budget: asked,
         stale_after: board.stale_after && round(board.stale_after * 1000)
       )
 
@@ -464,6 +479,9 @@ defmodule Visualize.Board.Server do
         brushed: 0,
         components: prepared.components,
         needs: prepared.needs,
+        ceiling: prepared.budget,
+        budgets: budgets,
+        asked: asked,
         monitor: monitor,
         cells_sup: cells_sup,
         cells: %{},
@@ -575,7 +593,7 @@ defmodule Visualize.Board.Server do
             %{pid: pid} when is_pid(pid) <- [state.cells[name]],
             do: send(pid, {:component, chart, v})
 
-        {:reply, :ok, %{state | board: board, components: components}}
+        {:reply, :ok, budgeted(%{state | board: board, components: components})}
 
       {:error, _errors} = error ->
         {:reply, error, state}
@@ -591,7 +609,7 @@ defmodule Visualize.Board.Server do
         %{pid: pid} when is_pid(pid) <- [state.cells[name]],
         do: send(pid, {:size, size(box)})
 
-    {:reply, :ok, tell(%{state | width: width})}
+    {:reply, :ok, %{state | width: width} |> budgeted() |> tell()}
   end
 
   def handle_call(:tick, _from, state), do: {:reply, :ok, turn(state)}
@@ -778,11 +796,45 @@ defmodule Visualize.Board.Server do
 
       {:ok, {:feed, feed}} ->
         delivery = Map.get(deliveries, feed)
-        %{delivery: delivery, schema: schema(cache, feed, delivery), status: statuses[feed]}
+        schema = schema(cache, feed, delivery)
+        delivery = own(state, {cell, slot}, feed, delivery, schema)
+        %{delivery: delivery, schema: schema, status: statuses[feed]}
 
       :error ->
         %{delivery: nil, schema: nil, status: {:down, {:unbound, slot}}}
     end
+  end
+
+  # A slot's delivery at its own budget (spec/15 §8.2, D-226): reduced when the budget is
+  # below the one its feed was asked, else as the monitor finished it, so a budget-honoring
+  # feed is not reduced again to the budget it honored.
+  defp own(_state, _key, _feed, nil, _schema), do: nil
+  defp own(_state, _key, _feed, delivery, nil), do: delivery
+
+  defp own(state, key, feed, delivery, schema) do
+    budget = Map.get(state.budgets, key)
+    asked = Map.get(state.asked, feed)
+
+    if budget != nil and (asked == nil or budget < asked),
+      do: Feed.reduce(delivery, schema, budget, state.monitor.reduce),
+      else: delivery
+  end
+
+  # Every bound slot's budget and every feed's, the largest of its slots' (spec/15 §8.2).
+  defp budgets(state, components, width, ceiling) do
+    boxes = Board.boxes(state.board, width)
+    budgets = Budget.slots(components, state.needs, state.slot_refs, boxes, ceiling)
+    feeds = Map.keys(state.feeds)
+    read = Engine.feeds_read(state.engine)
+    {budgets, Budget.feeds(feeds, budgets, state.slot_refs, read, ceiling)}
+  end
+
+  # The budgets recomputed for the board's present width and components, and the monitor
+  # given the feeds' (spec/15 §8.2): a `:budget` feed whose budget changed is refetched.
+  defp budgeted(state) do
+    {budgets, asked} = budgets(state, state.components, state.width, state.ceiling)
+
+    %{state | budgets: budgets, asked: asked, monitor: Monitor.budget(state.monitor, asked)}
   end
 
   defp schema(_cache, _feed, nil), do: nil

@@ -45,12 +45,15 @@ defmodule Visualize.Feed.Monitor do
   @type name :: term()
   @type status :: :loading | :live | :stale | {:down, term()}
 
+  @typedoc "One budget asked of every feed, or each feed's own by name, a name absent `nil`."
+  @type budgets :: Feed.budget() | %{name() => Feed.budget()}
+
   @type t :: %__MODULE__{
           entries: %{name() => map()},
           refs: %{reference() => name()},
           cache: Cache.t(),
           window: Feed.window(),
-          budget: Feed.budget(),
+          budget: budgets(),
           reduce: :lttb | :m4,
           every: non_neg_integer(),
           stale_after: pos_integer() | nil,
@@ -59,7 +62,8 @@ defmodule Visualize.Feed.Monitor do
 
   @doc """
   A monitor over a map of feeds by slot name, calling nothing. Options: `window:` and
-  `budget:` (the request), `reduce:` (`:lttb` or `:m4`), `every:` (a pull feed's poll
+  `budget:` (the request; the budget is one for every feed, or a map from a feed's name to
+  its own, a name it lacks asked `nil`), `reduce:` (`:lttb` or `:m4`), `every:` (a pull feed's poll
   interval, milliseconds, `1000`), `stale_after:` (milliseconds without an answer before
   a feed is `:stale`, `nil` for never) and `limit:` (the most rows held for a feed whose
   rows cannot be trimmed by a window field, `100_000`).
@@ -76,9 +80,29 @@ defmodule Visualize.Feed.Monitor do
         limit: 100_000
       )
 
+    budgets!(opts[:budget])
     monitor = struct!(__MODULE__, opts)
     %{monitor | entries: Map.new(feeds, fn {name, feed} -> {name, entry(feed)} end)}
   end
+
+  # A budget is `nil` or a positive integer, alone or under each feed's name (spec/08 §11.4).
+  defp budgets!(budgets) when is_map(budgets), do: Enum.each(budgets, &budget!(elem(&1, 1)))
+  defp budgets!(budget), do: budget!(budget)
+
+  defp budget!(nil), do: :ok
+  defp budget!(n) when is_integer(n) and n > 0, do: :ok
+
+  defp budget!(other) do
+    raise ArgumentError,
+          "budget: is nil, a positive integer or a map of them by feed name, got " <>
+            "#{inspect(other)} (spec/08 §11.4)"
+  end
+
+  # The budget a feed is asked: the monitor's one, or its own by name.
+  defp budget_of(%__MODULE__{budget: budgets}, name) when is_map(budgets),
+    do: Map.get(budgets, name)
+
+  defp budget_of(%__MODULE__{budget: budget}, _name), do: budget
 
   defp entry(feed) do
     %{
@@ -210,7 +234,7 @@ defmodule Visualize.Feed.Monitor do
     entry = monitor.entries[name]
     poll = %{entry | due: now + monitor.every}
 
-    case Feed.fetch(entry.feed, request(monitor.window, entry.schema), monitor.budget) do
+    case Feed.fetch(entry.feed, request(monitor.window, entry.schema), budget_of(monitor, name)) do
       {:error, reason} ->
         put_entry(monitor, name, %{poll | status: {:down, reason}})
 
@@ -351,7 +375,7 @@ defmodule Visualize.Feed.Monitor do
         out =
           Feed.finish(held, entry.schema,
             supports: entry.supports,
-            budget: monitor.budget,
+            budget: budget_of(monitor, name),
             reduce: monitor.reduce
           )
 
@@ -525,9 +549,26 @@ defmodule Visualize.Feed.Monitor do
     }
   end
 
-  @doc "The monitor with a new budget, refinished at the next tick."
-  @spec budget(t(), Feed.budget()) :: t()
-  def budget(%__MODULE__{} = monitor, budget), do: %{monitor | budget: budget}
+  @doc """
+  The monitor with a new budget, one or by feed name as `new/2` takes it (spec/08 §11.4):
+  a feed whose budget changed and that honors `:budget` is fetched again at the next tick,
+  since it can serve a new budget only if it is asked; every other feed is finished again
+  for its new budget from what it holds.
+  """
+  @spec budget(t(), budgets()) :: t()
+  def budget(%__MODULE__{} = monitor, budget) do
+    budgets!(budget)
+    next = %{monitor | budget: budget}
+
+    entries =
+      Map.new(monitor.entries, fn {name, entry} ->
+        moved? = budget_of(monitor, name) != budget_of(next, name)
+        honors? = entry.supports != nil and :budget in entry.supports
+        {name, %{entry | refetch: entry.refetch or (moved? and honors?)}}
+      end)
+
+    %{next | entries: entries}
+  end
 
   @doc "A feed added or replaced under a name: the old one unsubscribed, the new one described at the next tick."
   @spec put(t(), name(), Feed.t()) :: t()

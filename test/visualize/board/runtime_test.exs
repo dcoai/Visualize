@@ -182,7 +182,10 @@ defmodule Visualize.Board.RuntimeTest do
 
     test "a heap-blowing cell is killed alone, shown crashed, and restarted; the others go on" do
       {small, _} = scripted(schema: @schema, rows: rows(20))
-      {big, _} = scripted(schema: @schema, rows: rows(200_000))
+      # A feed that claims `:budget` and ships every row anyway: the board does not reduce
+      # it again to the budget it claimed (spec/08 §11.2), so its rows reach the cell whole
+      # — a feed without the claim would be reduced to the cell's derived budget (D-226).
+      {big, _} = scripted(schema: @schema, supports: [:budget], rows: rows(200_000))
       binding = Binding.new(%{{:a, :primary} => :big, {:b, :primary} => :small})
 
       {:ok, board} =

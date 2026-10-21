@@ -46,6 +46,7 @@ defmodule Visualize.Chart.Composite do
     layout: :one,
     interaction: :one,
     defaults: :one,
+    budget: :one,
     frames: :frames,
     styles: {:keyed, :style},
     scales: {:frame, :keyed, :scale},

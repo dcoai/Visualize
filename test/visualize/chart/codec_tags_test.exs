@@ -95,6 +95,12 @@ defmodule Visualize.Chart.CodecTagsTest do
           name(),
           &at(%{version: 3}, [:frames, :inset, :scales, :x], {:frame, &1, :x})
         ),
+      # A design's budget in rows per pixel (spec/14 §2.10, D-226).
+      "$per_px" =>
+        StreamData.map(
+          StreamData.one_of([StreamData.integer(1..20), StreamData.float(min: 0.1, max: 8.0)]),
+          &%{version: 3, budget: {:per_px, &1}}
+        ),
       "$keys" =>
         StreamData.map(
           StreamData.list_of(name(), min_length: 1, max_length: 4),
