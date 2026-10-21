@@ -29,37 +29,59 @@ defmodule Visualize.Chart.Builder.BoardSources do
   # `run(board, binding, sources, catalog, modules)`: `sources` the bindable feeds' preview
   # data by feed, `catalog` their schemas or `nil`, `modules` the host's function modules.
   @spec run(Board.t(), Binding.t(), map(), map() | nil, [module()]) :: t()
-  def run(%Board{} = board, %Binding{} = binding, sources, catalog, modules) do
+  def run(%Board{} = board, %Binding{} = binding, sources, catalog, modules),
+    do: board |> ran(sources, catalog, modules) |> answer(binding)
+
+  @doc false
+  # The board's sources run over the preview's data, whatever the binding (#838, D-219):
+  # what `answer/2` reads for a binding, so a pass whose binding alone moved does not
+  # check, compile and run the sources again.
+  @spec ran(Board.t(), map(), map() | nil, [module()]) :: map()
+  def ran(%Board{} = board, sources, catalog, modules) do
     table = Board.virtual_sources(board)
     schemas = catalog || %{}
     deliveries = Map.new(sources, fn {feed, source} -> {feed, delivery(source)} end)
-
-    plain = %{
-      pools: Binding.pools(binding, sources),
-      slot_schemas: %{},
-      feed_schemas: schemas,
-      sources: [],
-      errors: []
-    }
+    ran = %{table: table, sources: sources, schemas: schemas, deliveries: deliveries}
 
     if table == %{} do
-      plain
+      Map.put(ran, :engine, nil)
     else
       functions = VirtualSources.registry(modules)
       opts = [feeds: Map.keys(deliveries), functions: functions, debounce: 0]
 
-      case Engine.new(table, opts) do
-        {:ok, engine} ->
-          engine = engine |> Engine.push(deliveries, schemas, 0) |> Engine.run(0)
-          answered(engine, table, binding, deliveries, schemas, functions)
+      engine =
+        with {:ok, engine} <- Engine.new(table, opts),
+             do: {:ok, engine |> Engine.push(deliveries, schemas, 0) |> Engine.run(0)}
 
-        {:error, errors} ->
-          %{
-            plain
-            | sources: views(table, nil, functions),
-              errors: Enum.map(errors, &define_error/1)
-          }
-      end
+      Map.merge(ran, %{engine: engine, functions: functions})
+    end
+  end
+
+  @doc false
+  # What a pass reads of the sources' run for a binding.
+  @spec answer(map(), Binding.t()) :: t()
+  def answer(%{engine: {:ok, engine}} = ran, %Binding{} = binding),
+    do: answered(engine, ran.table, binding, ran.deliveries, ran.schemas, ran.functions)
+
+  def answer(ran, %Binding{} = binding) do
+    plain = %{
+      pools: Binding.pools(binding, ran.sources),
+      slot_schemas: %{},
+      feed_schemas: ran.schemas,
+      sources: [],
+      errors: []
+    }
+
+    case ran.engine do
+      nil ->
+        plain
+
+      {:error, errors} ->
+        %{
+          plain
+          | sources: views(ran.table, nil, ran.functions),
+            errors: Enum.map(errors, &define_error/1)
+        }
     end
   end
 

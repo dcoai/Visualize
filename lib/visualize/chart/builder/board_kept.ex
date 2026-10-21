@@ -12,15 +12,26 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # made from, compared with `==` (which the VM answers at once for the same term, as
     # D-189's types are). Nothing lives outside the socket: the kept map is an assign, and
     # what a pass made replaces it after each event (`Visualize.Chart.Builder.BoardMode.keep/1`).
+    #
+    # Each component's flattening is kept by the entries it reads (#838, D-219): `reads/2`
+    # is its key, every entry the flatten can fetch beside what the store answers for it now,
+    # so a pass fetches each one rather than flattening the component again.
 
     @typedoc "An entry: the key it was made under and what it made."
     @type entry :: {term(), term()}
 
-    @typedoc "What the last pass kept: the facts' entry, and each cell's slots and preview."
+    @typedoc """
+    What the last pass kept: the facts' entry, each component's flattening by its ref, each
+    cell's slots and preview, the virtual sources' run, and what a pass read of the run for
+    its binding.
+    """
     @type t :: %{
             facts: entry() | nil,
-            required: %{atom() => entry()},
-            previews: %{atom() => entry()}
+            flat: %{Visualize.Chart.Fragment.id() => entry()},
+            required: %{String.t() => entry()},
+            previews: %{String.t() => entry()},
+            ran: entry() | nil,
+            virtual: entry() | nil
           }
 
     @doc false
@@ -35,12 +46,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     end
 
     @doc false
-    # Each cell's value under its key in `keys` — its preview, its slots: the kept one when
-    # its key is the same, and for every other cell `compute.(names)`, one call for all of
-    # them, a map by name. `{values, entries, computed}`, `computed` the cells made now, in
-    # name order; a cell the board no longer holds is dropped.
-    @spec each(%{atom() => entry()} | nil, %{atom() => term()}, ([atom()] -> map())) ::
-            {%{atom() => term()}, %{atom() => entry()}, [atom()]}
+    # Each cell's value under its key in `keys` — its preview, its slots, or a component's
+    # flattening by its ref: the kept one when its key is the same, and for every other
+    # `compute.(names)`, one call for all of them, a map by name. `{values, entries,
+    # computed}`, `computed` the names made now, in order; a name `keys` lacks is dropped.
+    @spec each(%{term() => entry()} | nil, %{term() => term()}, ([term()] -> map())) ::
+            {%{term() => term()}, %{term() => entry()}, [term()]}
     def each(kept, keys, compute) do
       kept = kept || %{}
 
@@ -60,6 +71,27 @@ if Code.ensure_loaded?(Phoenix.Component) do
         end)
 
       {Map.new(entries, fn {name, {_key, preview}} -> {name, preview} end), entries, stale}
+    end
+
+    @doc false
+    # What a flatten of `ref` through `fetch` is a function of (spec/14 §19.6): `ref` and
+    # every id the entries it reaches refer to (`Visualize.Chart.Fragment.refs/1`), each
+    # with what `fetch` answers for it now, by id. A composite fetches its sites' refs and
+    # the reference sites of its flat design; both are ids its entries hold.
+    @spec reads(Visualize.Chart.Fragment.id(), (term() -> {:ok, map()} | :error)) :: map()
+    def reads(ref, fetch), do: reads([ref], fetch, %{})
+
+    defp reads([], _fetch, seen), do: seen
+    defp reads([id | rest], fetch, seen) when is_map_key(seen, id), do: reads(rest, fetch, seen)
+
+    defp reads([id | rest], fetch, seen) do
+      case fetch.(id) do
+        {:ok, fragment} = got ->
+          reads(Visualize.Chart.Fragment.refs(fragment) ++ rest, fetch, Map.put(seen, id, got))
+
+        :error ->
+          reads(rest, fetch, Map.put(seen, id, :error))
+      end
     end
   end
 end

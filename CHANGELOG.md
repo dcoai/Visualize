@@ -211,6 +211,16 @@ release it merely follows.
   version 2 stream (at least) with its paint records first, and an unresolvable fill
   without a fallback now draws no fill instead of black. A tree without a reference is
   unchanged, byte for byte.
+- **Binding a slot in the builder's board mode no longer re-reads an unchanged component**
+  (#838, #846, D-219). Each choice in a slot's select read the cell's component through
+  your `Visualize.Chart.Builder.Store` four times over, flattening and validating it again,
+  and ran the board's virtual sources again. For a large gallery composite that was about
+  three quarters of the event's cost. The builder now keeps each component's flattening
+  under the store entries it reads, fetching each entry once per pass to see whether it
+  changed. It keeps the virtual sources' run apart from the binding. A binding on the
+  examples' heaviest component costs about a quarter of what it did. Nothing changes in
+  what the builder shows or sends. A store whose entries change under the same store
+  value is still seen at the next event, because the entries themselves are compared.
 
 ### Changed
 
