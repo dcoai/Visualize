@@ -4,10 +4,11 @@ defmodule Visualize.VirtualSource.Sandbox.Cache do
   the functions — a board's engine, the builder — not a process or a table, as the schema
   cache is (spec/08 §10.3).
 
-  An entry is keyed by the SHA-256 of the source, the arity and the fields it was checked
-  against, and holds the compilation's answer, a refusal included, so a source is checked
-  and compiled once. A compilation the runner cut short (`:reductions`, `:hung`, `:memory`) is not
-  kept, since it says nothing about the source. The cache never evicts.
+  An entry is keyed by the SHA-256 of the source, the arities, the fields and the variables
+  it was checked against (D-228), and holds the compilation's answer, a refusal included,
+  so a source is checked and compiled once. A compilation the runner cut short
+  (`:reductions`, `:hung`, `:memory`) is not kept, since it says nothing about the source.
+  The cache never evicts.
   """
 
   alias Visualize.VirtualSource.Sandbox
@@ -23,12 +24,14 @@ defmodule Visualize.VirtualSource.Sandbox.Cache do
   @doc """
   `compile(cache, source, opts)`: `{:ok, compiled, cache}` or `{:error, faults, cache}`,
   as `Visualize.VirtualSource.Sandbox.compile/2` answers, compiled at most once per
-  source, arity and fields.
+  source, arities, fields and variables.
   """
   @spec compile(t(), String.t(), keyword()) ::
           {:ok, Sandbox.Compiled.t(), t()} | {:error, [Sandbox.fault(), ...], t()}
   def compile(%__MODULE__{} = cache, source, opts \\ []) when is_binary(source) do
-    key = {Sandbox.hash(source), Keyword.get(opts, :arity, 1), fields(opts[:fields])}
+    key =
+      {Sandbox.hash(source), opts |> Keyword.get(:arity, [1, 2]) |> List.wrap() |> Enum.sort(),
+       names(opts[:fields]), names(opts[:vars])}
 
     case Map.fetch(cache.entries, key) do
       {:ok, {:ok, compiled}} ->
@@ -52,8 +55,8 @@ defmodule Visualize.VirtualSource.Sandbox.Cache do
     end
   end
 
-  defp fields(nil), do: nil
-  defp fields(fields), do: fields |> Enum.map(&to_string/1) |> Enum.sort() |> Enum.uniq()
+  defp names(nil), do: nil
+  defp names(names), do: names |> Enum.map(&to_string/1) |> Enum.sort() |> Enum.uniq()
 
   defp keep?({:error, [{nil, {:compile, {_kind, _detail}}}]}), do: false
   defp keep?(_answer), do: true

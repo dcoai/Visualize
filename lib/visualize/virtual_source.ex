@@ -294,7 +294,7 @@ defmodule Visualize.VirtualSource do
   defp function(source) do
     case {Map.get(source, :elixir), Map.get(source, :function)} do
       {nil, nil} -> [{[:elixir], :required}]
-      {elixir, nil} -> elixir(elixir, nil)
+      {elixir, nil} -> elixir(elixir, [])
       {nil, name} when is_binary(name) and name != "" -> []
       {nil, name} when is_atom(name) and name not in @not_names -> []
       {nil, _name} -> [{[:function], {:type, :name}}]
@@ -302,14 +302,14 @@ defmodule Visualize.VirtualSource do
     end
   end
 
-  defp elixir(elixir, fields) when is_binary(elixir) do
-    case Sandbox.check(elixir, fields: fields) do
+  defp elixir(elixir, opts) when is_binary(elixir) do
+    case Sandbox.check(elixir, opts) do
       {:ok, _quoted} -> []
       {:error, faults} -> for {line, reason} <- faults, do: {[:elixir], {:check, line, reason}}
     end
   end
 
-  defp elixir(_other, _fields), do: [{[:elixir], {:type, :string}}]
+  defp elixir(_other, _opts), do: [{[:elixir], {:type, :string}}]
 
   defp per(nil, _from), do: []
 
@@ -329,17 +329,19 @@ defmodule Visualize.VirtualSource do
 
   @doc """
   `:ok`, or every fault of the source given what it reads (spec/08 §10.5.5): `inputs:`, a
-  map from an input's name to its `%Visualize.Data.Schema{}` where it is known, and
+  map from an input's name to its `%Visualize.Data.Schema{}` where it is known;
   `functions:`, the host functions' registry (`Visualize.VirtualSources.registry/1`), or
-  `nil` to leave the name unchecked.
+  `nil` to leave the name unchecked; and `vars:`, the names of the variables the source's
+  scope declares, or `nil` to leave a stored function's literal reads of them unchecked
+  (D-228).
   """
   @spec validate(t(), keyword()) :: :ok | {:error, [error(), ...]}
   def validate(%__MODULE__{} = source, opts \\ []) do
-    opts = Keyword.validate!(opts, inputs: %{}, functions: nil)
+    opts = Keyword.validate!(opts, inputs: %{}, functions: nil, vars: nil)
     inputs = opts[:inputs]
 
     errors =
-      fields_check(source, inputs) ++
+      elixir_check(source, inputs, opts[:vars]) ++
         functions_check(source, opts[:functions]) ++
         boxes(source, inputs) ++ identity_check(source, inputs)
 
@@ -349,21 +351,22 @@ defmodule Visualize.VirtualSource do
     end
   end
 
-  # With every input's schema known, a map read names one of their fields or the output's.
-  defp fields_check(%{elixir: nil}, _inputs), do: []
+  # With every input's schema known, a map read names one of their fields or the output's;
+  # with the scope's variables known, a literal read of one names one of them.
+  defp elixir_check(%{elixir: nil}, _inputs, _vars), do: []
 
-  defp fields_check(source, inputs) do
-    if Enum.all?(source.from, fn {name, _window} -> fetch_input(inputs, name) != :error end) do
-      fields =
+  defp elixir_check(source, inputs, vars) do
+    fields =
+      if Enum.all?(source.from, fn {name, _window} -> fetch_input(inputs, name) != :error end) do
         Enum.flat_map(source.from, fn {name, _window} ->
           Map.keys(fetch_input!(inputs, name).fields)
         end) ++
           Map.keys(source.schema.fields)
+      end
 
-      elixir(source.elixir, fields)
-    else
-      []
-    end
+    if fields == nil and vars == nil,
+      do: [],
+      else: elixir(source.elixir, fields: fields, vars: vars)
   end
 
   # An input's schema by its name's spelling: a host keys `inputs:` by atom or string, a

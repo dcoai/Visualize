@@ -24,7 +24,7 @@ defmodule Visualize.VirtualSource.Sandbox do
 
   alias Visualize.VirtualSource.Sandbox.{Checker, Compiled}
 
-  @check_opts [arity: 1, fields: nil, max_source: 10_000]
+  @check_opts [arity: [1, 2], fields: nil, vars: nil, max_source: 10_000]
   @run_opts [max_reductions: 100_000_000, timeout: 30_000, max_heap: 10_000_000]
 
   @typedoc "A checker fault: the source line, or `nil`, and the reason (spec/08 §10.5.1)."
@@ -42,8 +42,10 @@ defmodule Visualize.VirtualSource.Sandbox do
   `{:error, faults}` with every fault, each `{line, reason}`, ordered by line. Nothing is
   evaluated.
 
-  Options: `arity:` (`1`), `fields:` (the names a `row.field` may read; `nil` reads any)
-  and `max_source:` (bytes, `10_000`).
+  Options: `arity:` (the arities the function may take, an integer or a list, `[1, 2]`:
+  its inputs, or its inputs and its context), `fields:` (the names a `row.field` may read;
+  `nil` reads any), `vars:` (the variable names a literal `context["vars"]["x"]` may read;
+  `nil` reads any) and `max_source:` (bytes, `10_000`).
   """
   @spec check(String.t(), keyword()) :: {:ok, Macro.t()} | {:error, [fault(), ...]}
   def check(source, opts) when is_binary(source) and is_list(opts) do
@@ -89,7 +91,7 @@ defmodule Visualize.VirtualSource.Sandbox do
          %Compiled{
            hash: hash(source),
            fun: fun,
-           arity: opts[:arity],
+           arity: arity(fun),
            warnings: for(%{severity: :warning} = d <- diagnostics, do: warning(d))
          }}
 
@@ -138,6 +140,11 @@ defmodule Visualize.VirtualSource.Sandbox do
   defp value_receiver?({:__aliases__, _meta, _parts}), do: false
   defp value_receiver?(atom) when is_atom(atom), do: false
   defp value_receiver?(_value), do: true
+
+  defp arity(fun) do
+    {:arity, arity} = Function.info(fun, :arity)
+    arity
+  end
 
   defp warning(%{position: {line, _column}, message: message}), do: {line, message}
   defp warning(%{position: line, message: message}) when is_integer(line), do: {line, message}
@@ -236,8 +243,7 @@ defmodule Visualize.VirtualSource.Sandbox do
 
   defp words({:syntax, message}), do: "does not parse: #{message}"
 
-  defp words({:not_a_function, arity}),
-    do: "the source must be one fn taking #{arity} argument#{if arity == 1, do: "", else: "s"}"
+  defp words({:not_a_function, arity}), do: "the source must be one fn taking #{arguments(arity)}"
 
   defp words({:restricted, :struct}), do: "a struct is not allowed in a virtual source"
 
@@ -256,6 +262,9 @@ defmodule Visualize.VirtualSource.Sandbox do
   defp words({:unknown_field, name}),
     do: "#{name} is not a field of the virtual source's inputs or its schema"
 
+  defp words({:unknown_var, name}),
+    do: "#{name} is not a variable of the virtual source's scope"
+
   defp words({:into, :literal}),
     do: "into: takes a literal empty %{}, [] or \"\" in a virtual source"
 
@@ -268,11 +277,22 @@ defmodule Visualize.VirtualSource.Sandbox do
   defp words({:guard, {name, arity}}), do: "#{name}/#{arity} cannot be used in a guard"
   defp words({:pattern, form}), do: "#{form} cannot be used in a pattern"
 
+  defp words({:fn_arity, [arity]}),
+    do:
+      "the fn takes #{arguments(arity)}; a virtual source's takes its inputs, or its inputs and its context"
+
   defp words({:fn_arity, arities}),
     do: "the clauses of one fn take #{Enum.map_join(arities, " and ", &to_string/1)} arguments"
 
   defp words({:compile, {kind, _detail}}), do: "the compiler did not finish (#{kind})"
   defp words({:compile, message}), do: "does not compile: #{message}"
+
+  defp arguments([arity]), do: arguments(arity)
+  defp arguments(1), do: "1 argument"
+  defp arguments(arity) when is_integer(arity), do: "#{arity} arguments"
+
+  defp arguments(arities) when is_list(arities),
+    do: Enum.map_join(arities, " or ", &to_string/1) <> " arguments"
 
   defp module_text(module) when is_binary(module), do: module
   defp module_text(module), do: inspect(module)

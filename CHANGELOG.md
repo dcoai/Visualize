@@ -17,6 +17,19 @@ release it merely follows.
 
 ### Breaking
 
+- **`__virtual_sources__/0` lists each function's arity, and a stored function may take
+  two arguments** (#869, #870, D-228). A virtual source's function of two arguments is
+  now called with its context, so its arity is part of what a host module records.
+  *Affects* code that reads `__virtual_sources__/0` or matches the sandbox's faults:
+  - **`__virtual_sources__/0`'s entries are `{name, arity, source}`.** *Before:*
+    `[doubled: "fn rows -> … end"]`. *After:* `[{:doubled, 1, "fn rows -> … end"}]`.
+  - **`Visualize.VirtualSource.Sandbox.check/2` accepts one or two arguments by default**
+    (`arity: [1, 2]`, was `1`), and a `fn` of an arity it does not accept is
+    `{:fn_arity, [n]}`. *Before:* `check("fn a, b -> a end")` was
+    `{:error, [{1, {:not_a_function, 1}}]}`. *After:* `{:ok, quoted}`; `fn a, b, c -> … end`
+    is `{:error, [{1, {:fn_arity, [3]}}]}`. A source that is not one `fn` is still
+    `{:not_a_function, arity}`, `arity` the option as given (`[1, 2]` by default).
+
 - **`Visualize.Components.Chart` sends what a move changed, not the whole drawing**
   (#809, #813, D-203–D-206). A move on a 2,500-cell grid sent 1.3–2.8 MB and took
   0.46–0.75 s on the server; it now sends 1–3 KB and takes under 100 ms. *Affects* code
@@ -95,6 +108,22 @@ release it merely follows.
     your feed does in a GenServer it calls is only counted when you name the GenServer.
 
 ### Added
+
+- **A virtual source's function can read its inputs' schemas, their deliveries' facts and
+  its scope's variables** (#869, #870, D-228). Give it a second argument:
+  `fn inputs, context -> … end`, or `defsource bins(inputs, context)`. The context is
+  `%{"inputs" => %{key => %{"schema" => …, "window" => …, "resolution" => …, "capped" =>
+  …}}, "vars" => %{name => value}}`, every name a string. `"schema"` is the input's schema
+  as a snapshot writes it (field names and description keys as strings, a value entry as
+  `%{"value" => …, "name" => …, "color" => …}`), and `"vars"` the board's variables with
+  the cell's over them for a cell's source. It has no clock. A function of one argument
+  is called as before. `Visualize.VirtualSource.Engine.vars(engine, %{[] => board_vars,
+  [cell] => cell_vars}, now)` shows the engine the variables and marks only the
+  two-argument sources whose scope's variables changed; `Engine.new/2` takes the starting
+  ones as `vars:`. In context, a stored function's literal `context["vars"]["x"]` for a
+  variable its scope does not have is `{:unknown_var, "x"}` (`Sandbox.check/2` and
+  `VirtualSource.validate/2` take `vars:`). The board passes its variables to the engine
+  in #871.
 
 - **A legend can be shown only from a number of entries: `min_entries`** (#761, #861,
   D-223). `legend: %{position: :top, min_entries: 2}` draws the key when there are two

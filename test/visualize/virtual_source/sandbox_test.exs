@@ -93,11 +93,48 @@ defmodule Visualize.VirtualSource.SandboxTest do
       assert [{:syntax, _message}] = reasons("fn rows -> ")
     end
 
-    test "the source is one fn of the arity" do
-      assert [{:not_a_function, 1}] = reasons("1 + 1")
-      assert [{:not_a_function, 1}] = reasons("fn a, b -> a end")
-      assert [{:not_a_function, 2}] = reasons("fn a -> a end", arity: 2)
+    test "the source is one fn of an arity arity: holds, one or two by default (D-228)" do
+      assert [{:not_a_function, [1, 2]}] = reasons("1 + 1")
+      assert [{:not_a_function, 1}] = reasons("1 + 1", arity: 1)
+      assert ok?("fn a -> a end")
+      assert ok?("fn a, b -> {a, b} end")
+      assert [{:fn_arity, [3]}] = reasons("fn a, b, c -> {a, b, c} end")
+      assert [{:fn_arity, [1, 2]}] = reasons("fn a -> a; a, b -> {a, b} end")
+      assert [{:fn_arity, [2]}] = reasons("fn a, b -> a end", arity: 1)
+      assert [{:fn_arity, [1]}] = reasons("fn a -> a end", arity: 2)
       assert ok?("fn a, b -> {a, b} end", arity: 2)
+    end
+
+    test "vars: a literal read of the context's variables names one of them (D-228)" do
+      vars = [vars: ["bin_domain"]]
+
+      for read <- [~S|c["vars"]["x"]|, "c.vars.x", ~S|c.vars["x"]|, ~S|c["vars"].x|] do
+        assert [{:unknown_var, "x"}] = reasons("fn _rows, c -> #{read} end", vars)
+      end
+
+      assert ok?(~S|fn _rows, c -> c["vars"]["bin_domain"] end|, vars)
+      assert ok?("fn _rows, c -> c.vars.bin_domain end", vars)
+
+      # A dynamic key, another binding or a pattern in the context's place is read at run.
+      assert ok?(~S|fn rows, c -> c["vars"][Enum.at(rows, 0)] end|, vars)
+      assert ok?(~S|fn _rows, c -> v = c["vars"]; v["x"] end|, vars)
+      assert ok?(~S|fn _rows, %{"vars" => v} -> v["x"] end|, vars)
+
+      # Unknown names: any name reads; and a one-argument function has no context.
+      assert ok?(~S|fn _rows, c -> c["vars"]["x"] end|)
+      assert ok?(~S|fn rows -> rows["vars"]["x"] end|, vars)
+    end
+
+    test "a read of the context is not a field's (D-228)" do
+      fields = [fields: [:cpu], vars: ["x"]]
+
+      assert ok?(
+               ~S|fn rows, c -> {c.vars.x, c.inputs, c["inputs"]["hosts"], rows.cpu} end|,
+               fields
+             )
+
+      assert [{:unknown_field, "mem"}] = reasons("fn rows, _c -> rows.mem end", fields)
+      assert [{:unknown_field, "inputs"}] = reasons("fn rows -> rows.inputs end", fields)
     end
 
     test "every fault, by line" do
@@ -281,6 +318,21 @@ defmodule Visualize.VirtualSource.SandboxTest do
                Sandbox.run(fn -> receive(do: (:never_sent -> :ok)) end, [], timeout: 20)
     end
 
+    test "a function of two arguments: compiled with its arity, called with its context (D-228)" do
+      {:ok, compiled} = Sandbox.compile(~S|fn rows, c -> {Enum.count(rows), c["vars"]["x"]} end|)
+      assert compiled.arity == 2
+      assert {:ok, {2, 7}} = Sandbox.run(compiled, [[1, 2], %{"vars" => %{"x" => 7}}])
+
+      # The reductions bound holds for it as for one of one (#856).
+      {:ok, runaway} =
+        Sandbox.compile(
+          "fn _rows, c -> Enum.reduce(1..100_000_000_000_000, 0, fn x, acc -> rem(acc + x, c) end) end"
+        )
+
+      assert {:error, :reductions, 1_000_000} =
+               Sandbox.run(runaway, [[], 7], max_reductions: 1_000_000)
+    end
+
     test "a host's function runs bounded too" do
       assert {:ok, 3} = Sandbox.run(&(&1 + &2), [1, 2])
       assert {:error, :raised, :exit} = Sandbox.run(fn -> exit(:boom) end, [])
@@ -307,6 +359,21 @@ defmodule Visualize.VirtualSource.SandboxTest do
         Cache.compile(cache, "fn x -> x.cpu end", fields: [:mem])
 
       assert map_size(cache.entries) == 2
+
+      # The arities a source was checked against are its key's (D-228).
+      {:ok, %Compiled{arity: 1}, cache} = Cache.compile(cache, "fn x -> x end")
+      {:error, [{1, {:fn_arity, [1]}}], cache} = Cache.compile(cache, "fn x -> x end", arity: 2)
+      {:ok, %Compiled{arity: 1}, cache} = Cache.compile(cache, "fn x -> x end", arity: [1])
+      assert map_size(cache.entries) == 5
+    end
+
+    test "keyed by the variables too (D-228)" do
+      source = ~S|fn _rows, c -> c["vars"]["x"] end|
+      {:ok, %Compiled{arity: 2}, cache} = Cache.compile(Cache.new(), source, vars: ["x"])
+
+      {:error, [{1, {:unknown_var, "x"}}], cache} = Cache.compile(cache, source, vars: ["y"])
+      {:ok, _compiled, cache} = Cache.compile(cache, source, vars: ["x"])
+      assert map_size(cache.entries) == 2
     end
   end
 
@@ -316,6 +383,9 @@ defmodule Visualize.VirtualSource.SandboxTest do
           {1, {:unknown_atom, "zz"}},
           {1, {:syntax, "x"}},
           {nil, {:not_a_function, 1}},
+          {nil, {:not_a_function, [1, 2]}},
+          {1, {:fn_arity, [3]}},
+          {1, {:unknown_var, "x"}},
           {1, {:restricted, {Enum, :random, 1}}},
           {1, {:restricted, {:send, 2}}},
           {1, {:restricted, :struct}},

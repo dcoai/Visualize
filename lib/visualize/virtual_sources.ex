@@ -10,12 +10,19 @@ defmodule Visualize.VirtualSources do
           cpu = Enum.map(rows, & &1.cpu)
           %{state: if(List.last(cpu) > 90, do: :error, else: :ok)}
         end
+
+        defsource bins(inputs, context) do
+          [lo, hi] = context["vars"]["bin_domain"] || [0, 100]
+          ...
+        end
       end
 
   `use Visualize.VirtualSources` imports `defsource/2` and compiles
-  `__virtual_sources__/0`, each function's name and its source text, `[{name, source}]` in
-  definition order. The text is captured when the module compiles, since a release strips
-  the debug information a later reading would need; the builder shows it.
+  `__virtual_sources__/0`, each function's name, its arity and its source text, `[{name,
+  arity, source}]` in definition order. A function of two arguments is called with its
+  inputs and its context (spec/08 §10.5.6, D-228), one of one argument with its inputs
+  alone. The text is captured when the module compiles, since a release strips the debug
+  information a later reading would need; the builder shows it.
 
   A host's function is trusted — the sandbox's checker does not read it — but it runs
   through the same bounded runner as a stored one (`Visualize.VirtualSource.Sandbox.run/3`),
@@ -32,7 +39,7 @@ defmodule Visualize.VirtualSources do
       iex> Doc.Sources.doubled([1, 2])
       [2, 4]
       iex> Doc.Sources.__virtual_sources__()
-      [doubled: "fn rows -> Enum.map(rows, &(&1 * 2)) end"]
+      [{:doubled, 1, "fn rows -> Enum.map(rows, &(&1 * 2)) end"}]
       iex> Visualize.VirtualSources.registry([Doc.Sources])
       %{doubled: Doc.Sources}
 
@@ -62,21 +69,40 @@ defmodule Visualize.VirtualSources do
       |> Enum.map(&elem(&1, 0))
       |> Enum.uniq()
       |> Enum.map(fn name ->
-        fns = for {^name, clause} <- clauses, do: clause
-        {name, Macro.to_string({:fn, [], fns})}
+        fns = for {^name, _arity, clause} <- clauses, do: clause
+        {name, arity!(name, clauses, env), Macro.to_string({:fn, [], fns})}
       end)
 
     quote do
       @doc false
-      def __virtual_sources__, do: unquote(sources)
+      def __virtual_sources__, do: unquote(Macro.escape(sources))
+    end
+  end
+
+  # One name, one arity: the engine calls a function by the arity recorded for its name.
+  defp arity!(name, clauses, env) do
+    case clauses
+         |> Enum.flat_map(fn {n, a, _c} -> if n == name, do: [a], else: [] end)
+         |> Enum.uniq() do
+      [arity] ->
+        arity
+
+      arities ->
+        raise CompileError,
+          file: env.file,
+          line: env.line,
+          description:
+            "defsource #{name} has clauses of #{Enum.map_join(arities, " and ", &to_string/1)} " <>
+              "arguments; one function takes its inputs, or its inputs and its context"
     end
   end
 
   @doc """
-  A host's virtual-source function: `defsource name(arg) do … end` is a public `def` of one
-  argument, recorded with its source text under the module's `__virtual_sources__/0`. A
-  function of several clauses is defined clause by clause, as any function is, and listed
-  once with every clause.
+  A host's virtual-source function: `defsource name(inputs) do … end` is a public `def` of
+  one argument, and `defsource name(inputs, context) do … end` one of two, which is called
+  with its context (spec/08 §10.5.6, D-228); either is recorded with its arity and source
+  text under the module's `__virtual_sources__/0`. A function of several clauses is
+  defined clause by clause, as any function is, and listed once with every clause.
   """
   defmacro defsource(head, body) do
     {name, args, guard} = head!(head, __CALLER__)
@@ -85,7 +111,7 @@ defmodule Visualize.VirtualSources do
     clause = Macro.escape({:->, [], [patterns, block]})
 
     quote do
-      @visualize_virtual_sources {unquote(name), unquote(clause)}
+      @visualize_virtual_sources {unquote(name), unquote(length(args)), unquote(clause)}
       def unquote(head), unquote(body)
     end
   end
@@ -97,13 +123,16 @@ defmodule Visualize.VirtualSources do
 
   defp head!({name, _meta, [_arg] = args}, _caller) when is_atom(name), do: {name, args, nil}
 
+  defp head!({name, _meta, [_inputs, _context] = args}, _caller) when is_atom(name),
+    do: {name, args, nil}
+
   defp head!(head, caller) do
     raise CompileError,
       file: caller.file,
       line: caller.line,
       description:
-        "defsource needs a head of one argument, `name(rows)`, as a stored function " <>
-          "takes; got #{Macro.to_string(head)}"
+        "defsource needs a head of one argument, `name(inputs)`, or two, " <>
+          "`name(inputs, context)`, as a stored function takes; got #{Macro.to_string(head)}"
   end
 
   defp body!([do: block], _caller), do: block

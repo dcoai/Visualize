@@ -11,6 +11,11 @@ defmodule Visualize.VirtualSource.Engine do
   most once, every call bounded (`Visualize.VirtualSource.Sandbox.run/3`). A source that
   fails keeps its last good output, and the pulse goes no further along it.
 
+  A function of two arguments is called with its context (spec/08 §10.5.6, D-228): its
+  inputs' schemas and deliveries' facts, and its scope's variables, which `vars/3` shows the
+  engine by scope. A change to the variables a context-taking source's scope sees marks it,
+  and only it.
+
       iex> alias Visualize.VirtualSource
       iex> alias Visualize.VirtualSource.Engine
       iex> alias Visualize.Data.{Delivery, Schema}
@@ -32,7 +37,7 @@ defmodule Visualize.VirtualSource.Engine do
   alias Visualize.Feed
   alias Visualize.Feed.Window
   alias Visualize.VirtualSource
-  alias Visualize.VirtualSource.Sandbox
+  alias Visualize.VirtualSource.{Context, Sandbox}
   alias Visualize.VirtualSource.Sandbox.Cache
   alias Visualize.VirtualSource.Sandbox.Names, as: Spelling
 
@@ -44,6 +49,9 @@ defmodule Visualize.VirtualSource.Engine do
             readers: %{},
             functions: %{},
             compiled: %{},
+            arities: %{},
+            vars: %{},
+            vars_known: false,
             cache: %Cache{},
             outputs: %{},
             faults: %{},
@@ -59,6 +67,9 @@ defmodule Visualize.VirtualSource.Engine do
   @type path :: [atom(), ...]
   @type ref :: {:feed, term()} | {:source, path()}
 
+  @typedoc "A container's path, `[]` the board's and `[cell]` a cell's (spec/08 §10.5.9)."
+  @type scope :: [atom() | String.t()]
+
   @type t :: %__MODULE__{}
 
   @typedoc "A definition fault: the source's path, where in it, and why (spec/15 §14.1)."
@@ -73,8 +84,9 @@ defmodule Visualize.VirtualSource.Engine do
   The engine over virtual sources by path, defined (spec/15 §14.1): `{:ok, engine}`, or
   `{:error, errors}` — every input that resolves to nothing, every host function the
   registry lacks, then every cycle by name. Options: `feeds:` (the feeds' names, `[]`),
-  `functions:` (the registry, `%{}`), `debounce:` (milliseconds, `0`), `max_reductions:`,
-  `timeout:` and `max_heap:` (each call's limits, spec/08 §10.5.4).
+  `functions:` (the registry, `%{}`), `vars:` (the starting variables, each scope's own by
+  scope as `vars/3` takes them, or `nil` while none is known), `debounce:` (milliseconds,
+  `0`), `max_reductions:`, `timeout:` and `max_heap:` (each call's limits, spec/08 §10.5.4).
   """
   @spec new(%{path() => VirtualSource.t()}, keyword()) :: {:ok, t()} | {:error, [error(), ...]}
   def new(sources, opts \\ []) when is_map(sources) do
@@ -82,6 +94,7 @@ defmodule Visualize.VirtualSource.Engine do
       Keyword.validate!(opts,
         feeds: [],
         functions: %{},
+        vars: nil,
         debounce: 0,
         max_reductions: 100_000_000,
         timeout: 30_000,
@@ -109,6 +122,8 @@ defmodule Visualize.VirtualSource.Engine do
           feeds: feeds,
           inputs: inputs,
           functions: functions,
+          vars: scoped(opts[:vars] || %{}),
+          vars_known: opts[:vars] != nil,
           debounce: opts[:debounce],
           run_opts: Keyword.take(opts, [:max_reductions, :timeout, :max_heap])
         }
@@ -237,7 +252,12 @@ defmodule Visualize.VirtualSource.Engine do
       {path, %{elixir: text}}, engine when is_binary(text) ->
         case Cache.compile(engine.cache, text, engine.run_opts) do
           {:ok, compiled, cache} ->
-            %{engine | cache: cache, compiled: Map.put(engine.compiled, path, compiled.fun)}
+            %{
+              engine
+              | cache: cache,
+                compiled: Map.put(engine.compiled, path, compiled.fun),
+                arities: Map.put(engine.arities, path, compiled.arity)
+            }
 
           {:error, faults, cache} ->
             %{engine | cache: cache} |> fault(path, :restricted, faults)
@@ -246,10 +266,13 @@ defmodule Visualize.VirtualSource.Engine do
       {path, %{function: name}}, engine ->
         {:ok, function} = Visualize.Chart.Names.key(engine.functions, name)
         module = Map.fetch!(engine.functions, function)
+        # The arity `defsource` recorded with the text (spec/08 §10.5.8, D-228).
+        {^function, arity, _text} = List.keyfind(module.__virtual_sources__(), function, 0)
 
         %{
           engine
-          | compiled: Map.put(engine.compiled, path, Function.capture(module, function, 1))
+          | compiled: Map.put(engine.compiled, path, Function.capture(module, function, arity)),
+            arities: Map.put(engine.arities, path, arity)
         }
     end)
   end
@@ -282,15 +305,52 @@ defmodule Visualize.VirtualSource.Engine do
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
 
-  defp mark(engine, ref, now) do
-    case Map.get(engine.readers, ref, []) do
-      [] ->
-        engine
+  defp mark(engine, ref, now), do: mark_paths(engine, Map.get(engine.readers, ref, []), now)
 
-      readers ->
-        due = engine.due || now + engine.debounce
-        %{engine | marked: Enum.into(readers, engine.marked), due: due}
-    end
+  defp mark_paths(engine, [], _now), do: engine
+
+  defp mark_paths(engine, paths, now) do
+    due = engine.due || now + engine.debounce
+    %{engine | marked: Enum.into(paths, engine.marked), due: due}
+  end
+
+  @doc """
+  Each scope's own variables shown to the engine at the owner's monotonic millisecond
+  `now` (spec/15 §14.2, D-228): `vars` maps a scope — `[]` the board, `[cell]` a cell — to
+  that scope's variables by name, and a scope it does not name keeps what it had. A source
+  of two arguments is given the cascade at its scope (spec/15 §5): the board's variables
+  with each container's merged over them, inward. Every such source whose cascade changed
+  is marked, and the first mark makes the next pulse due `debounce` later; a source of one
+  argument is never marked by a variable.
+  """
+  @spec vars(t(), %{scope() => map()}, integer()) :: t()
+  def vars(%__MODULE__{} = engine, vars, now) when is_map(vars) do
+    updated = %{engine | vars: Map.merge(engine.vars, scoped(vars)), vars_known: true}
+
+    changed =
+      for path <- engine.order,
+          Map.get(engine.arities, path) == 2,
+          cascade(engine, path) != cascade(updated, path),
+          do: path
+
+    mark_paths(updated, changed, now)
+  end
+
+  # Scopes and variable names by their strings (D-195), as paths are.
+  defp scoped(vars) do
+    Map.new(vars, fn {scope, own} when is_list(scope) and is_map(own) ->
+      {Enum.map(scope, &Names.name/1),
+       Map.new(own, fn {name, value} -> {Names.name(name), value} end)}
+    end)
+  end
+
+  # The variables a source's scope sees: the board's, then each container's over them.
+  defp cascade(engine, path) do
+    scope = Enum.drop(path, -1)
+
+    Enum.reduce(0..length(scope), %{}, fn n, cascade ->
+      Map.merge(cascade, Map.get(engine.vars, Enum.take(scope, n), %{}))
+    end)
   end
 
   @doc "The monotonic millisecond the next pulse is due, or `nil` (spec/15 §14.2)."
@@ -324,7 +384,7 @@ defmodule Visualize.VirtualSource.Engine do
          {:ok, fun} <- function(engine, path) do
       engine = %{engine | runs: Map.update(engine.runs, path, 1, &(&1 + 1))}
 
-      case call(source, fun, inputs, engine.run_opts) do
+      case call(source, fun, inputs, context(engine, path, source, inputs), engine.run_opts) do
         {:ok, rows} -> answered(engine, path, source, rows, now)
         {:error, kind, detail} -> fault(engine, path, kind, detail)
       end
@@ -341,7 +401,8 @@ defmodule Visualize.VirtualSource.Engine do
       case input(engine, ref) do
         {%Delivery{} = delivery, %Schema{} = schema} ->
           rows = delivery |> Delivery.source() |> Table.rows() |> window(window, schema)
-          {:cont, {:ok, acc ++ [%{key: key, name: name, rows: rows, schema: schema}]}}
+          input = %{key: key, name: name, rows: rows, schema: schema, delivery: delivery}
+          {:cont, {:ok, acc ++ [input]}}
 
         _missing ->
           {:halt, :waiting}
@@ -355,27 +416,52 @@ defmodule Visualize.VirtualSource.Engine do
     do: {engine.outputs[path], Map.fetch!(engine.sources, path).schema}
 
   # Validated given its inputs' schemas before it first runs, and again when one of their
-  # versions changes (spec/15 §14.2); a refusal is the fault `:restricted`.
+  # versions changes (spec/15 §14.2) — a source of two arguments given its scope's
+  # variables too, once they are known, and again when their names change (D-228); a
+  # refusal is the fault `:restricted`.
   defp in_context(engine, path, source, inputs) do
-    versions = Enum.map(inputs, & &1.schema.version)
+    names = declared(engine, path)
+    key = {Enum.map(inputs, & &1.schema.version), names}
 
     result =
       case Map.fetch(engine.checked, path) do
-        {:ok, {^versions, result}} ->
+        {:ok, {^key, result}} ->
           result
 
         _stale ->
           schemas = Map.new(inputs, &{&1.name, &1.schema})
-          VirtualSource.validate(source, inputs: schemas, functions: engine.functions)
+
+          VirtualSource.validate(source,
+            inputs: schemas,
+            functions: engine.functions,
+            vars: names
+          )
       end
 
-    engine = %{engine | checked: Map.put(engine.checked, path, {versions, result})}
+    engine = %{engine | checked: Map.put(engine.checked, path, {key, result})}
 
     case result do
       :ok -> {:ok, engine}
       {:error, errors} -> {:restricted, fault(engine, path, :restricted, errors)}
     end
   end
+
+  defp declared(engine, path) do
+    if engine.vars_known and Map.get(engine.arities, path) == 2,
+      do: engine |> cascade(path) |> Map.keys() |> Enum.sort()
+  end
+
+  # A function of two arguments' context (spec/08 §10.5.6, D-228), read as its inputs are:
+  # a stored function's values by its literals' rule, a host's as given. `[]` for one of one.
+  defp context(engine, path, source, inputs) do
+    case Map.get(engine.arities, path) do
+      2 -> [Context.new(inputs, cascade(engine, path), &input_key(source, &1), value(source))]
+      _one -> []
+    end
+  end
+
+  defp value(%{elixir: elixir}) when is_binary(elixir), do: &Spelling.spelling/1
+  defp value(_source), do: & &1
 
   defp function(engine, path) do
     case Map.fetch(engine.compiled, path) do
@@ -445,14 +531,14 @@ defmodule Visualize.VirtualSource.Engine do
   # A stored function reads its inputs, its rows' fields and their category values as it
   # reads its own literals — a word's atom, else the string (spec/08 §10.5.6, D-195); a
   # host's function its rows as given.
-  defp call(%{per: nil} = source, fun, inputs, opts) do
+  defp call(%{per: nil} = source, fun, inputs, context, opts) do
     argument = Map.new(inputs, &{input_key(source, &1.key), rows(source, &1.rows)})
-    source |> answer(Sandbox.run(fun, [argument], opts))
+    source |> answer(Sandbox.run(fun, [argument | context], opts))
   end
 
   # Per identity: one call per entity, every call in one bounded batch, each answer given
-  # its entity's identity.
-  defp call(source, fun, inputs, opts) do
+  # its entity's identity; a context is the same for every entity.
+  defp call(source, fun, inputs, context, opts) do
     name = VirtualSource.identity_input(source)
     identity_input = Enum.find(inputs, &(&1.name == name))
     groups = entities(identity_input.rows, identity_input.schema)
@@ -471,7 +557,9 @@ defmodule Visualize.VirtualSource.Engine do
     end
 
     batch = fn ->
-      Enum.map(groups, fn {identity, rows} -> {identity, fun.(argument.(rows))} end)
+      Enum.map(groups, fn {identity, rows} ->
+        {identity, apply(fun, [argument.(rows) | context])}
+      end)
     end
 
     with {:ok, answers} <- Sandbox.run(batch, [], opts) do
