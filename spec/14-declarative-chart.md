@@ -3509,7 +3509,9 @@ Each part is in the form its own document has: an entry's `id` as `Store.encode_
 | `Visualize.Chart.Builder.Bundle.export/3` | the closure of an id through a store, dependencies first, with provenance: the source store, when, and the `schema` version it was exported at (§9.1) |
 | `Visualize.Chart.Builder.Bundle.to_map/1` | the bundle as plain data: `provenance`, `entries` as `%{id, name, fragment}`, `board` (#818) |
 | `Visualize.Chart.Builder.Bundle.from_map/2` | the bundle of a map: the `schema` gate, the limits under `limits:`, every key read and every fault at its path, each entry's `kind` derived from its fragment; `{:ok, bundle}` or `{:error, errors}` (#818) |
+| `Visualize.Chart.Builder.Bundle.from_map/1` | As `from_map/2` with `[]` options. |
 | `Visualize.Chart.Builder.Bundle.to_json/1` | the bundle as one JSON document stamped `"$version"`, its entries' fragments as `Fragment.to_json/1` writes them and its board in the board's JSON form; `provenance.store` as D-217 writes it; `{:error, {:missing_dependency, :jason}}` without Jason (#818) |
+| `Visualize.Chart.Builder.Bundle.from_json/1` | As `from_json/2` with `[]` options. |
 | `Visualize.Chart.Builder.Bundle.from_json/2` | the inverse: the stamp and the `schema` gated and the limits applied before a key is decoded, each part read by its own reader, every fault at its path; `{:error, [{[], {:json, message}}]}` for text that is not a JSON object (#818) |
 | `Visualize.Chart.Builder.Store.theme_name/1` | the name a stored theme entry answers to, as a string — the name its theme gives itself, or, for one that gives none, its entry name's last `:` segment — or `nil` for an entry that is not a theme; what `theme/2` matches a name against, and what a board bundle's import checks a carried theme's name by ([15-boards](15-boards.md) §11.2) |
 | `Visualize.Chart.Fragment.kinds/0` | every kind a fragment can be, and so every kind an id can carry |

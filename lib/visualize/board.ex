@@ -268,6 +268,13 @@ defmodule Visualize.Board do
     end
   end
 
+  @doc false
+  # A parsed board document read as `from_json/2` reads one, for a reader that holds it
+  # inside a document of its own — a bundle's board (spec/14 §19.7, #818).
+  @spec read_document(map(), keyword()) :: {:ok, t()} | {:error, [error(), ...]}
+  def read_document(term, opts) when is_map(term),
+    do: read_json(term, opts |> Keyword.get(:limits, []) |> Limits.new())
+
   defp read_json(term, limits) do
     {stamp, term} = Map.pop(term, Codec.stamp())
 
