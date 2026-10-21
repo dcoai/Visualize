@@ -124,6 +124,43 @@ defmodule Visualize.Board.VirtualSourcesTest do
     assert [%{"$atom" => "load"}, %{"type" => %{"$atom" => "number"}}] in load["schema"]
   end
 
+  test "a mixed list of values and value entries round-trips exactly (D-224)" do
+    values = [
+      %{value: :ok, name: "OK", color: "#2e7d32"},
+      %{value: :warning, color: {:ramp, :status, 0.5}},
+      %{value: :error, name: "Error", color: {:darken, {:color, :red}, 0.2}},
+      :unknown
+    ]
+
+    health = put_in(@health, [:schema, :state, :values], values)
+    health = put_in(health, [:schema, :state, :status], %{ok: :good, error: :bad})
+    board = Board.from_map!(board(%{virtual_sources: %{health: health}}))
+
+    assert [%{value: "ok"}, %{value: :warning}, %{value: "error"}, :unknown] =
+             board.virtual_sources["health"].schema["state"].values
+
+    assert {:ok, ^board} = board |> Board.to_map() |> Board.from_map()
+    assert {:ok, json} = Board.to_json(board)
+    assert {:ok, ^board} = Board.from_json(json)
+
+    [_, state] =
+      json
+      |> Jason.decode!()
+      |> get_in(["virtual_sources", "health", "schema"])
+      |> Enum.find(fn [name, _] -> name == %{"$atom" => "state"} end)
+
+    assert state["values"] == [
+             %{"value" => %{"$atom" => "ok"}, "name" => "OK", "color" => "#2e7d32"},
+             %{"value" => %{"$atom" => "warning"}, "color" => %{"$ramp" => ["status", 0.5]}},
+             %{
+               "value" => %{"$atom" => "error"},
+               "name" => "Error",
+               "color" => %{"$darken" => [%{"$color" => "red"}, 0.2]}
+             },
+             %{"$atom" => "unknown"}
+           ]
+  end
+
   test "a JSON key a virtual source does not know stays a string and is refused" do
     {:ok, json} = Board.to_json(Board.from_map!(board()))
 

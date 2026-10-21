@@ -183,13 +183,22 @@ defmodule Visualize.VirtualSource do
 
   defp named_schema(other), do: other
 
-  defp named_attribute({key, values}) when key in [:values, :order],
-    do: {key, Words.term(values)}
+  # A value entry's value is read as a bare value is; its name and color are as given
+  # (spec/08 §10.1, D-224).
+  defp named_attribute({:values, values}) when is_list(values),
+    do: {:values, Enum.map(values, &named_value/1)}
+
+  defp named_attribute({:order, values}), do: {:order, Words.term(values)}
 
   defp named_attribute({:status, status}) when is_map(status) and not is_struct(status),
     do: {:status, Map.new(status, fn {k, v} -> {Words.term(k), v} end)}
 
   defp named_attribute(attribute), do: attribute
+
+  defp named_value(%{value: value} = entry) when not is_struct(entry),
+    do: %{entry | value: Words.term(value)}
+
+  defp named_value(value), do: Words.term(value)
 
   # The proposal's `{:window, opts}` is the map `opts` makes; anything else as it is.
   defp read_from(inputs) when is_list(inputs) do
@@ -513,7 +522,7 @@ defmodule Visualize.VirtualSource do
 
     cond do
       not typed?(description.type, value) -> {name, {:type, description.type}}
-      not member?(description, value) -> {name, :not_in_values}
+      not member?(Schema.values(schema, key), value) -> {name, :not_in_values}
       true -> nil
     end
   end
@@ -532,8 +541,9 @@ defmodule Visualize.VirtualSource do
     do: is_binary(value) or is_number(value) or (is_atom(value) and not is_boolean(value))
 
   # A category value is one whichever spelling the function or the schema gives it (D-195).
-  defp member?(%{values: values}, value), do: Enum.any?(values, &Names.same?(&1, value))
-  defp member?(_description, _value), do: true
+  # Compared with the bare values, an entry's by its value (D-224).
+  defp member?(nil, _value), do: true
+  defp member?(values, value), do: Enum.any?(values, &Names.same?(&1, value))
 
   # -- paths (spec/08 §10.5.9) -------------------------------------------------------------
 

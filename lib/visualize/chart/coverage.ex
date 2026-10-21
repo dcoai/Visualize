@@ -55,7 +55,7 @@ defmodule Visualize.Chart.Coverage do
 
     for {i, slot, kind, field} <- mapped(map),
         %Schema{} = schema <- [Map.get(schemas, slot)],
-        {:ok, [_ | _] = values} <- [Schema.fetch(schema, field, :values)],
+        [_ | _] = values <- [Schema.values(schema, field)],
         missing =
           missing(kind, values, Enum.at(marks, i), map, frame_of(Enum.at(marks, i), frames)),
         missing != [] do

@@ -171,6 +171,42 @@ defmodule Visualize.Chart.ChooseTest do
                })
     end
 
+    test "a value entry is its value: coverage, and a fact of :values, read it bare (D-224)" do
+      schema =
+        Schema.new!(%{
+          x: %{type: :number},
+          y: %{type: :number},
+          "health.state": %{
+            type: :category,
+            values: [
+              %{value: :ok, name: "OK", color: "#2e7d32"},
+              :warning,
+              %{value: :error, name: "Error", color: {:ramp, :status, 1.0}}
+            ]
+          }
+        })
+
+      run = fn design ->
+        Chart.apply(design,
+          sources: %{hosts: Delivery.new(@rows, schema: Schema.version(schema))},
+          describe: fn :hosts -> {:ok, schema} end
+        )
+      end
+
+      assert {:error, [{[:marks, 0, :cases], {:uncovered, @state, [:warning]}}]} =
+               run.(design([choose()]))
+
+      frame = %{legend: %{values: Chart.fact(:hosts, @state, :values)}}
+      marks = [%{type: :circle, data: :hosts, channels: %{x: :x, y: :y}}]
+      assert {:ok, applied} = run.(design(marks, frame))
+      assert applied.chart.frames["main"].legend.values == [:ok, :warning, :error]
+
+      svg = Chart.render(applied)
+      assert svg =~ ~s(data-series="ok")
+      assert svg =~ ~s(data-series="error")
+      refute svg =~ "value:"
+    end
+
     test "a field with no declared values, or a slot with no schema, is not checked" do
       assert {:ok, _applied} = Chart.apply(design([choose()]), sources: %{hosts: @rows})
     end

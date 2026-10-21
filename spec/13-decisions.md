@@ -3049,3 +3049,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A legend with no entries is no longer drawn and takes no margin: a top or bottom one `inside: false` no longer grows a margin under 20 to 20, and a side one no longer needs 24 of its margin. Every golden legend has entries, so the goldens are unchanged.
 - `Visualize.Chart.Build.legend/2` takes `min_entries`, and the builder's inspector shows it in the legend's geometry, both from the schema.
+
+## 224. D-224 — A declared category value may carry a display name and a color hint
+
+**Context.** #759, from metresis#452 (dashboards on the board runtime). metresis colors each state of a state timeline by its catalog color and shows the state's display name: `degraded` is orange and reads "Degraded". On the board runtime a cell has only its feed's rows and schema, and a schema said of a `:category` field its `values` (D-194), `order` and `status`, but nothing of a value's name or color. spec/08 §10.1's "No color" rule refused any color in a schema, so the catalog's colors could not reach the runtime except by a per-design table copying the catalog. The owner chose, on 2026-10-21, to keep catalog colors on the runtime rather than color the states by their status, and to amend the rule.
+
+**Decision.**
+- **A declared value may be an entry** `%{value: v, name: "…", color: c}`, beside bare values in the same list. `value` is required and is a value as a bare one is; `name` is a string; `color` is a literal string `Visualize.Color.parse/1` reads or a typed color (§1.9, #650), checked for shape, since a schema has no theme to resolve a name against. No other key is an entry's (`:unknown_entry_key`). The values are distinct by value across bare and map entries, and an entry with neither a name nor a color is kept as its bare value, so the two spellings are one version.
+- **"No color" is amended, not dropped.** A description-level `color`, `palette`, `fill`, … stays the `{:color_key, key}` fault: a field never names a color. The hint lives only on a declared value, as data a host declares, and it ranks below the design: a design's explicit `range` or `:color_map` wins over the schema's value colors, which win over the theme's palette, in order, for every value without one. The scale that reads the hint is the next work item's (#863, through the facts `:names` and `:colors`).
+- **One accessor, so no consumer sees a map.** `Schema.values/2` is the bare values in declared order, `nil` for an open set; `value_names/2` and `value_colors/2` are maps from value to name and to color. The checks of `order` and `status` against `values`, the coverage check, a virtual source's output conformance and `fact(slot, field, :values)` read the bare values; `fetch/3` alone answers the description as written, for the codecs.
+- **The codecs carry entries exactly.** The content hash gains a tuple tag, `t<n>:`, for a typed color; no schema held a tuple before, so no version moved and the encoding's first line stands. The snapshot and virtual-source JSON forms write an entry as an object of its keys, the value as a bare value's term and the color in a design's color form (`$color`, `$ramp`, …), so a design and a schema write a color alike.
+
+**Rejected.**
+- **Cell variables carrying the catalog's colors.** A board would copy the catalog into every cell's `vars`, and a design would map them by hand; the colors would leave the feed that knows them and drift from it, and a remote feed (spec/15) could not deliver them.
+- **Names only.** A display name raises none of the rule's concerns, but metresis needs the catalog's colors, and without them a board draws a state in a color its catalog does not use. A name without the color solves half the problem #759 names.
+- **A color map beside `values`** (`colors: %{"ok" => …}`). A second key keyed by value can name a value `values` does not list and must be cross-checked; and it is a description-level color key, which the rule keeps a fault. On the entry, the hint cannot outlive its value.
+
+**Consequences.**
+- A consumer that reads `fetch(schema, field, :values)` to compare values may now see a map; every one in the library moved to `values/2`, and a host's code reading the raw list does too.
+- A schema with value colors has a version no theme decides; two hosts that declare different colors for one catalog have two versions, as two labels would.
+- A theme still draws every field whose values carry no color, and every design that gives its own range is drawn as it was.

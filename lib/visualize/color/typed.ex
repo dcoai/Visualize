@@ -87,8 +87,11 @@ defmodule Visualize.Color.Typed do
 
   @hex ~r/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i
 
-  # A literal `parse/1` reads, checked without letting a malformed hex digit raise in it.
-  defp readable?(literal) do
+  @doc false
+  # A literal `parse/1` reads, checked without letting a malformed hex digit raise in it:
+  # what a schema's value color is held to when it is a string (spec/08 §10.1, D-224).
+  @spec readable?(String.t()) :: boolean()
+  def readable?(literal) when is_binary(literal) do
     trimmed = String.trim(literal)
 
     if String.starts_with?(trimmed, "#"),

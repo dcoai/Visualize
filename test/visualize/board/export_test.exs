@@ -285,6 +285,62 @@ defmodule Visualize.Board.ExportTest do
                Enum.map(pools.b.primary, &Map.new(&1, fn {k, v} -> {to_string(k), v} end))
     end
 
+    test "a schema's value entries round-trip exactly, colors in a design's form (D-224)" do
+      schema =
+        Schema.new!(%{
+          t: %{type: :time},
+          v: %{type: :number},
+          state: %{
+            type: :category,
+            values: [
+              %{value: "ok", name: "OK", color: "#2e7d32"},
+              %{value: "warn", color: {:ramp, :status, 0.5}},
+              %{value: "down", name: "Down", color: {:blend, [{:color, :red}, "#000"]}},
+              %{value: "gone", color: {:series, 2}},
+              "unknown"
+            ]
+          }
+        })
+
+      board = board()
+      rows = for row <- rows(3), do: Map.put(row, :state, "ok")
+
+      pools =
+        Map.new(board.cells, fn {name, _cell} ->
+          {name, %{primary: Delivery.new(rows, schema: Schema.version(schema))}}
+        end)
+
+      {:ok, snapshot} =
+        Snapshot.realize(board, @store, pools,
+          now: DateTime.add(@t0, 3600),
+          describe: fn _slot -> {:ok, schema} end
+        )
+
+      assert snapshot.cells["a"].slots["primary"].schema == schema
+      assert Snapshot.from_map(Snapshot.to_map(snapshot)) == {:ok, snapshot}
+
+      {:ok, json} = Snapshot.to_json(snapshot)
+      assert {:ok, reopened} = Snapshot.from_json(json)
+      reread = reopened.cells["a"].slots["primary"].schema
+
+      assert Schema.version(reread) == Schema.version(schema)
+      assert Schema.fetch(reread, :state, :values) == Schema.fetch(schema, :state, :values)
+
+      [_, state] =
+        json
+        |> Jason.decode!()
+        |> get_in(["cells", "a", "slots", "primary", "schema"])
+        |> Enum.find(fn [name, _] -> name == %{"$atom" => "state"} end)
+
+      assert [
+               %{"value" => "ok", "name" => "OK", "color" => "#2e7d32"},
+               %{"value" => "warn", "color" => %{"$ramp" => ["status", 0.5]}},
+               %{"color" => %{"$blend" => [%{"$color" => "red"}, "#000"]}},
+               %{"color" => %{"$series" => 2}},
+               "unknown"
+             ] = state["values"]
+    end
+
     test "a slot bound through its default keeps the source it was bound to" do
       design = put_in(@line, [:sources, :primary, :default], :uptime)
       board = Board.from_map!(%{cells: %{a: %{x: 0, y: 0, w: 6, h: 3, ref: {:composite, 1}}}})
