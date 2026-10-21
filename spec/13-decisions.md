@@ -3116,6 +3116,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - The over-ceiling state — a `:budget` feed that ships more than the ceiling — is #865's, and is not decided here.
 - `Visualize.Feed.Monitor`'s `budget:` is one budget or a map by feed name; a monitor built with one budget behaves as it did, except that `budget/2` now refetches a `:budget` feed whose budget changed.
 
+**Amended 2026-10-21 by D-230 (#872, #873): a slot bound to a virtual source has a budget too.** `Visualize.Board.Budget.slots/5` derives every bound slot's budget, a source's as a feed's, and `feeds/5` groups only the feed-bound slots; a source's output is reduced to each of its slots' budgets as a feed's that does not name `:budget` is. A feed a source reads is still asked the ceiling.
+
 ## 227. D-227 — A slot over the board's ceiling is handed without its rows, and its cell is over budget
 
 **Context.** #760, #865. D-226 made the board's `budget:` the ceiling over every slot's derived budget and left one case open: a feed that names `:budget` and ships more than it was asked. spec/08 §11.2 does not reduce such a feed again — the overrun is the feed's, and the conformance kit names it — so its rows reached the cell whole. A cell handed 200,000 rows applies and compiles them until its heap limit kills it, and is shown *Crashed, restarting* on every restart: the true fault, an over-delivering feed, is never named. Four things had to be decided: where the check is made, what a cell over the ceiling is handed, where the state stands among the others, and whether a slot's own derived budget counts.
@@ -3139,6 +3141,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `Visualize.Board.State.t()` gains `{:over_budget, pos_integer(), pos_integer()}`, and `name/1` names it `"over_budget"`.
 - A virtual source whose output exceeds the ceiling — a union of feeds each asked the ceiling — is over budget too; reducing a source's output to its slots' budgets is not decided here.
 - The demo's row of states (`Examples.BoardDemo.States`, spec/15 §10) shows it, under a ceiling of 5,000 on the demo board, so every state is still on the page.
+
+**Amended 2026-10-21 by D-230 (#872, #873): a virtual source's output is reduced before the check.** Every slot is still held to the ceiling, but a slot bound to a virtual source is first reduced to its own budget, so a source's cell is over budget only when `Visualize.Feed.reduce/4` cannot reduce its output — no `:number` field besides the window field — and it exceeds the ceiling. The third consequence above is settled there.
 
 ## 228. D-228 — A virtual source's function of two arguments is given its context: its inputs' schemas in wire form, their deliveries' facts, and its scope's variables
 
@@ -3187,3 +3191,23 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `Visualize.Board.Server.vars/3` and `Visualize.Board.own_vars/1` are new; `vars/2` also shows the engine the variables.
 - On a running board, a context-taking source sees the cascade at its scope, and a viewer's change to a variable re-runs it and redraws the cells that read it; a function of one argument is never re-run by a variable.
 - The examples' demo board has a *Wave, binned* cell whose host `defsource wave_bins(inputs, context)` bins over the cell's `bin_domain` when set, else the data's extent, and the page's *Bins over* buttons change it (spec/15 §10).
+
+## 230. D-230 — A slot bound to a virtual source is reduced to its own budget, as a feed's slot is, and is over budget only when its output cannot be reduced
+
+**Context.** #872, work item #873, surfaced by #865 (D-227). D-226 derived a budget for every slot bound to a feed and reduced each slot's delivery to it with `Visualize.Feed.reduce/4`. A slot bound to a virtual source got no budget: `Visualize.Board.Budget.slots/5` took only slots the binding bound to a feed, and the board handed a source's output to its slots whole. D-227 then held every slot to the ceiling, so a source whose output legitimately passes the ceiling — a union of several feeds, each asked the ceiling, or a function that expands rows — made its cells *Over budget* and undrawn. That is the wrong outcome: `:over_budget` names a feed that claims `:budget` and breaks the promise (spec/08 §11.2), and a virtual source is visualize's own computation, which claims nothing. #864's tests bound slots to feeds only, and #865's virtual-source test asserted the over-budget state as the expected result, so nothing caught it. Three things had to be decided: whether a source's slot has a budget, how its output is reduced, and what is left of the over-budget state for a source.
+
+**Decision.**
+- **Every bound slot has a budget, a source's as a feed's.** A budget is what the cell draws at its size (D-226), whoever produces the rows, so `Budget.slots/5` derives one for a slot bound `{:feed, _}` or `{:source, _}`. `Budget.feeds/5` groups only the feed-bound slots by their feed: a source-bound slot is in no feed's budget, and a feed a source reads is still asked the ceiling, so the source's function reads the rows it was given before.
+- **A source's output is reduced to each slot's budget, like a feed's that does not name `:budget`.** The board reduces the output with `Visualize.Feed.reduce/4`, the source's output schema and the monitor's reduction (`:lttb`), and the delivery handed to the slot records `reduced_by: :visualize`. A source's output is never pre-reduced, so it is reduced whenever it holds more rows than the slot's budget: two cells of different widths on one source are handed different counts, each within its own. A slot with no budget (no ceiling and no mark that draws rows), a source with no output yet, or no schema, is handed the output as it is.
+- **What cannot be reduced is `Feed.reduce/4`'s own rule.** An output whose schema has no `:number` field besides the window field comes back as it is; over the ceiling it is `{:over_budget, rows, ceiling}`, the "reduction that cannot reach the budget" spec/15 §8.2 already names. D-227's check is unchanged: it now fires for a source only in that case.
+- **One table holds every binding kind to the budget rule.** The board's tests run a plain feed, a feed that honors `:budget` and a virtual source through the same assertions, so a binding kind added later without a row is a visible omission.
+
+**Rejected.**
+- **Asking a source's inputs the slot's budget.** A source's function reads the rows it is given — a union, a join, a rate — and its answer from reduced inputs is not its answer from the whole; the inputs keep the ceiling (D-226) and the output is reduced instead.
+- **Reducing a source's output once at the largest of its slots' budgets, and each slot from that.** It is a feed's shape because a fetch costs a query; a source's output is already whole in the board, so each slot is reduced from the whole in one pass, and keeps more of its shape than a reduction of a reduction.
+- **Keeping the over-budget state for a source and raising the ceiling.** The ceiling is the host's bound on what any cell holds; a source that unions feeds would push every host to raise it, and the cells it protects would lose the bound.
+
+**Consequences.**
+- A cell bound to a virtual source draws its output reduced to the cell's budget under any ceiling, and is *Over budget* only for an unreducible output over the ceiling.
+- `Visualize.Board.Budget.slots/5` answers source-bound slots' budgets as well, and `feeds/5` ignores them.
+- D-226 and D-227 are amended.
