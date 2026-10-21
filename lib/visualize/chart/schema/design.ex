@@ -7,7 +7,6 @@ defmodule Visualize.Chart.Schema.Design do
   import Visualize.Chart.Schema.Spec, only: [spec: 3, spec: 4, style_stack: 0, style_entry: 0]
 
   alias Visualize.Chart.Schema.Mark
-  alias Visualize.Data.Schema, as: FeedSchema
   alias Visualize.Theme
 
   @curve_types [
@@ -92,7 +91,9 @@ defmodule Visualize.Chart.Schema.Design do
       spec(:types, {:map, {:enum, @column_types}}, :binding, default: %{}),
       spec(:default, :name, :binding),
       # The slot's contract with its feed's schema (spec/14 §2.3, §7.4, #552).
-      spec(:requires, {:map, {:list, {:enum, FeedSchema.attributes()}}}, :binding, default: %{})
+      spec(:requires, {:map, {:list, {:enum, Visualize.Chart.Fact.keys()}}}, :binding,
+        default: %{}
+      )
     ]
   end
 

@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Words do
                Theme.builtins() ++
                Visualize.Theme.Palette.fixed_names() ++
                Fragment.kinds() ++
-               Visualize.Data.Schema.attributes() ++
+               Visualize.Chart.Fact.keys() ++
                Visualize.Data.Schema.words() ++
                Visualize.Units.units() ++
                Visualize.Geo.Projection.types() ++

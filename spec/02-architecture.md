@@ -80,6 +80,7 @@ An element is `%Visualize.IR.Element{type, attrs, style, transform, children, co
 | `Visualize.IR.Element.clip/3` | `clip(element, shape, keep)`: the element with `clip` set to the shape and `:inside` or `:outside`. |
 | `Visualize.IR.Element.set_attrs/2` | Merges the given attrs over the existing attrs. |
 | `Visualize.IR.Element.datum/2` | Writes the datum attributes of spec/10 §12.2 over the element's attrs, under string keys: `"data-datum"`, the field names space-separated in order, and `"data-datum-<field>"` per field with `_` as `-` and `to_string/1` of the value, a `nil` value omitted; the fields are a map (written in `Enum.sort/1` order) or a keyword list (in its order). What `TooltipHook` reads (D-75). |
+| `Visualize.IR.Element.datum/3` | `datum/2` with a map from field to its value's display name: each field written that the map holds also gains `"data-named-<field>"`, the name, which `TooltipHook` shows in place of the value; `data-datum-<field>` keeps the value (spec/10 §12.2, D-225). |
 | `Visualize.IR.Element.set_content/2` | Sets the text content. |
 | `Visualize.IR.Element.translate_group/3` | Wraps an element or list of elements in a `:group` carrying `Transform.translate(x, y)`. |
 

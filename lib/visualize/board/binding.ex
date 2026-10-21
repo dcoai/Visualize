@@ -36,7 +36,7 @@ defmodule Visualize.Board.Binding do
 
   """
 
-  alias Visualize.Chart.{Names, Types}
+  alias Visualize.Chart.{Fact, Names, Types}
   alias Visualize.Data.Schema
 
   defstruct slots: %{}
@@ -226,10 +226,11 @@ defmodule Visualize.Board.Binding do
     |> Enum.map(fn {path, reason} -> {[:cells, cell | path], reason} end)
   end
 
+  # What a fact key gives is `Fact.fetch/3`'s answer, as application's (spec/14 §7.4, D-225).
   defp missing(path, slot, %{requires: requires}, schema) do
     for {field, keys} <- requires,
         key <- keys,
-        Schema.fetch(schema, field, key) == :error,
+        Fact.fetch(schema, field, key) == :error,
         do: {path ++ [:requires, field], {:missing_attribute, slot, field, key}}
   end
 

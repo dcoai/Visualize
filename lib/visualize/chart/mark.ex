@@ -55,9 +55,10 @@ defmodule Visualize.Chart.Mark do
     Tiles
   }
 
-  alias Visualize.Chart.{Placements, Style, Var}
+  alias Visualize.Chart.{Names, Placements, Style, Var}
   alias Visualize.Chart.Style.Defaults
-  alias Visualize.Data.Table
+  alias Visualize.Data.{Schema, Table}
+  alias Visualize.Event
   alias Visualize.IR.{Element, Transform}
   alias Visualize.Theme
 
@@ -403,7 +404,26 @@ defmodule Visualize.Chart.Mark do
         {fields, _show} -> Enum.map(fields, &{&1, Table.get(datum, &1)})
       end
 
-    element |> Element.datum(fields) |> row_key(datum, ctx.keys)
+    element |> Element.datum(fields, names(fields, ctx)) |> row_key(datum, ctx.keys)
+  end
+
+  # The declared name of each written field's value, by the schema of the mark's slot in
+  # the frame (spec/14 §5.7, D-225): `%{field => name}`, the fields as written.
+  defp names([], _ctx), do: %{}
+
+  defp names(fields, %{frame: frame, mark: mark}) do
+    case Event.schema_of(frame.schemas, mark) do
+      %Schema{} = schema ->
+        # A value is a declared one by its spelling (spec/14 §9.4).
+        for {field, value} <- fields,
+            value != nil,
+            {:ok, name} <- [Names.fetch(Schema.value_names(schema, field), value)],
+            into: %{},
+            do: {field, name}
+
+      nil ->
+        %{}
+    end
   end
 
   # The datum's ordinal in the mark's realized rows, as `data-row` (D-170).

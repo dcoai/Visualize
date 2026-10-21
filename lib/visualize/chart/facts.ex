@@ -5,6 +5,8 @@ defmodule Visualize.Chart.Facts do
   # and every `%Fact{}` replaced by the attribute it names. Pure: the schema cache comes
   # in and the grown cache goes out with the result.
 
+  import Visualize.Chart.Names, only: [is_name: 1]
+
   alias Visualize.Chart
   alias Visualize.Chart.{Coverage, Fact, Template, Types, Validator}
   alias Visualize.Data.{Delivery, Schema}
@@ -18,9 +20,8 @@ defmodule Visualize.Chart.Facts do
         }
 
   @doc false
-  # Every slot's requirements: its `requires` with the attributes its facts read, each
-  # field's list in the order of `Visualize.Data.Schema.attributes/0`; a slot with none
-  # is absent.
+  # Every slot's requirements: its `requires` with the keys its facts read, each field's
+  # list in the order of `Visualize.Chart.Fact.keys/0` (D-225); a slot with none is absent.
   @spec contract(map()) :: %{atom() => %{atom() => [atom()]}}
   def contract(map) when is_map(map) do
     required =
@@ -41,7 +42,7 @@ defmodule Visualize.Chart.Facts do
     end)
   end
 
-  defp ordered(keys), do: Enum.filter(Schema.attributes(), &(&1 in keys))
+  defp ordered(keys), do: Enum.filter(Fact.keys(), &(&1 in keys))
 
   # The slot declarations, or none where `sources` is not a map of them — a whole-node
   # variable in a fragment, left for application to resolve.
@@ -103,6 +104,10 @@ defmodule Visualize.Chart.Facts do
 
     {schemas, cache} = typed(mapped, contract, entries, schemas, cache, describe)
 
+    # A mark with a tooltip shows its values' declared names (spec/14 §5.7, D-225), where its
+    # slot resolves; nothing requires it.
+    {schemas, cache} = typed(tipped(map), contract, entries, schemas, cache, describe)
+
     errors =
       errors ++
         missing(map, schemas) ++
@@ -112,7 +117,8 @@ defmodule Visualize.Chart.Facts do
 
     case Enum.sort_by(errors, &elem(&1, 0)) do
       [] ->
-        {resolved, []} = Template.walk(map, &value(&1, &2, schemas))
+        {resolved, []} =
+          map |> declared_colors(schemas) |> Template.walk(&value(&1, &2, schemas))
 
         {:ok, struct(Chart, resolved), %{schemas: schemas, versions: versions, cache: cache}}
 
@@ -145,6 +151,24 @@ defmodule Visualize.Chart.Facts do
         end
     end
   end
+
+  # Every mark with a tooltip, with the slot it reads: `{i, slot}`.
+  defp tipped(map) do
+    case Map.get(map, :marks) do
+      marks when is_list(marks) ->
+        for {%{tooltip: %{}, data: data}, i} <- Enum.with_index(marks),
+            slot = slot_of(data),
+            slot != nil,
+            do: {i, slot}
+
+      _none ->
+        []
+    end
+  end
+
+  defp slot_of(%{source: slot}) when is_name(slot), do: slot
+  defp slot_of(slot) when is_name(slot), do: slot
+  defp slot_of(_data), do: nil
 
   # Every mark whose data has a `:window` step asking `latest`, with the slot it reads.
   defp following(map) do
@@ -223,13 +247,13 @@ defmodule Visualize.Chart.Facts do
           {:ok, schema} <- [Map.fetch(schemas, slot)],
           {field, keys} when is_list(keys) <- requires,
           key <- keys,
-          Schema.fetch(schema, field, key) == :error,
+          Fact.fetch(schema, field, key) == :error,
           do: {[:sources, slot, :requires, field], {:missing_attribute, slot, field, key}}
 
     read =
       for {path, %Fact{source: s, field: f, key: k}} <- uses(map),
           {:ok, schema} <- [Map.fetch(schemas, s)],
-          Schema.fetch(schema, f, k) == :error,
+          Fact.fetch(schema, f, k) == :error,
           do: {path, {:missing_attribute, s, f, k}}
 
     required ++ read
@@ -247,14 +271,49 @@ defmodule Visualize.Chart.Facts do
 
   defp disagreements(_slots, _schemas), do: []
 
-  # Only a chart whose contract held reaches this: every fact's slot has a schema that
-  # gives the attribute. A field's `values` are its bare values, never a value entry's map
-  # (spec/08 §10.1, D-224).
-  defp value(%Fact{source: s, field: f, key: :values}, _path, schemas),
-    do: {Schema.values(Map.fetch!(schemas, s), f), []}
+  # Declared colors written into a color range (spec/14 §4.3, §7.4, D-225): the `:ordinal`
+  # `color` scale of each frame whose range is `:auto` and whose domain is a `:values` fact
+  # over a field with a declared color takes, per declared value in order, its color, else
+  # the palette slot of its 1-based position — the one `:auto` gives it. Read from the node
+  # as written, before its facts are replaced; every other scale is left as it is.
+  defp declared_colors(%{frames: frames} = map, schemas) when is_map(frames) do
+    frames =
+      Map.new(frames, fn
+        {name, %{scales: scales} = frame} when is_map(scales) ->
+          {name, %{frame | scales: Map.new(scales, &colored(&1, schemas))}}
 
+        other ->
+          other
+      end)
+
+    %{map | frames: frames}
+  end
+
+  defp declared_colors(map, _schemas), do: map
+
+  defp colored({"color", %{kind: :ordinal, domain: %Fact{key: :values} = fact} = node}, schemas) do
+    with :auto <- Map.get(node, :range, :auto),
+         {:ok, colors} <- Fact.fetch(Map.fetch!(schemas, fact.source), fact.field, :colors) do
+      {:ok, values} = Fact.fetch(Map.fetch!(schemas, fact.source), fact.field, :values)
+
+      range =
+        values
+        |> Enum.with_index(1)
+        |> Enum.map(fn {value, i} -> Map.get(colors, value, {:series, i}) end)
+
+      {"color", Map.put(node, :range, range)}
+    else
+      _given_or_none -> {"color", node}
+    end
+  end
+
+  defp colored(entry, _schemas), do: entry
+
+  # Only a chart whose contract held reaches this: every fact's slot has a schema that
+  # gives what its key reads (`Fact.fetch/3`). A field's `values` are its bare values, never
+  # a value entry's map (spec/08 §10.1, D-224); `names` and `colors` its maps (D-225).
   defp value(%Fact{source: s, field: f, key: k}, _path, schemas) do
-    {:ok, value} = Schema.fetch(Map.fetch!(schemas, s), f, k)
+    {:ok, value} = Fact.fetch(Map.fetch!(schemas, s), f, k)
     {value, []}
   end
 

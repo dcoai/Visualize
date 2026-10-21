@@ -28,7 +28,7 @@ defmodule Visualize.Chart.Codec do
   @fixed_slot_names Vocabulary.table(@fixed_slots)
   @anchors Vocabulary.table(Types.anchors())
   @frame_points Vocabulary.table(Types.frame_points())
-  @attributes Vocabulary.table(Visualize.Data.Schema.attributes())
+  @attributes Vocabulary.table(Fact.keys())
   @units Vocabulary.table(Visualize.Units.units())
   @ramps Vocabulary.table(Theme.ramp_names())
   @kinds Vocabulary.table(Fragment.kinds())

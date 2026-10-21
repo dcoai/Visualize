@@ -449,7 +449,8 @@ defmodule Examples.BoardDemo do
   # Each service's state over time as a state timeline: a `:band` per stretch, at its
   # service's row, filled by its state through an ordinal color scale whose domain is the
   # feed's declared states and whose range is its own meaning of each — a map from state to
-  # role — both read as facts (D-143), so the legend lists every state, present or not.
+  # role — both read as facts (D-143), so the legend lists every state, present or not. The
+  # legend and the tooltip show each state by the name the feed declares for it (D-225).
   defp status do
     Design.fold([
       chart(meta: %{name: "Service status"}),
@@ -467,7 +468,8 @@ defmodule Examples.BoardDemo do
       axis(:y, :left),
       band(:status, %{x0: :since, x1: :until, y: :service},
         style: :stretch,
-        options: %{height: 14}
+        options: %{height: 14},
+        tooltip: %{fields: [:service, :state]}
       ),
       legend(:color, title: "State", position: :bottom, inside: false)
     ])
