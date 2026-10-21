@@ -38,6 +38,7 @@ defmodule Visualize.Board.Snapshot.Codec do
   @slot_key_table Vocabulary.table(@slot_keys)
   @status_table Vocabulary.table(@statuses)
   @attribute_table Vocabulary.table(Schema.attributes())
+  @entry_table Vocabulary.table(Schema.entry_keys())
 
   @doc false
   def stamp, do: @stamp
@@ -123,6 +124,9 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp description(description) do
     Map.new(description, fn
+      {:values, values} when is_list(values) ->
+        {"values", Enum.map(values, &value_entry/1)}
+
       {:status, status} when is_map(status) ->
         {"status",
          Enum.map(status, fn {k, v} -> [Codec.encode_term(k), Codec.encode_term(v)] end)}
@@ -131,6 +135,17 @@ defmodule Visualize.Board.Snapshot.Codec do
         {Atom.to_string(key), Codec.encode_term(value)}
     end)
   end
+
+  # A value entry is the object of its keys, its color in a design's color form; a bare
+  # value is its term, never an object with a `value` key (spec/08 §10.5.10, D-224).
+  defp value_entry(entry) when is_map(entry) and not is_struct(entry) do
+    Map.new(entry, fn
+      {:color, color} -> {"color", Codec.encode_color(color)}
+      {key, value} -> {to_string(key), Codec.encode_term(value)}
+    end)
+  end
+
+  defp value_entry(value), do: Codec.encode_term(value)
 
   defp status({:down, reason}), do: %{"down" => reason}
   defp status(status), do: Atom.to_string(status)
@@ -225,11 +240,26 @@ defmodule Visualize.Board.Snapshot.Codec do
     Map.new(description, fn {key, value} ->
       case known(key, @attribute_table) do
         :status when is_list(value) -> {:status, read_pairs(value)}
+        :values when is_list(value) -> {:values, Enum.map(value, &read_value_entry/1)}
         key when is_atom(key) -> {key, Codec.decode_term(value)}
         key -> {key, value}
       end
     end)
   end
+
+  # An object with a `value` key is an entry, its keys looked up and never made atoms of: a
+  # key no entry has stays its string, for `Schema.new/1` to refuse.
+  defp read_value_entry(%{"value" => _} = entry) do
+    Map.new(entry, fn {key, value} ->
+      case known(key, @entry_table) do
+        :color -> {:color, Codec.decode_color(value)}
+        :name -> {:name, value}
+        key -> {key, Codec.decode_term(value)}
+      end
+    end)
+  end
+
+  defp read_value_entry(value), do: Codec.decode_term(value)
 
   defp read_pairs(pairs) do
     if Enum.all?(pairs, &match?([_k, _v], &1)),

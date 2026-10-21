@@ -248,7 +248,11 @@ defmodule Visualize.Chart.Facts do
   defp disagreements(_slots, _schemas), do: []
 
   # Only a chart whose contract held reaches this: every fact's slot has a schema that
-  # gives the attribute.
+  # gives the attribute. A field's `values` are its bare values, never a value entry's map
+  # (spec/08 §10.1, D-224).
+  defp value(%Fact{source: s, field: f, key: :values}, _path, schemas),
+    do: {Schema.values(Map.fetch!(schemas, s), f), []}
+
   defp value(%Fact{source: s, field: f, key: k}, _path, schemas) do
     {:ok, value} = Schema.fetch(Map.fetch!(schemas, s), f, k)
     {value, []}

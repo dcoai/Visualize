@@ -267,6 +267,13 @@ defmodule Visualize.Chart.Codec do
   @doc false
   def decode_term(value), do: read_term(value)
 
+  # One color as a design writes and reads it (spec/14 §11.2): a schema's value color is
+  # written so too, so a design and a schema spell a color alike (spec/08 §10.5.10, D-224).
+  @doc false
+  def encode_color(value), do: value(:color, value)
+  @doc false
+  def decode_color(value), do: read(:color, value)
+
   # A key is looked up in the schema's keys before anything is made of it (spec/14 §9.4,
   # D-195): a key no node kind has stays the string it was and its value is left as parsed,
   # for the validator to report as `:unknown_key` at its own spelling, so a refused document

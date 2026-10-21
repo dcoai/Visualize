@@ -72,7 +72,7 @@ defmodule Visualize.VirtualSource.Codec do
   defp spelled(description) do
     Map.new(description, fn
       {key, values} when key in ["values", "order"] and is_list(values) ->
-        {key, Enum.map(values, &atom_term/1)}
+        {key, Enum.map(values, &atom_value/1)}
 
       {"status", pairs} when is_list(pairs) ->
         {"status", Enum.map(pairs, fn [k, v] -> [atom_term(k), v] end)}
@@ -81,6 +81,10 @@ defmodule Visualize.VirtualSource.Codec do
         attribute
     end)
   end
+
+  # A value entry's value is spelled as a bare value is (spec/08 §10.5.10, D-224).
+  defp atom_value(%{"value" => value} = entry), do: %{entry | "value" => atom_term(value)}
+  defp atom_value(value), do: atom_term(value)
 
   # A name held as a string, written as the atom it was.
   defp atom_term(name) when is_binary(name), do: Tags.tag("$atom", name)

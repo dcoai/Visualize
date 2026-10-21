@@ -107,6 +107,115 @@ defmodule Visualize.Data.SchemaTest do
       for error <- errors, do: assert(is_binary(Schema.format_error(error)))
     end
 
+    test "a declared value may be an entry with a name and a color (D-224)" do
+      values = [
+        %{value: "ok", name: "OK", color: "#2e7d32"},
+        %{value: "degraded", name: "Degraded", color: {:ramp, :status, 0.5}},
+        %{value: :down, color: {:darken, {:color, :orange}, 0.2}},
+        "unknown",
+        3
+      ]
+
+      assert {:ok, schema} =
+               Schema.new(%{
+                 state: %{
+                   type: :category,
+                   values: values,
+                   order: ["ok", "degraded"],
+                   status: %{"ok" => :good, "degraded" => :warning}
+                 }
+               })
+
+      # The description is kept as declared; the accessors read it.
+      assert Schema.fetch(schema, :state, :values) == {:ok, values}
+      assert Schema.values(schema, :state) == ["ok", "degraded", :down, "unknown", 3]
+      assert Schema.values(schema, "state") == Schema.values(schema, :state)
+      assert Schema.value_names(schema, :state) == %{"ok" => "OK", "degraded" => "Degraded"}
+
+      assert Schema.value_colors(schema, :state) == %{
+               "ok" => "#2e7d32",
+               "degraded" => {:ramp, :status, 0.5},
+               down: {:darken, {:color, :orange}, 0.2}
+             }
+    end
+
+    test "a field with no values: values/2 is nil, the maps empty" do
+      schema =
+        Schema.new!(%{s: %{type: :category}, b: %{type: :category, values: [:a, :b]}})
+
+      assert Schema.values(schema, :s) == nil
+      assert Schema.values(schema, :missing) == nil
+      assert Schema.values(schema, :b) == [:a, :b]
+
+      for field <- [:s, :missing, :b] do
+        assert Schema.value_names(schema, field) == %{}
+        assert Schema.value_colors(schema, field) == %{}
+      end
+    end
+
+    test "an entry that says only its value is that value, one version" do
+      entry = Schema.new!(%{s: %{type: :category, values: [%{value: :ok}, "x"]}})
+      bare = Schema.new!(%{s: %{type: :category, values: [:ok, "x"]}})
+
+      assert entry == bare
+      assert Schema.fetch(entry, :s, :values) == {:ok, [:ok, "x"]}
+    end
+
+    test "every fault of a value entry, by path (D-224)" do
+      assert faults(%{
+               s: %{
+                 type: :category,
+                 values: [
+                   %{name: "No value"},
+                   %{value: nil},
+                   %{value: "a", name: :a},
+                   %{value: "b", color: "not-a-color"},
+                   %{value: "c", color: {:blend, ["#zz"]}},
+                   %{value: "d", color: :good},
+                   %{value: "e", label: "E"},
+                   "a",
+                   %{value: "b", name: "B again"}
+                 ]
+               }
+             }) == [
+               {[:s, :values, 0, :value], :required},
+               {[:s, :values, 1, :value], {:type, :state}},
+               {[:s, :values, 2, :name], {:type, :string}},
+               {[:s, :values, 3, :color], {:type, :color}},
+               {[:s, :values, 4, :color], {:type, :color}},
+               {[:s, :values, 5, :color], {:type, :color}},
+               {[:s, :values, 6, :label], :unknown_entry_key},
+               {[:s, :values, 7], :duplicate},
+               {[:s, :values, 8], :duplicate}
+             ]
+
+      for reason <- [{:type, :state}, {:type, :color}, :unknown_entry_key] do
+        assert is_binary(Schema.format_error({[:s, :values, 0, :x], reason}))
+      end
+
+      assert Schema.format_error({[:s, :values, 6, :label], :unknown_entry_key}) =~ ":color"
+
+      # An entry that is neither a value nor a map is the list's fault, as it was.
+      assert faults(%{s: %{type: :category, values: [:a, [:b]]}}) ==
+               [{[:s, :values], {:type, :values}}]
+
+      # A field-level color key is still the fault it was: the hint lives on a value.
+      assert faults(%{s: %{type: :category, values: [:a], color: "#fff"}}) ==
+               [{[:s, :color], {:color_key, :color}}]
+    end
+
+    test "order and status are checked against the bare values (D-224)" do
+      values = [%{value: :ok, name: "OK"}, %{value: :error, color: "#c62828"}]
+
+      assert {:ok, _} =
+               Schema.new(%{
+                 s: %{type: :category, values: values, order: [:ok, :error], status: %{ok: :good}}
+               })
+
+      assert faults(%{s: %{type: :category, values: values, status: %{warning: :warning}}}) ==
+               [{[:s, :status, :warning], :not_in_values}]
+    end
+
     test "values do not move the version of a schema that does not use them" do
       assert Schema.version(Schema.new!(%{v: %{type: :number}})) ==
                "39b0c8eff6adfa6c6c9ada7fb3ee3a308675a1a5869afcd1ef1aca19378d0a81"
@@ -564,6 +673,27 @@ defmodule Visualize.Data.SchemaTest do
 
       assert Schema.version(Schema.new!(@full)) ==
                "b2c21496f503413d6d7aa558bcc08f67b5457078a494ab33d887fee31edbcb3f"
+    end
+
+    test "a typed color in a value entry hashes, deterministically (D-224)" do
+      fields = %{s: %{type: :category, values: [%{value: "ok", color: {:ramp, :status, 0.5}}]}}
+
+      bytes =
+        "visualize.schema/1\nm1:s1:sm2:a4:typea8:categorya6:valuesl1:" <>
+          "m2:a5:colort3:a4:rampa6:statusf0.5;a5:values2:ok"
+
+      version = Schema.version(Schema.new!(fields))
+      assert version == Base.encode16(:crypto.hash(:sha256, bytes), case: :lower)
+
+      reversed = %{
+        "s" => %{values: [%{color: {:ramp, :status, 0.5}, value: "ok"}], type: :category}
+      }
+
+      assert Schema.version(Schema.new!(reversed)) == version
+
+      # A different color, or a literal of the same, is a different version.
+      other = put_in(fields, [:s, :values], [%{value: "ok", color: {:ramp, :status, 0.6}}])
+      refute Schema.version(Schema.new!(other)) == version
     end
 
     test "is the SHA-256 of the documented encoding" do

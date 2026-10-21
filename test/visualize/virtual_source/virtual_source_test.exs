@@ -241,6 +241,32 @@ defmodule Visualize.VirtualSourceTest do
     end
   end
 
+  test "conform/2: a value entry's value is the value (D-224)" do
+    source =
+      VirtualSource.new!(
+        id: :health,
+        from: [hosts: nil],
+        schema: %{
+          state: %{
+            type: :category,
+            values: [%{value: :ok, name: "OK", color: "#2e7d32"}, :warning]
+          }
+        },
+        elixir: "fn x -> x end"
+      )
+
+    assert [%{value: "ok", name: "OK", color: "#2e7d32"}, :warning] =
+             source.schema.fields["state"].values
+
+    assert {:ok, _} = VirtualSource.conform(source, [%{state: :ok}, %{state: "warning"}])
+
+    assert {:error, {0, "state", :not_in_values}} =
+             VirtualSource.conform(source, [%{state: :error}])
+
+    assert {:error, {0, "state", {:type, :category}}} =
+             VirtualSource.conform(source, [%{state: %{value: :ok, name: "OK"}}])
+  end
+
   test "key/1 and identity_input/1" do
     assert VirtualSource.key(:hosts) == :hosts
     assert VirtualSource.key("vm.memory") == "vm.memory"

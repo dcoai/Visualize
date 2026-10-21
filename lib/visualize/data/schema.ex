@@ -8,7 +8,10 @@ defmodule Visualize.Data.Schema do
   `identity` as the feed knows, and for a `:category` field the `values` it takes, every
   one (#643, D-194). It says what
   the numbers *are*, whoever draws them, and never how they are drawn: a description has
-  no color key, since color is the theme's to choose from the meaning (#533). A `:time`
+  no color key, since color is the theme's to choose from the meaning (#533). A declared
+  value may be an entry, `%{value: v, name: "Display", color: c}`, whose color is a
+  host's hint a design's own range outranks (D-224); `values/2`, `value_names/2` and
+  `value_colors/2` read the bare values, the names and the colors. A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
   `window: true`, the field its windows are over (D-154). A numeric field may say how it
   was measured, `metric_kind: :gauge | :counter | :rate`, which refines what its
@@ -44,6 +47,7 @@ defmodule Visualize.Data.Schema do
 
   """
 
+  alias Visualize.Color.Typed
   alias Visualize.Data.Table
   alias Visualize.{Quantity, Unit}
 
@@ -71,7 +75,20 @@ defmodule Visualize.Data.Schema do
           optional(:metric_kind) => :gauge | :counter | :rate,
           optional(:bounds) => [number() | nil],
           optional(:identity) => boolean(),
-          optional(:values) => [String.t() | atom() | number(), ...]
+          optional(:values) => [value() | value_entry(), ...]
+        }
+
+  @typedoc "A category field's value: a string, an atom or a number."
+  @type value :: String.t() | atom() | number()
+
+  @typedoc """
+  A declared value with what a person reads of it (spec/08 §10.1, D-224): its display
+  `name`, and a `color` hint — a literal string or a typed color (spec/08 §1.9).
+  """
+  @type value_entry :: %{
+          required(:value) => value(),
+          optional(:name) => String.t(),
+          optional(:color) => Visualize.Color.value()
         }
 
   @type t :: %__MODULE__{
@@ -112,6 +129,8 @@ defmodule Visualize.Data.Schema do
   @clocks [:time, :number]
   # `identity` names a thing, which a `:time` field never does: it says when (D-167).
   @identities [:category, :text, :number]
+  # A value entry's keys (D-224): the one place a schema holds a color, a host's hint.
+  @entry_keys [:value, :name, :color]
 
   # The first line of the canonical encoding, naming the encoding itself (spec/08 §10.2).
   @encoding "visualize.schema/1\n"
@@ -127,6 +146,12 @@ defmodule Visualize.Data.Schema do
   # document's `{"$atom": …}` value reads as the atom of (spec/14 §9.4, D-195).
   @spec words() :: [atom(), ...]
   def words, do: @types ++ @polarities ++ @metric_kinds
+
+  @doc false
+  # A value entry's keys, `:value` first (spec/08 §10.1, D-224): what a codec reads an
+  # entry's keys as, never making an atom of another.
+  @spec entry_keys() :: [atom(), ...]
+  def entry_keys, do: @entry_keys
 
   @doc false
   # The three polarities, which a color scale over a ramp reads too (spec/14 §4.3, D-143).
@@ -201,6 +226,67 @@ defmodule Visualize.Data.Schema do
   @spec fetch(t(), name(), atom()) :: {:ok, term()} | :error
   def fetch(%__MODULE__{} = schema, name, key) when is_atom(key) do
     with {:ok, description} <- fetch(schema, name), do: Map.fetch(description, key)
+  end
+
+  @doc """
+  A field's declared values, bare, in their declared order (spec/08 §10.1, D-224): each
+  value entry's `value`, and each bare value as it is. `nil` when the schema has no such
+  field or the field declares no `values` — an open set, where `[]` would say a closed one
+  holding nothing. Read by either spelling of the field's name.
+
+  What compares or lists a field's values reads them here, never through `fetch/3`, whose
+  `:values` is the list as declared, entries and all.
+
+      iex> schema = Visualize.Data.Schema.new!(%{state: %{type: :category, values: [
+      ...>   %{value: "ok", name: "OK", color: "#2e7d32"}, "unknown"]}})
+      iex> Visualize.Data.Schema.values(schema, :state)
+      ["ok", "unknown"]
+      iex> Visualize.Data.Schema.values(schema, :other)
+      nil
+  """
+  @spec values(t(), name()) :: [value(), ...] | nil
+  def values(%__MODULE__{} = schema, field) do
+    case fetch(schema, field, :values) do
+      {:ok, [_ | _] = values} -> Enum.map(values, &bare/1)
+      _none -> nil
+    end
+  end
+
+  @doc """
+  A map from each declared value with a `name` to its name (spec/08 §10.1, D-224); `%{}`
+  when none has one, or the field declares no values.
+
+      iex> schema = Visualize.Data.Schema.new!(%{state: %{type: :category, values: [
+      ...>   %{value: "ok", name: "OK"}, %{value: "down", color: "#c62828"}, "unknown"]}})
+      iex> Visualize.Data.Schema.value_names(schema, "state")
+      %{"ok" => "OK"}
+  """
+  @spec value_names(t(), name()) :: %{value() => String.t()}
+  def value_names(%__MODULE__{} = schema, field), do: entries(schema, field, :name)
+
+  @doc """
+  A map from each declared value with a `color` to its color, as written — a literal string
+  or a typed color — (spec/08 §10.1, D-224); `%{}` when none has one, or the field declares
+  no values. It is a `:color_map` as it stands; a design's own range outranks it.
+
+      iex> schema = Visualize.Data.Schema.new!(%{state: %{type: :category, values: [
+      ...>   %{value: "ok", color: "#2e7d32"}, %{value: "warn", color: {:ramp, :status, 0.5}}]}})
+      iex> Visualize.Data.Schema.value_colors(schema, :state)
+      %{"ok" => "#2e7d32", "warn" => {:ramp, :status, 0.5}}
+  """
+  @spec value_colors(t(), name()) :: %{value() => Visualize.Color.value()}
+  def value_colors(%__MODULE__{} = schema, field), do: entries(schema, field, :color)
+
+  defp entries(schema, field, key) do
+    case fetch(schema, field, :values) do
+      {:ok, values} when is_list(values) ->
+        for %{value: value} = entry <- values, Map.has_key?(entry, key), into: %{} do
+          {value, Map.fetch!(entry, key)}
+        end
+
+      _none ->
+        %{}
+    end
   end
 
   @doc """
@@ -378,7 +464,9 @@ defmodule Visualize.Data.Schema do
 
   defp in_order(_name, _description), do: []
 
-  defp in_values(name, %{values: [_ | _] = values} = description) do
+  defp in_values(name, %{values: [_ | _] = declared} = description) do
+    values = Enum.map(declared, &bare/1)
+
     order =
       case Map.get(description, :order) do
         [_ | _] = order ->
@@ -472,7 +560,7 @@ defmodule Visualize.Data.Schema do
 
   defp key(name, _type, :order, value), do: order(value, [name, :order])
 
-  defp key(name, _type, :values, value), do: values(value, [name, :values])
+  defp key(name, _type, :values, value), do: declared_values(value, [name, :values])
 
   defp key(name, _type, :status, value) do
     if is_map(value) and not is_struct(value) and
@@ -511,8 +599,18 @@ defmodule Visualize.Data.Schema do
 
   # `identity: false` is the description that says nothing, kept as that one schema
   # (spec/08 §10.1, D-167).
-  defp declared(%{identity: false} = description), do: Map.delete(description, :identity)
+  # An entry that says nothing but its value is that value, so the two spellings are one
+  # schema too (D-224).
+  defp declared(%{identity: false} = description),
+    do: description |> Map.delete(:identity) |> declared()
+
+  defp declared(%{values: [_ | _] = values} = description),
+    do: %{description | values: Enum.map(values, &plain/1)}
+
   defp declared(description), do: description
+
+  defp plain(%{value: value} = entry) when map_size(entry) == 1, do: value
+  defp plain(entry), do: entry
 
   # A unit is a UCUM code `Visualize.Unit` reads (spec/05 §4.1, D-157).
   defp unit(value, path) when is_binary(value) and value != "" do
@@ -539,31 +637,74 @@ defmodule Visualize.Data.Schema do
   defp measure(_name, _description, _faults), do: []
 
   defp order([_ | _] = states, path) do
-    if Enum.all?(states, &state?/1) do
-      states
-      |> Enum.with_index()
-      |> Enum.reduce({MapSet.new(), []}, fn {state, i}, {seen, errors} ->
-        if MapSet.member?(seen, state),
-          do: {seen, [{path ++ [i], :duplicate} | errors]},
-          else: {MapSet.put(seen, state), errors}
-      end)
-      |> elem(1)
-      |> Enum.reverse()
-    else
-      [{path, {:type, :order}}]
-    end
+    if Enum.all?(states, &state?/1),
+      do: distinct(states, path),
+      else: [{path, {:type, :order}}]
   end
 
   defp order(_other, path), do: [{path, {:type, :order}}]
 
-  # A closed set of values is a list like an order, each distinct (D-194).
-  defp values([_ | _] = values, path) do
-    if Enum.all?(values, &state?/1),
-      do: order(values, path),
-      else: [{path, {:type, :values}}]
+  # Each state listed once: a later one listed before is `:duplicate` at its index. A
+  # value entry is compared by its value, and one whose value is no state is its own fault.
+  defp distinct(states, path) do
+    states
+    |> Enum.with_index()
+    |> Enum.reduce({MapSet.new(), []}, fn {state, i}, {seen, errors} ->
+      cond do
+        not state?(state) -> {seen, errors}
+        MapSet.member?(seen, state) -> {seen, [{path ++ [i], :duplicate} | errors]}
+        true -> {MapSet.put(seen, state), errors}
+      end
+    end)
+    |> elem(1)
+    |> Enum.reverse()
   end
 
-  defp values(_other, path), do: [{path, {:type, :values}}]
+  # A closed set of values is a list like an order, each distinct by value (D-194); an entry
+  # may be a map of its value, name and color (D-224).
+  defp declared_values([_ | _] = values, path) do
+    if Enum.all?(values, &(state?(&1) or entry?(&1))) do
+      entries =
+        values
+        |> Enum.with_index()
+        |> Enum.flat_map(fn {entry, i} -> entry(entry, path ++ [i]) end)
+
+      entries ++ distinct(Enum.map(values, &bare/1), path)
+    else
+      [{path, {:type, :values}}]
+    end
+  end
+
+  defp declared_values(_other, path), do: [{path, {:type, :values}}]
+
+  defp entry?(v), do: is_map(v) and not is_struct(v)
+
+  defp entry(entry, path) when is_map(entry) do
+    missing = if Map.has_key?(entry, :value), do: [], else: [{path ++ [:value], :required}]
+    missing ++ Enum.flat_map(entry, fn {key, value} -> entry_key(key, value, path ++ [key]) end)
+  end
+
+  defp entry(_state, _path), do: []
+
+  defp entry_key(:value, value, path),
+    do: if(state?(value), do: [], else: [{path, {:type, :state}}])
+
+  defp entry_key(:name, name, path),
+    do: if(is_binary(name), do: [], else: [{path, {:type, :string}}])
+
+  defp entry_key(:color, color, path),
+    do: if(color?(color), do: [], else: [{path, {:type, :color}}])
+
+  defp entry_key(_key, _value, path), do: [{path, :unknown_entry_key}]
+
+  # A literal a color parser reads, or a typed color whose literal operands it reads. Its
+  # names are a theme's, which a schema has none of: a design checks them (spec/14 §3.2).
+  defp color?(color) when is_binary(color), do: Typed.readable?(color)
+  defp color?(color), do: Typed.value?(color) and Typed.unreadable(color) == []
+
+  # A declared value, bare: an entry's value, or the value it is.
+  defp bare(%{value: value}), do: value
+  defp bare(value), do: value
 
   # `[min, max]`, each a number or `nil`, the first below the second when both are given.
   defp bounds?([min, max]) when is_number(min) and is_number(max), do: min < max
@@ -594,6 +735,12 @@ defmodule Visualize.Data.Schema do
 
   defp encode(list) when is_list(list),
     do: ["l", Integer.to_string(length(list)), ":" | Enum.map(list, &encode/1)]
+
+  # A value entry's typed color (D-224): no schema held a tuple before, so no version moved.
+  defp encode(tuple) when is_tuple(tuple) do
+    elements = Tuple.to_list(tuple)
+    ["t", Integer.to_string(length(elements)), ":" | Enum.map(elements, &encode/1)]
+  end
 
   defp encode(map) when is_map(map) do
     entries =
@@ -665,7 +812,20 @@ defmodule Visualize.Data.Schema do
   defp words({:type, :status}), do: "must be a map from a state to a role atom"
 
   defp words({:type, :values}),
-    do: "must be a non-empty list of the field's values: strings, atoms or numbers"
+    do:
+      "must be a non-empty list of the field's values: strings, atoms or numbers, or " <>
+        "entries %{value: v, name: \"Display\", color: c}"
+
+  defp words({:type, :state}),
+    do: "must be a value: a string, an atom other than nil, true and false, or a number"
+
+  defp words({:type, :color}),
+    do:
+      "must be a color: a literal string Visualize.Color.parse/1 reads, or a typed color " <>
+        "(spec/08 §1.9) whose literals it reads"
+
+  defp words(:unknown_entry_key),
+    do: "is not a value entry's key; the keys are #{Enum.map_join(@entry_keys, ", ", &inspect/1)}"
 
   defp words({:duplicate_field, name}),
     do: "names the same column as #{inspect(name)}: a field is described once"
