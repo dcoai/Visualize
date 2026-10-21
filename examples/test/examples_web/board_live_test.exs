@@ -26,11 +26,12 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert html =~ "<h2 class=\"vis-board-title\">Live board</h2>"
 
     for cell <-
-          ~w(load memory queue wave offline requests errors services hosts weather latency status) do
+          ~w(load memory queue wave offline requests errors services hosts weather latency status histogram) do
       assert html =~ ~s(data-vis-cell="#{cell}"), cell
     end
 
     assert html =~ ~s(phx-click="window")
+    assert html =~ ~s(phx-click="bin_domain")
   end
 
   test "the board runs under the examples' board supervisor, one process for every visitor" do
@@ -93,10 +94,84 @@ defmodule ExamplesWeb.BoardLiveTest do
   test "the trend is the host's own function, tested as any function" do
     rows = for cpu <- [10, 12, 30], do: %{cpu: cpu}
     assert Examples.BoardDemo.Sources.trend(rows) == %{trend: :increasing}
-    assert [{:trend, 1, source}] = Examples.BoardDemo.Sources.__virtual_sources__()
+
+    assert {:trend, 1, source} =
+             List.keyfind(Examples.BoardDemo.Sources.__virtual_sources__(), :trend, 0)
+
     assert source =~ "Visualize.Data.slope()"
     assert Examples.BoardDemo.Sources.trend([%{cpu: 40}]) == %{trend: :neutral}
     assert Examples.BoardDemo.Sources.trend([%{cpu: 40}, %{cpu: 39.5}]) == %{trend: :neutral}
+  end
+
+  test "the wave's bins are the host's function of two arguments: a variable's bounds, else the extent" do
+    rows = for y <- [12, 18, 30, 55, 88], do: %{y: y}
+    inputs = %{"wave" => rows}
+
+    # No `bin_domain`: ten bins over the data's extent, 12 to 88.
+    extent = Examples.BoardDemo.Sources.wave_bins(inputs, %{"vars" => %{}})
+    assert length(extent) == 10
+    assert hd(extent).lo == 12 and List.last(extent).hi == 88
+    assert Enum.sum(Enum.map(extent, & &1.count)) == 5
+
+    # `:auto`, the component's default, is the extent too.
+    assert Examples.BoardDemo.Sources.wave_bins(inputs, %{"vars" => %{"bin_domain" => :auto}}) ==
+             extent
+
+    # A pair of numbers: ten bins of ten over 0 to 100.
+    fixed =
+      Examples.BoardDemo.Sources.wave_bins(inputs, %{"vars" => %{"bin_domain" => [0, 100]}})
+
+    assert Enum.map(fixed, &{&1.lo, &1.hi}) |> hd() == {0, 10.0}
+    assert List.last(fixed).hi == 100
+    assert Enum.map(fixed, & &1.count) == [0, 2, 0, 1, 0, 1, 0, 0, 1, 0]
+
+    assert {:wave_bins, 2, source} =
+             List.keyfind(Examples.BoardDemo.Sources.__virtual_sources__(), :wave_bins, 0)
+
+    assert source =~ ~s(context["vars"]["bin_domain"])
+    assert Examples.BoardDemo.bin_domain("fixed") == [0, 100]
+    assert Examples.BoardDemo.bin_domain("bogus") == :auto
+  end
+
+  test "the bins buttons set the cell's variable, and the board re-shapes the cell" do
+    {:ok, socket} = BoardLive.mount(%{}, %{}, %Phoenix.LiveView.Socket{})
+    board = socket.assigns.board
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+    bins = fn -> Server.snapshot(board).cells["histogram"].slots["bins"] end
+    extent? = fn -> match?(%{delivery: %{rows: [_ | _]}}, bins.()) and not fixed?(bins.()) end
+    first = drawn_until(board, "histogram", extent?)
+    before = Server.info(board).virtual_sources
+
+    {:noreply, _socket} = BoardLive.handle_event("bin_domain", %{"domain" => "fixed"}, socket)
+    assert Server.info(board).board.cells["histogram"].vars == %{"bin_domain" => [0, 100]}
+
+    fixed = drawn_until(board, "histogram", fn -> fixed?(bins.()) end)
+    assert fixed.state == :live and fixed.svg != first.svg
+
+    # The cell's own source re-ran with the new bounds.
+    sources = Server.info(board).virtual_sources
+    assert sources[["histogram", "bins"]].runs > before[["histogram", "bins"]].runs
+    assert sources[["histogram", "bins"]].state == :live
+
+    {:noreply, _socket} = BoardLive.handle_event("bin_domain", %{"domain" => "extent"}, socket)
+    assert Server.info(board).board.cells["histogram"].vars == %{"bin_domain" => :auto}
+    assert drawn_until(board, "histogram", extent?).state == :live
+    Server.unsubscribe(board, self())
+  end
+
+  # Whether a slot's bins span 0 to 100: the cell's `bin_domain` set.
+  defp fixed?(%{delivery: %{rows: [first | _] = rows}}),
+    do: first["lo"] == 0 and List.last(rows)["hi"] == 100
+
+  defp fixed?(_slot), do: false
+
+  # The cell's next drawn view once the board's state passes `test`.
+  defp drawn_until(board, cell, test) do
+    receive do
+      {:visualize_board, ^board, {:cell, ^cell, %{svg: svg} = view}} when is_binary(svg) ->
+        if test.(), do: view, else: drawn_until(board, cell, test)
+    end
   end
 
   # The hosts cell's first view whose icons are drawn from the virtual sources' answers:
@@ -344,7 +419,7 @@ defmodule ExamplesWeb.BoardLiveTest do
     assert {:ok, frozen} = Visualize.Board.Snapshot.from_json(response(snapshot, 200))
 
     assert Map.keys(frozen.cells) |> Enum.sort() ==
-             ~w(capped colored errors hosts invalid latency links load memory no_data offline over_budget queue requests services stale status wave weather)
+             ~w(capped colored errors histogram hosts invalid latency links load memory no_data offline over_budget queue requests services stale status wave weather)
 
     assert Visualize.Board.Export.svg(frozen) =~ ~s(data-vis-cell="offline" data-vis-state="down")
 

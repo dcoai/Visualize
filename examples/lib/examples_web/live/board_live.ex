@@ -21,6 +21,11 @@ defmodule ExamplesWeb.BoardLive do
   export buttons post to `ExamplesWeb.BoardExportController`, which freezes the board
   and hands back its SVG, its PNG, its snapshot or its printed pages (#578).
 
+  The *Bins over* buttons set *Wave, binned*'s own variable `bin_domain` with
+  `Visualize.Board.Server.vars/3` (D-229): the board's shared state, as its window is. The
+  cell's virtual source takes its context, so the board re-runs it and the cell redraws
+  with the new bins.
+
   The three cells of the last row interact (spec/15 §13, #545): a service picked in one is
   selected in all three, and a click on a bar drills down. The component hands the drill to
   this page, which follows it to `/board/detail` with the bar's service: the page knows its
@@ -291,6 +296,14 @@ defmodule ExamplesWeb.BoardLive do
      |> start_async(:conformance, fn -> Lifecycle.conformance() end)}
   end
 
+  # A viewer's choice of the bounds *Wave, binned* bins over: the cell's own variable, set
+  # on the board (D-229), which re-runs its source. The key is matched, never an atom.
+  def handle_event("bin_domain", %{"domain" => key}, socket) do
+    domain = BoardDemo.bin_domain(key)
+    :ok = Server.vars(socket.assigns.board, :histogram, %{bin_domain: domain})
+    {:noreply, socket}
+  end
+
   def handle_event("window", %{"last" => last}, socket) do
     window = %{"last" => last, "from" => nil, "to" => nil}
     {:noreply, push_patch(socket, to: path(socket, window))}
@@ -412,6 +425,23 @@ defmodule ExamplesWeb.BoardLive do
             the design reads a number, so the cell names the mismatch rather than crash; and
             <em>Over budget</em>
             ships 6,000 readings past the board's ceiling of 5,000, so the board never hands the cell its rows.
+          </p>
+          <p class="board-bins">
+            Bins over:
+            <button
+              :for={{name, key, _value} <- BoardDemo.bin_domains()}
+              type="button"
+              phx-click="bin_domain"
+              phx-value-domain={key}
+            >
+              {name}
+            </button>
+            — <em>Wave, binned</em>
+            is drawn from the cell's own virtual source, the host's <code>defsource wave_bins(inputs, context)</code>: a function of two arguments, so the
+            board gives it its context, and it bins over the cell's variable <code>bin_domain</code>
+            when it is set, else over the data's extent. A button sets that variable on the board
+            (<code>Server.vars/3</code>), which re-runs the source and nothing else, and the bars
+            and the axis change together.
           </p>
           <p class="board-links">
             <em>Links</em>

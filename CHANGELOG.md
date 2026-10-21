@@ -125,6 +125,19 @@ release it merely follows.
   `VirtualSource.validate/2` take `vars:`). The board passes its variables to the engine
   in #871.
 
+- **On a running board, a virtual source sees its scope's variables, and a viewer's change
+  to one re-shapes the cells that read it** (#869, #871, D-229). `Visualize.Board.Server`
+  shows the engine every scope's own variables (`Visualize.Board.own_vars/1`, new) when it
+  starts and on every change, so a two-argument source's context holds the board's
+  variables, a cell's own over them. **`Visualize.Board.Server.vars(board, cell, vars)`**
+  (new) sets one cell's own variables, as `vars/2` sets the board's, and answers
+  `{:error, errors}` for a variable the cell's component does not declare or a cell the
+  board does not have. Either re-runs only the two-argument sources whose variables
+  changed — a cell's only its own, a board's every one that does not override it — and,
+  with `debounce: 0`, before it answers, so the cells are drawn with the new answers. A
+  stored function's literal read of a variable its scope does not give is a `:restricted`
+  fault at that source. The builder's board mode gives its preview the same variables.
+
 - **A legend can be shown only from a number of entries: `min_entries`** (#761, #861,
   D-223). `legend: %{position: :top, min_entries: 2}` draws the key when there are two
   series to tell apart and nothing when there is one, whose key would only repeat the

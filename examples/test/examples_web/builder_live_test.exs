@@ -230,7 +230,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
 
       mode = Visualize.Chart.Builder.Editing.editing(s.assigns).board_mode
       assert mode.catalog?
-      assert map_size(mode.board.cells) == 19
+      assert map_size(mode.board.cells) == 20
       # The one fault is the cell that is wrong on purpose: its feed sends text where the
       # design reads a number (#821), which the builder names as the board does.
       assert [_ | _] = mode.faults
@@ -268,7 +268,7 @@ defmodule ExamplesWeb.BuilderLiveTest do
         BuilderLive.handle_info({:board_bound, "builder", board_id, binding}, page)
 
       assert page.assigns.bindings[board_id] == binding
-      assert page.assigns.saved =~ "bound: 19 slot(s)"
+      assert page.assigns.saved =~ "bound: 20 slot(s)"
     end
   end
 

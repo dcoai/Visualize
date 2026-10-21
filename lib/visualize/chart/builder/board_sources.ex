@@ -2,10 +2,11 @@ defmodule Visualize.Chart.Builder.BoardSources do
   @moduledoc false
   # A board's virtual sources in the board mode (spec/14 §22.9, D-194): run as the board
   # runs them, over the preview's data — the bindable feeds' sample rows under their catalog
-  # schemas — with the same engine and one immediate pulse, no process. What a pass reads
-  # of them: each cell's pool with the sources' answers and joined fields, each slot's
-  # schema, each feed's schema with the fields joined into it at the board's scope (for the
-  # binding check), and a view of every source for the inspector.
+  # schemas — with the same engine, the board's variables and one immediate pulse, no
+  # process, so a source of two arguments is given the context the board gives it (D-229).
+  # What a pass reads of them: each cell's pool with the sources' answers and joined
+  # fields, each slot's schema, each feed's schema with the fields joined into it at the
+  # board's scope (for the binding check), and a view of every source for the inspector.
 
   alias Visualize.Board
   alias Visualize.Board.Binding
@@ -47,7 +48,9 @@ defmodule Visualize.Chart.Builder.BoardSources do
       Map.put(ran, :engine, nil)
     else
       functions = VirtualSources.registry(modules)
-      opts = [feeds: Map.keys(deliveries), functions: functions, debounce: 0]
+      # Every scope's own variables, as the board process shows its engine (D-229).
+      vars = Board.own_vars(board)
+      opts = [feeds: Map.keys(deliveries), functions: functions, vars: vars, debounce: 0]
 
       engine =
         with {:ok, engine} <- Engine.new(table, opts),
@@ -217,7 +220,8 @@ defmodule Visualize.Chart.Builder.BoardSources do
         map = source |> VirtualSource.to_map() |> Map.put(:elixir, text)
 
         with {:ok, edited} <- lines(VirtualSource.new(map)),
-             :ok <- lines(VirtualSource.validate(edited, inputs: input_schemas(edited, schemas))) do
+             check = [inputs: input_schemas(edited, schemas), vars: names(board, path)],
+             :ok <- lines(VirtualSource.validate(edited, check)) do
           {:ok, put(board, path, map |> Map.delete(:id))}
         end
 
@@ -232,6 +236,11 @@ defmodule Visualize.Chart.Builder.BoardSources do
 
   defp line({[:elixir], {:check, line, reason}}), do: Sandbox.format_error({line, reason})
   defp line(fault), do: VirtualSource.format_error(fault)
+
+  # The names of the variables a source's scope gives it (D-228, D-229): the cascade's, the
+  # board's for a board's source, the board's and its cell's for a cell's.
+  defp names(board, [_id]), do: board.vars |> Map.keys() |> Enum.sort()
+  defp names(board, [cell, _id]), do: board |> Board.vars(cell) |> Map.keys() |> Enum.sort()
 
   defp input_schemas(source, schemas) do
     for {name, _window} <- source.from,
