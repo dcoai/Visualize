@@ -155,7 +155,10 @@ defmodule Visualize.Chart.Schema.Frame do
       # A top or bottom legend wraps to the plot's width, and a label can be cut to a
       # count of characters, the full text kept (§4.5, D-169).
       spec(:wrap, :boolean, :geometry, default: true),
-      spec(:max_label, :integer, :geometry, range: {1, 80, 1})
+      spec(:max_label, :integer, :geometry, range: {1, 80, 1}),
+      # The fewest entries a legend is drawn with, decided at every realization (§4.5,
+      # D-223): below it the legend is not drawn and takes no margin.
+      spec(:min_entries, :integer, :geometry, default: 1, range: {1, 12, 1})
     ]
   end
 

@@ -461,6 +461,11 @@ defmodule Visualize.Chart.Validator do
       else: [{path, {:unsafe, :class}}]
   end
 
+  # A legend's `min_entries` is a count of entries at least 1 (spec/14 §4.5, D-223); the
+  # schema's `range` is the builder's, so the floor is checked here.
+  defp check_key(:legend, %{key: :min_entries}, n, path, _ctx) when is_integer(n) and n < 1,
+    do: [{path, {:type, :pos_integer}}]
+
   # A theme needs at least one series color (spec/08 §7.2).
   defp check_key(:theme, %{key: :series}, [], path, _ctx), do: [{path, :required}]
 

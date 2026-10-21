@@ -3030,3 +3030,22 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A chart whose legend is fixed, inside the plot or fits its margin changes no byte: its ticks stand on the compiled plot and the path is never taken. The goldens are unchanged.
 - `static/1` and `backdrop/1` can change after a tick. A page that sends the static document once, at mount, sends it again when the compiled chart's `margin` changes.
 - A design that grew its margin past the box before now raises in `Frame.new/2`, `Chart.render/2`, `Chart.compile/2` and every tick.
+
+## 223. D-223 — A legend is drawn from a number of entries, decided at every realization
+
+**Context.** #761, #861; from metresis #452. metresis draws a chart's legend only when the chart has more than one series, because a single line's legend repeats the title. On the board runtime the design is fixed while the data decides how many series there are — one host today, five tomorrow — and a design could not say "a legend when it would tell series apart". A legend with no entries at all was drawn as an empty group: it took 12 + 8 of a top or bottom margin `inside: false` and a 16 width that could make a side margin raise.
+
+**Decision.**
+- **A legend's `min_entries`** — an `:integer` at least 1, a `:geometry` key, `1` by default — is the fewest entries it is drawn with (spec/14 §4.5). Below it `Frame.generate/2` holds no legend group, `Frame.legend_extent/1` is `%{width: 0, height: 0}`, and the margin is the one the design gave: a top or bottom margin is not grown and a side margin is not checked, so nothing raises. The three answers come from the one layout the legend has, so the drawing, the extent and the margin cannot disagree.
+- **Its entries are the realized ones**: one per declared `values` entry, else one per value of `Visualize.Scale.ticks/2` of its scale. That is the number of series only when the color scale's domain is inferred from them; the title is not an entry.
+- **It is decided at every realization.** A compiled chart realizes its frame per tick, so a legend whose scale's domain is inferred appears and disappears as its entries cross the minimum, and a top or bottom legend in its margin gives that tick its margin, which the compiled chart carries (D-222). The legend's region is listed whenever the design has a legend, and draws nothing on a tick below the minimum.
+- **The validator checks it.** A `min_entries` that is not an integer at least 1 is `{:type, :pos_integer}`; the schema's `range` is the builder's and is not enforced, so the check is the validator's own. `Frame.new/2` raises `ArgumentError` for one, as for a `max_label` below 1.
+
+**Rejected.**
+- **A boolean "only with several series".** It names one threshold, 2, and counts series where a legend counts entries; a legend of declared values or a continuous scale's ticks has entries and no series.
+- **Counting the marks' series.** The legend explains its scale, not the marks; its entries are what it draws, and a scale with a declared domain has its entries whatever the rows hold.
+- **Keeping the empty legend under the default.** An empty group explains nothing and took margin the plot could have had; `1` as the default is the rule that a legend with nothing to say is not drawn.
+
+**Consequences.**
+- A legend with no entries is no longer drawn and takes no margin: a top or bottom one `inside: false` no longer grows a margin under 20 to 20, and a side one no longer needs 24 of its margin. Every golden legend has entries, so the goldens are unchanged.
+- `Visualize.Chart.Build.legend/2` takes `min_entries`, and the builder's inspector shows it in the legend's geometry, both from the schema.
