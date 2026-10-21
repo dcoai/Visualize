@@ -64,6 +64,8 @@ defmodule Visualize.Chart.Validator do
           | {:var_binding, atom()}
           | {:unbound, :source, atom()}
           | {:missing_field, atom()}
+          | {:width, non_neg_integer(), non_neg_integer()}
+          | {:rank, non_neg_integer()}
           | :conflict
           | :cycle
           | {:cycle, [term()]}

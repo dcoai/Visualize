@@ -118,6 +118,22 @@ release it merely follows.
   and sent again until the render has stopped. `{:error, :timeout}` arrives within the
   `:timeout` plus at most 6 s whatever the load, and normally within milliseconds of it.
 
+- **An Nx tensor bound to a design draws, or says why it cannot** (#830, #843, D-214).
+  A rank-2 tensor's rows are tuples, and a design reads fields by name, so a tensor
+  bound to a design's slot used to apply with `{:ok, _}` and draw nothing. It is now read
+  column by column in the slot's declared field order: `source(:pts, [:x, :y])` bound to
+  `Nx.tensor([[1, 4.0], [2, 5.0]])` draws two points, as `%{x: [1, 2], y: [4.0, 5.0]}`
+  does. A rank-1 tensor is one column. `apply/2` refuses a tensor it cannot read, at
+  `[:sources, slot]`: `{:width, declared, given}` when the tensor is not as wide as the
+  slot's fields, `{:rank, rank}` for a rank other than 1 or 2, and `{:type, :named_rows}`
+  when the slot declares no fields. A compiled chart's tick raises `ArgumentError` for
+  the same faults. A map or keyword list of rank-1 tensors, such as
+  `%{x: Nx.tensor([1, 2]), y: Nx.tensor([4.0, 5.0])}`, is now read as columns by
+  `Visualize.Data.Table.rows/1` wherever a map of lists is. It used to raise
+  `ArgumentError`. The new `Visualize.Data.Table.named/2` names a tensor's columns.
+  *Affects* code that read a bound tensor back from `Visualize.Chart.Applied`'s
+  `sources`: it is now the named column map, not the tensor. Nx is still optional.
+
 - **A basemap stays inside its own frame** (#826, #827, D-209). A `:tiles` mark covers
   its plot with whole tiles, so the tiles at the edges reach up to one tile past it. A
   chart of one frame hid this at the document's edge. In a design of several frames, one

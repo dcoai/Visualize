@@ -151,9 +151,15 @@ defmodule Visualize.Chart.Template do
       Enum.reduce(slots, {%{}, []}, fn {name, slot}, {bound, errors} ->
         case entry(pool, name, slot) do
           {:ok, _feed, source} ->
-            # A delivery binds as the source it carries (spec/08 §10.4).
-            source = Delivery.source(source)
-            {Map.put(bound, name, source), errors ++ missing_fields(slot, source, name)}
+            # A delivery binds as the source it carries (spec/08 §10.4), and a tensor as
+            # its columns named by the slot's fields (D-214).
+            case read(slot, Delivery.source(source)) do
+              {:ok, source} ->
+                {Map.put(bound, name, source), errors ++ missing_fields(slot, source, name)}
+
+              {:error, reason} ->
+                {bound, [{[:sources, name], reason} | errors]}
+            end
 
           :error ->
             {bound, [{[:sources, name], {:unbound, :source, name}} | errors]}
@@ -168,6 +174,20 @@ defmodule Visualize.Chart.Template do
 
   # A slot that is not a map is left for the validator to report; it binds nothing.
   def bind(%Chart{}, _pool), do: {:ok, %{}}
+
+  @doc false
+  # A bound source as a design reads it (spec/14 §7.3, D-214): a tensor's rows are tuples,
+  # which have no names, so its columns take the slot's declared fields in order; a slot
+  # that declares none refuses it. Any other source is as given.
+  @spec read(term(), term()) :: {:ok, term()} | {:error, Validator.reason()}
+  def read(slot, %{__struct__: Nx.Tensor} = tensor) do
+    case slot do
+      %{fields: [_ | _] = fields} -> Table.named(tensor, fields)
+      _none -> {:error, {:type, :named_rows}}
+    end
+  end
+
+  def read(_slot, source), do: {:ok, source}
 
   @doc false
   # A slot's pool entry — under its own name, else its default — with the name it was
