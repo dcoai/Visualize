@@ -77,6 +77,23 @@ release it merely follows.
     to compile, and about 150 times a source near the 10 kB limit. A per-identity batch
     fits some 180,000 rows at the board demo's cost (#852 has the measurements).
 
+- **The feed conformance kit no longer fails a correct feed on a busy host** (#852,
+  #857, D-221). `Visualize.Feed.Conformance` gave every callback 1 s of wall clock and
+  reported a slow answer as the feed's fault, so a correct feed could fail your suite
+  on a loaded CI runner. Now `timeout:` only catches a callback that never answers. A
+  cost claim is yours to make, counted in reductions, which load does not change.
+  *Affects* suites that match on the kit's findings or set `timeout:`:
+  - **The finding `{:timeout, call}` is now `{:hung, call, ms}`**, worded "did not
+    answer within 30000 ms: it is blocked (hung), not slow". `timeout:` defaults to
+    `30_000` (was `1000`) and still bounds the push check's wait for the first push.
+  - **New `reductions:`** (default `nil`, no claim): the most reductions one callback
+    (`describe`, `fetch`, `subscribe`, `unsubscribe`) may spend, counted in its own
+    process. A callback over it fails at its call with
+    `{:reductions, call, spent, budget}`, at any load.
+  - **New `processes:`**: pids or registered names whose reductions during a callback
+    count toward its budget. The count is otherwise the callback's own process, so work
+    your feed does in a GenServer it calls is only counted when you name the GenServer.
+
 ### Added
 
 - **A bundle can be written to a file and read back: `Bundle.to_json/1` and `from_json/2`**

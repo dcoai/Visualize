@@ -10,7 +10,12 @@ defmodule Visualize.Feed.Conformance.Words do
     do:
       "#{call(call)} raised or exited instead of answering a value: #{Exception.format_exit(reason)}"
 
-  def words({:timeout, call}), do: "#{call(call)} did not answer within the timeout"
+  def words({:hung, call, timeout}),
+    do: "#{call(call)} did not answer within #{timeout} ms: it is blocked (hung), not slow"
+
+  def words({:reductions, call, spent, budget}),
+    do: "#{call(call)} spent #{spent} reductions, over its budget of #{budget}"
+
   def words({:describe_error, reason}), do: "describe/1 answered {:error, #{inspect(reason)}}"
 
   def words({:not_described, answer}),
