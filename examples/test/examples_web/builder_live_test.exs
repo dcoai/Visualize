@@ -183,6 +183,11 @@ defmodule ExamplesWeb.BuilderLiveTest do
   describe "the board mode (spec/14 §22, D-152)" do
     alias Visualize.Chart.Builder.Stack
 
+    # The builder over the page's own assigns, the board opened as a click on it opens it
+    # (`ExamplesWeb.BuilderBoard`); every component bound to every kind of feed is
+    # `ExamplesWeb.BuilderBoardBindTest`, one test per component (#838).
+    import ExamplesWeb.BuilderBoard, only: [board_mode: 0]
+
     test "the page tells of it, and the library holds a board over gallery charts" do
       html = build_conn() |> get("/builder") |> html_response(200)
       assert html =~ "opens the board mode"
@@ -193,28 +198,6 @@ defmodule ExamplesWeb.BuilderLiveTest do
       assert entry.kind == :board
       assert {:ok, board} = Visualize.Board.from_map(entry.fragment.board)
       assert Visualize.Board.validate(board, Stack.fetch(Library)) == :ok
-    end
-
-    # The builder over the page's own assigns, the board opened as a click on it opens it.
-    defp board_mode do
-      {:ok, page} = BuilderLive.mount(%{}, %{}, %Socket{})
-
-      host =
-        page.assigns
-        |> Map.take([:layers, :sources, :catalog])
-        |> Map.merge(%{
-          id: "builder",
-          store: Library,
-          on_bind: :board_bound,
-          board_bindings: page.assigns.bindings,
-          virtual_sources: [Examples.BoardDemo.Sources]
-        })
-
-      {:ok, s} = Visualize.Chart.Builder.mount(%Socket{})
-      {:ok, s} = Visualize.Chart.Builder.update(host, s)
-      id = Visualize.Chart.Builder.Store.encode_id(Library.id_of("Boards::live board"))
-      {:noreply, s} = Visualize.Chart.Builder.handle_event("add_layer", %{"name" => id}, s)
-      {page, s}
     end
 
     test "the catalog is the /board page's feeds, and its binding opens the board" do
@@ -285,61 +268,6 @@ defmodule ExamplesWeb.BuilderLiveTest do
 
       assert page.assigns.bindings[board_id] == binding
       assert page.assigns.saved =~ "bound: 18 slot(s)"
-    end
-
-    # A wrong binding is a fault panel, never a crash (spec/14 §18.4, §22.6, D-153): every
-    # component of the library in a cell, its slots bound to each of the page's feeds in turn.
-    test "any component binds to any feed without taking the builder down" do
-      alias Visualize.Chart.Builder
-      alias Visualize.Chart.Builder.{Boards, Editing, Store}
-      require Phoenix.LiveViewTest
-
-      {page, s} = board_mode()
-      event = fn s, name, params -> elem(Builder.handle_event(name, params, s), 1) end
-
-      s =
-        Enum.reduce(Map.keys(s.assigns.board.cells) -- ["wave"], s, fn cell, s ->
-          event.(s, "board_remove", %{"cell" => to_string(cell)})
-        end)
-
-      s = event.(s, "board_select", %{"cell" => "wave"})
-      feeds = Map.keys(page.assigns.catalog)
-
-      bind = fn s, feed ->
-        slots = Editing.editing(s.assigns).board_mode.selected.slots
-
-        Enum.reduce(slots, s, fn %{name: slot}, s ->
-          key = "slot." <> slot
-          event.(s, "board_bind", %{"_target" => [key], key => Boards.feed_key(feed)})
-        end)
-      end
-
-      shown =
-        for %{kind: :composite, id: id} <- Library.list(nil),
-            s = event.(s, "board_cell", %{"_target" => ["ref"], "ref" => Store.encode_id(id)}),
-            s.assigns.board.cells["wave"].ref == id,
-            reduce: [] do
-          shown ->
-            {s, previews} =
-              Enum.reduce(feeds, {s, []}, fn feed, {s, previews} ->
-                s = bind.(s, feed)
-                [cell] = Editing.editing(s.assigns).board_mode.cells
-                {s, [elem(cell.preview, 0) | previews]}
-              end)
-
-            # The page draws, whatever the last binding was.
-            html =
-              s.assigns
-              |> Map.drop([:__changed__, :flash, :myself])
-              |> Map.put(:layers, Map.get(s.assigns, :host_layers, []))
-              |> then(&Phoenix.LiveViewTest.render_component(Builder, &1))
-
-            assert html =~ ~s(data-board-cell="wave")
-            previews ++ shown
-        end
-
-      assert :fault in shown
-      assert :ok in shown
     end
   end
 

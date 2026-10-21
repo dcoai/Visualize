@@ -82,10 +82,10 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
 
   # The board open with each cell bound — `a` to feed 1, `b` to feed 2, `c` and `d` to
   # feed 3 — and what a pass over it draws kept.
-  defp opened do
+  defp opened(entries \\ entries()) do
     s =
       BuilderFixture.socket(BuilderFixture.layers(),
-        store: {Shelf, entries()},
+        store: {Shelf, entries},
         sources: sources()
       )
 
@@ -113,26 +113,36 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
              Editing.editing(Map.delete(assigns, :board_kept)).board_mode
 
     # The virtual sources' run is held to its own inputs below.
-    Map.delete(computed, :virtual)
+    Map.drop(computed, [:ran, :virtual])
   end
 
   test "the virtual sources run again only when what they read moved (spec/14 §22.9)" do
     s = opened()
     {_kept, computed} = BoardMode.kept(s.assigns)
-    assert computed.virtual == false
+    assert {computed.ran, computed.virtual} == {false, false}
 
     {_kept, computed} = BoardMode.kept(assign(s, :catalog, %{}).assigns)
-    assert computed.virtual == true
+    assert {computed.ran, computed.virtual} == {true, true}
+
+    # A binding is read of the run, and does not run the sources again (D-219).
+    binding = Binding.put(s.assigns.binding, :a, :primary, :feed_2)
+    {_kept, computed} = BoardMode.kept(assign(s, :binding, binding).assigns)
+    assert {computed.ran, computed.virtual} == {false, true}
   end
 
   @all ["a", "b", "c", "d"]
 
   test "a pass over what was kept makes nothing again" do
     s = opened()
-    assert remade(s, & &1) == %{facts: false, required: [], previews: []}
+    assert remade(s, & &1) == %{facts: false, flat: [], required: [], previews: []}
 
     # A selection is no input of either.
-    assert remade(s, &assign(&1, :board_cell, :b)) == %{facts: false, required: [], previews: []}
+    assert remade(s, &assign(&1, :board_cell, :b)) == %{
+             facts: false,
+             flat: [],
+             required: [],
+             previews: []
+           }
   end
 
   test "a cell's own fields remake its slots, its preview and the board's validation" do
@@ -141,13 +151,19 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     retitled = put_in(board.cells["a"][:title], "Renamed")
 
     assert remade(s, &assign(&1, :board, retitled)) ==
-             %{facts: true, required: ["a"], previews: ["a"]}
+             %{facts: true, flat: [], required: ["a"], previews: ["a"]}
   end
 
   test "the board's shared state remakes every preview and the validation, no slots" do
     s = opened()
     board = %{s.assigns.board | vars: %{threshold: 3}}
-    assert remade(s, &assign(&1, :board, board)) == %{facts: true, required: [], previews: @all}
+
+    assert remade(s, &assign(&1, :board, board)) == %{
+             facts: true,
+             flat: [],
+             required: [],
+             previews: @all
+           }
   end
 
   test "what the store says of a component remakes its cells, and only theirs" do
@@ -155,13 +171,59 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     changed = Map.put(entries(), {:composite, 2}, entries(%{label: "x"})[{:composite, 2}])
 
     assert remade(s, &assign(&1, :store, {Shelf, changed})) ==
-             %{facts: true, required: ["c", "d"], previews: ["c", "d"]}
+             %{facts: true, flat: [{:composite, 2}], required: ["c", "d"], previews: ["c", "d"]}
 
     # An entry no cell reaches is no input.
     more = Map.put(entries(), {:composite, 9}, entries()[{:composite, 1}])
 
     assert remade(s, &assign(&1, :store, {Shelf, more})) ==
-             %{facts: false, required: [], previews: []}
+             %{facts: false, flat: [], required: [], previews: []}
+  end
+
+  # The second component as a design whose mark's style names a library style, which the
+  # flatten resolves (spec/14 §19.6): an entry the component reaches but is not.
+  defp styled(opacity) do
+    design = Visualize.Chart.stack(BuilderFixture.layers())
+    [mark | marks] = design.marks
+    design = %{design | marks: [%{mark | style: [mark.style, {:style, 7}]} | marks]}
+
+    entries()
+    |> Map.put({:composite, 2}, %{name: "Charts::two", kind: :composite, fragment: design})
+    |> Map.put({:style, 7}, %{
+      name: "Styles::faded",
+      kind: :style,
+      fragment: %{style: %{opacity: opacity}}
+    })
+  end
+
+  test "an entry a component reaches through a reference remakes its cells, and only theirs (D-219)" do
+    s = opened(styled(0.5))
+    assert remade(s, & &1) == %{facts: false, flat: [], required: [], previews: []}
+
+    assert remade(s, &assign(&1, :store, {Shelf, styled(0.25)})) ==
+             %{facts: true, flat: [{:composite, 2}], required: ["c", "d"], previews: ["c", "d"]}
+
+    # The kept flattening is the new entry's: the style resolved inline.
+    kept = BoardMode.keep(assign(s, :store, {Shelf, styled(0.25)})).assigns.board_kept
+    {_key, {:ok, design, _report}} = kept.flat[{:composite, 2}]
+    assert [_series, %{opacity: 0.25}] = hd(design.marks).style
+  end
+
+  test "a bind event reads the kept slots, and names none stale (D-219)" do
+    s = opened()
+    bind = %{"_target" => ["slot.primary"], "slot.primary" => "feed_1"}
+    {:noreply, s} = Builder.handle_event("board_select", %{"cell" => "c"}, s)
+    {:noreply, bound} = Builder.handle_event("board_bind", bind, s)
+    assert Binding.fetch(bound.assigns.binding, "c", "primary") == {:ok, :feed_1}
+
+    # A component the store now answers without the slot: the event reads it again, and the
+    # slot it names is no longer one of the cell's.
+    gone = Map.update!(entries(), {:composite, 2}, &%{&1 | fragment: %{composite: %{uses: []}}})
+
+    {:noreply, unbound} =
+      Builder.handle_event("board_bind", bind, assign(s, :store, {Shelf, gone}))
+
+    assert Binding.fetch(unbound.assigns.binding, "c", "primary") == {:ok, :feed_3}
   end
 
   test "a cell's binding remakes its preview alone" do
@@ -170,6 +232,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
 
     assert remade(s, &assign(&1, :binding, binding)) == %{
              facts: false,
+             flat: [],
              required: [],
              previews: ["a"]
            }
@@ -185,14 +248,14 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
       |> assign(:typed, Typed.typed(sources, s.assigns.catalog))
     end
 
-    assert remade(s, changed) == %{facts: false, required: [], previews: ["c", "d"]}
+    assert remade(s, changed) == %{facts: false, flat: [], required: [], previews: ["c", "d"]}
   end
 
   test "the theme and the catalog remake every preview, and neither the slots nor the validation" do
     s = opened()
 
     assert remade(s, &assign(&1, :theme, Visualize.Theme.dark())) ==
-             %{facts: false, required: [], previews: @all}
+             %{facts: false, flat: [], required: [], previews: @all}
 
     catalog = Map.put(catalog(), :feed_4, Schema.new!(%{t: %{type: :time}}))
 
@@ -202,7 +265,7 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
       |> assign(:typed, Typed.typed(s.assigns.sources, catalog))
     end
 
-    assert remade(s, changed) == %{facts: false, required: [], previews: @all}
+    assert remade(s, changed) == %{facts: false, flat: [], required: [], previews: @all}
   end
 
   test "an event keeps what it made, so the render after it makes nothing" do
@@ -211,7 +274,9 @@ defmodule Visualize.Chart.Builder.BoardKeptTest do
     {:noreply, s} = Builder.handle_event("board_select", %{"cell" => "a"}, s)
     {:noreply, s} = Builder.handle_event("board_cell", retitle, s)
 
-    assert {_kept, %{facts: false, required: [], previews: []}} = BoardMode.kept(s.assigns)
+    assert {_kept, %{facts: false, flat: [], required: [], previews: []}} =
+             BoardMode.kept(s.assigns)
+
     assert %{cells: [%{title: "Renamed"} | _]} = Editing.editing(s.assigns).board_mode
   end
 end

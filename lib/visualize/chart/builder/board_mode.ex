@@ -322,8 +322,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     @doc false
     # What a pass over the assigns keeps, and what it had to compute for it: `{kept,
-    # %{facts: computed?, required: cells read, previews: cells drawn}}`, or `nil` off the
-    # mode.
+    # %{facts: computed?, flat: refs flattened, required: cells read, previews: cells drawn,
+    # ran: sources run?, virtual: read for the binding?}}`, or `nil` off the mode.
     def kept(assigns) do
       case board_kept(assigns) do
         nil -> nil
@@ -349,43 +349,38 @@ if Code.ensure_loaded?(Phoenix.Component) do
       names = Map.new(entries, &{&1.id, &1.name})
       kept = Map.get(assigns, :board_kept) || %{}
 
+      # What the store says of each component, flattened, kept by the entries it reads
+      # (§22.5, D-219); and the store read through it, so nothing below flattens again.
+      {flat, flat_entries, flattened} = flattened(kept[:flat], board, fetch)
+      read = reading(fetch, flat)
+
       # The facts are a function of the board and of what the store says of its
       # components, flattened (§22.5): kept while both are what they were.
-      flat = flat(board, fetch)
-
       {facts, facts_entry, facts?} =
-        BoardKept.facts(kept[:facts], {board, flat}, fn -> facts(board, fetch, flat) end)
+        BoardKept.facts(kept[:facts], {board, flat}, fn -> facts(board, read, flat) end)
 
       # A cell's slots are its component's, read alone (§22.8): kept by the cell and what
       # the store says of its component.
-      {per_cell, required_entries, read} =
-        BoardKept.each(
-          kept[:required],
-          Map.new(board.cells, fn {name, cell} -> {name, {cell, Map.get(flat, cell.ref)}} end),
-          fn stale -> Map.new(stale, &{&1, required_of(board, &1, fetch)}) end
-        )
-
-      required = per_cell |> Map.values() |> Enum.reduce(%{}, &Map.merge(&2, &1))
+      {required, required_entries, required_read} = slots(kept[:required], board, flat, read)
       binding = assigns.binding || Binding.new()
       sources = feed_sources(assigns)
 
       # The board's virtual sources run over the preview's data (§22.9), kept by what they
-      # are a function of.
+      # are a function of; and what a pass reads of the run for its binding, kept by that
+      # and the binding, so a binding changed does not run them again (D-219).
+      ran_key =
+        {board.virtual_sources, cell_sources(board), sources, assigns[:catalog],
+         assigns[:virtual_sources]}
+
+      {ran, ran_entry, ran?} =
+        BoardKept.facts(kept[:ran], ran_key, fn ->
+          BoardSources.ran(board, sources, assigns[:catalog], assigns[:virtual_sources] || [])
+        end)
+
       {virtual, virtual_entry, virtual?} =
-        BoardKept.facts(
-          kept[:virtual],
-          {board.virtual_sources, cell_sources(board), binding, sources, assigns[:catalog],
-           assigns[:virtual_sources]},
-          fn ->
-            BoardSources.run(
-              board,
-              binding,
-              sources,
-              assigns[:catalog],
-              assigns[:virtual_sources] || []
-            )
-          end
-        )
+        BoardKept.facts(kept[:virtual], {ran_key, binding}, fn ->
+          BoardSources.answer(ran, binding)
+        end)
 
       bind_faults = binding_faults(assigns, binding, required, sources, virtual.feed_schemas)
       faults = facts.faults ++ bind_faults
@@ -406,7 +401,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       {previews, preview_entries, drawn} =
         BoardKept.each(kept[:previews], keys, fn stale ->
-          Boards.preview(%{board | cells: Map.take(board.cells, stale)}, fetch,
+          Boards.preview(%{board | cells: Map.take(board.cells, stale)}, read,
             pools: pools,
             theme: assigns.theme,
             describe: describe(assigns, binding, virtual.slot_schemas),
@@ -453,10 +448,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {mode,
        %{
          facts: facts_entry,
+         flat: flat_entries,
          required: required_entries,
          previews: preview_entries,
+         ran: ran_entry,
          virtual: virtual_entry
-       }, %{facts: facts?, required: read, previews: drawn, virtual: virtual?}}
+       },
+       %{
+         facts: facts?,
+         flat: flattened,
+         required: required_read,
+         previews: drawn,
+         ran: ran?,
+         virtual: virtual?
+       }}
     end
 
     # What a source's inputs may name, with their schemas: the catalog's feeds and the
@@ -474,15 +479,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
       do: for({name, %{virtual_sources: s}} <- board.cells, into: %{}, do: {name, s})
 
     # Each component the board's cells name, flattened through the store (spec/14 §19.8):
-    # what the store says of it, nested references and all, by ref.
-    defp flat(board, fetch) do
-      board.cells
-      |> Map.values()
-      |> Enum.map(& &1.ref)
-      |> Enum.uniq()
-      |> Map.new(fn ref ->
-        {ref, with({:ok, fragment} <- fetch.(ref), do: Chart.flatten(fragment, fetch))}
+    # what the store says of it, nested references and all, by ref. Kept under the entries
+    # the flatten reads, each fetched again now (§22.5, D-219), so a component is flattened
+    # again only when one of them changed: `{flat, entries, refs flattened}`.
+    defp flattened(kept, board, fetch) do
+      refs = board.cells |> Map.values() |> Enum.map(& &1.ref) |> Enum.uniq()
+
+      BoardKept.each(kept, Map.new(refs, &{&1, BoardKept.reads(&1, fetch)}), fn stale ->
+        Map.new(stale, fn ref ->
+          {ref, with({:ok, fragment} <- fetch.(ref), do: Chart.flatten(fragment, fetch))}
+        end)
       end)
+    end
+
+    # The store read through the components' flattenings (D-219): a cell's ref answers its
+    # flat design, which flattens to itself (§19.6), and every other id the store's entry.
+    defp reading(fetch, flat) do
+      fn id ->
+        case Map.get(flat, id) do
+          {:ok, design, _report} -> {:ok, design}
+          _none -> fetch.(id)
+        end
+      end
+    end
+
+    # Each cell's slots, kept by the cell and its component's flattening (§22.8):
+    # `{slots, entries, cells read}`, the slots of every cell merged.
+    defp slots(kept, board, flat, read) do
+      {per_cell, entries, computed} =
+        BoardKept.each(
+          kept,
+          Map.new(board.cells, fn {name, cell} -> {name, {cell, Map.get(flat, cell.ref)}} end),
+          fn stale -> Map.new(stale, &{&1, required_of(board, &1, read)}) end
+        )
+
+      {per_cell |> Map.values() |> Enum.reduce(%{}, &Map.merge(&2, &1)), entries, computed}
     end
 
     # The board's faults given the store (§22.5) and the variables it shows (§22.4): one
@@ -651,13 +682,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp feeds(assigns), do: assigns |> pool() |> Map.keys() |> Enum.sort_by(&Boards.feed_key/1)
 
     # Every cell's slots, each cell read alone, so one that does not resolve leaves the
-    # others' listed (§22.8).
-    defp required(%{board: %Board{cells: cells} = board, store: store}) do
+    # others' listed (§22.8): what the last pass kept for a cell whose key is still its own,
+    # and read now for any other (D-219), so an event neither reads an unchanged component
+    # again nor names a stale slot.
+    defp required(%{board: %Board{} = board, store: store} = assigns) do
       fetch = Stack.fetch(store)
-
-      Enum.reduce(cells, %{}, fn {name, _cell}, acc ->
-        Map.merge(acc, required_of(board, name, fetch))
-      end)
+      kept = assigns[:board_kept] || %{}
+      {flat, _entries, _flattened} = flattened(kept[:flat], board, fetch)
+      {required, _entries, _read} = slots(kept[:required], board, flat, reading(fetch, flat))
+      required
     end
 
     defp required(_assigns), do: %{}
