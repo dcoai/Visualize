@@ -57,8 +57,9 @@ defmodule Visualize.Chart.Frame.Legend do
   # The margin a frame takes for its legend (spec/14 §4.5, D-169): the given one, with a top
   # or bottom margin `inside: false` grown to the legend's rows when it is smaller. Raises
   # `ArgumentError` for what cannot be fitted — a side margin narrower than the legend's
-  # estimated width, a row too wide for the plot with `wrap: false`, a single cell wider
-  # than the plot — naming the side and the size needed.
+  # estimated width, a top or bottom margin grown past the box (D-222), a row too wide for
+  # the plot with `wrap: false`, a single cell wider than the plot — naming the side and
+  # the size needed.
   @spec fit!(map(), map()) :: map()
   def fit!(%{legend: nil}, margin), do: margin
 
@@ -71,9 +72,10 @@ defmodule Visualize.Chart.Frame.Legend do
 
       layout.position in @horizontal ->
         needs = layout.extent.height + @inset
+        given = Map.fetch!(margin, layout.position)
 
-        if Map.fetch!(margin, layout.position) < needs,
-          do: Map.put(margin, layout.position, needs),
+        if given < needs,
+          do: grow!(margin, layout.position, needs, plot.height + given),
           else: margin
 
       true ->
@@ -90,6 +92,24 @@ defmodule Visualize.Chart.Frame.Legend do
         margin
     end
   end
+
+  # A top or bottom margin grown to the legend's need, which must leave the plot some height
+  # (spec/14 §4.5, D-222): `room` is the plot's height and the margin given on that side,
+  # what the need is taken from. A margin the author gave is not judged here.
+  defp grow!(margin, side, needs, room) do
+    if needs >= room do
+      box = room + Map.fetch!(margin, opposite(side))
+
+      raise ArgumentError,
+            "the legend at #{inspect(side)} outside the plot needs #{needs} in the #{side} " <>
+              "margin, which leaves the plot no height in a box #{box} high (spec/14 §4.5)"
+    end
+
+    Map.put(margin, side, needs)
+  end
+
+  defp opposite(:top), do: :bottom
+  defp opposite(:bottom), do: :top
 
   # -- layout ---------------------------------------------------------------------------
 

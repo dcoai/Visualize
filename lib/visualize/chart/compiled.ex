@@ -358,6 +358,8 @@ defmodule Visualize.Chart.Compiled do
   def render(%__MODULE__{} = compiled, sources) when is_map(sources) do
     sources = sources!(compiled, sources)
     {frame, hi} = realize(compiled, sources, nil)
+    # On the plot the frame stands on (§12.5, D-222); the chart it refits is not kept.
+    compiled = refit(compiled, frame, sources)
     drawn = drawn(compiled, frame, sources, hi, true)
     canvas = layer(compiled, drawn, :canvas, false)
 
@@ -383,6 +385,7 @@ defmodule Visualize.Chart.Compiled do
   def svg(%__MODULE__{} = compiled, sources) when is_map(sources) do
     sources = sources!(compiled, sources)
     {frame, hi} = realize(compiled, sources, nil)
+    compiled = refit(compiled, frame, sources)
     children = moving(layer(compiled, drawn(compiled, frame, sources, hi, true), :svg, true))
 
     Element.group(compiled.defs ++ undeclared(compiled, children) ++ children,
@@ -405,7 +408,7 @@ defmodule Visualize.Chart.Compiled do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
-    compiled = %{compiled | forces: Force.warm(frame.forces)}
+    compiled = %{refit(compiled, frame, sources) | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
 
     children =
@@ -525,6 +528,12 @@ defmodule Visualize.Chart.Compiled do
   `Visualize.Incremental` for a design with a viewport and a binary canvas layer
   (spec/14 §12.5), else `nil`; `bytes` the byte size of what the tick transmits.
 
+  The chart returned stands on the tick's frame (spec/14 §12.5, D-222): a top or bottom
+  legend in its margin grows that margin to the tick's rows, and when the tick's margin or
+  plot is not the chart's, the chart takes them and its static regions, `static/1` and
+  `backdrop/1` are re-rendered there — so a page that holds `static/1` reads it again
+  when `margin` changes. A tick on the compiled plot changes no byte.
+
   ## Options
 
     * `:now` - the window's upper end for a viewport design; by default the newest
@@ -543,7 +552,7 @@ defmodule Visualize.Chart.Compiled do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
-    compiled = %{compiled | forces: Force.warm(frame.forces)}
+    compiled = %{refit(compiled, frame, sources) | forces: Force.warm(frame.forces)}
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
 
@@ -683,35 +692,62 @@ defmodule Visualize.Chart.Compiled do
       compiled
     else
       compiled = %{compiled | chart: %{chart | frames: %{name => node}}}
-      frame = Frame.new(compiled.chart, realize_opts(compiled, sources))
-
-      regions =
-        Enum.map(compiled.regions, fn
-          %{status: :static, build: build} = region ->
-            %{region | static: build.(frame, sources, :css)}
-
-          region ->
-            region
-        end)
-
-      compiled = %{
-        compiled
-        | regions: regions,
-          size: frame.size,
-          margin: frame.margin,
-          plot: frame.plot
-      }
-
-      drawn = drawn(compiled, frame, sources, nil, true)
-      static = layer(compiled, drawn, :static, false)
-
-      %{
-        compiled
-        | static: root(compiled, compiled.defs ++ undeclared(compiled, static) ++ static),
-          backdrop: static_backdrop(compiled, drawn)
-      }
+      restatic(compiled, Frame.new(compiled.chart, realize_opts(compiled, sources)), sources)
     end
   end
+
+  # The chart on the plot the tick's frame stands on (spec/14 §12.5, D-222): a top or
+  # bottom legend in its margin grows that margin to the tick's rows (§4.5, D-169), so a
+  # tick whose legend gained or lost rows realizes another margin and plot than the chart
+  # was compiled over. The marks and the moving regions are drawn on the tick's; the static
+  # ones, the group's translate, a polar center and the canvas offset read the chart's, so
+  # the chart takes the tick's and its static regions are re-rendered there. A tick on the
+  # compiled plot — every tick of a legend that fits — is the chart as it was.
+  defp refit(%{margin: margin, plot: plot, size: size} = compiled, frame, _sources)
+       when frame.margin == margin and frame.plot == plot and frame.size == size,
+       do: compiled
+
+  defp refit(compiled, frame, sources), do: restatic(compiled, frame, sources)
+
+  # Every static region re-rendered from the frame, and the chart on its geometry: what a
+  # ticked frame node (#424) and a tick's grown or shrunk margin (D-222) share. The
+  # incremental canvas is the plot (§12.5), so a new plot forgets what the window drew and
+  # its next payload is the full redraw, as a recompilation's first is (#456).
+  defp restatic(compiled, frame, sources) do
+    regions =
+      Enum.map(compiled.regions, fn
+        %{status: :static, build: build} = region ->
+          %{region | static: build.(frame, sources, :css)}
+
+        region ->
+          region
+      end)
+
+    viewport =
+      if frame.plot == compiled.plot, do: compiled.viewport, else: redrawn(compiled.viewport)
+
+    compiled = %{
+      compiled
+      | regions: regions,
+        size: frame.size,
+        margin: frame.margin,
+        plot: frame.plot,
+        box: box(frame),
+        viewport: viewport
+    }
+
+    drawn = drawn(compiled, frame, sources, nil, true)
+    static = layer(compiled, drawn, :static, false)
+
+    %{
+      compiled
+      | static: root(compiled, compiled.defs ++ undeclared(compiled, static) ++ static),
+        backdrop: static_backdrop(compiled, drawn)
+    }
+  end
+
+  defp redrawn(nil), do: nil
+  defp redrawn(window), do: %{window | drawn: nil, incremental: nil}
 
   # A tick re-realizes the frame, and must do it at the size the chart was compiled at
   # (spec/14 §4.2, #427): a design records none, so the compiled chart is where it lives.

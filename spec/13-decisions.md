@@ -3011,3 +3011,22 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Breaking: the finding `{:timeout, call}` is now `{:hung, call, timeout}`, and `timeout:` defaults to 30 s (was 1 s). A suite that passed `timeout:` to cap a callback's speed passes `reductions:` instead.
 - A correct feed passes the kit with every scheduler saturated, and the kit's own suite shows it (spec/08 §12.4). A feed that hangs costs its suite up to 30 s before failing. A suite that wants a hang reported sooner may lower `timeout:`, giving up the margin a loaded host needs. The kit's own suite does that only for a callback that never answers, so the bound only decides when the hang is reported, never whether.
 - `conformance.ex` loses its own spawn-and-wait.
+
+## 222. D-222 — A compiled chart's margin is the latest tick's, and a grown margin stays inside the box
+
+**Context.** #859, #860, surfaced while evaluating #761. A top or bottom legend in its margin grows that margin to hold its wrapped rows (D-169), and the rows follow the legend's entries. A compiled chart fixed `margin` and `plot` when it was compiled (spec/14 §12.1), and only a ticked frame node (#424) changed them. Every tick re-realizes the frame through `Visualize.Chart.Frame.new/2`, so a tick whose inferred color scale gained categories laid its marks and its dynamic legend out on a smaller plot, while the static regions — a fixed scale's axis and grid — the group's translate, a `:polar` frame's center and the canvas layer's offset stayed on the compile-time plot. At 300 × 200 with `margin.top` 20, a chart compiled over one series had a 150-high plot, and stepped to twelve series its marks were drawn on an 86-high plot under axes drawn on the 150. With long enough names the need passed the box: twelve series grew `margin.top` to 196 and the plot to −26, and nothing raised. Every D-169 test realized a frame once; none stepped a compiled chart whose legend's rows changed between ticks, and nothing asserted a plot's height after its margin grew.
+
+**Decision.**
+- **A tick's margin carries into the compiled chart.** When the frame a tick realizes (`tick/3`, `step/3`) has a `margin`, `plot` or `size` other than the compiled chart's, the chart takes the frame's `margin`, `plot`, `size` and `box`, re-renders every static region from that frame, and rebuilds the static document and the static backdrop. That is the path a ticked frame node already took (#424), and the two share one function. `render/2` and `svg/2` do the same for their one drawing and keep nothing.
+- **The incremental canvas starts again at a new plot.** The incremental canvas is the plot (spec/14 §12.5), so a tick that changes the plot forgets the viewport's drawn state and its payload is the full redraw at the new size, as a recompilation's first tick is (#456).
+- **A margin past the box is a fault.** When a top or bottom legend's need would leave the plot a height of 0 or less, `Frame.new/2` raises `ArgumentError` naming the side, the need and the box's height. It raises only when the legend grew the margin: a margin the author gave is the author's.
+
+**Rejected.**
+- **Reserving the margin at compilation.** The compiled chart cannot know the categories of future ticks, and a margin reserved for the most it might see leaves a gap over the plot for every tick that has fewer.
+- **Cutting the legend to fit.** A legend that silently drops entries is a legend the author cannot see, which spec/14 §4.5 already rules worse than a fault for a side margin; `max_label` is the author's way to narrow it.
+- **Making every region dynamic when a legend sits in a margin.** It would hold the axes to the marks by drawing them every tick, even on the ticks whose plot did not move, which is every tick of most charts. Re-rendering only on a changed plot costs nothing when nothing changed.
+
+**Consequences.**
+- A chart whose legend is fixed, inside the plot or fits its margin changes no byte: its ticks stand on the compiled plot and the path is never taken. The goldens are unchanged.
+- `static/1` and `backdrop/1` can change after a tick. A page that sends the static document once, at mount, sends it again when the compiled chart's `margin` changes.
+- A design that grew its margin past the box before now raises in `Frame.new/2`, `Chart.render/2`, `Chart.compile/2` and every tick.
