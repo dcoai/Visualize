@@ -16,6 +16,7 @@ defmodule Visualize.Board.State do
   | `{:crashed, reason}` | `:bad` | Crashed, restarting |
   | `{:down, reason}` | `:bad` | Feed down and the reason |
   | `{:invalid, errors}` | `:bad` | Wrong binding and the first fault |
+  | `{:over_budget, rows, ceiling}` | `:bad` | Over budget, the rows and the ceiling |
   | `:loading` | `:info` | Loading… |
   | `:no_data` | `:neutral` | No data yet |
   | `{:stale, age}` | `:warning` | Stale and the age |
@@ -48,13 +49,18 @@ defmodule Visualize.Board.State do
           | {:stale, number() | nil}
           | {:down, term()}
           | {:invalid, [Validator.error(), ...]}
+          | {:over_budget, pos_integer(), pos_integer()}
           | {:crashed, term()}
 
-  @typedoc "What a cell knows of one slot: its delivery, the delivery's schema and the feed's status."
+  @typedoc """
+  What a cell knows of one slot: its delivery, the delivery's schema and the feed's status,
+  or `{:over_budget, rows, ceiling}` with no delivery for a slot the board did not hand its
+  rows (spec/15 §8.2, D-227).
+  """
   @type slot :: %{
           delivery: Delivery.t() | nil,
           schema: Schema.t() | nil,
-          status: Visualize.Feed.Monitor.status()
+          status: Visualize.Feed.Monitor.status() | {:over_budget, pos_integer(), pos_integer()}
         }
 
   @banner_height 22
@@ -67,7 +73,8 @@ defmodule Visualize.Board.State do
 
   @doc """
   The state of a cell's slots at `now` (spec/15 §8.4), the first that holds of: down (a
-  slot's feed is down), loading (a slot has no delivery yet), no data (every delivery
+  slot's feed is down), over budget (a slot the board did not hand its rows, more than
+  its ceiling, D-227), loading (a slot has no delivery yet), no data (every delivery
   empty), stale (a feed the monitor calls stale, or a newest `DateTime` reading older than
   `stale_after` seconds at `now`), capped (a delivery is `capped`), and live. A cell with
   no slots is live. Crashed is the board's, which draws it for a cell that cannot.
@@ -78,6 +85,7 @@ defmodule Visualize.Board.State do
 
     cond do
       down = Enum.find_value(slots, &down/1) -> {:down, down}
+      over = Enum.find(slots, &match?(%{status: {:over_budget, _, _}}, &1)) -> over.status
       Enum.any?(slots, &(&1.delivery == nil)) -> :loading
       slots != [] and Enum.all?(slots, &(Table.rows(&1.delivery) == [])) -> :no_data
       stale = stale(slots, now, stale_after) -> stale
@@ -133,6 +141,7 @@ defmodule Visualize.Board.State do
   def role({:crashed, _reason}), do: :bad
   def role({:down, _reason}), do: :bad
   def role({:invalid, _errors}), do: :bad
+  def role({:over_budget, _rows, _ceiling}), do: :bad
   def role(:loading), do: :info
   def role(:no_data), do: :neutral
   def role({:stale, _age}), do: :warning
@@ -144,6 +153,10 @@ defmodule Visualize.Board.State do
   def words({:crashed, _reason}), do: "Crashed, restarting"
   def words({:down, reason}), do: "Feed down: " <> reason(reason)
   def words({:invalid, [error | _]}), do: "Wrong binding: " <> Validator.format(error)
+
+  def words({:over_budget, rows, ceiling}),
+    do: "Over budget: #{Format.number(rows)} rows, ceiling #{Format.number(ceiling)}"
+
   def words(:loading), do: "Loading…"
   def words(:no_data), do: "No data yet"
   def words({:stale, nil}), do: "Stale"
@@ -257,7 +270,7 @@ defmodule Visualize.Board.State do
 
   @doc ~s(A state's name, the `data-vis-state` its drawings carry: `"stale"`, `"down"`, …)
   @spec name(t()) :: String.t()
-  def name({tag, _detail}), do: Atom.to_string(tag)
+  def name(state) when is_tuple(state), do: state |> elem(0) |> Atom.to_string()
   def name(state) when is_atom(state), do: Atom.to_string(state)
 
   defp title(:live), do: "Live"

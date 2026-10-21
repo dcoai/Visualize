@@ -275,6 +275,11 @@ defmodule Visualize.Board.Snapshot.Reader do
 
   defp status(status, _path) when status in [:loading, :live, :stale], do: []
   defp status({:down, reason}, _path) when is_binary(reason), do: []
+
+  defp status({:over_budget, rows, ceiling}, _path)
+       when is_integer(rows) and rows > 0 and is_integer(ceiling) and ceiling > 0,
+       do: []
+
   defp status(_status, path), do: [{path, {:type, :status}}]
 
   defp under(prefix, errors),

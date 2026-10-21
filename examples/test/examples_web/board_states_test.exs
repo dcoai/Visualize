@@ -1,8 +1,8 @@
 defmodule ExamplesWeb.BoardStatesTest do
   @moduledoc """
   `/board` shows every cell state and a composite selection (spec/15 §8.4, §13.2, D-167,
-  #781, work item #821): four cells over feeds made to be stale, empty, capped and wrongly
-  typed, and a cell whose feed names a link by two fields, picked and selected as a map,
+  #781, work item #821, #865, D-227): five cells over feeds made to be stale, empty,
+  capped, wrongly typed and over the board's ceiling, and a cell whose feed names a link by two fields, picked and selected as a map,
   kept in the page's URL.
   """
   use ExUnit.Case, async: false
@@ -18,7 +18,7 @@ defmodule ExamplesWeb.BoardStatesTest do
   test "the page renders the new cells and says what each shows" do
     html = build_conn() |> get("/board") |> html_response(200)
 
-    for cell <- ~w(links stale no_data capped invalid),
+    for cell <- ~w(links stale no_data capped invalid over_budget),
         do: assert(html =~ ~s(data-vis-cell="#{cell}"), cell)
 
     assert html =~ ~s(phx-click="select_link")
@@ -29,7 +29,7 @@ defmodule ExamplesWeb.BoardStatesTest do
     {:ok, board} = Examples.BoardDemo.board()
     {:ok, _info} = Server.subscribe(board)
     :ok = Server.tick(board)
-    views = views(%{}, [:stale, :no_data, :capped, :invalid])
+    views = views(%{}, [:stale, :no_data, :capped, :invalid, :over_budget])
     Server.unsubscribe(board, self())
 
     assert {:stale, age} = views.stale.state
@@ -45,6 +45,12 @@ defmodule ExamplesWeb.BoardStatesTest do
 
     assert {:invalid, [_ | _] = errors} = views.invalid.state
     assert inspect(errors) =~ "type_mismatch"
+
+    # Over the board's ceiling: the rows are never handed to the cell, and its panel says so.
+    assert views.over_budget.state == {:over_budget, 6000, 5000}
+    assert views.over_budget.svg == nil
+    assert views.over_budget.note =~ ~s(data-vis-state="over_budget")
+    assert views.over_budget.note =~ "Over budget: 6,000 rows, ceiling 5,000"
   end
 
   test "a link's pick is its composite identity, which the board selects as a map" do

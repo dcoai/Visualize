@@ -403,13 +403,15 @@ defmodule ExamplesWeb.BoardLive do
             always <em>Feed down</em>.
           </p>
           <p class="board-every-state">
-            The last row is one chart over four feeds, each made to be in one state: <em>Stale</em>
+            The last rows are one chart over five feeds, each made to be in one state: <em>Stale</em>
             stopped reporting ninety seconds ago, past the board's <code>stale_after: 30</code>;
             <em>No data</em>
             answers no rows; <em>Capped</em>
-            answers only its newest readings; and <em>Invalid binding</em>
+            answers only its newest readings; <em>Invalid binding</em>
             sends text where
-            the design reads a number, so the cell names the mismatch rather than crash.
+            the design reads a number, so the cell names the mismatch rather than crash; and
+            <em>Over budget</em>
+            ships 6,000 readings past the board's ceiling of 5,000, so the board never hands the cell its rows.
           </p>
           <p class="board-links">
             <em>Links</em>

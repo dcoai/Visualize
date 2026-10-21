@@ -47,6 +47,22 @@ defmodule Visualize.Board.StateTest do
       assert State.of(%{a: stale_and_capped, b: slot([], status: {:down, :gone})}, @now, 60) ==
                {:down, :gone}
     end
+
+    test "over budget is after down and before every other state (D-227)" do
+      over = slot(nil, status: {:over_budget, 20_000, 5_000})
+      state = {:over_budget, 20_000, 5_000}
+
+      assert State.of(%{a: over}, @now, nil) == state
+
+      assert State.of(%{a: over, b: slot(nil, status: {:down, :gone})}, @now, nil) ==
+               {:down, :gone}
+
+      assert State.of(%{a: over, b: slot(nil, status: :loading)}, @now, nil) == state
+      assert State.of(%{a: over, b: slot([])}, @now, nil) == state
+      assert State.of(%{a: over, b: slot([at(0)], capped: true)}, @now, 60) == state
+      assert State.of(%{a: over, b: slot([at(9)], status: :stale)}, @now, nil) == state
+      assert State.name(state) == "over_budget"
+    end
   end
 
   describe "the drawings (spec/15 §8.4)" do
@@ -56,7 +72,8 @@ defmodule Visualize.Board.StateTest do
       {:loading, :info, "Loading…"},
       {:no_data, :neutral, "No data yet"},
       {{:stale, 330}, :warning, "Stale: 5m30s old"},
-      {:capped, :info, "Capped: part of the window"}
+      {:capped, :info, "Capped: part of the window"},
+      {{:over_budget, 200_000, 5_000}, :bad, "Over budget: 200,000 rows, ceiling 5,000"}
     ]
 
     test "every state renders as the whole cell, in its role's color, glyph and words" do

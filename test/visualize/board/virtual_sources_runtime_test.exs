@@ -75,6 +75,23 @@ defmodule Visualize.Board.VirtualSourcesRuntimeTest do
     end
   end
 
+  test "a source's answer over the board's ceiling is over budget, as a feed's is (D-227)" do
+    tripled = %{@doubled | elixir: "fn %{raw: rows} -> rows ++ rows ++ rows end"}
+
+    {{:ok, board}, _agent} =
+      start(
+        board: board(%{tripled: tripled}),
+        budget: 10,
+        binding: Binding.new(%{{:a, :primary} => :tripled})
+      )
+
+    {:ok, _info} = Server.subscribe(board)
+    :ok = Server.tick(board)
+
+    view = view_until(:a, &match?({:over_budget, _, _}, &1.state))
+    assert view.state == {:over_budget, 15, 10} and view.svg == nil
+  end
+
   test "a cell bound to a virtual source draws its answer" do
     {{:ok, board}, _agent} = start([])
     {:ok, _info} = Server.subscribe(board)

@@ -58,6 +58,10 @@ defmodule Visualize.Board.Server do
   resize, or new board variables, recompute the budgets; a feed that honors `:budget` and
   whose budget changed is fetched again.
 
+  The ceiling is the one hard bound (D-227): a slot whose delivery, at its own budget,
+  still holds more rows than `:budget` — a `:budget` feed that over-delivers — is handed
+  to its cell without them, and the cell is `{:over_budget, rows, ceiling}`, never drawn.
+
   ## Options
 
     * `:board` - the `%Visualize.Board{}` (required)
@@ -79,7 +83,8 @@ defmodule Visualize.Board.Server do
       (default `1000`)
     * `:budget` - the ceiling on every slot's budget: each bound slot is asked the
       budget its cell's plot width and marks derive, or its design declares, capped by
-      this; `nil` caps nothing (default `nil`, spec/15 §8.2, D-226)
+      this, and no slot is handed more rows than this; `nil` caps nothing (default
+      `nil`, spec/15 §8.2, D-226, D-227)
     * `:max_heap` - each cell's heap limit in words (default `25_000_000`)
     * `:clock` - the board's now, a function of no argument answering a UTC `DateTime`
       (default `DateTime.utc_now/0`)
@@ -107,6 +112,7 @@ defmodule Visualize.Board.Server do
   alias Visualize.Board
   alias Visualize.Board.{Binding, Budget, Cell, Draw, Export, Snapshot, State, View}
   alias Visualize.Data.Schema.Cache
+  alias Visualize.Data.Table
   alias Visualize.Feed
   alias Visualize.Feed.Monitor
   alias Visualize.VirtualSource.{Engine, Join}
@@ -775,14 +781,37 @@ defmodule Visualize.Board.Server do
   end
 
   # A slot's delivery, schema and status, its rows carrying the joined fields of the
-  # per-identity sources over what it reads (spec/15 §14.7).
+  # per-identity sources over what it reads (spec/15 §14.7); a slot over the ceiling
+  # without its rows.
   defp slot(state, cell, slot, deliveries, statuses, cache) do
-    %{delivery: delivery, schema: schema} =
-      data = read(state, cell, slot, deliveries, statuses, cache)
+    data = read(state, cell, slot, deliveries, statuses, cache)
 
-    joins = Map.get(state.joins, {cell, slot}, [])
-    {delivery, schema} = Join.join(delivery, schema, joins, state.engine)
-    %{data | delivery: delivery, schema: schema}
+    case over_budget(data, state.ceiling) do
+      nil ->
+        joins = Map.get(state.joins, {cell, slot}, [])
+        {delivery, schema} = Join.join(data.delivery, data.schema, joins, state.engine)
+        %{data | delivery: delivery, schema: schema}
+
+      over ->
+        over
+    end
+  end
+
+  # A slot whose delivery, at its own budget, still holds more rows than the ceiling
+  # (spec/15 §8.2, D-227): handed with no delivery, so its cell never holds the rows, and
+  # the status `{:over_budget, rows, ceiling}` — unless its feed is down, which says more.
+  # `nil` for a slot within the ceiling, and for every slot of a board with none.
+  defp over_budget(%{delivery: nil}, _ceiling), do: nil
+  defp over_budget(_data, nil), do: nil
+
+  defp over_budget(%{delivery: delivery, status: status} = data, ceiling) do
+    rows = length(Table.rows(delivery))
+
+    cond do
+      rows <= ceiling -> nil
+      match?({:down, _reason}, status) -> %{data | delivery: nil}
+      true -> %{data | delivery: nil, status: {:over_budget, rows, ceiling}}
+    end
   end
 
   defp read(state, cell, slot, deliveries, statuses, cache) do

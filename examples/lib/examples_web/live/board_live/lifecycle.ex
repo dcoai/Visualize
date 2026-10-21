@@ -237,7 +237,8 @@ defmodule ExamplesWeb.BoardLive.Lifecycle do
         <code>Visualize.Feed.Conformance</code> is the kit a host runs over its own feeds in
         its tests; here it runs over every feed of this board. Each feed is asked for no
         window and the last five minutes. <em>Offline</em> fails on purpose: its source
-        cannot be reached.
+        cannot be reached; and <em>over_budget</em> fails on purpose too, serving more rows
+        than the budget it names.
       </p>
       <button type="button" phx-click="conformance" disabled={@conformance == :running}>
         {if @conformance == :running, do: "Running…", else: "Run the conformance kit"}

@@ -212,6 +212,36 @@ defmodule Visualize.Board.RuntimeTest do
       assert b.frames >= 1
     end
 
+    test "the same heap-blowing feed under a ceiling is over budget: never drawn, never killed" do
+      {small, _} = scripted(schema: @schema, rows: rows(20))
+      {big, _} = scripted(schema: @schema, supports: [:budget], rows: rows(200_000))
+      binding = Binding.new(%{{:a, :primary} => :big, {:b, :primary} => :small})
+
+      {:ok, board} =
+        start(
+          feeds: %{big: big, small: small},
+          binding: binding,
+          max_heap: 2_000_000,
+          budget: 5_000
+        )
+
+      Server.subscribe(board)
+
+      # The board does not hand the cell the rows (D-227), so its heap never grows for them.
+      a = view_until(:a, &(&1.state != :loading))
+      assert a.state == {:over_budget, 200_000, 5_000}
+      assert a.svg == nil and a.frames == 0
+      assert a.note =~ ~s(data-vis-state="over_budget")
+      assert a.note =~ "Over budget: 200,000 rows, ceiling 5,000"
+      assert view_until(:b, &(&1.state == :live)).frames >= 1
+
+      :ok = Server.tick(board)
+      info = Server.info(board)
+      assert info.cells["a"].state == {:over_budget, 200_000, 5_000}
+      assert info.cells["a"].restarts == 0
+      assert :sys.get_state(info.cells["a"].pid).slots["primary"].delivery == nil
+    end
+
     test "a cell that raises shows crashed and does not take the board with it" do
       # A string where the time scale needs an instant: the cell's render raises.
       {bad, _} = scripted(schema: @schema, rows: [%{t: "noon", v: 1}, %{t: "one", v: 2}])

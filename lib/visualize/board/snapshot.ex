@@ -58,7 +58,12 @@ defmodule Visualize.Board.Snapshot do
   @type slot :: %{
           delivery: Delivery.t() | nil,
           schema: Visualize.Data.Schema.t() | nil,
-          status: :loading | :live | :stale | {:down, String.t()}
+          status:
+            :loading
+            | :live
+            | :stale
+            | {:down, String.t()}
+            | {:over_budget, pos_integer(), pos_integer()}
         }
 
   @typedoc "What a snapshot holds of one cell."
@@ -85,7 +90,7 @@ defmodule Visualize.Board.Snapshot do
   # A snapshot of what a board holds (spec/15 §12.2): the runtime's and `realize/4`'s one
   # constructor. `cells` maps a name to its `chart`, `vars`, `slots` and `crashed` reason
   # as the holder has them; each slot is normalized here — rows as a list, a status as one
-  # of the four a snapshot keeps, a down reason and a crash as their words — so a snapshot
+  # of the five a snapshot keeps, a down reason and a crash as their words — so a snapshot
   # holds only what its codecs write.
   @spec new(keyword()) :: t()
   def new(fields) do
@@ -124,6 +129,7 @@ defmodule Visualize.Board.Snapshot do
   defp status({:down, reason}) when is_binary(reason), do: {:down, reason}
   defp status({:down, reason}), do: {:down, State.reason(reason)}
   defp status(status) when status in [:loading, :live, :stale], do: status
+  defp status({:over_budget, _rows, _ceiling} = status), do: status
   defp status(nil), do: :loading
 
   defp crashed(nil), do: nil

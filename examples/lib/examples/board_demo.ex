@@ -32,9 +32,9 @@ defmodule Examples.BoardDemo do
     feed's own `status` map. Every time design brushes with its own `brush: :x`.
   - **links** is a bar per network link over a feed that names a link by two fields,
     `host` and `iface` (`Examples.BoardDemo.Links`, D-167), so a pick is a composite
-    selection; **stale**, **no_data**, **capped** and **invalid** are the *Line Chart* over
-    feeds made to be in that state (`Examples.BoardDemo.States`), so every cell state of
-    spec/15 §8.4 is on the page (#781, work item #821).
+    selection; **stale**, **no_data**, **capped**, **invalid** and **over_budget** are the
+    *Line Chart* over feeds made to be in that state (`Examples.BoardDemo.States`), so
+    every cell state of spec/15 §8.4 is on the page (#781, work item #821, #865).
 
   The board shares one window, the last five minutes by default, in UTC and shown in the
   board's zone; one sync group joins the time charts' hover and brush. The board is
@@ -138,6 +138,9 @@ defmodule Examples.BoardDemo do
       feeds: feeds(),
       boards: %{detail: detail_value("api")},
       virtual_sources: [Examples.BoardDemo.Sources],
+      # The ceiling (spec/15 §8.2, D-227): above every cell's derived budget at the page's
+      # widths, and below what the over-budget cell's feed ships.
+      budget: 5_000,
       tick: 1000
     ]
 
@@ -215,7 +218,8 @@ defmodule Examples.BoardDemo do
         stale: %{x: 0, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Stale"},
         no_data: %{x: 3, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "No data"},
         capped: %{x: 6, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Capped"},
-        invalid: %{x: 9, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Invalid binding"}
+        invalid: %{x: 9, y: 22, w: 3, h: 3, ref: {:composite, 2}, title: "Invalid binding"},
+        over_budget: %{x: 0, y: 25, w: 6, h: 3, ref: {:composite, 2}, title: "Over budget"}
       },
       virtual_sources: virtual_sources()
     })
@@ -569,7 +573,8 @@ defmodule Examples.BoardDemo do
       {:stale, :points} => :stale,
       {:no_data, :points} => :no_data,
       {:capped, :points} => :capped,
-      {:invalid, :points} => :invalid
+      {:invalid, :points} => :invalid,
+      {:over_budget, :points} => :over_budget
     })
   end
 

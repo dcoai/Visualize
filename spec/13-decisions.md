@@ -3115,3 +3115,27 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A board with no `budget:` no longer asks its feeds for everything: each slot is asked what its plot can draw. A feed that lacks `:budget` is reduced by the monitor to the largest of its slots' budgets, and further per slot.
 - The over-ceiling state — a `:budget` feed that ships more than the ceiling — is #865's, and is not decided here.
 - `Visualize.Feed.Monitor`'s `budget:` is one budget or a map by feed name; a monitor built with one budget behaves as it did, except that `budget/2` now refetches a `:budget` feed whose budget changed.
+
+## 227. D-227 — A slot over the board's ceiling is handed without its rows, and its cell is over budget
+
+**Context.** #760, #865. D-226 made the board's `budget:` the ceiling over every slot's derived budget and left one case open: a feed that names `:budget` and ships more than it was asked. spec/08 §11.2 does not reduce such a feed again — the overrun is the feed's, and the conformance kit names it — so its rows reached the cell whole. A cell handed 200,000 rows applies and compiles them until its heap limit kills it, and is shown *Crashed, restarting* on every restart: the true fault, an over-delivering feed, is never named. Four things had to be decided: where the check is made, what a cell over the ceiling is handed, where the state stands among the others, and whether a slot's own derived budget counts.
+
+**Decision.**
+- **The check is the board's, where the delivery and the ceiling are both known.** After `Visualize.Board.Server` reduces a slot to its own budget (D-226), a slot whose delivery still holds more rows than the ceiling is over budget. It is the last point before the rows are copied into the cell's mailbox, so the cell never holds them: a check in the cell would come after the copy that blows its heap.
+- **An over-budget slot is handed without its delivery**: `delivery: nil`, its schema, and the status `{:over_budget, rows, ceiling}`. The rows are not reduced, truncated or drawn; spec/08 §11.2's "not reduced again" stands, so visualize neither hides the overrun nor draws a drawing the feed did not send. A slot whose feed is also down keeps `{:down, reason}`, and is handed no rows either.
+- **The state is `{:over_budget, rows, ceiling}`, `:bad`, after down and before loading.** Its words are `Over budget: 200,000 rows, ceiling 5,000`, the counts grouped by `Visualize.Format.number/1`, and its panel stands in the chart's place. Down outranks it, as down outranks loading: a feed that cannot answer is the larger fact. It outranks loading, since another slot's loading passes and the overrun persists; it outranks no data, stale and capped, since those describe a delivery the cell draws, and an over-budget cell draws none. The role is `:bad` with down and invalid: the feed broke a contract, and nothing is drawn until it is fixed.
+- **Every slot is held to it**, a virtual source's as a feed's: the ceiling bounds what a cell is handed, whoever produced it.
+- **The ceiling is the only hard bound, and with no ceiling there is no over-budget state.** A slot's derived budget is a request computed from its plot's pixels (D-226); a budget-honoring feed may round it — a bucket width, a step that keeps one more row — and it moves with every resize, so a cell blanked a few rows over its derived budget would flicker between drawn and not as the page is resized. The ceiling is a number the host chose as the most any cell may hold. A board with `budget: nil` has chosen none, and its cells' heap limit (spec/15 §8.3) is their defense.
+- **A snapshot keeps the state's slot.** The status is a fifth form a snapshot holds, `{:over_budget, rows, ceiling}` in the map form and `{"over_budget": [rows, ceiling]}` in the JSON form, both positive integers, and its slot has no delivery, so a snapshot of an over-budget cell draws the same panel and never holds the rows.
+
+**Rejected.**
+- **Truncating or reducing to the ceiling.** It hides the overrun spec/08 §11.2 says visualize must not hide, and draws something the feed did not send as though it had.
+- **The check in the cell.** The cell would be handed the rows first: the copy into its mailbox is what blows its heap.
+- **The derived budget as a hard bound**, above.
+- **A cell fault (`fault: {:over_budget, …}`) beside the state** (#760's first wording). The cell's fault is application's; a slot's status already carries what the board knows of a slot, as `{:down, {:unbound, slot}}` does, and the cell decides its state from its slots alone.
+
+**Consequences.**
+- A cell bound to an over-delivering `:budget` feed under a ceiling is drawn *Over budget* and is never killed for its heap by those rows; without a ceiling it is killed and restarted as before.
+- `Visualize.Board.State.t()` gains `{:over_budget, pos_integer(), pos_integer()}`, and `name/1` names it `"over_budget"`.
+- A virtual source whose output exceeds the ceiling — a union of feeds each asked the ceiling — is over budget too; reducing a source's output to its slots' budgets is not decided here.
+- The demo's row of states (`Examples.BoardDemo.States`, spec/15 §10) shows it, under a ceiling of 5,000 on the demo board, so every state is still on the page.
