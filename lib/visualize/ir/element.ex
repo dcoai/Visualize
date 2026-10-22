@@ -527,6 +527,28 @@ defmodule Visualize.IR.Element do
   end
 
   @doc """
+  Whether the element paints its stroke under its fill: a `:text` whose effective stroke —
+  its own `:stroke`, else `inherited`'s, the style its groups give it — is neither absent
+  nor `:none`. A text's stroke is a halo, which frames the glyphs and never covers them, so
+  every backend asks this and paints the stroke first (spec/09 §2.5, §3.3.1, D-235).
+
+      iex> text = Visualize.IR.Element.text("A", 0, 0, %{fill: "#222"})
+      iex> Visualize.IR.Element.stroke_first?(text, %{stroke: "#fff"})
+      true
+      iex> Visualize.IR.Element.stroke_first?(text, %{})
+      false
+      iex> Visualize.IR.Element.stroke_first?(Visualize.IR.Element.rect(0, 0, 2, 2, %{stroke: "#fff"}), %{})
+      false
+  """
+  @spec stroke_first?(t(), map()) :: boolean()
+  def stroke_first?(%__MODULE__{type: :text, style: style}, inherited) when is_map(inherited) do
+    stroke = if is_nil(style[:stroke]), do: inherited[:stroke], else: style[:stroke]
+    stroke not in [nil, :none]
+  end
+
+  def stroke_first?(%__MODULE__{}, inherited) when is_map(inherited), do: false
+
+  @doc """
   Writes a datum's fields onto the element as the data attributes `TooltipHook` reads
   (spec/10 §12.2, D-75).
 

@@ -54,14 +54,7 @@ defmodule Visualize.Render.Segments do
   @doc "The tree's SVG markup as segments: their texts concatenated are `Visualize.Render.to_string(tree, backend: :svg)`."
   @spec svg(Element.t(), cache()) :: {t(), cache()}
   def svg(%Element{} = tree, cache) when is_map(cache) do
-    step = fn element, nil ->
-      case SVG.segment(element) do
-        {:leaf, text} -> {:leaf, text}
-        {:node, open, close, children} -> {:node, open, close, children, nil}
-      end
-    end
-
-    run(tree, :svg, step, &IO.iodata_to_binary/1, nil, cache)
+    run(tree, :svg, &SVG.segment/2, &IO.iodata_to_binary/1, %{}, cache)
   end
 
   @doc """

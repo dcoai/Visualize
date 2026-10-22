@@ -197,8 +197,9 @@ defmodule Visualize.Backend.Canvas.Output do
     ]
   end
 
-  defp command_to_js_line({:fillText, [text, x, y]}) do
-    ["ctx.fillText('", escape_js(text || ""), "', ", format_num(x), ", ", format_num(y), ");"]
+  defp command_to_js_line({draw, [text, x, y]}) when draw in [:fillText, :strokeText] do
+    ["ctx.", Atom.to_string(draw), "('", escape_js(text || ""), "', "] ++
+      [format_num(x), ", ", format_num(y), ");"]
   end
 
   # An image loads asynchronously: the draw runs in `onload`, at the transform current

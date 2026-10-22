@@ -51,6 +51,19 @@ release it merely follows.
   declares may define a key twice (spec/10 §4.1). No API change: a host regenerates its
   `visualize_hooks.js` (`Visualize.Hooks.install!/0`) to take the fix.
 
+- **A text's halo is drawn under its glyphs** (#775, #927, D-235). A text or a label whose
+  style sets a `stroke` — a halo — drew it over its glyphs, since SVG paints a fill and
+  then its stroke, so a halo wide enough to frame text over a busy picture covered the
+  letters it framed; the canvas drew no text stroke at all. A text whose effective stroke
+  is present, its own or a group's above it, now paints the stroke first on every backend:
+  SVG writes `paint-order="stroke"` on the `<text>`, which a PNG through resvg honors too,
+  and the canvas commands draw `strokeText` before `fillText` in the text's stroke color,
+  width, join, cap and dash. There is no style key for the order: a halo is the one use a
+  text's stroke has. `Visualize.IR.Element.stroke_first?/2` is the one decision every
+  backend asks. SVG without a stroked text is unchanged byte for byte; the binary canvas
+  stream carries no text, as before. The gallery's Bubble Chart names its countries in a
+  halo now.
+
 - **Tuple rows draw through a design, and a tick's bad data is a fault, not a crash**
   (#855, #924, D-232). A list of tuple rows bound to a design's slot applied with
   `{:ok, _}` and drew nothing, since a design reads fields by name and a tuple has none.

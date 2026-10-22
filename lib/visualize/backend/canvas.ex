@@ -400,7 +400,7 @@ defmodule Visualize.Backend.Canvas do
            content: nil,
            children: [_ | _] = lines,
            transform: transform
-         },
+         } = text,
          inherited
        ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
@@ -408,13 +408,13 @@ defmodule Visualize.Backend.Canvas do
     y = attrs[:y] || 0
     font_size = if is_number(style[:font_size]), do: style[:font_size], else: 10
 
-    {commands, _y} =
-      Enum.reduce(lines, {[], y}, fn %Element{attrs: line, content: content}, {acc, at} ->
+    {at, _y} =
+      Enum.map_reduce(lines, y, fn %Element{attrs: line, content: content}, at ->
         at = at + em(line[:dy], font_size)
-        {acc ++ [{:fillText, [content || "", line[:x] || x, at]}], at}
+        {[content || "", line[:x] || x, at], at}
       end)
 
-    scoped(setup, alpha(commands, Map.merge(inherited, style), :fill_opacity))
+    scoped(setup, text_draws(text, at, inherited))
   end
 
   defp element_to_commands(
@@ -424,17 +424,11 @@ defmodule Visualize.Backend.Canvas do
            style: style,
            content: content,
            transform: transform
-         },
+         } = text,
          inherited
        ) do
     setup = transform_commands(transform) ++ text_style_commands(style)
-    x = attrs[:x] || 0
-    y = attrs[:y] || 0
-
-    scoped(
-      setup,
-      alpha([{:fillText, [content || "", x, y]}], Map.merge(inherited, style), :fill_opacity)
-    )
+    scoped(setup, text_draws(text, [[content || "", attrs[:x] || 0, attrs[:y] || 0]], inherited))
   end
 
   # A group's style is set after its transform, inside the save/restore pair, so children
@@ -591,14 +585,7 @@ defmodule Visualize.Backend.Canvas do
         color -> cmds ++ [{:set_strokeStyle, [to_string(color)]}]
       end
 
-    # A stroke that keeps its width on screen divides it by the transform's scale when it
-    # is set, which only the context knows (spec/09 §3.3.3, spec/14 §3.9).
-    cmds =
-      case {style[:stroke_width], style[:vector_effect]} do
-        {nil, _effect} -> cmds
-        {w, :non_scaling_stroke} -> cmds ++ [{:nonScalingLineWidth, [w]}]
-        {w, _effect} -> cmds ++ [{:set_lineWidth, [w]}]
-      end
+    cmds = cmds ++ line_width_commands(style)
 
     # A blend is the compositing operation; an effect the context's shadow or its filter
     # (spec/09 §3.3.3).
@@ -635,23 +622,7 @@ defmodule Visualize.Backend.Canvas do
           cmds
       end
 
-    cmds =
-      case style[:stroke_linecap] do
-        nil -> cmds
-        cap -> cmds ++ [{:set_lineCap, [to_string(cap)]}]
-      end
-
-    cmds =
-      case style[:stroke_linejoin] do
-        nil -> cmds
-        join -> cmds ++ [{:set_lineJoin, [to_string(join)]}]
-      end
-
-    cmds =
-      case dash(style[:stroke_dasharray]) do
-        nil -> cmds
-        pattern -> cmds ++ [{:setLineDash, [pattern]}]
-      end
+    cmds = cmds ++ line_shape_commands(style)
 
     cmds =
       if style[:opacity],
@@ -659,6 +630,40 @@ defmodule Visualize.Backend.Canvas do
         else: cmds
 
     cmds
+  end
+
+  # A stroke that keeps its width on screen divides it by the transform's scale when it is
+  # set, which only the context knows (spec/09 §3.3.3, spec/14 §3.9).
+  defp line_width_commands(style) do
+    case {style[:stroke_width], style[:vector_effect]} do
+      {nil, _effect} -> []
+      {w, :non_scaling_stroke} -> [{:nonScalingLineWidth, [w]}]
+      {w, _effect} -> [{:set_lineWidth, [w]}]
+    end
+  end
+
+  # A line's cap, join and dash, each where the style sets it (spec/09 §3.3.3).
+  defp line_shape_commands(style) do
+    cap = if cap = style[:stroke_linecap], do: [{:set_lineCap, [to_string(cap)]}], else: []
+    join = if join = style[:stroke_linejoin], do: [{:set_lineJoin, [to_string(join)]}], else: []
+    dash = if pattern = dash(style[:stroke_dasharray]), do: [{:setLineDash, [pattern]}], else: []
+    cap ++ join ++ dash
+  end
+
+  # A text's draws, each line `[content, x, y]`, filled at its fill's opacity. A stroked
+  # text strokes each line first, at its stroke's opacity, so the stroke is under the fill
+  # as SVG's `paint-order="stroke"` paints it: a halo (spec/09 §3.3.1, D-235).
+  defp text_draws(text, lines, inherited) do
+    style = Map.merge(inherited, text.style)
+
+    if Element.stroke_first?(text, inherited) do
+      Enum.flat_map(lines, fn line ->
+        alpha([{:strokeText, line}], style, :stroke_opacity) ++
+          alpha([{:fillText, line}], style, :fill_opacity)
+      end)
+    else
+      alpha(Enum.map(lines, &{:fillText, &1}), style, :fill_opacity)
+    end
   end
 
   defp style_apply_commands(style, _element) when map_size(style) == 0, do: []
@@ -810,6 +815,20 @@ defmodule Visualize.Backend.Canvas do
         color -> cmds ++ [{:set_fillStyle, [to_string(color)]}]
       end
 
-    cmds
+    cmds ++ text_stroke_commands(style)
+  end
+
+  # The text's own stroke, which `strokeText` draws in (spec/09 §3.3.3, D-235): its color —
+  # a paint's first stop's, as a text's fill takes — then its width, cap, join and dash.
+  defp text_stroke_commands(style) do
+    color =
+      case style[:stroke] do
+        stroke when stroke in [nil, :none] -> []
+        :current_color -> [{:set_strokeStyle, ["currentColor"]}]
+        %Paint{} = paint -> [{:set_strokeStyle, [Paint.first_color(paint)]}]
+        color -> [{:set_strokeStyle, [to_string(color)]}]
+      end
+
+    color ++ line_width_commands(style) ++ line_shape_commands(style)
   end
 end

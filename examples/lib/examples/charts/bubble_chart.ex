@@ -7,6 +7,8 @@ defmodule Examples.Charts.BubbleChart do
   and a `:filter` on the radius is what makes only the big ones carry a name — a condition
   on a *label* is a condition on the rows the labeling mark reads. That second mark is a
   `:text` (spec/14 §5.2, #134); it once was a zero-radius circle carrying a label.
+  Each name is haloed in the page color, its stroke drawn under its glyphs, so it reads
+  over the translucent bubbles and the grid behind it (spec/14 §3.1, #927, D-235).
 
   The bubble's radius is a column, because a `:circle`'s `value` is user units and names no
   scale (spec/14 §5.2). The hand-drawn ticks are real axes now, their units on every tick
@@ -57,7 +59,16 @@ defmodule Examples.Charts.BubbleChart do
           stroke: {:field, :region},
           stroke_width: 1
         ),
-        style(:name, extends: :label, font_size: 9, font_weight: :bold),
+        # A halo in the page color under each name, so it reads over the bubbles and the
+        # grid it crosses (spec/14 §3.1, D-235).
+        style(:name,
+          extends: :label,
+          font_size: 9,
+          font_weight: :bold,
+          stroke: :background,
+          stroke_width: 3,
+          stroke_linejoin: :round
+        ),
         style(:caption, extends: :label, font_size: 9, fill: :axis),
         cartesian(margin: @margin),
         linear_scale(:x, domain: [0, 1500]),
@@ -129,7 +140,15 @@ defmodule Examples.Charts.BubbleChart do
           stroke: {:field, :region},
           stroke_width: 1
         ),
-        style(:name, extends: :label, font_size: 9, font_weight: :bold),
+        # A halo in the page color, drawn under each name: it reads over the bubbles.
+        style(:name,
+          extends: :label,
+          font_size: 9,
+          font_weight: :bold,
+          stroke: :background,
+          stroke_width: 3,
+          stroke_linejoin: :round
+        ),
         cartesian(margin: %{top: 30, right: 120, bottom: 50, left: 70}),
         linear_scale(:x, domain: [0, 1500]),
         linear_scale(:y, domain: [0, 25]),
