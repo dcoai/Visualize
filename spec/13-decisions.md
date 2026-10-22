@@ -3300,3 +3300,24 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A stored function's atoms are strings (D-195), so it cannot write a typed color: `{:color, :good}` in one is `{"color", "good"}`, refused as `{:type, :color}`. A typed color comes from a host's function (`defsource`), as metresis's does; a stored function writes a literal color string.
 - The builder's column-type picker offers `:color`, a preview's sample rows give a `:color` field the palette's series in turn, and a `:color` field derives no scale.
 - A schema with a `:color` field has a version of its own, as any new description does; no existing schema's version moves.
+
+## 234. D-234 — A compiled region is finished as the frame finishes its tree: one pass resolves the paints and splits the lines of every region
+
+**Context.** #776, work item #926, found building the 0.7.0 examples (#754). A frame label with a newline drew as two lines on a chart page (`Visualize.Chart.render/2`) and as one line in a board cell, which draws through `Visualize.Chart.Compiled.step/3`. The split into lines is in the IR: `Visualize.Chart.Frame.Lines.split/1` turns a `:text` with a newline into one `tspan` per line (spec/14 §7.1, D-210), and every backend draws the `tspan`s, SVG as written and a canvas one `fillText` per line (spec/09 §3.3). `Visualize.Chart.Frame.generate/2` runs it, with `Visualize.Chart.Frame.Defs.resolve/3`, once over its whole group. The compiled chart builds its regions one by one, and only its mark builder ran the two; the axes, the grid, the legend, the labels and a facet's panels did not, so a frame label, an axis label, a legend's title or a panel's title kept its newline in one text on every compiled path: the one-string form, a board cell's step and the hybrid map's SVG layers. The render/compiled parity tests held `Compiled.svg/2` to `Chart.render/2` byte for byte, but over the stored designs of `test/support/designs/`, none of which has a text with a newline; spec/14 §12.4 named a mark's group as the one region finished as the frame finishes it, and the tests followed the spec. The mark builder also split its lines before clipping the mark, the frame after.
+
+**Decision.**
+- **The split stays in the IR, in one finishing pass.** `Visualize.Chart.Frame.finish/3` resolves a drawn tree's paints for the mode and splits its texts' lines. `Frame.generate/2` runs it over its group. The compiled chart runs it over every region's elements as its builder draws them, whatever the region, after a mark's clip as the frame does. No region builder runs either step of its own, so a region added later is finished without asking.
+- **It is a tree pass, not a constructor.** A text's line height is its effective one, read from its groups (D-210), so the split needs the tree. A region is a whole subtree of the frame's group, and the frame's group and a polar frame's centered group carry no `line_height`, so splitting each region reads the same line heights as splitting the frame.
+- **The binary stream is unchanged.** It carries no text (spec/09 §4.4): a canvas-layer mark's labels are SVG text on the SVG layer (spec/14 §12.3), which this pass finishes as any region's. No record and no stream version changes.
+- **The guard is every kind of text.** `test/visualize/chart/compiled_text_test.exs` draws a `:text` mark, a mark's inline label, frame labels at every kind of anchor, a legend's title and a facet panel's title, each with a newline, a `line_height`, a `vertical_align` and a `text_angle`, in static and dynamic regions and in cartesian, polar and facet frames, and holds the one-string form, `step/3` and the hybrid map's SVG layers to the frame's, the labeled mark on every render target.
+
+**Rejected.**
+- **Adding `Lines.split/1` to each builder that lacked it.** It is the fix the mark builder already was, and the defect came from the next builder not having it.
+- **Splitting in the SVG backend's writer.** A canvas would then need its own split, and the `:json` canvas already draws the IR's `tspan`s; two splits are two places for the rules of D-210 to disagree.
+- **One `tspan` per line at the text's constructor.** It cannot read the line height a group sets (D-210).
+
+**Consequences.**
+- A multi-line text draws the same in a board cell, a compiled chart and on a chart page, on SVG and on both canvas formats' SVG layer.
+- A paint a legend or a label's style names is resolved on the compiled path as on the frame's.
+- A chart without a newline in any text, and without a paint outside its marks, draws byte for byte as before.
+- D-210 is amended: the pass it describes runs over every compiled region too.
