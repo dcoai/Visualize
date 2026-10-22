@@ -342,7 +342,8 @@ defmodule Visualize.Chart do
   over rows that are the slot's own. A time scale needs `:time`; band and ordinal need
   `:category`; every other kind needs `:number`. `types` maps a slot to what is known of
   its fields. A `Visualize.Data.Schema` says what they mean: `:text` satisfies a category,
-  and `:time` is instants (D-154), which no numeric scale takes. A map from field to
+  `:time` is instants (D-154), which no numeric scale takes, and `:color` satisfies no
+  scale, being colors the theme resolves (D-233). A map from field to
   type, as `Visualize.Data.Table.column_types/1` reads it from rows, says how they are
   written: `:time` is instants there too, and a category takes anything. A
   slot it does not hold, and a field it does not type, are not checked. Pure and total

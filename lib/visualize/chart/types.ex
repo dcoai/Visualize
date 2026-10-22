@@ -53,7 +53,8 @@ defmodule Visualize.Chart.Types do
   # `:text` is as discrete as `:category`, and `:time` is instants (D-154), which no
   # numeric scale takes — a feed's tick is a `:number`. A rows' type is how values are
   # written: `:time` is instants there too, and a band or ordinal scale takes a value of
-  # any type.
+  # any type. A schema's `:color` satisfies no need: its values are colors the theme
+  # resolves, read only where a channel's reading is a color (D-233).
   @spec satisfies?(atom(), need(), :schema | :rows) :: boolean()
   def satisfies?(:text, :category, :schema), do: true
   def satisfies?(_type, :category, :rows), do: true

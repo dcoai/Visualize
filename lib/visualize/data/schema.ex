@@ -11,7 +11,9 @@ defmodule Visualize.Data.Schema do
   no color key, since color is the theme's to choose from the meaning (#533). A declared
   value may be an entry, `%{value: v, name: "Display", color: c}`, whose color is a
   host's hint a design's own range outranks (D-224); `values/2`, `value_names/2` and
-  `value_colors/2` read the bare values, the names and the colors. A `:time`
+  `value_colors/2` read the bare values, the names and the colors. A `:color` field says
+  its rows carry color values (spec/08 §1.9), which the theme resolves at render; the
+  description still names none (D-233). A `:time`
   field holds instants; a feed whose clock is a number describes it `:number` and
   `window: true`, the field its windows are over (D-154). A numeric field may say how it
   was measured, `metric_kind: :gauge | :counter | :rate`, which refines what its
@@ -62,7 +64,7 @@ defmodule Visualize.Data.Schema do
 
   @typedoc "What one field means (spec/08 §10.1)."
   @type description :: %{
-          required(:type) => :time | :number | :category | :text,
+          required(:type) => :time | :number | :category | :text | :color,
           optional(:unit) => String.t(),
           optional(:quantity) => atom(),
           optional(:label) => String.t(),
@@ -116,7 +118,7 @@ defmodule Visualize.Data.Schema do
     :identity,
     :values
   ]
-  @types [:time, :number, :category, :text]
+  @types [:time, :number, :category, :text, :color]
   @polarities [:higher_is_better, :lower_is_better, :neutral]
   @metric_kinds [:gauge, :counter, :rate]
   # spelling: allow — a feed schema refuses a color key in either spelling.
@@ -124,6 +126,7 @@ defmodule Visualize.Data.Schema do
 
   # The keys a field's type takes; every other key but `type`, `label` and `continuity` is
   # `{:invalid_for, type}` on it. `window` is a clock's: a `:time` or a `:number` field's.
+  # A `:color` field takes none of them (D-233).
   @numeric [:unit, :quantity, :polarity, :target, :metric_kind, :bounds]
   @categorical [:order, :status, :values]
   @clocks [:time, :number]
@@ -697,10 +700,14 @@ defmodule Visualize.Data.Schema do
 
   defp entry_key(_key, _value, path), do: [{path, :unknown_entry_key}]
 
-  # A literal a color parser reads, or a typed color whose literal operands it reads. Its
+  @doc false
+  # A color value as a schema holds one (spec/08 §10.1, D-224, D-233): a literal a color
+  # parser reads, or a typed color — `Visualize.Color.value?/1` — whose literal operands it
+  # reads. A value entry's `color` and a `:color` field's row values are held to it. Its
   # names are a theme's, which a schema has none of: a design checks them (spec/14 §3.2).
-  defp color?(color) when is_binary(color), do: Typed.readable?(color)
-  defp color?(color), do: Typed.value?(color) and Typed.unreadable(color) == []
+  @spec color?(term()) :: boolean()
+  def color?(color) when is_binary(color), do: Typed.readable?(color)
+  def color?(color), do: Typed.value?(color) and Typed.unreadable(color) == []
 
   # A declared value, bare: an entry's value, or the value it is.
   defp bare(%{value: value}), do: value

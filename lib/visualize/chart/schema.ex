@@ -249,7 +249,7 @@ defmodule Visualize.Chart.Schema do
   @spec builtin_styles() :: [atom(), ...]
   def builtin_styles, do: @builtin_styles
 
-  @doc "The four column types a source's `types` may name (spec/14 §2.3, #369)."
+  @doc "The five column types a source's `types` may name (spec/14 §2.3, #369, D-233)."
   @spec column_types() :: [atom(), ...]
   defdelegate column_types(), to: Design
 

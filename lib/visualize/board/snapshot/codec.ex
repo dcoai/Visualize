@@ -9,7 +9,9 @@ defmodule Visualize.Board.Snapshot.Codec do
   # Rows are written **column by column** — `{"fields": [name, …], "rows": [[value, …],
   # …]}` — so a field's name keeps the spelling it had, an atom (`{"$atom": "t"}`) or a
   # string, which a JSON object's keys could not; a row that lacks a field has
-  # `{"$absent": true}` in its place. A schema's fields are a list of `[name,
+  # `{"$absent": true}` in its place. A field the slot's schema types `:color` holds color
+  # values, written in a design's color form and read back by it, the schema read before
+  # the rows (spec/15 §12.3, D-233). A schema's fields are a list of `[name,
   # description]` pairs for the same reason, and a description's `status`, which maps
   # category values to roles, a list of `[value, role]` pairs.
   #
@@ -81,7 +83,7 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp slot(slot) do
     %{
-      "rows" => rows(slot.rows),
+      "rows" => rows(slot.rows, colors(slot.schema)),
       "window" => Codec.encode_term(Map.get(slot, :window)),
       "resolution" => Codec.encode_term(Map.get(slot, :resolution)),
       "capped" => Map.get(slot, :capped),
@@ -92,24 +94,46 @@ defmodule Visualize.Board.Snapshot.Codec do
     }
   end
 
-  defp rows(nil), do: nil
+  defp rows(nil, _colors), do: nil
 
-  defp rows(rows) do
+  defp rows(rows, colors) do
     fields = rows |> Enum.flat_map(&Map.keys/1) |> Enum.uniq()
+    encoders = Enum.map(fields, &encoder(&1, colors))
 
     %{
       "fields" => Enum.map(fields, &Codec.encode_term/1),
       "rows" =>
         Enum.map(rows, fn row ->
-          Enum.map(fields, fn field ->
+          Enum.zip_with(fields, encoders, fn field, encode ->
             case Map.fetch(row, field) do
-              {:ok, value} -> Codec.encode_term(value)
+              {:ok, value} -> encode.(value)
               :error -> @absent
             end
           end)
         end)
     }
   end
+
+  # The fields a schema types `:color`, by their string, so a row's either spelling of one
+  # is found (spec/08 §6.2); none without a schema.
+  defp colors(fields) when is_map(fields) do
+    for {name, %{type: :color}} <- fields, into: MapSet.new(), do: to_string(name)
+  end
+
+  defp colors(_none), do: MapSet.new()
+
+  defp encoder(field, colors) do
+    if color_field?(field, colors), do: &Codec.encode_color/1, else: &Codec.encode_term/1
+  end
+
+  defp decoder(field, colors) do
+    if color_field?(field, colors), do: &Codec.decode_color/1, else: &Codec.decode_term/1
+  end
+
+  defp color_field?(field, colors) when is_atom(field) or is_binary(field),
+    do: MapSet.member?(colors, to_string(field))
+
+  defp color_field?(_field, _colors), do: false
 
   @doc false
   # A schema's fields as `[name, description]` pairs; a virtual source writes its schema
@@ -193,10 +217,14 @@ defmodule Visualize.Board.Snapshot.Codec do
   defp read_cell(other), do: other
 
   defp read_slot(slot) when is_map(slot) do
+    # The schema first: it says which fields of the rows hold colors (D-233).
+    schema = slot |> Map.get("schema") |> read_schema_json()
+    colors = colors(schema)
+
     Map.new(slot, fn {key, value} ->
       case known(key, @slot_key_table) do
-        :rows -> {:rows, read_rows(value)}
-        :schema -> {:schema, read_schema_json(value)}
+        :rows -> {:rows, read_rows(value, colors)}
+        :schema -> {:schema, schema}
         :status -> {:status, read_status(value)}
         key when key in [:window, :resolution, :reduced_by] -> {key, Codec.decode_term(value)}
         other -> {other, value}
@@ -206,23 +234,24 @@ defmodule Visualize.Board.Snapshot.Codec do
 
   defp read_slot(other), do: other
 
-  defp read_rows(%{"fields" => fields, "rows" => rows} = term)
+  defp read_rows(%{"fields" => fields, "rows" => rows} = term, colors)
        when map_size(term) == 2 and is_list(fields) and is_list(rows) do
     names = Enum.map(fields, &Codec.decode_term/1)
+    named = Enum.map(names, &{&1, decoder(&1, colors)})
 
     Enum.map(rows, fn
       values when is_list(values) and length(values) == length(names) ->
-        names
+        named
         |> Enum.zip(values)
         |> Enum.reject(fn {_name, value} -> value == @absent end)
-        |> Map.new(fn {name, value} -> {name, Codec.decode_term(value)} end)
+        |> Map.new(fn {{name, decode}, value} -> {name, decode.(value)} end)
 
       other ->
         other
     end)
   end
 
-  defp read_rows(other), do: other
+  defp read_rows(other, _colors), do: other
 
   @doc false
   def read_schema_json(pairs) when is_list(pairs) do

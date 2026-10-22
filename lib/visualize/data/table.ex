@@ -251,17 +251,19 @@ defmodule Visualize.Data.Table do
   @doc """
   Every named column's type, read whole (spec/08 §6.3, spec/14 §2.3, #369): all non-`nil`
   values temporal is `:time`, all numbers `:number`, all strings `:text`, all atoms or
-  booleans `:category`; a mixed or empty column is left out. A suggestion for a tool, never
-  something the layer reads at render.
+  booleans `:category`, all typed colors (tuples `Visualize.Color.value?/1` holds) `:color`
+  (D-233); a mixed or empty column is left out. A suggestion for a tool, never something
+  the layer reads at render.
 
-      iex> rows = [%{t: ~U[2024-01-01 00:00:00Z], v: 1, k: :a, s: "x", m: 1},
-      ...>         %{t: ~U[2024-01-02 00:00:00Z], v: 2.5, k: :b, s: "y", m: "two"}]
+      iex> rows = [%{t: ~U[2024-01-01 00:00:00Z], v: 1, k: :a, s: "x", m: 1, c: {:color, :good}},
+      ...>         %{t: ~U[2024-01-02 00:00:00Z], v: 2.5, k: :b, s: "y", m: "two",
+      ...>           c: {:alpha, {:color, :bad}, 0.5}}]
       iex> Visualize.Data.Table.column_types(rows)
-      %{t: :time, v: :number, k: :category, s: :text}
+      %{t: :time, v: :number, k: :category, s: :text, c: :color}
       iex> Visualize.Data.Table.column_types([])
       %{}
   """
-  @spec column_types(source()) :: %{name() => :time | :number | :category | :text}
+  @spec column_types(source()) :: %{name() => :time | :number | :category | :text | :color}
   def column_types(source) do
     rows = rows(source)
 
@@ -280,6 +282,7 @@ defmodule Visualize.Data.Table do
       Enum.all?(values, &is_number/1) -> :number
       Enum.all?(values, &is_binary/1) -> :text
       Enum.all?(values, &(is_atom(&1) and not is_nil(&1))) -> :category
+      Enum.all?(values, &(is_tuple(&1) and Visualize.Color.value?(&1))) -> :color
       true -> nil
     end
   end
