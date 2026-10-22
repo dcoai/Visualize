@@ -294,8 +294,9 @@ defmodule Visualize.Chart.Validator.Types do
   defp text_part(_, path, _ctx), do: [{path, {:type, :text}}]
 
   # A fact of a feed's schema (spec/14 §7.4): a declared slot, one of its fields and a fact
-  # key (D-225); in a text, one written as words, never `order`'s list or the maps of
-  # `status`, `names` and `colors`. Whether the schema gives it is application's question.
+  # key (D-225); in a text, one written as words — a scalar key by its shape
+  # (`Fact.word?/1`), never a list or a map. Whether the schema gives it is application's
+  # question.
   defp fact(%Fact{source: s, field: f, key: k}, path, ctx, text?) do
     cond do
       not (name?(s) and name?(f) and name?(k)) ->
@@ -304,7 +305,7 @@ defmodule Visualize.Chart.Validator.Types do
       k not in Fact.keys() ->
         [{path, {:enum, Fact.keys()}}]
 
-      text? and k in [:order, :status, :names, :colors] ->
+      text? and not Fact.word?(k) ->
         [{path, {:invalid_for, :text}}]
 
       true ->

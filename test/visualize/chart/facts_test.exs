@@ -376,9 +376,37 @@ defmodule Visualize.Chart.FactsTest do
       end
     end
 
-    test "a text cannot hold a list or a map: order and status are not words" do
-      d = put_in(design(), [:labels, Access.at(0), :text], "\#{fact(:primary, :state, :order)}")
+    # Every fact key, so a key added later is held to its shape without editing this test
+    # (#868, #928): a scalar is a word, a list or a map is not.
+    test "a text holds a fact of every scalar key and refuses every list and map key" do
+      for key <- Fact.keys() do
+        hole = "v: \#{fact(:primary, :state, :#{key})}"
+        d = put_in(design(), [:labels, Access.at(0), :text], hole)
+
+        case Fact.shape(key) do
+          :scalar ->
+            assert {:ok, _chart} = Chart.from_map(d), "#{key} is a word"
+
+          shape when shape in [:list, :map] ->
+            assert {:error, [{[:labels, 0, :text], {:invalid_for, :text}}]} = Chart.from_map(d),
+                   "#{key} is a #{shape}, not a word"
+        end
+      end
+    end
+
+    test "a text cannot hold the list a field's values are" do
+      d = put_in(design(), [:labels, Access.at(0), :text], "\#{fact(:primary, :state, :values)}")
       assert {:error, [{[:labels, 0, :text], {:invalid_for, :text}}]} = Chart.from_map(d)
+    end
+
+    test "every fact key states its shape, and a word is a scalar" do
+      for key <- Fact.keys() do
+        assert Fact.shape(key) in [:scalar, :list, :map], "#{key} states no shape"
+        assert Fact.word?(key) == (Fact.shape(key) == :scalar)
+      end
+
+      assert Enum.filter(Fact.keys(), &(Fact.shape(&1) != :scalar)) ==
+               [:order, :status, :bounds, :values, :names, :colors]
     end
   end
 
