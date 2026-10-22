@@ -226,9 +226,255 @@ defmodule Visualize.Components.ChartCostTest do
   # #850: D-206's drawing measured its own heap, which a process reads as its whole block,
   # so each move asked for half as much again as the last was given, and a long game on
   # this board asked the node for 104 GB. The size a drawing carries to the next is a
-  # function of its own need (D-216): flat, within a quarter or so of the need, and
-  # never past the bound, move after move.
-  test "the drawing's heap stays flat over hundreds of moves on a 2,500-cell board" do
+  # function of its own need (D-216): flat, within a quarter of the need, and never past
+  # the bound. The guard is in parts (#858): the sizing rule, a pure function of one
+  # measurement, over hundreds of steps without drawing; and the real drawing, for as
+  # many moves as the defect needs to show.
+
+  # What the LiveView read of real 50 × 50 moves (`garbage_collection_info`, from outside),
+  # each with the size its drawing was given: the first unsized, so it collected; each
+  # after it sized by `next_heap/1` of the one before, the board alternating between the
+  # two drawings of a move.
+  @recorded [
+    {nil,
+     [
+       heap_size: 453_610,
+       heap_block_size: 833_026,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 453_572,
+       stack_size: 4,
+       mbuf_size: 18
+     ]},
+    {7_257_152,
+     [
+       heap_size: 4_559_219,
+       heap_block_size: 7_427_328,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 0,
+       stack_size: 4,
+       mbuf_size: 217_090
+     ]},
+    {5_699_023,
+     [
+       heap_size: 4_559_876,
+       heap_block_size: 6_189_440,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 0,
+       stack_size: 4,
+       mbuf_size: 217_148
+     ]},
+    {5_699_845,
+     [
+       heap_size: 4_559_219,
+       heap_block_size: 6_189_440,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 0,
+       stack_size: 3,
+       mbuf_size: 217_087
+     ]},
+    {5_699_023,
+     [
+       heap_size: 4_559_876,
+       heap_block_size: 6_189_440,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 0,
+       stack_size: 3,
+       mbuf_size: 217_148
+     ]},
+    {5_699_845,
+     [
+       heap_size: 4_559_219,
+       heap_block_size: 6_189_440,
+       old_heap_size: 0,
+       old_heap_block_size: 0,
+       recent_size: 0,
+       stack_size: 3,
+       mbuf_size: 217_090
+     ]}
+  ]
+
+  # The words a drawing used, and whether it collected, from what the LiveView read.
+  defp used(info), do: info[:heap_size] + info[:old_heap_size]
+  defp collected?(info), do: info[:recent_size] + info[:old_heap_size] > 0
+
+  test "the sizing rule sizes recorded 50 × 50 moves by their need, not by their heap" do
+    bound = Component.heap_bound()
+    nexts = Enum.map(@recorded, fn {_given, info} -> Component.next_heap(info) end)
+
+    # The recording is the rule's own loop: each size given is the rule's of the one before.
+    assert Enum.map(tl(@recorded), &elem(&1, 0)) == Enum.drop(nexts, -1)
+
+    for {{given, info}, next} <- Enum.zip(@recorded, nexts) do
+      assert next != nil and next <= bound, "#{inspect(next)} words, past the bound of #{bound}"
+
+      # A drawing given more than it used is read for what it used, never for its block.
+      if not collected?(info) do
+        assert next >= used(info) and next <= used(info) + div(used(info), 4),
+               "a drawing given #{given} words used #{used(info)} and is followed by #{next}"
+      end
+    end
+
+    # What the first, collecting drawing kept sizes the second over its need.
+    [{_, first}, {_, second} | _] = @recorded
+    assert collected?(first) and not collected?(second)
+
+    # The size follows the need down as well as up: no size grows past the one before it
+    # unless the drawing it measures used more than the one before.
+    @recorded
+    |> Enum.map(&elem(&1, 1))
+    |> Enum.zip(nexts)
+    |> Enum.drop(1)
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.each(fn [{a, size_a}, {b, size_b}] ->
+      assert used(b) > used(a) or size_b <= size_a,
+             "a drawing using #{used(b)} words after one using #{used(a)} " <>
+               "is followed by #{size_b}, up from #{size_a}"
+    end)
+  end
+
+  # What the LiveView reads of a drawing given `given` words (or `nil`, unsized) that uses
+  # `need`: one given its need does not collect, reports the words it used, and holds a
+  # heap block the BEAM rounded `given` up to, up to an eighth more at these sizes (the
+  # recording's are 2 and 9 percent more). One given less collects, and its collection
+  # keeps `kept` words, `old` of them on its old heap and the rest on its young one.
+  defp measured(given, %{need: need}) when is_integer(given) and given >= need do
+    [
+      heap_size: need,
+      heap_block_size: given + div(given, 8),
+      old_heap_size: 0,
+      old_heap_block_size: 0,
+      recent_size: 0,
+      stack_size: 4,
+      mbuf_size: 0
+    ]
+  end
+
+  defp measured(given, %{kept: kept, old: old}) do
+    [
+      heap_size: kept - old,
+      heap_block_size: max(given || 0, 2 * kept),
+      old_heap_size: old,
+      old_heap_block_size: if(old > 0, do: 2 * old, else: 0),
+      recent_size: kept - old,
+      stack_size: 4,
+      mbuf_size: 0
+    ]
+  end
+
+  # A drawing that needs `need` words and keeps a `ratio`-th of them when it collects, all
+  # on its young heap or, with `old?`, half on its old one: 3 to 9 on the cost test's
+  # boards (D-216), 10 on the recording's first move.
+  defp step(need, ratio, old? \\ false) do
+    kept = max(div(need, ratio), 1)
+    %{need: need, kept: kept, old: if(old?, do: div(kept, 2), else: 0)}
+  end
+
+  # The rule's loop, closed over the model drawing: each step's drawing is given the size
+  # the step before it measured into. `{given, step, next}` per step, the first unsized.
+  defp loop(steps) do
+    steps
+    |> Enum.map_reduce(nil, fn step, given ->
+      next = Component.next_heap(measured(given, step))
+      {{given, step, next}, next}
+    end)
+    |> elem(0)
+  end
+
+  # What the rule holds over any loop: no size past the bound; no size larger than the one
+  # before it unless the drawing it measures needs more than the one before; and a drawing
+  # given its need, followed by its need and at most a quarter more.
+  defp holds!(trace) do
+    bound = Component.heap_bound()
+
+    for {{given, %{need: need}, next}, i} <- Enum.with_index(trace) do
+      assert next == nil or next <= bound,
+             "step #{i} carries #{next} words, past the bound of #{bound}"
+
+      if given != nil and given >= need and need + div(need, 4) <= bound do
+        assert next >= need and next <= need + div(need, 4),
+               "step #{i} needs #{need} words, was given #{given} and is followed by #{next}"
+      end
+    end
+
+    trace
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.with_index(1)
+    |> Enum.each(fn {[{_, %{need: before}, size}, {_, %{need: need}, next}], i} ->
+      assert size == nil or next == nil or need > before or next <= size,
+             "step #{i} needs #{need} words after #{before} and grows the size " <>
+               "from #{size} to #{next}"
+    end)
+  end
+
+  test "the sizing rule settles a constant need within a quarter of it, however long" do
+    bound = Component.heap_bound()
+
+    for need <- [2_000, 480_000, 4_559_877, 20_000_000, div(bound * 4, 5)],
+        ratio <- [3, 6, 9, 10, 12],
+        old? <- [false, true] do
+      %{kept: kept} = step = step(need, ratio, old?)
+      trace = loop(List.duplicate(step, 400))
+      holds!(trace)
+
+      # The first drawing is sized by the BEAM and the second by what the first kept; from
+      # the third on, each is sized by the one before it, the same size every time.
+      sizes = trace |> Enum.drop(1) |> Enum.map(&elem(&1, 0))
+      settled = Enum.drop(sizes, 1)
+
+      cond do
+        16 * kept <= bound and need + div(need, 4) <= bound ->
+          assert hd(sizes) >= need, "the second drawing of #{need} words collects"
+
+          assert Enum.uniq(settled) == [need + div(need, 4)],
+                 "#{need} words settle at #{inspect(Enum.uniq(settled))}"
+
+        # What its collection keeps sizes it past the bound, so it is never sized.
+        16 * kept > bound ->
+          assert Enum.uniq(sizes) == [nil], "#{need} words is sized past the bound"
+
+        # Sized by what it kept, and unsized by what it then used: `holds!/1` is the claim.
+        true ->
+          :ok
+      end
+    end
+  end
+
+  test "the sizing rule follows a need that varies, falls and passes the bound" do
+    bound = Component.heap_bound()
+
+    # A walk of needs from a fixed seed: a page of charts of every size, in any order.
+    {walk, _} =
+      Enum.map_reduce(1..600, :rand.seed_s(:exsss, {858, 922, 216}), fn _, seed ->
+        {need, seed} = :rand.uniform_s(30_000_000, seed)
+        {ratio, seed} = :rand.uniform_s(10, seed)
+        {old, seed} = :rand.uniform_s(2, seed)
+        {step(need + 1_000, ratio + 2, old == 2), seed}
+      end)
+
+    falling = for need <- 20_000_000..10_000//-50_000, do: step(need, 6)
+    sawtooth = for _ <- 1..30, need <- [100_000, 5_000_000, 40_000_000], do: step(need, 9, true)
+    # Past the bound and back: a drawing too large to size is unsized, then sized again.
+    over =
+      for need <- [4_559_877, bound, 2 * bound, 4_559_877, bound - 1],
+          _ <- 1..40,
+          do: step(need, 8)
+
+    for steps <- [walk, falling, sawtooth, over], do: holds!(loop(steps))
+
+    # The walk is long enough to have tried every case of the rule.
+    trace = loop(walk)
+    assert Enum.any?(trace, fn {given, %{need: need}, _} -> given != nil and given >= need end)
+    assert Enum.any?(trace, fn {given, %{need: need}, _} -> given != nil and given < need end)
+  end
+
+  # The real drawing, on the 50 × 50 board, for 24 moves: past the tenth, by which D-206's
+  # sizing had grown the size about 1.44 times a move.
+  test "the drawing's heap settles within half again its need on a 2,500-cell board" do
     {before, now} = move(50, 50)
     last = Map.take(Component.drawn(before, [], :svg, @empty), Map.keys(@empty))
     need = need(now, :svg, last)
@@ -236,7 +482,7 @@ defmodule Visualize.Components.ChartCostTest do
     {:ok, socket} = Component.mount(%Socket{assigns: %{__changed__: %{}}})
 
     sizes =
-      Enum.map_reduce(1..300, socket, fn i, socket ->
+      Enum.map_reduce(1..24, socket, fn i, socket ->
         socket = updated(socket, if(rem(i, 2) == 1, do: now, else: before), [])
         heap = socket.assigns.heap
 
