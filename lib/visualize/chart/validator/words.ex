@@ -470,5 +470,6 @@ defmodule Visualize.Chart.Validator.Words do
   defp a_type(:number), do: "a number"
   defp a_type(:category), do: "a category"
   defp a_type(:text), do: "text"
+  defp a_type(:color), do: "a color"
   defp a_type(other), do: inspect(other)
 end

@@ -3080,6 +3080,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A schema with value colors has a version no theme decides; two hosts that declare different colors for one catalog have two versions, as two labels would.
 - A theme still draws every field whose values carry no color, and every design that gives its own range is drawn as it was.
 
+**Amended 2026-10-22 by D-233 (#875, #925): a field may be of type `:color`, and the description still holds no color.** A field described `type: :color` says its rows carry color values (spec/08 §1.9), which the theme resolves at render; it names no color itself, any more than a `:number` field names a number. This decision's rule is about the *description*: a description-level `color`, `palette`, `fill`, … is still `{:color_key, key}`, on a `:color` field too, and a declared value's `color` is still the one color a schema holds, a hint. A row's color value is data, as a row's number is, and is held to the type by the same rule a value entry's `color` is: a literal `Visualize.Color.parse/1` reads, or a typed color whose literal operands it reads.
+
 ## 225. D-225 — Declared colors are written into a color scale's range at application, and names are read at the frame by the field a value is of
 
 **Context.** #759, #863, after D-224. A feed may now declare, on a category field's values, a display name and a color hint, and spec/08 §10.1 ranks the hint between the design and the theme. Three consumers read them: a color scale, a legend and a tooltip. A schema reaches a design only through facts (D-136), and a fact is replaced by its value before the frame is built, so by the time a scale or a legend is realized `domain: fact(:status, :state, :values)` is a plain list with nothing to say which feed's field it came from. A theme's palette is also unknown at application: a frame knows its theme, the facts step does not.
@@ -3273,3 +3275,28 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Tuple rows of the right width now draw through a design where they drew nothing; no golden moves.
 - The `{:width, …}` and `{:type, :named_rows}` words name tuple rows beside tensors.
 - D-214 is amended.
+
+## 233. D-233 — A field may be of type `:color`: its rows carry color values, held to the type and resolved by the theme at render
+
+**Context.** #875, work item #925; from metresis#504 (under metresis#452). A frame that declares no color scale paints a `:rect` mark's `value`, and a style's `fill` or `stroke` `{:field, f}`, with the row's value itself. metresis's status strip relies on it: each block's row carries the theme's color of its verdict, `{:color, :good}` or `{:color, :bad}`, or for a rate that color shaded, `{:alpha, {:color, :good}, 0.74}`, so a theme change re-colors every verdict and the host never resolves a color. A host source's rows reach the channel unchecked, so this worked. A virtual source's rows are held to its schema (spec/08 §10.5.7), and no field type admitted a color value: `:text` is a string, and `:category` a string, a number or an atom, never a tuple. Moving the strip's shaping onto a board's virtual sources was refused with `nonconforming {0, "fill", {:type, :text}}`. The owner accepted, on 2026-10-22, a field type rather than a knob, as a type of the one `Visualize.Data.Schema`, so it is valid in a feed's schema and a virtual source's alike.
+
+**Decision.**
+- **`:color` is the fifth field type** of `Visualize.Data.Schema` (spec/08 §10.1) and of a design's `types` (spec/14 §2.3). It takes `label` and `continuity`, as every type does; every other key is `{:invalid_for, :color}` — a color is not measured, not a state, not a clock and not a name for a thing.
+- **A value conforms when it is a color value whose literals parse.** `Visualize.Color.value?/1` holds of it and `Visualize.Color.parse/1` reads each literal in it: a literal string it reads, or a typed color whose literal operands it reads. It is the rule a value entry's `color` is held to (D-224), the one predicate the schema has, so a schema checks a color one way. A virtual source's output whose `:color` field holds anything else is `{:type, :color}`, as the other types' faults are. `Color.value?/1` alone holds of every string, so a string no parser reads (`"good"`) would pass and draw as no color; the parse is what tells a color from a word.
+- **The description still holds no color** (D-224, amended). `type: :color` says what the rows carry; a description-level color key is still a fault, on a `:color` field too.
+- **No scale reads a `:color` field.** Its need is never met (spec/14 §7.4): through a scale of any kind, a color scale's ordinal domain included, or as a number with no scale between, it is `{:type_mismatch, slot, field, need, :color}`. Where the reading is a color — a `:rect`'s `value`, a style's `fill` or `stroke` binding, in a frame with no color scale — it is drawn as it is. A rows' column of typed colors is suggested `:color` by `Visualize.Data.Table.column_types/1`.
+- **The codecs carry it.** The type is a word, `{"$atom": "color"}`, in a snapshot's and a virtual source's schema. A snapshot writes a `:color` field's row values in a design's color form, `Visualize.Chart.Codec`'s `encode_color` and `decode_color` (spec/14 §11.2, D-224), since a typed color is no term of §11.2; the reader reads the slot's schema before its rows to know which fields those are. A virtual source's own JSON holds its schema and no rows.
+
+**Rejected.**
+- **Widening `:category` or `:text` to admit color tuples.** A category is a state a scale maps and a coverage check counts; a text is words. Either would let a color reach a band scale or a legend as a state, and a virtual source's conformance would stop telling a color from a mistake.
+- **An opacity channel beside a role atom.** A rate's shade would render differently, and every stored status-strip design would change.
+- **A color scale over a state field whose entries carry the colors.** The entries would come per panel from a catalog into a board's static schema, and a rate's per-row shade cannot be said that way.
+- **Resolving the color in the host to the theme's CSS string.** It hard-codes the theme's output and breaks re-theming, which is the point of the typed color.
+- **Writing a typed color as a general term of §11.2.** Every term position — a variable's value, a window's end — would gain colors it has no use for, and a literal's string would be ambiguous with a slot's name on the way back. The schema already says which fields hold colors.
+
+**Consequences.**
+- A virtual source can shape a status strip, and its cells draw what a host source with the same rows draws, under every theme.
+- A feed may describe a `:color` field; the conformance kit checks the window and time fields of its rows, as before, and nothing reads the colors but the channels that draw them.
+- A stored function's atoms are strings (D-195), so it cannot write a typed color: `{:color, :good}` in one is `{"color", "good"}`, refused as `{:type, :color}`. A typed color comes from a host's function (`defsource`), as metresis's does; a stored function writes a literal color string.
+- The builder's column-type picker offers `:color`, a preview's sample rows give a `:color` field the palette's series in turn, and a `:color` field derives no scale.
+- A schema with a `:color` field has a version of its own, as any new description does; no existing schema's version moves.

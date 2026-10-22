@@ -287,8 +287,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
     (spec/14 §22.6): a `:time` field a second apart and ending at `now`, a `:number` window
     field (`window: true`, D-154) its row's place, `0` to `59`, as a tick counts, any other
     `:number` field a slow sine, a `:category` field its `order` in turn — else `"a"`, `"b"`
-    and `"c"` — and a `:text` field its own name. The rows are shaped like the feed's, not
-    its values.
+    and `"c"` — a `:text` field its own name, and a `:color` field the palette's first three
+    series in turn (D-233). The rows are shaped like the feed's, not its values.
 
         iex> schema = Visualize.Data.Schema.new!(%{t: %{type: :time}, v: %{type: :number},
         ...>   state: %{type: :category, order: ["ok", "warn"]}})
@@ -320,6 +320,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       Enum.at(order, rem(i, length(order)))
     end
 
+    defp sampled(%{type: :color}, _name, i, _k, _now), do: {:series, rem(i, 3) + 1}
     defp sampled(_text, name, _i, _k, _now), do: to_string(name)
 
     # -- the preview (§22.6) -------------------------------------------------------------------

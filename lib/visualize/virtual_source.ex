@@ -539,6 +539,8 @@ defmodule Visualize.VirtualSource do
   defp typed?(:number, value), do: is_number(value)
   defp typed?(:time, value), do: Window.instant?(value)
   defp typed?(:text, value), do: is_binary(value)
+  # A color value whose literals parse, as the schema holds a value entry's color (D-233).
+  defp typed?(:color, value), do: Schema.color?(value)
 
   defp typed?(:category, value),
     do: is_binary(value) or is_number(value) or (is_atom(value) and not is_boolean(value))

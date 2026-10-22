@@ -15,6 +15,29 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.8.3-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Added
+
+- **A field may be of type `:color`: its rows carry color values** (#875, #925, D-233).
+  A frame with no color scale paints a `:rect` mark's `value`, and a style's `fill` or
+  `stroke` `{:field, f}`, with the row's value itself, so a host's rows can carry the
+  theme's color of a verdict, `{:color, :good}`, or that color shaded,
+  `{:alpha, {:color, :good}, 0.74}`, and re-color with the theme — metresis's status strip
+  is drawn so. A host source's rows were never checked, but a virtual source's are held to
+  its schema, and no type admitted a color: a source typing the field `:text` was refused
+  as nonconforming. `Visualize.Data.Schema` now takes `type: :color`, in a feed's schema and
+  a virtual source's alike. A value conforms when it is a color value
+  (`Visualize.Color.value?/1`) whose literals `Visualize.Color.parse/1` reads, the rule a
+  value entry's `color` already follows; anything else is `{:type, :color}`. A virtual
+  source carrying color values draws exactly what a host source with the same rows draws,
+  under every theme. A `:color` field takes only `label` and `continuity`, a description
+  still names no color (D-224), and a scale never reads the field: through any scale, or
+  as a number, it is `{:type_mismatch, slot, field, need, :color}`. A snapshot writes a
+  `:color` field's row values in a design's color form (`{"$color": "good"}`) and reads
+  them back. A design's `types` may say `:color` too, `Visualize.Data.Table.column_types/1`
+  suggests it for a column of typed colors, and the builder's sample rows give such a
+  field the palette's series. A stored function's atoms are strings, so it writes a
+  literal color string; a typed color comes from a host's `defsource` function.
+
 ### Fixed
 
 - **A library entry dropped in the builder is inserted again** (#802, #923). `BuilderHook`,

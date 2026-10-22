@@ -26,7 +26,7 @@ defmodule Visualize.Chart.Schema.Design do
   @symbol_types [:circle, :cross, :diamond, :square, :star, :triangle, :wye]
   @weights [:light, :normal, :medium, :bold]
   @blends [:normal, :multiply, :screen, :overlay, :darken, :lighten]
-  @column_types [:time, :number, :category, :text]
+  @column_types [:time, :number, :category, :text, :color]
 
   @doc false
   def curve_types, do: @curve_types
