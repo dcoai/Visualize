@@ -1822,6 +1822,8 @@ A trial on OTP 29 with no Rust installed compiled, doubled the dimensions exactl
 - A label with more characters than `max_label` shows `…`, and its entry gains a `<title>` and an `aria-label`; `data-series` and `LegendHook` are unchanged.
 - metresis (#464) can stop sizing its legend margins by hand and read `legend_extent/1` where it lays out around a chart.
 
+**Amended 2026-10-22 by D-231 (#876, #914): what cannot be fitted is omitted, not raised.** A row wider than the plot with `wrap: false`, a cell wider than the plot on its own, and a side margin narrower than the legend's width no longer raise: the legend is omitted — not drawn, no margin taken — and `Visualize.Chart.Frame.legend_fit/1` reports it with the reason `:row`, `:cell` or `:width` and its entry count. Each depends on the entries, which are the data's. A `max_label` below 1 still raises.
+
 ## 170. D-170 — Every interaction is one `Visualize.Event`, resolved on the server to the row that was drawn
 
 **Context.** #622, work item #627. Interaction reached a host in four shapes (D-161, spec/15 §9.2): a plain chart's mark click as `handle_event(event, %{"field" => "…"})` pushed straight from `TooltipHook`, a board cell's as `{:visualize_board_event, id, %{cell, event, fields}}` with the same strings, a drill as `{:visualize_board_drill, id, %{cell, board, vars}}`, and a host-owned brush as `{:visualize_board_brush, id, %{domain}}`. Two of them carried strings scraped from `data-datum-*` attributes, which lose every type a row had. The scenes umbrella (#620) adds many more sources of interaction, and metresis builds on whatever shape exists, so the shape is settled first, in 0.6.0. An element carried only its datum's strings, so a server could not tell which row a click meant; and a chart whose data moves can be clicked on a frame that is no longer the one the server holds. Identity is declared since D-167.
@@ -3031,6 +3033,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - `static/1` and `backdrop/1` can change after a tick. A page that sends the static document once, at mount, sends it again when the compiled chart's `margin` changes.
 - A design that grew its margin past the box before now raises in `Frame.new/2`, `Chart.render/2`, `Chart.compile/2` and every tick.
 
+**Amended 2026-10-22 by D-231 (#876, #914): a margin past the box omits the legend rather than raising.** When a top or bottom legend's need would leave the plot no height, the legend is omitted, the reason `:height`: it is not drawn, the margin stays the one the design gave, and the plot keeps its height. The rows follow the series, so the raise made a chart that drew yesterday raise today, and in a LiveView it took the page down (metresis#540). A compiled chart's tick takes the restored margin as it takes any tick's, and a later tick whose rows fit draws the legend and grows the margin again. The third decision above and the last consequence are reversed; "Cutting the legend to fit" stays rejected — the legend is omitted whole and reported, never cut.
+
 ## 223. D-223 — A legend is drawn from a number of entries, decided at every realization
 
 **Context.** #761, #861; from metresis #452. metresis draws a chart's legend only when the chart has more than one series, because a single line's legend repeats the title. On the board runtime the design is fixed while the data decides how many series there are — one host today, five tomorrow — and a design could not say "a legend when it would tell series apart". A legend with no entries at all was drawn as an empty group: it took 12 + 8 of a top or bottom margin `inside: false` and a 16 width that could make a side margin raise.
@@ -3049,6 +3053,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 **Consequences.**
 - A legend with no entries is no longer drawn and takes no margin: a top or bottom one `inside: false` no longer grows a margin under 20 to 20, and a side one no longer needs 24 of its margin. Every golden legend has entries, so the goldens are unchanged.
 - `Visualize.Chart.Build.legend/2` takes `min_entries`, and the builder's inspector shows it in the legend's geometry, both from the schema.
+
+**Amended 2026-10-22 by D-231 (#876, #914): below the minimum is one reason of an omission.** A legend below its `min_entries` is reported by `Visualize.Chart.Frame.legend_fit/1` as `%{status: :omitted, reason: :min_entries, entries: n}`, beside the omissions for want of room, so a host has one answer to read whatever kept the legend from being drawn. Nothing it draws changes; the minimum is checked before any room is.
 
 ## 224. D-224 — A declared category value may carry a display name and a color hint
 
@@ -3211,3 +3217,27 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A cell bound to a virtual source draws its output reduced to the cell's budget under any ceiling, and is *Over budget* only for an unreducible output over the ceiling.
 - `Visualize.Board.Budget.slots/5` answers source-bound slots' budgets as well, and `feeds/5` ignores them.
 - D-226 and D-227 are amended.
+
+## 231. D-231 — A legend that cannot be laid out in its room is omitted and reported, not raised
+
+**Context.** #876, work item #914; from metresis#540. `Visualize.Chart.Frame.new/2` raised `ArgumentError` for four legends it could not lay out: a top or bottom margin grown past the box (D-222), a side margin narrower than the legend's width, a row wider than the plot with `wrap: false`, and a single cell wider than the plot (D-169). Each depends on the entries — how many there are, how long their labels — and they are the data's, so a chart that drew yesterday raised today, and in a LiveView the raise took the page down. metresis met it in production: a bar chart of disk use by host × mount and a stacked bar of compiles by project × bucket, each with a top legend outside the plot. A host could not avoid it, since whether a legend fits depends on its laid-out label widths, which only the library measures. A legend below its `min_entries` (D-223) was already not drawn, with no margin and no raise, but nothing told the host so.
+
+**Decision.**
+- **A legend that cannot be laid out in its room is omitted**, as one below its `min_entries` is: `Frame.generate/2` holds no legend group, `Frame.legend_extent/1` is `%{width: 0, height: 0}`, and it takes no margin, so the plot keeps the height it has with no legend. Each omission has a reason, the first that holds in this order: `:min_entries`, fewer entries than the minimum; `:cell`, a wrapped legend's entry or title wider than the plot; `:row`, a `wrap: false` legend's row wider than the plot; `:height`, a top or bottom margin that would leave the plot no height; `:width`, a side margin narrower than the legend. The legend is omitted whole.
+- **The frame reports it.** `Visualize.Chart.Frame.legend_fit/1` is `nil` for a frame with no legend, `%{status: :drawn, entries: n}`, or `%{status: :omitted, reason: reason, entries: n}`, `n` the realized entries with the title not counted. The applied chart's `frames` answer it after `Visualize.Chart.apply/2`, and a compiled chart carries the latest tick's or step's as `legend_fit`, read by `Visualize.Chart.Compiled.legend_fit/1`. The answer comes from the one layout the legend has, so the drawing, the extent, the margin and the fit cannot disagree.
+- **It is decided at every realization.** A compiled chart's tick omits the legend when the tick's series no longer fit and draws it again when they do; its margin follows both ways, through the refit D-222 gave a tick's margin.
+- **What does not depend on the data still raises.** A `min_entries` or a `max_label` that is not a count at least 1 is an `ArgumentError` of `Frame.new/2`, and a malformed node the validator's fault.
+
+**Rejected.**
+- **Keeping the side-margin raise as the author's fault.** The author fixed the margin, but the labels outgrew it: a long host name would crash the same LiveView.
+- **The host bounding the entries.** It cannot know the label widths or the wrap, so any bound is wrong at some width.
+- **A "+N more" entry, or cutting to the entries that fit.** A better picture for some charts, but it hides series a reader may be looking for (D-169), and it needs a fitting pass of its own; it can follow this decision as a setting, and the omitted case is still needed for a cell wider than the plot.
+- **Growing the box.** The box is the host's grid cell, fixed by its layout (spec/14 §4.2).
+- **Reporting it in the drawing**, as an attribute on the frame's group. A host would parse its own markup to learn what the library decided; the realized frame and the compiled chart are where a host reads what the data decided, as it reads the extent.
+- **A new knob to choose between raising and omitting.** A raise for data is never what a host wants on a live page, and the test of a design that should have a legend reads the fit.
+
+**Consequences.**
+- A design whose legend could not be fitted no longer raises in `Frame.new/2`, `Chart.render/2`, `Chart.compile/2` or a tick: it draws without its legend. A host that rescued the raise reads `legend_fit/1` instead.
+- A legend that fits draws byte for byte as before; no golden moves.
+- metresis can offer an omitted legend's entries in its legend popup (metresis#540).
+- D-169, D-222 and D-223 are amended.
