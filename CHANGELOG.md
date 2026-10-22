@@ -74,6 +74,18 @@ release it merely follows.
   which return no chart, still raise. *Affects* a host that rescued the tick's
   `ArgumentError`: it reads `faults/1` after each tick instead.
 
+- **A multi-line text draws as lines in a board cell, as on a chart page** (#776, #926,
+  D-234). `Visualize.Chart.render/2` draws a text with a newline as one `<tspan>` per
+  line, spaced by its `line_height`, but the compiled chart split only its marks' texts:
+  a frame label, an axis label, a legend's title and a facet panel's title kept the
+  newline in one text in `Visualize.Chart.Compiled.svg/2`, `step/3` — which every board
+  cell draws through — and the SVG layers of `render/2` and `tick/3`, so a two-line note
+  drew on one line. Now every compiled region goes through the one pass the frame's group
+  does, so its lines, line height, alignment and angle are the frame's, byte for byte,
+  whatever the mark's render target. The same pass resolves a paint a legend or a label
+  names. *Affects* board cells and compiled charts with multi-line text: they draw it as
+  `Chart.render/2` does; a chart with no newline in any text draws as before.
+
 ## [0.8.2] — 2026-10-22
 
 ### Fixed

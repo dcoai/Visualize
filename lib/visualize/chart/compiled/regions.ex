@@ -6,7 +6,7 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   alias Visualize.Chart
   alias Visualize.Chart.Frame
-  alias Visualize.Chart.Frame.{Defs, Furniture, Labels, Legend, Lines, Scales}
+  alias Visualize.Chart.Frame.{Furniture, Labels, Legend, Scales}
   alias Visualize.Chart.Mark
   alias Visualize.IR.Element
 
@@ -49,7 +49,7 @@ defmodule Visualize.Chart.Compiled.Regions do
         %{
           region: region,
           status: status(region, chart, axes, viewport),
-          build: builder(region, node.kind, axes),
+          build: finished(builder(region, node.kind, axes)),
           static: nil
         }
       end
@@ -233,16 +233,21 @@ defmodule Visualize.Chart.Compiled.Regions do
 
   # -- builders -------------------------------------------------------------------------
 
-  # A mark's group as the frame builds it (spec/14 §4.7, §12.4, #356): its paints
-  # resolved for the mode — `url(#id)` in `:css`, the first stop's color in `:literal` —
-  # and its texts' lines split.
+  # Every region's elements finished as the frame finishes its tree (spec/14 §12.4,
+  # D-234): its paints resolved for the mode — `url(#id)` in `:css`, the first stop's color
+  # in `:literal` (#356) — and its texts' lines split (§7.1, #926), whatever the region.
+  defp finished(build) do
+    fn frame, sources, mode ->
+      frame |> build.(sources, mode) |> Enum.map(&Frame.finish(&1, frame, mode))
+    end
+  end
+
+  # A mark's group as the frame builds it (spec/14 §4.7): clipped, then finished.
   defp builder({:mark, i}, _kind, _axes) do
     fn frame, sources, mode ->
       [
         frame
         |> Mark.generate(Enum.at(frame.marks, i), sources: sources, resolve: mode, index: i + 1)
-        |> Defs.resolve(frame, mode)
-        |> Lines.split()
         |> Frame.clip_mark(frame)
       ]
     end
