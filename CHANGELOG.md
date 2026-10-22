@@ -15,6 +15,19 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.8.3-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Fixed
+
+- **A library entry dropped in the builder is inserted again** (#802, #923). `BuilderHook`,
+  as `Visualize.Hooks.js_code/0` emits it, defined `dragged` twice: the library drop's
+  reader of the entry's name, and the frame drag's box. In a JavaScript object literal the
+  later of two same-named methods replaces the earlier without a word, so since 0.5.1,
+  when frames became draggable on the graph (#614), every drop of a library entry — on the
+  stack, into a group, on a reference field and on the graph — threw a `TypeError` and
+  inserted nothing; the frame drag kept working. The frame drag's method is now
+  `draggedBox`, each drop pushes its `insert` or `place` again, and no object the bundle
+  declares may define a key twice (spec/10 §4.1). No API change: a host regenerates its
+  `visualize_hooks.js` (`Visualize.Hooks.install!/0`) to take the fix.
+
 ## [0.8.2] — 2026-10-22
 
 ### Fixed

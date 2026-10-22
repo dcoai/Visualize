@@ -23,8 +23,8 @@ defmodule Visualize.Hooks.ExecutedBuilderHookTest do
 
   # house and shared grouped into "group 1" at 0 (its rows 1 and 2), panel at 3, and an
   # empty layer "layer 2" at 4, after panel.
-  defp grouped do
-    s = BuilderFixture.socket(BuilderFixture.layers())
+  defp grouped(opts \\ []) do
+    s = BuilderFixture.socket(BuilderFixture.layers(), opts)
     {:noreply, s} = Builder.handle_event("select_layer", %{"index" => "0"}, s)
 
     {:noreply, s} =
@@ -83,6 +83,41 @@ defmodule Visualize.Hooks.ExecutedBuilderHookTest do
 
     assert {:ok, %{"log" => log, "report" => report}} = run(scenario)
     {for(%{"kind" => "push", "name" => name, "payload" => p} <- log, do: {name, p}), report}
+  end
+
+  # A library entry named `name` dropped from outside the hook element — the library's own
+  # instance started the drag — onto the drawn rows `dy` pixels below the top of the drawn
+  # row `over`. What the hook pushed is returned; a throw fails the run.
+  defp drop_entry(rows, over, dy, name) do
+    scenario = """
+    const rows = #{Jason.encode!(rows)}.map((attributes, i) => {
+      const row = Stub.markup('li', attributes, [Stub.markup('span', {class: 'vis-builder-layer-name'})]);
+      row.rect = {top: i * #{@row_height}, left: 0, width: 200, height: #{@row_height}};
+      return row;
+    });
+    const list = Stub.markup('ol', {class: 'vis-builder-layers', 'data-builder-stack': 'true'}, rows);
+    const hook = Stub.mount(BuilderHook, list);
+    #{library_transfer(name)}
+    const y = #{over * @row_height + dy};
+    hook.handleDragOver({target: list, clientY: y, dataTransfer: transfer, preventDefault() {}});
+    hook.handleDrop({target: list, clientY: y, dataTransfer: transfer, preventDefault() {}});
+    hook.handleDragEnd({});
+    Stub.done({});
+    """
+
+    assert {:ok, %{"log" => log}} = run(scenario)
+    for %{"kind" => "push", "name" => event, "payload" => p} <- log, do: {event, p}
+  end
+
+  # What a drag from the library carries: the entry's name under its type, and nothing else.
+  defp library_transfer(name) do
+    """
+    const transfer = {
+      types: ['application/x-visualize-fragment'],
+      setData() {},
+      getData: (type) => type === 'application/x-visualize-fragment' ? #{Jason.encode!(name)} : ''
+    };
+    """
   end
 
   defp position(s, label) do
@@ -150,6 +185,82 @@ defmodule Visualize.Hooks.ExecutedBuilderHookTest do
 
       {:noreply, moved} = Builder.handle_event("reorder", %{"from" => 3, "to" => 4}, s)
       assert BuilderFixture.names(moved) == ["group 1", :house, :shared, "layer 2", :panel]
+    end
+  end
+
+  # Every library drop read the entry's name through a method the frame drag's box had
+  # replaced, and threw before it pushed (#923, spec/10 §16.3): each path is run here.
+  describe "a library entry dropped is inserted (#923)" do
+    test "on the stack at a gap, it pushes insert at that gap, and the builder inserts it there" do
+      s = closed(grouped(store: BuilderFixture.Library))
+      # On the top of panel's row (drawn second): the gap before panel, outside the group.
+      assert [{"insert", %{"name" => "composite:1", "at" => 3} = push}] =
+               drop_entry(rows(s), 1, 2, "composite:1")
+
+      assert map_size(push) == 2
+
+      {:noreply, added} = Builder.handle_event("insert", push, s)
+      assert length(BuilderFixture.names(added)) == length(BuilderFixture.names(s)) + 1
+      assert Enum.at(BuilderFixture.names(added), 4) == :panel
+    end
+
+    test "on the middle of a group's row, it pushes insert into that group" do
+      s = grouped(store: BuilderFixture.Library)
+      [%{"data-builder-into" => into} | _] = rows(s)
+
+      assert [{"insert", %{"name" => "composite:1", "into" => ^into} = push}] =
+               drop_entry(rows(s), 0, div(@row_height, 2), "composite:1")
+
+      {:noreply, added} = Builder.handle_event("insert", push, s)
+      assert length(BuilderFixture.names(added)) == length(BuilderFixture.names(s)) + 1
+    end
+
+    test "on a reference field, it pushes insert into that field" do
+      scenario = """
+      const field = Stub.markup('input', {'data-builder-ref': 'style'});
+      const panel = Stub.markup('div', {'data-builder-scope': 'ref'}, [field]);
+      const hook = Stub.mount(BuilderHook, panel);
+      #{library_transfer("style:1")}
+      hook.handleDragOver({target: field, dataTransfer: transfer, preventDefault() {}});
+      hook.handleDrop({target: field, dataTransfer: transfer, preventDefault() {}});
+      Stub.done({});
+      """
+
+      assert {:ok, %{"log" => log}} = run(scenario)
+
+      assert [
+               %{
+                 "name" => "insert",
+                 "payload" => %{"field" => "style", "name" => "style:1", "scope" => "ref"}
+               }
+             ] = Enum.filter(log, &(&1["kind"] == "push"))
+    end
+
+    test "on the graph, it pushes place at the chart point" do
+      scenario = """
+      const svg = Stub.markup('svg', {class: 'vis-builder-chart', viewBox: '0 0 400 200'});
+      svg.rect = {left: 0, top: 0, width: 800, height: 400};
+      const graph = Stub.markup('div', {'data-builder-scope': 'graph'}, [svg]);
+      const hook = Stub.mount(BuilderHook, graph);
+      #{library_transfer("composite:1")}
+      hook.handleDragOver({target: svg, clientX: 200, clientY: 100, dataTransfer: transfer, preventDefault() {}});
+      hook.handleDrop({target: svg, clientX: 200, clientY: 100, dataTransfer: transfer, preventDefault() {}});
+      Stub.done({});
+      """
+
+      assert {:ok, %{"log" => log}} = run(scenario)
+
+      assert [
+               %{
+                 "name" => "place",
+                 "payload" => %{
+                   "name" => "composite:1",
+                   "x" => 100,
+                   "y" => 50,
+                   "scope" => "graph"
+                 }
+               }
+             ] = Enum.filter(log, &(&1["kind"] == "push"))
     end
   end
 end

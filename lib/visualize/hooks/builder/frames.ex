@@ -151,8 +151,10 @@ defmodule Visualize.Hooks.Builder.Frames do
         return [start, edge - start];
       },
 
-      // The box a drag gives: moved by the body, or stretched by the corner `handle`.
-      dragged(name, from, dx, dy, handle, size) {
+      // The box a drag gives: moved by the body, or stretched by the corner `handle`. These
+      // methods share BuilderHook's object, where a repeated name replaces the earlier one
+      // silently, so none takes a name the hook proper already uses (#923).
+      draggedBox(name, from, dx, dy, handle, size) {
         const xs = this.snapLines(name, size, 'x');
         const ys = this.snapLines(name, size, 'y');
         const tx = 8 / size.w, ty = 8 / size.h;
@@ -223,7 +225,7 @@ defmodule Visualize.Hooks.Builder.Frames do
             cell = this.celled(fromCell, dx, dy, handle, grid);
             box = this.cellBox(cell, grid);
           } else {
-            box = this.dragged(name, from, dx, dy, handle, size);
+            box = this.draggedBox(name, from, dx, dy, handle, size);
           }
           this.showFrame(box, size);
         };
