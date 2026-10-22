@@ -4,8 +4,9 @@ defmodule Visualize.Chart.Frame.Legend do
   # swatch in the scale's color beside the value's label, stacked or in rows at one of
   # the eight positions inside the plot area — or, with `inside: false`, in the margin the
   # position names (#136). A top or bottom legend wraps to the plot's width, and in its
-  # margin grows that margin to hold its rows (#630, D-169). Below its `min_entries` it is
-  # not drawn and takes no margin (D-223).
+  # margin grows that margin to hold its rows (#630, D-169). Below its `min_entries`, or
+  # with no room for it, it is omitted: not drawn and no margin taken, and `status/1`
+  # says why (D-223, D-231).
 
   import Visualize.Chart.Names, only: [is_name: 1]
 
@@ -24,8 +25,8 @@ defmodule Visualize.Chart.Frame.Legend do
   @horizontal [:top, :bottom]
 
   @doc false
-  # The legend group, or `[]` when the frame has no legend or its legend is below its
-  # `min_entries` (D-223); stamped `frames.<name>.legend` when `paths?` (spec/14 §4.7).
+  # The legend group, or `[]` when the frame has no legend or its legend is omitted
+  # (D-223, D-231); stamped `frames.<name>.legend` when `paths?` (spec/14 §4.7).
   @spec generate(map(), atom(), boolean()) :: [Element.t()]
   def generate(frame, mode, paths? \\ false)
 
@@ -33,7 +34,7 @@ defmodule Visualize.Chart.Frame.Legend do
 
   def generate(frame, mode, paths?) do
     case layout(frame, mode) do
-      :below ->
+      {:omitted, _reason, _count} ->
         []
 
       layout ->
@@ -53,78 +54,47 @@ defmodule Visualize.Chart.Frame.Legend do
   # The box the legend is laid out in, `%{width:, height:}` (spec/14 §4.5, D-169): the
   # widest row and its rows for a top or bottom legend, the estimated width and its rows
   # for a stacked one; the 8 between it and the plot is not counted. No box with no legend,
-  # nor below the legend's `min_entries` (D-223).
+  # nor for an omitted one (D-223, D-231).
   @spec extent(map()) :: %{width: number(), height: number()}
   def extent(%{legend: nil}), do: %{width: 0, height: 0}
 
   def extent(frame) do
     case layout(frame, :literal) do
-      :below -> %{width: 0, height: 0}
+      {:omitted, _reason, _count} -> %{width: 0, height: 0}
       layout -> layout.extent
     end
   end
 
   @doc false
-  # The margin a frame takes for its legend (spec/14 §4.5, D-169): the given one, with a top
-  # or bottom margin `inside: false` grown to the legend's rows when it is smaller. Raises
-  # `ArgumentError` for what cannot be fitted — a side margin narrower than the legend's
-  # estimated width, a top or bottom margin grown past the box (D-222), a row too wide for
-  # the plot with `wrap: false`, a single cell wider than the plot — naming the side and
-  # the size needed. A legend below its `min_entries` takes no margin and raises nothing
-  # (D-223).
-  @spec fit!(map(), map()) :: map()
-  def fit!(%{legend: nil}, margin), do: margin
+  # Whether the frame's legend is drawn, and with how many entries; or why it is omitted
+  # (spec/14 §4.5, D-231). `nil` with no legend.
+  @spec status(map()) :: Frame.legend_fit()
+  def status(%{legend: nil}), do: nil
 
-  def fit!(%{legend: node, plot: plot, theme: theme} = frame, margin) do
-    layout = layout(node, frame, plot.width, styles(frame), theme, :literal)
-
-    cond do
-      layout == :below ->
-        margin
-
-      layout.inside? ->
-        margin
-
-      layout.position in @horizontal ->
-        needs = layout.extent.height + @inset
-        given = Map.fetch!(margin, layout.position)
-
-        if given < needs,
-          do: grow!(margin, layout.position, needs, plot.height + given),
-          else: margin
-
-      true ->
-        side = if layout.position in @right, do: :right, else: :left
-        needs = @inset + layout.extent.width
-        room = Map.fetch!(margin, side)
-
-        if room < needs do
-          raise ArgumentError,
-                "the legend at #{inspect(layout.position)} outside the plot needs #{needs} in the " <>
-                  "#{side} margin, which is #{room} (spec/14 §4.5)"
-        end
-
-        margin
+  def status(frame) do
+    case layout(frame, :literal) do
+      {:omitted, reason, count} -> %{status: :omitted, reason: reason, entries: count}
+      layout -> %{status: :drawn, entries: layout.entries}
     end
   end
 
-  # A top or bottom margin grown to the legend's need, which must leave the plot some height
-  # (spec/14 §4.5, D-222): `room` is the plot's height and the margin given on that side,
-  # what the need is taken from. A margin the author gave is not judged here.
-  defp grow!(margin, side, needs, room) do
-    if needs >= room do
-      box = room + Map.fetch!(margin, opposite(side))
+  @doc false
+  # The margin a frame takes for its legend (spec/14 §4.5, D-169): its own, with a top or
+  # bottom margin `inside: false` grown to the legend's rows when it is smaller. An omitted
+  # legend takes none (D-223, D-231), so nothing that depends on the entries raises here;
+  # an invalid `min_entries` or `max_label` does, being the design's.
+  @spec fit(map()) :: map()
+  def fit(%{legend: nil, margin: margin}), do: margin
 
-      raise ArgumentError,
-            "the legend at #{inspect(side)} outside the plot needs #{needs} in the #{side} " <>
-              "margin, which leaves the plot no height in a box #{box} high (spec/14 §4.5)"
+  def fit(%{margin: margin} = frame) do
+    case layout(frame, :literal) do
+      %{inside?: false, position: side} = layout when side in @horizontal ->
+        Map.update!(margin, side, &max(&1, height_needed(layout)))
+
+      _drawn_or_omitted ->
+        margin
     end
-
-    Map.put(margin, side, needs)
   end
-
-  defp opposite(:top), do: :bottom
-  defp opposite(:bottom), do: :top
 
   # -- layout ---------------------------------------------------------------------------
 
@@ -136,21 +106,61 @@ defmodule Visualize.Chart.Frame.Legend do
     {frame.styles, Defaults.at(frame, nil, nil), pick}
   end
 
-  # The legend laid out against the plot's width: its elements, where it sits and its
-  # extent — or `:below`, when it has fewer entries than its `min_entries` and is neither
-  # drawn nor given margin (D-223). The one place every question about the legend's shape
-  # is answered, so the frame's margin and the drawing cannot disagree.
-  defp layout(frame, mode),
-    do: layout(frame.legend, frame, frame.plot.width, styles(frame), frame.theme, mode)
-
-  defp layout(node, frame, plot_width, {styles, _base, _pick} = styled, theme, mode) do
+  # The legend laid out against the plot's width: its elements, where it sits, its extent
+  # and its entry count — or `{:omitted, reason, count}`, when it is neither drawn nor given
+  # margin (D-223, D-231): below its `min_entries`, else with a cell or a row wider than
+  # the plot, else with no room in its margin. The one place every question about the
+  # legend's shape is answered, so the frame's margin, the drawing, the extent and the
+  # status cannot disagree.
+  defp layout(%{legend: node, theme: theme} = frame, mode) do
+    {styles, _base, _pick} = styled = styles(frame)
     entries = entries(node, frame.scales, namer(frame), {styles, theme, mode})
+    count = length(entries)
 
-    if length(entries) < min_entries(node),
-      do: :below,
-      else: lay_out(node, entries, plot_width, styled, theme, mode)
+    with :ok <- at_least(count, min_entries(node)),
+         %{} = layout <- lay_out(node, entries, frame.plot.width, styled, theme, mode),
+         layout = Map.put(layout, :entries, count),
+         :ok <- room(layout, frame) do
+      layout
+    else
+      {:omitted, reason} -> {:omitted, reason, count}
+    end
   end
 
+  defp at_least(count, min) when count < min, do: {:omitted, :min_entries}
+  defp at_least(_count, _min), do: :ok
+
+  # Whether the legend has room where it sits (spec/14 §4.5, D-231). Inside the plot it
+  # always has, its rows having been fitted to the plot's width. A top or bottom margin
+  # may grow to the rows, but must leave the plot some height (D-222): the room is the
+  # plot's height and that margin, which the growth moves between them, so a frame
+  # realized over the grown margin answers as the one before it did. A margin the author
+  # gave that already holds the rows is not judged. A side margin is the author's, and
+  # must hold the legend's estimated width.
+  defp room(%{inside?: true}, _frame), do: :ok
+
+  defp room(%{position: side} = layout, %{margin: margin, plot: plot}) when side in @horizontal do
+    needs = height_needed(layout)
+    given = Map.fetch!(margin, side)
+
+    if given < needs and needs >= plot.height + given,
+      do: {:omitted, :height},
+      else: :ok
+  end
+
+  defp room(layout, %{margin: margin}) do
+    side = if layout.position in @right, do: :right, else: :left
+
+    if Map.fetch!(margin, side) < @inset + layout.extent.width,
+      do: {:omitted, :width},
+      else: :ok
+  end
+
+  # A top or bottom legend's need of its margin: its rows and the 8 (D-169).
+  defp height_needed(layout), do: layout.extent.height + @inset
+
+  # The layout, or `{:omitted, reason}` when its cells cannot be placed in rows no wider
+  # than the plot (`:cell`, `:row`).
   defp lay_out(node, entries, plot_width, {styles, base, pick}, theme, mode) do
     stack = Map.get(node, :style, Schema.default(:legend, :style))
     style_node = Style.over(base, styles, stack, pick)
@@ -169,15 +179,15 @@ defmodule Visualize.Chart.Frame.Legend do
     if position in @horizontal do
       wrap? = Map.get(node, :wrap, Schema.default(:legend, :wrap))
 
-      {elements, rows, widest} =
-        rows(entries, title, font_size, style, plot_width, wrap?, position)
-
-      Map.merge(base, %{
-        elements: elements,
-        rows: rows,
-        width: widest,
-        extent: %{width: widest, height: (rows - 1) * @row + @swatch}
-      })
+      with {:ok, {elements, rows, widest}} <-
+             rows(entries, title, font_size, style, plot_width, wrap?) do
+        Map.merge(base, %{
+          elements: elements,
+          rows: rows,
+          width: widest,
+          extent: %{width: widest, height: (rows - 1) * @row + @swatch}
+        })
+      end
     else
       # Outside there is room, so every position reads swatch-then-label (spec/14 §4.5).
       right? = inside? and position in @right
@@ -418,18 +428,21 @@ defmodule Visualize.Chart.Frame.Legend do
   # each cell as wide as its estimated text (an entry's swatch and gap before it), 8 between
   # cells, a cell that would end past the plot starting the next row 16 below. One row is
   # placed exactly as the single row was before wrapping; several are each centered on the
-  # widest. Returns `{elements, rows, widest row's width}`.
-  defp rows(entries, title, font_size, style, plot_width, wrap?, position) do
-    fill = Map.take(style, [:fill])
+  # widest. Returns `{:ok, {elements, rows, widest row's width}}`, or `{:omitted, reason}`
+  # when the cells cannot be placed (D-231).
+  defp rows(entries, title, font_size, style, plot_width, wrap?) do
     title_cell = if title, do: [{:title, title, Text.width(title, font_size)}], else: []
     entry_cells = Enum.map(entries, &{:entry, &1, Text.width(elem(&1, 1), font_size)})
     cells = title_cell ++ entry_cells
 
-    rows =
-      if wrap?,
-        do: wrap(cells, plot_width, position),
-        else: unwrapped(cells, plot_width, position)
+    placed = if wrap?, do: wrap(cells, plot_width), else: unwrapped(cells, plot_width)
 
+    with {:ok, rows} <- placed do
+      {:ok, laid_out(rows, Map.take(style, [:fill]))}
+    end
+  end
+
+  defp laid_out(rows, fill) do
     laid = Enum.map(rows, &lay/1)
     widest = laid |> Enum.map(&elem(&1, 1)) |> Enum.max(fn -> 0 end)
     several? = length(laid) > 1
@@ -465,19 +478,19 @@ defmodule Visualize.Chart.Frame.Legend do
     {placed, max(x - @inset, 0)}
   end
 
-  # Greedy rows: a cell joins the row unless it would end past the plot; a cell wider than
-  # the plot on its own cannot be placed at all (spec/14 §4.5, D-169).
-  defp wrap(cells, plot_width, position) do
+  # Greedy rows: a cell joins the row unless it would end past the plot. A cell wider than
+  # the plot on its own cannot be placed at all, and the legend is omitted (spec/14 §4.5,
+  # D-169, D-231).
+  defp wrap(cells, plot_width) do
+    if Enum.any?(cells, &(cell_width(&1) > plot_width)),
+      do: {:omitted, :cell},
+      else: {:ok, greedy(cells, plot_width)}
+  end
+
+  defp greedy(cells, plot_width) do
     cells
     |> Enum.reduce([], fn cell, rows ->
       width = cell_width(cell)
-
-      if width > plot_width do
-        raise ArgumentError,
-              "a #{cell_name(cell)} of the legend at #{inspect(position)} needs " <>
-                "#{round_to(width)} across the #{position} on its own, and the plot is " <>
-                "#{round_to(plot_width)} wide; #{remedy(cell)} (spec/14 §4.5)"
-      end
 
       case rows do
         [{row, end_x} | rest] when end_x + @inset + width <= plot_width ->
@@ -491,33 +504,17 @@ defmodule Visualize.Chart.Frame.Legend do
     |> Enum.map(fn {row, _end_x} -> Enum.reverse(row) end)
   end
 
-  # `wrap: false`: one row, which must fit the plot (spec/14 §4.5, D-169).
-  defp unwrapped(cells, plot_width, position) do
+  # `wrap: false`: one row, which must fit the plot, else the legend is omitted (spec/14
+  # §4.5, D-169, D-231).
+  defp unwrapped(cells, plot_width) do
     {_placed, width} = lay(cells)
-
-    if width > plot_width do
-      raise ArgumentError,
-            "the legend at #{inspect(position)} with wrap: false needs #{round_to(width)} " <>
-              "across the #{position}, and the plot is #{round_to(plot_width)} wide " <>
-              "(spec/14 §4.5)"
-    end
-
-    [cells]
+    if width > plot_width, do: {:omitted, :row}, else: {:ok, [cells]}
   end
 
   # A cell's own width, without the 8 after it: the title's text, an entry's swatch, gap
   # and label.
   defp cell_width({:title, _title, width}), do: width
   defp cell_width({:entry, _entry, label_width}), do: @gap + label_width
-
-  defp cell_name({:title, _title, _width}), do: "title"
-  defp cell_name({:entry, _entry, _width}), do: "single entry"
-
-  defp remedy({:title, _title, _width}), do: "a shorter title fits"
-  defp remedy({:entry, _entry, _width}), do: "a max_label cuts its labels"
-
-  defp round_to(n) when is_integer(n), do: n
-  defp round_to(n), do: Float.round(n * 1.0, 1)
 
   # An entry names what it explains, the string a series path carries (spec/14 §4.5, D-77).
   defp series(value), do: %{"data-series" => to_string(value)}

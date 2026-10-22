@@ -97,28 +97,36 @@ defmodule Visualize.Chart.LegendWrapTest do
              )
     end
 
-    test "wrap: false keeps one row and raises when it is wider than the plot" do
-      assert_raise ArgumentError,
-                   ~r/:top with wrap: false needs 472.0 across the top, and the plot is 200 wide/,
-                   fn -> legend_frame(%{position: :top, wrap: false}) end
+    test "wrap: false keeps one row, and omits the legend when it is wider than the plot" do
+      # 5 × 88 + 4 × 8 = 472 across a 200-wide plot (D-231).
+      for inside <- [true, false] do
+        frame = legend_frame(%{position: :top, wrap: false, inside: inside})
+        assert Legend.generate(frame, :literal) == []
+        assert Frame.legend_extent(frame) == %{width: 0, height: 0}
+        assert Frame.legend_fit(frame) == %{status: :omitted, reason: :row, entries: 5}
+        assert frame.margin.top == 100
+      end
 
       {_at, group} = legend(legend_frame(%{position: :top, wrap: false}, domain: ["a", "b"]))
       assert Enum.map(items(group), &elem(at(&1), 1)) == [0, 0]
     end
 
-    test "a single entry wider than the plot raises, naming the side and the width" do
+    test "a single entry wider than the plot omits the legend" do
+      # 16 + 0.6 × 12 × 30 = 232 across a 200-wide plot (D-231).
       long = String.duplicate("x", 30)
+      frame = legend_frame(%{position: :bottom}, domain: ["a", long])
+      assert Legend.generate(frame, :literal) == []
+      assert Frame.legend_fit(frame) == %{status: :omitted, reason: :cell, entries: 2}
 
-      assert_raise ArgumentError,
-                   ~r/single entry of the legend at :bottom needs 232.0 across the bottom on its own, and the plot is 200 wide/,
-                   fn -> legend_frame(%{position: :bottom}, domain: ["a", long]) end
+      # The title is a cell too, and max_label does not cut it: 216 across.
+      titled = legend_frame(%{position: :top, title: long, max_label: 5})
+      assert Legend.generate(titled, :literal) == []
+      assert Frame.legend_fit(titled) == %{status: :omitted, reason: :cell, entries: 5}
 
-      # The title is a cell too, and max_label does not cut it.
-      assert_raise ArgumentError,
-                   ~r/a title of the legend at :top needs 216.0 across the top/,
-                   fn ->
-                     legend_frame(%{position: :top, title: long, max_label: 5})
-                   end
+      # max_label is the remedy.
+      cut = legend_frame(%{position: :bottom, max_label: 10}, domain: ["a", long])
+      assert [_group] = Legend.generate(cut, :literal)
+      assert Frame.legend_fit(cut) == %{status: :drawn, entries: 2}
     end
 
     test "a side legend does not wrap" do
@@ -217,9 +225,10 @@ defmodule Visualize.Chart.LegendWrapTest do
     test "it applies at a side, narrowing the width the margin must hold" do
       margin = %{top: 20, right: 100, bottom: 20, left: 20}
 
-      assert_raise ArgumentError, ~r/needs .* in the right margin, which is 100/, fn ->
-        legend_frame(%{position: :right, inside: false}, domain: @long, margin: margin)
-      end
+      # 8 + 16 + 0.6 × 12 × 27 = 218.4 in a margin of 100: omitted (D-231).
+      wide = legend_frame(%{position: :right, inside: false}, domain: @long, margin: margin)
+      assert Legend.generate(wide, :literal) == []
+      assert Frame.legend_fit(wide) == %{status: :omitted, reason: :width, entries: 2}
 
       frame =
         legend_frame(%{position: :right, inside: false, max_label: 8},

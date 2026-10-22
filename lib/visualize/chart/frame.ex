@@ -117,6 +117,15 @@ defmodule Visualize.Chart.Frame do
           generated: struct() | nil
         }
 
+  @typedoc "Why a legend is omitted (spec/14 §4.5, D-223, D-231)."
+  @type omission :: :min_entries | :cell | :row | :height | :width
+
+  @typedoc "Whether a frame's legend is drawn (spec/14 §4.5, D-231); `nil` with no legend."
+  @type legend_fit ::
+          %{status: :drawn, entries: non_neg_integer()}
+          | %{status: :omitted, reason: omission(), entries: non_neg_integer()}
+          | nil
+
   # The size a frame is realized at when the caller gives none (spec/14 §4.2): a static
   # render still works, and a design never carries one.
   @default_size {600, 400}
@@ -154,11 +163,13 @@ defmodule Visualize.Chart.Frame do
   (spec/14 §5.4.3).
 
   Raises `ArgumentError` for an unresolved variable, a theme name it cannot resolve, a
-  `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, a legend in a side margin that cannot hold it, a top or
-  bottom legend with a row or a single entry wider than the plot, or a `max_label` below 1
-  (spec/14 §4.5). A top or bottom legend in a margin too small for its rows grows that
-  margin, and the plot is that much shorter (D-169); a need that would leave the plot no
-  height raises, naming the side, the need and the box (D-222).
+  `system:` not of `Visualize.Quantity.systems/0`, a bound value a scale cannot take, or
+  a legend's `max_label` or `min_entries` below 1 (spec/14 §4.5). A top or bottom legend
+  in a margin too small for its rows grows that margin, and the plot is that much shorter
+  (D-169). A legend that cannot be laid out in its room — a side margin narrower than it,
+  a row or a single cell wider than the plot, a top or bottom margin that would leave the
+  plot no height — is omitted, as one below its `min_entries` is: not drawn and no margin
+  taken; `legend_fit/1` says why (D-223, D-231).
   """
   @spec new(Chart.t(), keyword()) :: t()
   def new(%Chart{} = chart, opts \\ []) do
@@ -167,10 +178,12 @@ defmodule Visualize.Chart.Frame do
     margin = margin(Map.get(node, :margin, Schema.default(:frame, :margin)))
     frame = realize(chart, opts, name, node, size, margin)
 
-    # A legend in a margin that cannot hold it is a fault here, not a clipped drawing; a top
-    # or bottom one grows its margin instead, and the frame is realized over the smaller plot
-    # (§4.5, D-169). The rows depend on the plot's width, which that leaves alone.
-    case Legend.fit!(frame, margin) do
+    # A top or bottom legend in its margin grows that margin to its rows, and the frame is
+    # realized over the smaller plot (§4.5, D-169); one with no room is omitted and takes
+    # none (D-231). The rows depend on the plot's width, which that leaves alone, and its
+    # room on the plot's height and that margin together, so the second realization fits
+    # the legend as the first did.
+    case Legend.fit(frame) do
       ^margin -> frame
       grown -> realize(chart, opts, name, node, size, grown)
     end
@@ -342,6 +355,38 @@ defmodule Visualize.Chart.Frame do
   """
   @spec legend_extent(t()) :: %{width: number(), height: number()}
   def legend_extent(%__MODULE__{} = frame), do: Legend.extent(frame)
+
+  @doc """
+  Whether the frame's legend is drawn (spec/14 §4.5, D-231): `nil` when the frame has no
+  legend, `%{status: :drawn, entries: n}`, or `%{status: :omitted, reason: reason,
+  entries: n}` when it is not drawn and takes no margin. `n` counts its realized entries,
+  the title not among them. The reason is the first that holds of:
+
+    * `:min_entries` - fewer entries than its `min_entries` (D-223)
+    * `:cell` - wrapped, an entry or the title is wider than the plot on its own
+    * `:row` - with `wrap: false`, its one row is wider than the plot
+    * `:height` - `:top` or `:bottom` `inside: false`, the margin its rows need would
+      leave the plot no height (D-222)
+    * `:width` - at a side or a corner `inside: false`, its margin is narrower than 8
+      and its estimated width
+
+  A host reads it to offer an omitted legend's entries another way: from
+  `Visualize.Chart.Applied`'s `frames` after `Visualize.Chart.apply/2`, and as a
+  compiled chart's `Visualize.Chart.Compiled.legend_fit/1` after a tick.
+
+  ## Examples
+
+      iex> chart = Visualize.Chart.from_map!(%{version: 2, frames: %{main: %{kind: :cartesian,
+      ...>   margin: %{top: 20, right: 30, bottom: 20, left: 20},
+      ...>   scales: %{color: %{kind: :ordinal, domain: ["a-long-host-name", "b"]}},
+      ...>   legend: %{scale: :color, position: :right, inside: false}}}})
+      iex> Visualize.Chart.Frame.new(chart) |> Visualize.Chart.Frame.legend_fit()
+      %{status: :omitted, reason: :width, entries: 2}
+      iex> Visualize.Chart.Frame.new(chart) |> Visualize.Chart.Frame.legend_extent()
+      %{width: 0, height: 0}
+  """
+  @spec legend_fit(t()) :: legend_fit()
+  def legend_fit(%__MODULE__{} = frame), do: Legend.status(frame)
 
   @doc "The projection of a `:geo` frame (spec/14 §4.6), `nil` for any other kind."
   @spec projection(t()) :: Projection.t() | nil

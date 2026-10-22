@@ -15,6 +15,25 @@ All notable changes to Visualize are recorded here, following
 `mix.exs` reads `0.8.2-dev`: the `-dev` suffix is what keeps a commit from claiming to be the
 release it merely follows.
 
+### Fixed
+
+- **A legend that cannot fit its room is omitted and reported, not raised** (#876, #914,
+  D-231). `Visualize.Chart.Frame.new/2` — and so `Chart.apply/2`, `Chart.render/2`,
+  `Chart.compile/2` and every compiled tick — raised `ArgumentError` for a top or bottom
+  legend `inside: false` whose rows would leave the plot no height (0.8.0, D-222), a side
+  legend wider than its margin, a `wrap: false` row wider than the plot, and an entry or
+  title wider than the plot. Each depends on the series and their names, so a chart that
+  drew yesterday raised today, and a LiveView went down with it (metresis#540). Now such a
+  legend is omitted as one below its `min_entries` is: not drawn, no margin taken, the
+  plot its height with no legend. `Visualize.Chart.Frame.legend_fit/1` says so — `nil`
+  with no legend, `%{status: :drawn, entries: n}`, or `%{status: :omitted, reason: reason,
+  entries: n}` with `reason` one of `:min_entries`, `:cell`, `:row`, `:height` and
+  `:width` — read from `Chart.Applied`'s `frames`, and `Visualize.Chart.Compiled.legend_fit/1`
+  is the latest tick's: a tick omits the legend when its series no longer fit and draws
+  it again, the margin following, when they do. An invalid `min_entries` or `max_label`
+  still raises. *Affects* a host that caught the raise to fall back: it reads
+  `legend_fit/1` instead, and can offer the omitted entries some other way.
+
 ## [0.8.1] — 2026-10-22
 
 ### Fixed

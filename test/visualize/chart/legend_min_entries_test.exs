@@ -61,10 +61,15 @@ defmodule Visualize.Chart.LegendMinEntriesTest do
           assert length(children) == unquote(count)
           assert extent.height == (unquote(count) - 1) * 16 + 12
           assert extent.width > 0
+          assert Frame.legend_fit(frame) == %{status: :drawn, entries: unquote(count)}
         else
           assert groups == []
           assert extent == %{width: 0, height: 0}
           refute Frame.render(frame) =~ ~s(class="legend")
+
+          # Reported as an omission, with the entries it has (D-231).
+          assert Frame.legend_fit(frame) ==
+                   %{status: :omitted, reason: :min_entries, entries: unquote(count)}
         end
       end
 
@@ -103,14 +108,19 @@ defmodule Visualize.Chart.LegendMinEntriesTest do
       frame = Frame.new(Chart.from_map!(design), size: {400, 300})
       assert frame.margin.right == 4
       assert Legend.generate(frame, :literal) == []
+      # The minimum is checked first, so the reason is it and not the room (D-231).
+      assert Frame.legend_fit(frame) == %{status: :omitted, reason: :min_entries, entries: 2}
 
-      # At its minimum the same legend cannot be fitted, as any side legend (§4.5).
-      assert_raise ArgumentError, ~r/needs .* in the right margin, which is 4/, fn ->
+      # At its minimum the same legend has no room, and is omitted for that (§4.5, D-231).
+      at_minimum =
         design
         |> put_in([:frames, :main, :legend, :min_entries], 2)
         |> Chart.from_map!()
         |> Frame.new(size: {400, 300})
-      end
+
+      assert at_minimum.margin.right == 4
+      assert Legend.generate(at_minimum, :literal) == []
+      assert Frame.legend_fit(at_minimum) == %{status: :omitted, reason: :width, entries: 2}
     end
 
     test "a legend of declared values counts its values" do
@@ -171,17 +181,20 @@ defmodule Visualize.Chart.LegendMinEntriesTest do
       {:ok, %{"main" => one}} = Chart.compile(@live, sources: rows(1), size: @size)
       assert one.margin.top == 10
       refute Compiled.svg(one, rows(1)) =~ ~s(class="legend")
+      assert Compiled.legend_fit(one) == %{status: :omitted, reason: :min_entries, entries: 1}
 
       {_group, three} = Compiled.step(one, rows(3))
       assert three.margin.top == 12 + 8
       assert three.plot.height == one.plot.height - 10
       assert Compiled.svg(three, rows(3)) =~ ~s(class="legend")
+      assert Compiled.legend_fit(three) == %{status: :drawn, entries: 3}
 
       {_group, back} = Compiled.step(three, rows(1))
       assert back.margin == one.margin
       assert back.plot == one.plot
       assert Compiled.static(back) == Compiled.static(one)
       refute Compiled.svg(back, rows(1)) =~ ~s(class="legend")
+      assert Compiled.legend_fit(back) == Compiled.legend_fit(one)
     end
   end
 
