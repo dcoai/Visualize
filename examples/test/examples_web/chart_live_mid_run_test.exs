@@ -77,6 +77,13 @@ defmodule ExamplesWeb.ChartLiveMidRunTest do
 
   defp first_series(key), do: hd(Themes.theme(key).series)
 
+  # The y scale's easing as the run's renderer holds it after its last frame: where it is
+  # shown and where it goes (spec/14 §12.5).
+  defp eased_y(s) do
+    [{_name, compiled}] = Renderer.state(s.assigns.run.renderer).compiled
+    Map.fetch!(compiled.eased, "y")
+  end
+
   # The frame a fresh render draws at the page's options: Stop, and the still frame is
   # the chart at the run's tick, prepared afresh (#362).
   defp still_after_stop(s), do: event(s, "run_stop", %{}).assigns.still_frame
@@ -158,6 +165,11 @@ defmodule ExamplesWeb.ChartLiveMidRunTest do
           Enum.reduce(1..6, {full, reduce}, fn _, {f, r} -> {ticked(f, 50), ticked(r, 50)} end)
 
         assert reduce.assigns.run_ticks == full.assigns.run_ticks
+        # The easing reads the page's stopped clock (#921), so where each y scale stands is
+        # the ticks' and not the test's speed: the full run's is still on its way.
+        %{shown: shown, target: target} = eased_y(full)
+        assert shown != target
+        assert %{shown: ^target, target: ^target} = eased_y(reduce)
         refute drawn(reduce.assigns.run_frame) == drawn(full.assigns.run_frame)
         # Under :reduce the run draws what the still draws: the target, never mid-transition.
         assert drawn(reduce.assigns.run_frame) == drawn(still_after_stop(reduce))
