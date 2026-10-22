@@ -443,8 +443,7 @@ defmodule Visualize.Chart.Frame do
         transform: Transform.translate(frame.margin.left, frame.margin.top)
       )
       |> stamp([:frames, frame.name], paths?)
-      |> Defs.resolve(frame, mode)
-      |> Lines.split()
+      |> finish(frame, mode)
 
     # A style's motion as classes and the one `<style>` they need (spec/14 §3.10, D-176).
     {group, motion} = Motion.apply(group, mode)
@@ -452,6 +451,15 @@ defmodule Visualize.Chart.Frame do
     # The defs come first (spec/14 §2.7): the paints declared, the filters the tree uses.
     %{group | children: motion ++ Defs.defs(frame, mode, group) ++ group.children}
   end
+
+  @doc false
+  # The frame's finishing pass over a drawn tree (spec/14 §7.1, §12.4, D-234): its paints
+  # resolved for the mode (§2.7) and its texts' lines split (D-210). `generate/2` runs it
+  # over its group and a compiled chart over every region's elements, so a text has the
+  # same lines whichever path draws it.
+  @spec finish(Element.t(), t(), Theme.mode()) :: Element.t()
+  def finish(%Element{} = element, %__MODULE__{} = frame, mode),
+    do: element |> Defs.resolve(frame, mode) |> Lines.split()
 
   # The frame's own box painted under its contents, `[]` when it declares no `background`
   # (spec/14 §4.2, #383): the group is translated by the margins, so the rect starts back
