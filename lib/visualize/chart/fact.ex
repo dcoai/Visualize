@@ -12,7 +12,8 @@ defmodule Visualize.Chart.Fact do
 
   The keys are `keys/0`: the attributes of `Visualize.Data.Schema.attributes/0` and two
   derived from a field's declared values, `:names` and `:colors` (D-225). `fetch/3` says
-  what a key gives.
+  what a key gives, and `shape/1` what shape it is: a `:scalar`, a `:list` or a `:map`.
+  Only a scalar is a word (`word?/1`), so only a scalar key's fact is a text's hole.
 
   ## Examples
 
@@ -32,6 +33,38 @@ defmodule Visualize.Chart.Fact do
   @derived [:names, :colors]
   @keys Schema.attributes() ++ @derived
 
+  # The shape of each fact key's value, whatever schema gives it (spec/14 §7.4, #928): what
+  # a text hole asks of a key, so it is stated here, once, for every key.
+  @shapes %{
+    type: :scalar,
+    unit: :scalar,
+    quantity: :scalar,
+    label: :scalar,
+    order: :list,
+    status: :map,
+    polarity: :scalar,
+    target: :scalar,
+    continuity: :scalar,
+    window: :scalar,
+    metric_kind: :scalar,
+    bounds: :list,
+    identity: :scalar,
+    values: :list,
+    names: :map,
+    colors: :map
+  }
+
+  # A key added to the schema's attributes, or derived, states its shape before it compiles.
+  if Enum.sort(Map.keys(@shapes)) != Enum.sort(@keys) do
+    raise CompileError,
+      description:
+        "every fact key states its shape: keys #{inspect(@keys)}, " <>
+          "shapes #{inspect(Map.keys(@shapes))}"
+  end
+
+  @typedoc "The shape of a fact key's value: one word, a list or a map."
+  @type shape :: :scalar | :list | :map
+
   @doc """
   The fact keys, in order: the description attributes, then `:names` and `:colors`
   (spec/14 §7.4, D-225).
@@ -41,6 +74,32 @@ defmodule Visualize.Chart.Fact do
   """
   @spec keys() :: [atom(), ...]
   def keys, do: @keys
+
+  @doc """
+  The shape of the fact key `key`'s value, whatever schema gives it (spec/14 §7.4):
+  `:scalar`, `:list` or `:map`.
+
+      iex> Visualize.Chart.Fact.shape(:unit)
+      :scalar
+      iex> Visualize.Chart.Fact.shape(:values)
+      :list
+      iex> Visualize.Chart.Fact.shape(:names)
+      :map
+  """
+  @spec shape(atom()) :: shape()
+  def shape(key) when is_map_key(@shapes, key), do: Map.fetch!(@shapes, key)
+
+  @doc """
+  Whether a fact of the key `key` is written as a word — its shape is `:scalar` — and so
+  may stand in a text's hole (spec/14 §7.4). A list or a map is not a word.
+
+      iex> Visualize.Chart.Fact.word?(:label)
+      true
+      iex> Visualize.Chart.Fact.word?(:order)
+      false
+  """
+  @spec word?(atom()) :: boolean()
+  def word?(key), do: shape(key) == :scalar
 
   @doc """
   What the fact key `key` gives `field` in `schema` (spec/14 §7.4, D-225): `{:ok, value}`,

@@ -99,6 +99,18 @@ release it merely follows.
   names. *Affects* board cells and compiled charts with multi-line text: they draw it as
   `Chart.render/2` does; a chart with no newline in any text draws as before.
 
+- **A list or a map fact in a text fails validation** (#868, #928). spec/14 §7.4 says only
+  a fact written as words may stand in a text's hole, but the validator refused a hand-kept
+  set of keys, `:order`, `:status`, `:names` and `:colors`, so `"#{fact(:s, :state,
+  :values)}"` and `"#{fact(:s, :latency, :bounds)}"`, lists too, validated: at application
+  the values ran together into one word (`okwarnfail`), and bounds became stray characters
+  or raised `ArgumentError`. Whether a fact is a word now comes from its key's shape:
+  `Visualize.Chart.Fact.shape/1` states every key's — `:scalar`, `:list` or `:map` — and
+  `Visualize.Chart.Fact.word?/1` is true for a scalar, which is what a text hole takes. A
+  list or a map key in a text is `{:invalid_for, :text}` at the text's path, as the four
+  were. *Affects* a design with a list or map fact in a text hole, which now fails
+  validation; a fact of `values`, `order` or `bounds` still reads as a value, outside a text.
+
 ## [0.8.2] — 2026-10-22
 
 ### Fixed
