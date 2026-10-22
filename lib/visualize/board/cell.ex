@@ -19,7 +19,11 @@ defmodule Visualize.Board.Cell do
     at the cell's box and compiled, one compiled chart per frame, and every data change is
     a `Visualize.Chart.Compiled.step/3` per frame inside one accessible root. A delivery
     naming another schema version (`Compiled.stale?/2`), a new size and a new chart or
-    variables compile again, `carry/2`'d from the compiled chart before.
+    variables compile again, `carry/2`'d from the compiled chart before. The deliveries are
+    first read as a compiled chart's tick reads its sources (spec/14 §12.5): a tensor and
+    tuple rows named by the slot's fields, and a delivery its slot cannot read a fault — the
+    cell keeps the frame it holds and is `{:invalid, errors}` until one that reads arrives
+    (D-232).
 
   The board's messages are plain sends, never calls, so a slow cell never holds the board:
   `{:data, slots, now}`, `{:now, now}`, `{:size, size}`, `{:component, chart, vars}`,
@@ -160,8 +164,8 @@ defmodule Visualize.Board.Cell do
   # -- drawing ------------------------------------------------------------------------------
 
   # The chart drawn when every slot holds a delivery with rows and anything it is drawn
-  # from changed; the frame kept otherwise. A component the data cannot be applied to is a
-  # fault the state shows, never a raise. The drawing is `Visualize.Board.Draw`'s, which a
+  # from changed; the frame kept otherwise. A component the data cannot be applied to, and a
+  # delivery its slot cannot read (D-232), are faults the state shows, never a raise. The drawing is `Visualize.Board.Draw`'s, which a
   # snapshot draws through too (spec/15 §12.2).
   defp draw(%{slots: nil} = state), do: state
 
@@ -183,25 +187,37 @@ defmodule Visualize.Board.Cell do
         state
 
       true ->
-        placed = Draw.sources(state.slots)
+        case Draw.read(state.chart, state.slots) do
+          {:ok, slots} ->
+            drawn_over(%{state | slots: slots}, slots)
 
-        {sources, chart} = selected(state, placed)
-
-        case compiled(state, sources, chart) do
-          {:ok, state} ->
-            step(state, sources)
-
-          {:error, errors} ->
-            %{
-              state
-              | svg: nil,
-                attrs: {%{}, %{}},
-                pickable: nil,
-                shown: nil,
-                token: nil,
-                fault: {:apply, errors}
-            }
+          # A delivery its slot cannot read (spec/15 §8.3, D-232): nothing is placed,
+          # applied or stepped, and the drawing held stays under the fault.
+          {:error, faults} ->
+            %{state | fault: {:data, faults}, drawn: drawn_from(state)}
         end
+    end
+  end
+
+  defp drawn_over(state, slots) do
+    placed = Draw.sources(slots)
+
+    {sources, chart} = selected(state, placed)
+
+    case compiled(state, sources, chart) do
+      {:ok, state} ->
+        step(state, sources)
+
+      {:error, errors} ->
+        %{
+          state
+          | svg: nil,
+            attrs: {%{}, %{}},
+            pickable: nil,
+            shown: nil,
+            token: nil,
+            fault: {:apply, errors}
+        }
     end
   end
 

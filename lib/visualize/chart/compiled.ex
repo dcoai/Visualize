@@ -48,8 +48,8 @@ defmodule Visualize.Chart.Compiled do
 
   alias Visualize.Backend.{CanvasBinary, Hybrid}
   alias Visualize.{Chart, Render, Theme}
-  alias Visualize.Chart.{Applied, Frame, Mark, Names, Template}
-  alias Visualize.Chart.Compiled.{Motion, Regions, Transition, Window}
+  alias Visualize.Chart.{Applied, Frame, Mark, Names, Validator}
+  alias Visualize.Chart.Compiled.{Motion, Regions, Sources, Transition, Window}
   alias Visualize.Chart.Frame.{Defs, Furniture, Scales}
   alias Visualize.Chart.Frame.Motion, as: FrameMotion
   alias Visualize.Chart.Transform.Force
@@ -84,7 +84,8 @@ defmodule Visualize.Chart.Compiled do
     forces: %{},
     schemas: %{},
     versions: %{},
-    legend_fit: nil
+    legend_fit: nil,
+    faults: []
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -148,7 +149,8 @@ defmodule Visualize.Chart.Compiled do
           forces: forces(),
           schemas: %{atom() => Visualize.Data.Schema.t()},
           versions: %{atom() => String.t() | nil},
-          legend_fit: Frame.legend_fit()
+          legend_fit: Frame.legend_fit(),
+          faults: [Validator.error()]
         }
 
   @doc false
@@ -356,7 +358,8 @@ defmodule Visualize.Chart.Compiled do
   `backdrop`, the layer beneath the canvas (a basemap's images, #476).
 
   Raises `ArgumentError` as `Visualize.Chart.Frame.new/2` does for a value a scale
-  cannot take.
+  cannot take, and for a source its slot cannot read, which `tick/3` carries as
+  `faults/1` instead (D-232).
   """
   @spec render(t(), map()) :: map()
   def render(%__MODULE__{} = compiled, sources) when is_map(sources) do
@@ -403,13 +406,15 @@ defmodule Visualize.Chart.Compiled do
   @doc """
   One frame of the one-string form with the state after it (spec/14 §12.5, #360): the
   frame's group of `svg/2` as a `Visualize.IR.Element`, its eased scales at their shown
-  domains for this tick, and the compiled chart carrying the easing on. `:now`, `:at`
-  and `:motion` as `tick/3` takes them. A caller that wants a page-ready document wraps it in
+  domains for this tick, and the compiled chart carrying the easing on and the step's
+  `faults/1`, as `tick/3`'s (D-232). `:now`, `:at` and `:motion` as `tick/3` takes them.
+  A caller that wants a page-ready document wraps it in
   `Visualize.IR.Element.root/3`.
   """
   @spec step(t(), map(), keyword()) :: {Element.t(), t()}
   def step(%__MODULE__{} = compiled, sources, opts \\ []) when is_map(sources) do
-    sources = sources!(compiled, sources)
+    {sources, faults} = read(compiled, sources)
+    compiled = %{compiled | faults: faults}
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
     compiled = ticked(compiled, frame, sources)
@@ -540,6 +545,11 @@ defmodule Visualize.Chart.Compiled do
   has no room omits it, with no margin taken and nothing raised, and one whose legend fits
   again draws it; the chart holds the tick's `legend_fit/1` (§4.5, D-231).
 
+  Bad data is a fault, not a raise (§12.5, D-232): a source its slot cannot read — a
+  tensor or tuple rows of another width, or under a slot that declares no fields — is
+  drawn as an omitted slot, and the chart holds the tick's `faults/1`, `[]` once a tick's
+  sources all read. A host that presents the chart reads it after every tick.
+
   ## Options
 
     * `:now` - the window's upper end for a viewport design; by default the newest
@@ -555,7 +565,8 @@ defmodule Visualize.Chart.Compiled do
   """
   @spec tick(t(), map(), keyword()) :: {payload(), t()}
   def tick(%__MODULE__{} = compiled, sources, opts) when is_map(sources) do
-    sources = sources!(compiled, sources)
+    {sources, faults} = read(compiled, sources)
+    compiled = %{compiled | faults: faults}
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
     compiled = ticked(compiled, frame, sources)
@@ -611,6 +622,28 @@ defmodule Visualize.Chart.Compiled do
   @spec legend_fit(t()) :: Frame.legend_fit()
   def legend_fit(%__MODULE__{legend_fit: legend_fit}), do: legend_fit
 
+  @doc """
+  The faults of the latest `tick/3`'s or `step/3`'s sources (spec/14 §12.5, D-232): `[]`
+  when every source read, else `{[:sources, slot], reason}` for each one its slot cannot
+  read — `{:width, declared, given}`, `{:rank, rank}` or `{:type, :named_rows}` — in the
+  shape and order of `Visualize.Chart.apply/2`'s errors. A tick does not raise for them: it
+  draws a faulted slot as an omitted one, and the next tick whose sources read clears them.
+
+      iex> design = %{version: 2, sources: %{s: %{fields: [:t, :v]}},
+      ...>   frames: %{main: %{kind: :cartesian,
+      ...>     scales: %{x: %{kind: :linear}, y: %{kind: :linear}}}},
+      ...>   marks: [%{type: :line, data: :s, channels: %{x: :t, y: :v}}]}
+      iex> {:ok, %{"main" => c}} = Visualize.Chart.compile(design, sources: %{s: [{1, 3}, {2, 9}]})
+      iex> {_payload, c} = Visualize.Chart.Compiled.tick(c, %{s: [{1, 3, 0}]})
+      iex> Visualize.Chart.Compiled.faults(c)
+      [{[:sources, "s"], {:width, 2, 3}}]
+      iex> {_payload, c} = Visualize.Chart.Compiled.tick(c, %{s: [{1, 3}, {2, 9}]})
+      iex> Visualize.Chart.Compiled.faults(c)
+      []
+  """
+  @spec faults(t()) :: [Validator.error()]
+  def faults(%__MODULE__{faults: faults}), do: faults
+
   # -- per tick -------------------------------------------------------------------------
 
   # The chart after a tick's or a step's realization: on the tick's plot (D-222), its force
@@ -632,50 +665,27 @@ defmodule Visualize.Chart.Compiled do
   delivery; the caller compiles again and `carry/2`s the state across.
   """
   @spec stale?(t(), map()) :: boolean()
-  def stale?(%__MODULE__{} = compiled, sources) when is_map(sources),
-    do: changed(compiled, Names.keys(sources)) != nil
+  def stale?(%__MODULE__{versions: versions}, sources) when is_map(sources),
+    do: Sources.stale(versions, Names.keys(sources)) != nil
 
-  defp changed(%{versions: versions}, sources) do
-    Enum.find_value(sources, fn
-      {slot, %Delivery{schema: version}} ->
-        compiled = Map.get(versions, slot)
-        if version != compiled, do: {slot, compiled, version}
-
-      _plain ->
-        nil
-    end)
-  end
-
-  # The tick's sources as the chart reads them: a delivery is the source it carries
-  # (spec/08 §10.4), once it is known to name the schema the chart was compiled with, and a
-  # tensor its columns named by the slot's fields, as application binds it (D-214).
-  defp sources!(compiled, sources) do
+  # The tick's sources as the chart reads them, with their faults (spec/14 §12.5, D-232):
+  # once no delivery names a schema other than the one the chart was compiled with — which
+  # raises, a recompilation, not bad data — each read by `Sources.read/2`, a delivery as
+  # the source it carries (spec/08 §10.4), a tensor or tuple rows named by the slot's
+  # fields (D-214, D-232), a source its slot cannot read left out and reported.
+  defp read(%{chart: %Chart{sources: slots}, versions: versions}, sources) do
     # The host names a source by atom or string; the design by string (D-195).
     sources = Names.keys(sources)
-
-    case changed(compiled, sources) do
-      nil ->
-        Map.new(sources, fn {name, source} -> {name, read!(compiled, name, source)} end)
-
-      {slot, compiled_with, delivered} ->
-        raise ArgumentError,
-              "slot #{inspect(slot)}'s delivery names schema version #{inspect(delivered)}, " <>
-                "and the chart was compiled with #{inspect(compiled_with)}: a schema change " <>
-                "recompiles (spec/14 §12.1) — compile again and carry/2 the state across"
-    end
+    :ok = Sources.fresh!(versions, sources)
+    {read, faults} = Sources.read(slots, sources)
+    {Map.new(read, fn {name, source} -> {name, Delivery.source(source)} end), faults}
   end
 
-  # A tick has no error return: a tensor its slot cannot read raises, naming the slot, as a
-  # stale delivery does.
-  defp read!(%{chart: %Chart{sources: slots}}, name, source) do
-    case Template.read(Map.get(slots || %{}, name), Delivery.source(source)) do
-      {:ok, source} ->
-        source
-
-      {:error, reason} ->
-        raise ArgumentError,
-              "a tick's source cannot bind: " <>
-                Visualize.Chart.Validator.format({[:sources, name], reason}) <> " (spec/14 §7.3)"
+  # The one-shot forms return no chart to carry a fault, so it raises there (D-232).
+  defp sources!(compiled, sources) do
+    case read(compiled, sources) do
+      {sources, []} -> sources
+      {_sources, faults} -> Sources.raise!(faults)
     end
   end
 
