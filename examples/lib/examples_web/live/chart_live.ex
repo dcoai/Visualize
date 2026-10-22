@@ -711,9 +711,14 @@ defmodule ExamplesWeb.ChartLive do
 
   # The frame at the run's next tick, asked of the run's renderer (#413): a streaming
   # design's at its window — whose rows the renderer holds and slides by the columns the
-  # tick advanced — any other chart's at its next animation tick.
+  # tick advanced — any other chart's at its next animation tick. Its transitions ease at
+  # the tick's instant on the page's clock (spec/14 §12.6, #921), never the renderer's.
   defp start_frame(socket, columns \\ 0) do
-    opts = run_opts(socket.assigns, socket.assigns.run_ticks) |> Keyword.delete(:rows)
+    opts =
+      run_opts(socket.assigns, socket.assigns.run_ticks)
+      |> Keyword.delete(:rows)
+      |> Keyword.put(:at, now(socket, :millisecond))
+
     {run, _id} = Run.asking(socket.assigns.run, opts, columns)
     assign(socket, run: run)
   end
