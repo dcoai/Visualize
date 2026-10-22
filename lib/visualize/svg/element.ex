@@ -75,39 +75,50 @@ defmodule Visualize.SVG.Element do
   Converts an IR.Element to an SVG.Element.
   """
   @spec from_ir(IR.Element.t()) :: t()
+  def from_ir(%IR.Element{} = ir), do: convert(ir, %{})
+
+  # The walk carries the stroke an element inherits, so a stroked text under a stroked
+  # group paints its stroke first, as the backend writes it (spec/09 §2.5, D-235).
+  #
   # A clipped element converted alone is its definition and itself, which SVG keeps side by
   # side, in a group (spec/02 §5.1); among siblings the two stand side by side as the
   # backend writes them.
-  def from_ir(%IR.Element{clip: %{}} = ir),
-    do: %__MODULE__{tag: :g, attrs: %{}, children: clipped(ir), content: nil}
+  defp convert(%IR.Element{clip: %{}} = ir, inherited),
+    do: %__MODULE__{tag: :g, attrs: %{}, children: clipped(ir, inherited), content: nil}
 
   # `vector-effect` does not inherit (spec/09 §2.5, spec/14 §3.9): a group's is written on
   # each child that does not set its own, never on the group, as the backend writes it.
-  def from_ir(%IR.Element{type: :group, style: %{vector_effect: effect} = style} = ir) do
+  defp convert(%IR.Element{type: :group, style: %{vector_effect: effect} = style} = ir, inherited) do
     children =
       Enum.map(ir.children, &%{&1 | style: Map.put_new(&1.style, :vector_effect, effect)})
 
-    from_ir(%{ir | style: Map.delete(style, :vector_effect), children: children})
+    convert(%{ir | style: Map.delete(style, :vector_effect), children: children}, inherited)
   end
 
-  def from_ir(%IR.Element{} = ir) do
+  defp convert(%IR.Element{} = ir, inherited) do
+    within =
+      if ir.type == :group,
+        do: Visualize.Backend.SVG.within(inherited, ir.style),
+        else: inherited
+
     %__MODULE__{
       tag: ir_type_to_tag(ir.type),
-      attrs: build_attrs(ir),
-      children: Enum.flat_map(ir.children, &converted/1),
+      attrs: build_attrs(ir, inherited),
+      children: Enum.flat_map(ir.children, &converted(&1, within)),
       content: ir.content
     }
   end
 
-  defp converted(%IR.Element{clip: %{}} = ir), do: clipped(ir)
-  defp converted(%IR.Element{} = ir), do: [from_ir(ir)]
+  defp converted(%IR.Element{clip: %{}} = ir, inherited), do: clipped(ir, inherited)
+  defp converted(%IR.Element{} = ir, inherited), do: [convert(ir, inherited)]
 
   # A clipped element: its definition — a `clipPath` or a `mask` — then the element
   # referring to it, the definition the one `Visualize.Backend.SVG` writes (spec/09 §2.3).
-  defp clipped(%IR.Element{clip: %{shape: shape, keep: keep}} = ir) do
+  defp clipped(%IR.Element{clip: %{shape: shape, keep: keep}} = ir, inherited) do
     {tag, attrs, children, reference} = Visualize.Backend.SVG.clip_definition(shape, keep)
-    definition = %__MODULE__{tag: tag, attrs: attrs, children: Enum.map(children, &from_ir/1)}
-    [definition | converted(IR.Element.set_attrs(%{ir | clip: nil}, reference))]
+    shapes = Enum.map(children, &convert(&1, inherited))
+    definition = %__MODULE__{tag: tag, attrs: attrs, children: shapes}
+    [definition | converted(IR.Element.set_attrs(%{ir | clip: nil}, reference), inherited)]
   end
 
   defp ir_type_to_tag(:group), do: :g
@@ -119,7 +130,7 @@ defmodule Visualize.SVG.Element do
   defp ir_type_to_tag(:fe_gaussian_blur), do: :feGaussianBlur
   defp ir_type_to_tag(type), do: type
 
-  defp build_attrs(%IR.Element{} = ir) do
+  defp build_attrs(%IR.Element{} = ir, inherited) do
     attrs = geometric_attrs(ir)
 
     # Add path data if present
@@ -140,7 +151,12 @@ defmodule Visualize.SVG.Element do
 
     # Convert style to SVG attributes
     style_attrs = style_to_attrs(ir.style)
-    Map.merge(attrs, style_attrs)
+    attrs = Map.merge(attrs, style_attrs)
+
+    # A stroked text paints its stroke under its fill (spec/09 §2.5, D-235).
+    if IR.Element.stroke_first?(ir, inherited),
+      do: Map.put(attrs, :"paint-order", "stroke"),
+      else: attrs
   end
 
   # A root carries the namespace and its `view_box` renders as `viewBox` (D-11); points

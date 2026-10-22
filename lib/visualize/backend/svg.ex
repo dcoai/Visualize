@@ -31,7 +31,7 @@ defmodule Visualize.Backend.SVG do
   @impl true
   @spec render_element(Element.t(), keyword()) :: iolist()
   def render_element(%Element{} = element, _opts \\ []) do
-    do_render_element(element)
+    do_render_element(element, %{})
   end
 
   @impl true
@@ -67,38 +67,44 @@ defmodule Visualize.Backend.SVG do
   # One step of `Visualize.Render.Segments` (spec/09 §1.4, #813, D-203): a group or the
   # root as its start tag, its end tag and the children written between them, and any
   # other element — one that names its identity or is clipped, whatever its type — as the
-  # text `render_element/2` writes for it. The parts concatenate to `render_element/2`.
-  @spec segment(Element.t()) :: {:leaf, iodata()} | {:node, iodata(), iodata(), [Element.t()]}
-  def segment(%Element{attrs: %{"data-vis-id" => _}} = element),
-    do: {:leaf, do_render_element(element)}
+  # text `render_element/2` writes for it. The parts concatenate to `render_element/2`. A
+  # group passes its children the stroke they inherit, so a stroked text under it paints
+  # its stroke first (§2.5, D-235).
+  @spec segment(Element.t(), map()) ::
+          {:leaf, iodata()} | {:node, iodata(), iodata(), [Element.t()], map()}
+  def segment(%Element{attrs: %{"data-vis-id" => _}} = element, inherited),
+    do: {:leaf, do_render_element(element, inherited)}
 
-  def segment(%Element{clip: %{}} = element), do: {:leaf, do_render_element(element)}
+  def segment(%Element{clip: %{}} = element, inherited),
+    do: {:leaf, do_render_element(element, inherited)}
 
-  def segment(%Element{type: :group, style: %{vector_effect: effect} = style} = group) do
+  def segment(%Element{type: :group, style: %{vector_effect: effect} = style} = group, inherited) do
     children =
       Enum.map(group.children, fn child ->
         %{child | style: Map.put_new(child.style, :vector_effect, effect)}
       end)
 
-    segment(%{group | style: Map.delete(style, :vector_effect), children: children})
+    segment(%{group | style: Map.delete(style, :vector_effect), children: children}, inherited)
   end
 
-  def segment(%Element{type: :group, children: [_ | _] = children} = group) do
+  def segment(%Element{type: :group, children: [_ | _] = children} = group, inherited) do
     attrs =
       group.style
       |> style_to_attrs()
       |> Map.merge(group.attrs)
       |> maybe_add_transform(group.transform)
 
-    {:node, ["<g", Renderer.render_attrs(attrs), ">"], "</g>", children}
+    {:node, ["<g", Renderer.render_attrs(attrs), ">"], "</g>", children,
+     within(inherited, group.style)}
   end
 
-  def segment(%Element{type: :root, attrs: attrs, children: [_ | _] = children}) do
+  def segment(%Element{type: :root, attrs: attrs, children: [_ | _] = children}, inherited) do
     svg_attrs = Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, attrs)
-    {:node, ["<svg", Renderer.render_attrs(svg_attrs), ">"], "</svg>", children}
+    {:node, ["<svg", Renderer.render_attrs(svg_attrs), ">"], "</svg>", children, inherited}
   end
 
-  def segment(%Element{} = element), do: {:leaf, do_render_element(element)}
+  def segment(%Element{} = element, inherited),
+    do: {:leaf, do_render_element(element, inherited)}
 
   # ============================================================
   # Element Rendering
@@ -107,22 +113,25 @@ defmodule Visualize.Backend.SVG do
   # A clipped element (spec/02 §2.1, spec/09 §2.3): its definition — a clipPath holding
   # the shape, or a mask of everything but it — then the element referring to it. It is
   # matched before every other clause, so a clipped group keeps its clip (D-209).
-  defp do_render_element(%Element{clip: %{shape: shape, keep: keep}} = element) do
+  defp do_render_element(%Element{clip: %{shape: shape, keep: keep}} = element, inherited) do
     {tag, attrs, children, reference} = clip_definition(shape, keep)
 
     [
-      render_svg_tag(tag, attrs, Enum.map(children, &do_render_element/1), nil),
-      do_render_element(Element.set_attrs(%{element | clip: nil}, reference))
+      render_svg_tag(tag, attrs, Enum.map(children, &do_render_element(&1, inherited)), nil),
+      do_render_element(Element.set_attrs(%{element | clip: nil}, reference), inherited)
     ]
   end
 
-  defp do_render_element(%Element{
-         type: :path,
-         path: path,
-         style: style,
-         transform: transform,
-         attrs: extra_attrs
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :path,
+           path: path,
+           style: style,
+           transform: transform,
+           attrs: extra_attrs
+         },
+         _inherited
+       ) do
     attrs =
       extra_attrs
       |> Map.merge(style_to_attrs(style))
@@ -134,51 +143,63 @@ defmodule Visualize.Backend.SVG do
 
   # `vector-effect` does not inherit (spec/09 §2.5, spec/14 §3.9): a group's is written on
   # each child that does not set its own, never on the group.
-  defp do_render_element(%Element{type: :group, style: %{vector_effect: effect} = style} = group) do
+  defp do_render_element(
+         %Element{type: :group, style: %{vector_effect: effect} = style} = group,
+         inherited
+       ) do
     children =
       Enum.map(group.children, fn child ->
         %{child | style: Map.put_new(child.style, :vector_effect, effect)}
       end)
 
-    do_render_element(%{group | style: Map.delete(style, :vector_effect), children: children})
+    do_render_element(
+      %{group | style: Map.delete(style, :vector_effect), children: children},
+      inherited
+    )
   end
 
-  defp do_render_element(%Element{
-         type: :group,
-         children: children,
-         style: style,
-         transform: transform,
-         attrs: extra_attrs
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :group,
+           children: children,
+           style: style,
+           transform: transform,
+           attrs: extra_attrs
+         },
+         inherited
+       ) do
     attrs =
       style_to_attrs(style)
       |> Map.merge(extra_attrs)
       |> maybe_add_transform(transform)
 
-    child_content = Enum.map(children, &do_render_element/1)
+    child_content = Enum.map(children, &do_render_element(&1, within(inherited, style)))
     render_svg_tag(:g, attrs, child_content, nil)
   end
 
   # A title or desc is its content, escaped, under its attrs (the id); no style (D-56).
-  defp do_render_element(%Element{type: type, attrs: attrs, content: content})
+  defp do_render_element(%Element{type: type, attrs: attrs, content: content}, _inherited)
        when type in [:title, :desc, :style] do
     render_svg_tag(type, attrs, [], content || "")
   end
 
   # A root's `view_box` attr renders as `viewBox` through the shared attribute names
   # (D-11); its style and transform are ignored.
-  defp do_render_element(%Element{type: :root, attrs: attrs, children: children}) do
+  defp do_render_element(%Element{type: :root, attrs: attrs, children: children}, inherited) do
     svg_attrs = Map.merge(%{xmlns: "http://www.w3.org/2000/svg"}, attrs)
-    child_content = Enum.map(children, &do_render_element/1)
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:svg, svg_attrs, child_content, nil)
   end
 
-  defp do_render_element(%Element{
-         type: :rect,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :rect,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
@@ -186,12 +207,15 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:rect, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{
-         type: :circle,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :circle,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
@@ -199,12 +223,15 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:circle, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{
-         type: :ellipse,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :ellipse,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
@@ -212,7 +239,10 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:ellipse, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{type: :line, attrs: attrs, style: style, transform: transform}) do
+  defp do_render_element(
+         %Element{type: :line, attrs: attrs, style: style, transform: transform},
+         _inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
@@ -220,12 +250,15 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:line, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{
-         type: :polyline,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :polyline,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     points_str = format_points(attrs[:points])
 
     all_attrs =
@@ -236,12 +269,15 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:polyline, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{
-         type: :polygon,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :polygon,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     points_str = format_points(attrs[:points])
 
     all_attrs =
@@ -252,31 +288,46 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:polygon, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{
-         type: :text,
-         attrs: attrs,
-         style: style,
-         content: content,
-         children: children,
-         transform: transform
-       }) do
+  # A stroked text paints its stroke under its fill, its own stroke or its groups' (§2.5,
+  # D-235): `paint-order` on the text alone, since it inherits and a group's other shapes
+  # paint their outlines over their fills.
+  defp do_render_element(
+         %Element{
+           type: :text,
+           attrs: attrs,
+           style: style,
+           content: content,
+           children: children,
+           transform: transform
+         } = text,
+         inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
+      |> paint_order(text, inherited)
 
-    render_svg_tag(:text, all_attrs, Enum.map(children, &do_render_element/1), content)
+    render_svg_tag(
+      :text,
+      all_attrs,
+      Enum.map(children, &do_render_element(&1, inherited)),
+      content
+    )
   end
 
   # A line of a text (spec/14 §7.1): its attrs and its content, no style of its own.
-  defp do_render_element(%Element{type: :tspan, attrs: attrs, content: content}),
+  defp do_render_element(%Element{type: :tspan, attrs: attrs, content: content}, _inherited),
     do: render_svg_tag(:tspan, attrs, [], content || "")
 
-  defp do_render_element(%Element{
-         type: :image,
-         attrs: attrs,
-         style: style,
-         transform: transform
-       }) do
+  defp do_render_element(
+         %Element{
+           type: :image,
+           attrs: attrs,
+           style: style,
+           transform: transform
+         },
+         _inherited
+       ) do
     all_attrs =
       Map.merge(attrs, style_to_attrs(style))
       |> maybe_add_transform(transform)
@@ -284,44 +335,50 @@ defmodule Visualize.Backend.SVG do
     render_svg_tag(:image, all_attrs, [], nil)
   end
 
-  defp do_render_element(%Element{type: :defs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(%Element{type: :defs, children: children}, inherited) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:defs, %{}, child_content, nil)
   end
 
-  defp do_render_element(%Element{type: :clip_path, attrs: attrs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(%Element{type: :clip_path, attrs: attrs, children: children}, inherited) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:clipPath, attrs, child_content, nil)
   end
 
-  defp do_render_element(%Element{type: :linear_gradient, attrs: attrs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(
+         %Element{type: :linear_gradient, attrs: attrs, children: children},
+         inherited
+       ) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:linearGradient, attrs, child_content, nil)
   end
 
-  defp do_render_element(%Element{type: :radial_gradient, attrs: attrs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(
+         %Element{type: :radial_gradient, attrs: attrs, children: children},
+         inherited
+       ) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:radialGradient, attrs, child_content, nil)
   end
 
   # A hatch's tile (spec/09 §2.3, #673).
-  defp do_render_element(%Element{type: :pattern, attrs: attrs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(%Element{type: :pattern, attrs: attrs, children: children}, inherited) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:pattern, attrs, child_content, nil)
   end
 
-  defp do_render_element(%Element{type: :filter, attrs: attrs, children: children}) do
-    child_content = Enum.map(children, &do_render_element/1)
+  defp do_render_element(%Element{type: :filter, attrs: attrs, children: children}, inherited) do
+    child_content = Enum.map(children, &do_render_element(&1, inherited))
     render_svg_tag(:filter, attrs, child_content, nil)
   end
 
-  defp do_render_element(%Element{type: :fe_drop_shadow, attrs: attrs}),
+  defp do_render_element(%Element{type: :fe_drop_shadow, attrs: attrs}, _inherited),
     do: render_svg_tag(:feDropShadow, attrs, [], nil)
 
-  defp do_render_element(%Element{type: :fe_gaussian_blur, attrs: attrs}),
+  defp do_render_element(%Element{type: :fe_gaussian_blur, attrs: attrs}, _inherited),
     do: render_svg_tag(:feGaussianBlur, attrs, [], nil)
 
-  defp do_render_element(%Element{type: :stop, attrs: attrs, style: style}) do
+  defp do_render_element(%Element{type: :stop, attrs: attrs, style: style}, _inherited) do
     all_attrs = Map.merge(attrs, style_to_attrs(style))
     render_svg_tag(:stop, all_attrs, [], nil)
   end
@@ -486,6 +543,20 @@ defmodule Visualize.Backend.SVG do
   end
 
   def effect_id(effect, radius, _offset, _color), do: "vis-effect-#{effect}-#{radius || 3}"
+
+  defp paint_order(attrs, text, inherited) do
+    if Element.stroke_first?(text, inherited),
+      do: Map.put(attrs, :paint_order, "stroke"),
+      else: attrs
+  end
+
+  @doc false
+  # The style a group's children inherit, as far as an SVG writer reads it: the stroke, the
+  # group's own when it sets one, else the one the group inherits (§2.5, D-235). Shared with
+  # `Visualize.SVG.Element.from_ir/1`.
+  @spec within(map(), map()) :: map()
+  def within(_inherited, %{stroke: stroke}) when not is_nil(stroke), do: %{stroke: stroke}
+  def within(inherited, _style), do: inherited
 
   defp maybe_add_transform(attrs, nil), do: attrs
   defp maybe_add_transform(attrs, %Transform{operations: []}), do: attrs

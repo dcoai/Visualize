@@ -3321,3 +3321,24 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A paint a legend or a label's style names is resolved on the compiled path as on the frame's.
 - A chart without a newline in any text, and without a paint outside its marks, draws byte for byte as before.
 - D-210 is amended: the pass it describes runs over every compiled region too.
+
+## 235. D-235 — A stroked text paints its stroke under its fill, on every backend, with no style key
+
+**Context.** #775, work item #927; found building the 0.7.0 examples (#754). A text or a label whose style sets a stroke — the halo D-172 gives the `text` kind and every label (spec/14 §3.1) — drew it over its glyphs. SVG paints a shape's fill, then its stroke, so a stroke as wide as a halo has to be to frame text over a busy picture covers the glyphs it frames: a light halo of width 24 on a bold 96-pixel "I" left no dark pixel of the letter in resvg's raster. The canvas did not draw a text's stroke at all, `fillText` alone. So the examples show no halo anywhere. Two shapes of fix were open: always paint a stroked text's stroke first, or a style key (`text.stroke_order`) that says which goes first.
+
+**Decision.**
+- **A text whose effective stroke is present paints the stroke first, then the fill over it, on every backend.** The effective stroke is the text's own `:stroke`, else the nearest group's above it that sets one — how SVG inherits it and how the canvas draws by the effective style (D-111) — and it is present when it is neither absent nor `:none`. `Visualize.IR.Element.stroke_first?/2` (spec/02 §2.1) is the one place this is decided; every backend asks it, and none decides for itself.
+- **SVG** writes `paint-order="stroke"` on that `<text>` and on nothing else (spec/09 §2.5): `paint-order` inherits, so on a group it would reorder the outlines of the group's other shapes. The backend carries the inherited stroke down its walk — its segments (spec/09 §1.4) and the HEEx bridge (spec/02 §5.1) the same way — so a mark's texts, whose style is on their group (D-210), are found as a label's, whose style is on the text. A drawing with no stroked text is the markup it was.
+- **The `:json` and `:js` canvas commands** draw `strokeText` before `fillText`, line by line for a text of several lines, the stroke at its `:stroke_opacity` and the fill at its `:fill_opacity` (spec/09 §3.3.1, D-180). The text style sets the text's own stroke — its color, a paint's first stop's as a text's fill takes, its width, cap, join and dash; a group's stroke is in Canvas state already (D-37). The hook replays `strokeText` as it replays any context call.
+- **The binary stream carries no text** (spec/09 §4.4), so it has no order to keep: a compiled chart draws its texts as SVG beside the stream (spec/14 §12.3). The hybrid backend draws its static texts as SVG and any dynamic text through the canvas commands, both by the rules above. resvg honors `paint-order`, so a PNG (spec/09 §9) paints the halo under the glyphs.
+
+**Rejected.**
+- **A style key for the order** (`text.stroke_order`, or a `paint_order` part). No one who writes a style knows to set it: a halo is drawn under its glyphs everywhere text is haloed, and a stroke over the glyphs only erodes them, so the key would have one useful value and a default that is a defect. The halo is the only use a text's stroke has.
+- **Writing `paint-order` on every `<text>`, stroked or not.** It would change every drawing's markup and its goldens for no change in any picture.
+- **Writing it on the group that gives the stroke.** The group's paths and shapes would paint their outlines under their fills, half of each outline hidden.
+- **Stamping the order onto the IR in the frame's finishing pass.** Only a compiled chart passes through it; an IR a caller builds by hand, haloed the same way, would still draw its stroke over its glyphs.
+
+**Consequences.**
+- A haloed text or label reads on SVG, on a PNG and on the `:json` canvas: its glyphs keep their fill and the halo frames them. The guard rasterizes a dark text under a thick light halo with resvg and samples the glyph's interior, and replays the canvas commands on the recording hook, asserting `strokeText` in the halo's color and width before `fillText`.
+- A text's stroke now draws on the canvas at all, where before it drew nothing there.
+- The SVG of a drawing gains `paint-order="stroke"` only on its stroked texts; one that has none is byte for byte what it was.
