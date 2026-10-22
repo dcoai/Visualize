@@ -83,7 +83,8 @@ defmodule Visualize.Chart.Compiled do
     moving: %{},
     forces: %{},
     schemas: %{},
-    versions: %{}
+    versions: %{},
+    legend_fit: nil
   ]
 
   @typedoc "A render target of spec/14 §12.3."
@@ -146,7 +147,8 @@ defmodule Visualize.Chart.Compiled do
           moving: %{non_neg_integer() => map()},
           forces: forces(),
           schemas: %{atom() => Visualize.Data.Schema.t()},
-          versions: %{atom() => String.t() | nil}
+          versions: %{atom() => String.t() | nil},
+          legend_fit: Frame.legend_fit()
         }
 
   @doc false
@@ -201,7 +203,9 @@ defmodule Visualize.Chart.Compiled do
       # The schema versions its facts were read from: another one recompiles (§12.1).
       versions: applied.versions,
       # The slots' schemas, whose declared identity a `latest` step reads (D-168).
-      schemas: frame.schemas
+      schemas: frame.schemas,
+      # Whether the legend is drawn, which every tick replaces (spec/14 §4.5, D-231).
+      legend_fit: Frame.legend_fit(frame)
     }
 
     # The design's defs go first in the static layer (spec/14 §12.4, #356): the gradients
@@ -408,7 +412,7 @@ defmodule Visualize.Chart.Compiled do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
-    compiled = %{refit(compiled, frame, sources) | forces: Force.warm(frame.forces)}
+    compiled = ticked(compiled, frame, sources)
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
 
     children =
@@ -532,7 +536,9 @@ defmodule Visualize.Chart.Compiled do
   legend in its margin grows that margin to the tick's rows, and when the tick's margin or
   plot is not the chart's, the chart takes them and its static regions, `static/1` and
   `backdrop/1` are re-rendered there — so a page that holds `static/1` reads it again
-  when `margin` changes. A tick on the compiled plot changes no byte.
+  when `margin` changes. A tick on the compiled plot changes no byte. A tick whose legend
+  has no room omits it, with no margin taken and nothing raised, and one whose legend fits
+  again draws it; the chart holds the tick's `legend_fit/1` (§4.5, D-231).
 
   ## Options
 
@@ -552,7 +558,7 @@ defmodule Visualize.Chart.Compiled do
     sources = sources!(compiled, sources)
     compiled = retarget(compiled, Keyword.get(opts, :frame), sources)
     {frame, hi} = realize(compiled, sources, Keyword.get(opts, :now))
-    compiled = %{refit(compiled, frame, sources) | forces: Force.warm(frame.forces)}
+    compiled = ticked(compiled, frame, sources)
     {frame, moved, compiled} = ease(compiled, frame, sources, opts)
     format = format(compiled)
 
@@ -595,7 +601,27 @@ defmodule Visualize.Chart.Compiled do
     {payload, %{compiled | viewport: window}}
   end
 
+  @doc """
+  Whether the frame's legend is drawn, as the latest `tick/3` or `step/3` realized it, else
+  as the compilation did (spec/14 §4.5, §12.5, D-231): `nil` with no legend,
+  `%{status: :drawn, entries: n}`, or `%{status: :omitted, reason: reason, entries: n}`,
+  as `Visualize.Chart.Frame.legend_fit/1` answers. A tick whose series no longer fit the
+  legend's room omits it, and a later one whose series fit draws it again.
+  """
+  @spec legend_fit(t()) :: Frame.legend_fit()
+  def legend_fit(%__MODULE__{legend_fit: legend_fit}), do: legend_fit
+
   # -- per tick -------------------------------------------------------------------------
+
+  # The chart after a tick's or a step's realization: on the tick's plot (D-222), its force
+  # layouts warm (D-132), and the tick's legend fit (D-231).
+  defp ticked(compiled, frame, sources) do
+    %{
+      refit(compiled, frame, sources)
+      | forces: Force.warm(frame.forces),
+        legend_fit: Frame.legend_fit(frame)
+    }
+  end
 
   @doc """
   Whether a delivery among the sources names a schema version other than the one its

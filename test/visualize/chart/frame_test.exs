@@ -1416,15 +1416,15 @@ defmodule Visualize.Chart.FrameTest do
       assert [{:translate, _, 108}] = at.(:bottom)
     end
 
-    test "a legend that does not fit its margin is a fault of Frame.new/2" do
-      assert_raise ArgumentError, ~r/needs .* in the right margin, which is 10/, fn ->
-        legend_frame(%{position: :right, inside: false}, %{
-          top: 20,
-          right: 10,
-          bottom: 20,
-          left: 20
-        })
-      end
+    test "a legend that does not fit its side margin is omitted, and the frame says so" do
+      narrow = %{top: 20, right: 10, bottom: 20, left: 20}
+      frame = legend_frame(%{position: :right, inside: false}, narrow)
+
+      # Not drawn, no margin taken, the plot as it is with no legend (D-231).
+      assert frame.margin == narrow
+      assert Legend.generate(frame, :literal) == []
+      refute Frame.render(frame) =~ ~s(class="legend")
+      assert Frame.legend_fit(frame) == %{status: :omitted, reason: :width, entries: 2}
 
       # A top or bottom margin grows to its rows instead: one row, 12 + 8 (D-169).
       grown =

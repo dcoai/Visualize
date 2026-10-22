@@ -1,7 +1,8 @@
 defmodule Visualize.Chart.CompiledMarginTest do
   # A compiled chart's margin is the latest tick's (spec/14 §12.5, #860, D-222): a top
   # legend in its margin grows it to the tick's rows, and the static regions follow. A
-  # grown margin that leaves the plot no height raises (§4.5).
+  # legend whose margin would leave the plot no height is omitted, and drawn again when a
+  # tick's rows fit (§4.5, D-231).
   use ExUnit.Case, async: true
   use ExUnitProperties
 
@@ -145,21 +146,68 @@ defmodule Visualize.Chart.CompiledMarginTest do
     end
   end
 
-  describe "a grown margin stays inside the box (D-222)" do
-    test "a top legend whose rows leave the plot no height raises, naming the side, the need and the box" do
+  describe "a grown margin stays inside the box (D-222, D-231)" do
+    test "a top legend whose rows would leave the plot no height is omitted, and the plot keeps its height" do
+      # Twelve such names need 196 of the top margin in a box 200 high.
       long = rows(12, &"a-very-long-series-name-#{&1}")
+      compiled = compile!(long)
 
-      assert_raise ArgumentError,
-                   ~r/legend at :top outside the plot needs 196 in the top margin, .*box 200 high/,
-                   fn -> compile!(long) end
+      assert compiled.margin.top == 20
+      assert compiled.plot.height == 150
+      assert Compiled.legend_fit(compiled) == %{status: :omitted, reason: :height, entries: 12}
+      refute Compiled.svg(compiled, long) =~ ~s(class="legend")
     end
 
-    test "a tick whose rows grow the margin past the box raises" do
+    test "a tick whose rows would grow the margin past the box omits the legend, and one that fits draws it again" do
       one = compile!(rows(1))
       long = rows(12, &"a-very-long-series-name-#{&1}")
+      assert Compiled.legend_fit(one) == %{status: :drawn, entries: 1}
 
-      assert_raise ArgumentError, ~r/top margin/, fn -> Compiled.step(one, long) end
-      assert_raise ArgumentError, ~r/top margin/, fn -> Compiled.tick(one, long) end
+      for move <- [&Compiled.step/2, &Compiled.tick/2] do
+        {_out, omitted} = move.(one, long)
+        assert omitted.margin.top == 20
+        assert omitted.plot.height == 150
+        assert axis_transform(omitted).operations == [{:translate, 0, 150}]
+        assert Compiled.legend_fit(omitted) == %{status: :omitted, reason: :height, entries: 12}
+
+        {_out, back} = move.(omitted, rows(1))
+        assert back.margin == one.margin
+        assert Compiled.static(back) == Compiled.static(one)
+        assert Compiled.legend_fit(back) == %{status: :drawn, entries: 1}
+      end
+    end
+
+    test "stepped 1 → 40 → 3 series in a 600 × 240 box: drawn, omitted, drawn again" do
+      # A top margin of 4, which one row of the legend grows to 12 + 8.
+      design = put_in(@design, [:frames, :main, :margin, :top], 4)
+      size = {600, 240}
+      host = &"host-#{div(&1, 4)}:/mount/data-#{rem(&1, 4)}"
+      compile = &Chart.compile(design, sources: rows(&1, host), size: size)
+      # The plot with no legend: the box less the design's margins.
+      bare = 240 - 4 - 30
+
+      {:ok, %{"main" => one}} = compile.(1)
+      assert Compiled.legend_fit(one) == %{status: :drawn, entries: 1}
+      assert one.margin.top == 20
+      assert one.plot.height == bare - 16
+      assert Compiled.svg(one, rows(1, host)) =~ ~s(class="legend")
+
+      # Three to a row, fourteen rows: 13 × 16 + 12 + 8 = 228 of a 210 the plot and the
+      # top margin share.
+      {_group, forty} = Compiled.step(one, rows(40, host))
+      assert Compiled.legend_fit(forty) == %{status: :omitted, reason: :height, entries: 40}
+      assert forty.margin.top == 4
+      assert forty.plot.height == bare
+      refute Compiled.svg(forty, rows(40, host)) =~ ~s(class="legend")
+
+      {_group, three} = Compiled.step(forty, rows(3, host))
+      assert Compiled.legend_fit(three) == %{status: :drawn, entries: 3}
+      assert three.margin.top == 20
+      assert three.plot.height == bare - 16
+      assert Compiled.svg(three, rows(3, host)) =~ ~s(class="legend")
+
+      {:ok, %{"main" => fresh}} = compile.(3)
+      assert Compiled.static(three) == Compiled.static(fresh)
     end
 
     test "a margin the author gave is not judged" do
@@ -169,16 +217,23 @@ defmodule Visualize.Chart.CompiledMarginTest do
     end
   end
 
-  describe "recurrence guard (D-222)" do
-    property "the static regions stand on the tick frame's plot on every tick" do
-      check all(counts <- list_of(integer(1..12), min_length: 1, max_length: 8)) do
-        Enum.reduce(counts, compile!(rows(1)), fn count, compiled ->
-          {_group, compiled} = Compiled.step(compiled, rows(count))
-          frame = tick_frame(compiled, rows(count))
+  describe "recurrence guard (D-222, D-231)" do
+    # Long names past a few series leave no room, so the legend comes and goes.
+    property "the static regions stand on the tick frame's plot, and the fit is the tick's, on every tick" do
+      check all(ticks <- list_of({integer(1..12), boolean()}, min_length: 1, max_length: 8)) do
+        Enum.reduce(ticks, compile!(rows(1)), fn {count, long?}, compiled ->
+          sources =
+            if long?, do: rows(count, &"a-very-long-series-name-#{&1}"), else: rows(count)
+
+          {_group, compiled} = Compiled.step(compiled, sources)
+          frame = tick_frame(compiled, sources)
 
           assert compiled.margin == frame.margin
           assert compiled.plot == frame.plot
+          assert compiled.plot.height > 0
           assert axis_transform(compiled).operations == [{:translate, 0, frame.plot.height}]
+          assert Compiled.legend_fit(compiled) == Frame.legend_fit(frame)
+          assert %{entries: ^count} = Compiled.legend_fit(compiled)
           compiled
         end)
       end
