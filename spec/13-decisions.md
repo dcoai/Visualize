@@ -2886,6 +2886,8 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - Nx stays optional. The only Nx calls are in `Visualize.Data.Table` under its `no_warn_undefined`, and they are made only when a source is a tensor.
 - A list of tuple rows from the host is still unnamed and still draws nothing through a design. It is not a tensor, and a list is not checked row by row at binding.
 
+**Amended 2026-10-22 by D-232 (#855, #924): tuple rows are named too, and a tick does not raise.** A list of tuple rows bound to a slot that declares its fields is named row by row in the declared order through `named/2`, as a rank-2 tensor's columns are, with the same `{:width, declared, given}` fault, and a slot that declares no fields refuses it as `{:type, :named_rows}`; the last consequence above no longer holds. A tick's source its slot cannot read no longer raises `ArgumentError` in `tick/3` or `step/3`: the compiled chart carries the fault, read by `Visualize.Chart.Compiled.faults/1`. `render/2`, `svg/2` and `rows/3`, which return no chart, still raise.
+
 ## 215. D-215 — A channel read as a number with no scale between is typed `:number`
 
 **Context.** #835, found building the examples' data-sources page (#781). The type check of a binding (D-153) gives a need only to a field read through a scale. A `:circle` mark's `value` is its radius, and it names no scale. Bound to a text field, an easy slip since `value` is what a color scale reads on most marks, it passed `from_map/1`, `apply/2` and `check_types/2`, then raised `ArithmeticError` at render. A board cell over it crashed where D-153 says it draws `{:invalid, errors}`. The same gap is open wherever a channel is drawn as its reading:
@@ -3243,3 +3245,31 @@ Every `{:color, name}` in a palette entry's paints must resolve in the theme's c
 - A legend that fits draws byte for byte as before; no golden moves.
 - metresis can offer an omitted legend's entries in its legend popup (metresis#540).
 - D-169, D-222 and D-223 are amended.
+
+## 232. D-232 — Tuple rows bound to a slot are named by its declared fields, and a tick's source its slot cannot read is a fault the compiled chart carries, not a raise
+
+**Context.** #855, work item #924; left open by #830 (D-214), in its defect class: bad data is a fault, not a blank chart or a crash. Two gaps remained.
+- **Tuple rows.** A design reads every field by name (spec/14 §1.4) and a tuple has none. D-214 named a rank-2 tensor's columns by the slot's declared fields, but a list of tuple rows, the other unnamed shape a host holds (an Ecto `select` of a tuple, a CSV parser's rows, `Enum.zip/2`), still applied with `{:ok, _}` and drew nothing, with nothing to say why.
+- **A tick raised.** `Visualize.Chart.Compiled.tick/3` and `step/3` have no error return, so D-214 made a tensor its slot cannot read raise `ArgumentError` naming the slot. Data arrives at a tick from a feed or a host, so a live chart fed a bad tensor crashed its LiveView, and a board cell, which steps its compiled charts per delivery, crashed and was restarted, to crash again on the next delivery. `Visualize.Chart.apply/2` and a board cell's application report the same faults as `{:error, errors}`, which the cell draws as a state. In a board cell, tuple rows under a feed with a window field did not reach the tick at all: placing them read a field of a tuple and raised `BadMapError`.
+
+**Decision.**
+- **Tuple rows are named as a tensor is.** A list `Visualize.Data.Table.rows/1` reads as rows — a keyword list of columns is columns, as before — whose first row is a tuple is named row by row through `Visualize.Data.Table.named/2`: element `i` of each tuple under the `i`th declared field, each row a map, a row that is not a tuple kept as it is. A tuple whose size is not the number of fields is `{:width, declared, given}` at `[:sources, slot]`, `given` the first such row's size. A slot that declares no fields refuses tuple rows as `{:type, :named_rows}` there. Tuple rows under a declared slot therefore draw exactly what the tensor of the same values draws. The per-slot reader is the one D-214 made, so application, every tick, a board cell and the builder's preview typing all read tuple rows the same way.
+- **A tick carries its faults.** `tick/3` and `step/3` keep their return types, `{payload, compiled}` and `{group, compiled}`, since this is a patch release. The compiled chart gains a `faults` field and `Visualize.Chart.Compiled.faults/1` reads it: `[]` when every source of the latest tick or step read, else every fault, `{[:sources, slot], reason}` in `apply/2`'s shape, ordered by path. The tick draws as if the faulted slots were omitted, which draws them nothing (spec/14 §12.4), and its other slots as ever. A later tick whose sources read clears the faults.
+- **One function reads a tick's sources.** `Visualize.Chart.Compiled.Sources.read/2` takes the design's slot declarations and the sources by name, and answers the sources as a chart reads them, a delivery keeping its wrapper with its rows named, with every fault. `tick/3`, `step/3`, `render/2`, `svg/2` and `rows/3` call it, and so does a board cell before it places its rows. It reads each slot through the per-slot reader application uses (`Visualize.Chart.Template`), so application and a tick cannot disagree.
+- **The presenters keep the last drawing and draw `{:invalid, errors}` over it.** That is how a board cell already presented a state over a chart it holds: a banner, the last data still readable. A board cell whose delivery its slot cannot read keeps its frame, token, hooks and compiled charts, applies and steps nothing, and is `{:invalid, errors}`: a banner over the drawing, or the whole-cell panel when nothing was drawn yet, as at a first delivery. `Visualize.Components.Chart` takes `apply/2`'s answer whole: given `{:error, errors}` it keeps its drawing and token and draws the same banner over it, or the whole panel with none held. Both keep running.
+- **What returns no chart still raises.** `render/2`, `svg/2` and `rows/3` have nowhere to put the fault, and a blank answer would be the defect this decision closes, so a source its slot cannot read raises `ArgumentError` naming it there, as before. A stale delivery (D-136) still raises in all five: it is not bad data but a chart to compile again.
+
+**Rejected.**
+- **An `{:error, faults}` return from `tick/3`**, the proposal's first option. It is the honest type, but it changes the return of a public function in a patch release (#855's acceptance note); a chart that carries its faults is read the same way `legend_fit/1` is (D-231).
+- **Validating where the host's or the feed's data enters**, so a tick never sees bad data. Every host would repeat the check, and the slots it reads are the design's; the compiled chart is where they are known.
+- **Rescuing the raise in the callers.** It hides the fault from whoever does not rescue it, and the project uses no rescue.
+- **Keeping the last good payload in the compiled chart**, so a faulted tick could answer it again. A compiled chart keeps no drawing (#412: a kept tick was megabytes per frame), and the callers that present a chart already hold theirs.
+- **Naming tuple rows by position with no declaration**, as `{0, 1, …}` or `x`, `y`. It guesses; the declaration is the design's own order (D-214).
+- **Drawing a faulted slot as empty in `render/2` and `svg/2`.** With no fault returned it would be the blank chart that says nothing.
+
+**Consequences.**
+- A LiveView ticking a compiled chart over bad data keeps running and reads `faults/1`; a host that rescued the `ArgumentError` reads `faults/1` instead.
+- A board cell fed bad rows shows `Wrong binding` over its last frame and recovers on the next good delivery, where it crashed and restarted before.
+- Tuple rows of the right width now draw through a design where they drew nothing; no golden moves.
+- The `{:width, …}` and `{:type, :named_rows}` words name tuple rows beside tensors.
+- D-214 is amended.
