@@ -497,6 +497,8 @@ defmodule Visualize.Hooks.Builder do
         return item && this.el.contains(item) ? item : null;
       },
 
+      // The library entry a drag carries, by name, or null (spec/10 §16.3): what every
+      // library drop reads.
       dragged(e) {
         if (!e.dataTransfer) return null;
         const stored = e.dataTransfer.getData('application/x-visualize-fragment');
