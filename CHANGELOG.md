@@ -28,6 +28,29 @@ release it merely follows.
   declares may define a key twice (spec/10 §4.1). No API change: a host regenerates its
   `visualize_hooks.js` (`Visualize.Hooks.install!/0`) to take the fix.
 
+- **Tuple rows draw through a design, and a tick's bad data is a fault, not a crash**
+  (#855, #924, D-232). A list of tuple rows bound to a design's slot applied with
+  `{:ok, _}` and drew nothing, since a design reads fields by name and a tuple has none.
+  And `Visualize.Chart.Compiled.tick/3` and `step/3`, fed a tensor of the wrong width or
+  rank, raised `ArgumentError`, so a live chart fed bad data crashed its LiveView, and a
+  board cell crashed and restarted on every bad delivery — tuple rows under a feed with a
+  window field crashed it even at the right width. Now tuple rows under a slot that
+  declares its fields are named in the declared order, as a rank-2 tensor is
+  (`Visualize.Data.Table.named/2`): `[{1, 4.0}, {2, 5.0}]` under `fields: [:x, :y]` draws
+  what the tensor of the same values draws. A tuple of another size is `{:width, declared,
+  given}` at `[:sources, slot]`, and a slot that declares no fields refuses tuple rows as
+  `{:type, :named_rows}`. A tick no longer raises for a source its slot cannot read: it
+  draws that slot as an omitted one, the returned chart carries the faults, and
+  `Visualize.Chart.Compiled.faults/1` reads them — `[]` when clean, else
+  `[{[:sources, "pts"], {:width, 2, 3}}]` in `Chart.apply/2`'s shape — until a tick whose
+  sources read clears them. The return types are unchanged. A board cell keeps its last
+  frame and shows `Wrong binding` over it, the panel alone when nothing was drawn yet, and
+  `Visualize.Components.Chart` now takes `apply/2`'s answer whole (`chart={Chart.apply(…)}`):
+  `{:error, errors}` keeps the drawing and draws the same banner over it, in
+  `<div class="vis-chart-fault" role="alert">`. `Compiled.render/2`, `svg/2` and `rows/3`,
+  which return no chart, still raise. *Affects* a host that rescued the tick's
+  `ArgumentError`: it reads `faults/1` after each tick instead.
+
 ## [0.8.2] — 2026-10-22
 
 ### Fixed

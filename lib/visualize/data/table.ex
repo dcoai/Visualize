@@ -75,14 +75,25 @@ defmodule Visualize.Data.Table do
   end
 
   @doc """
-  A tensor's columns under `names`, in order: the column map `rows/1` reads (spec/08 §6.4,
-  D-214).
+  A tensor's columns, or tuple rows' elements, under `names`, in order (spec/08 §6.4,
+  D-214, D-232).
 
-  Column `i` of a rank-2 tensor is `Enum.at(names, i)`, and a rank-1 tensor is one column.
-  A tensor whose width is not `length(names)` is `{:error, {:width, length(names), width}}`,
-  one of another rank `{:error, {:rank, rank}}`; nothing raises. Any other source is
-  `{:ok, source}`, the same term, so every source can pass through.
+  Column `i` of a rank-2 tensor is `Enum.at(names, i)`, and a rank-1 tensor is one column:
+  the column map `rows/1` reads. A tensor whose width is not `length(names)` is
+  `{:error, {:width, length(names), width}}`, one of another rank `{:error, {:rank, rank}}`.
 
+  Tuple rows — a list `rows/1` reads as rows whose first row is a tuple — are named row by
+  row: element `i` of each tuple under `Enum.at(names, i)`, and a row that is not a tuple
+  kept as it is. A tuple of another size is `{:error, {:width, length(names), size}}`, the
+  first such row's. A keyword list of columns is columns, and passes through.
+
+  Nothing raises. Any other source is `{:ok, source}`, the same term, so every source can
+  pass through.
+
+      iex> Visualize.Data.Table.named([{1, 4.0}, {2, 5.0}], ["x", "y"])
+      {:ok, [%{"x" => 1, "y" => 4.0}, %{"x" => 2, "y" => 5.0}]}
+      iex> Visualize.Data.Table.named([{1, 4.0, 7}], ["x", "y"])
+      {:error, {:width, 2, 3}}
       iex> Visualize.Data.Table.named([%{x: 1}], ["x"])
       {:ok, [%{x: 1}]}
   """
@@ -98,7 +109,39 @@ defmodule Visualize.Data.Table do
     end
   end
 
+  def named([first | _] = rows, names) when is_tuple(first) and is_list(names) do
+    if columns?(rows, first), do: {:ok, rows}, else: named_rows(rows, names, length(names))
+  end
+
   def named(source, names) when is_list(names), do: {:ok, source}
+
+  @doc false
+  # Whether a source's rows have no names a design can read (spec/14 §7.3, D-214, D-232):
+  # a tensor, whose rows are tuples, or a list of tuple rows — not a keyword list of
+  # columns, which is named by its keys.
+  @spec unnamed?(term()) :: boolean()
+  def unnamed?(%{__struct__: Nx.Tensor}), do: true
+  def unnamed?([first | _] = rows) when is_tuple(first), do: not columns?(rows, first)
+  def unnamed?(_source), do: false
+
+  # Each tuple row a map of its elements under the names; any other row as it is.
+  defp named_rows(rows, names, n) do
+    rows
+    |> Enum.reduce_while([], fn
+      row, acc when is_tuple(row) and tuple_size(row) == n ->
+        {:cont, [names |> Enum.zip(Tuple.to_list(row)) |> Map.new() | acc]}
+
+      row, _acc when is_tuple(row) ->
+        {:halt, {:error, {:width, n, tuple_size(row)}}}
+
+      row, acc ->
+        {:cont, [row | acc]}
+    end)
+    |> case do
+      {:error, _width} = error -> error
+      named -> {:ok, Enum.reverse(named)}
+    end
+  end
 
   defp named_columns(tensor, names, n, n),
     do: {:ok, names |> Enum.zip(tensor |> Nx.transpose() |> Nx.to_list()) |> Map.new()}

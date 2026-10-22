@@ -151,8 +151,8 @@ defmodule Visualize.Chart.Template do
       Enum.reduce(slots, {%{}, []}, fn {name, slot}, {bound, errors} ->
         case entry(pool, name, slot) do
           {:ok, _feed, source} ->
-            # A delivery binds as the source it carries (spec/08 §10.4), and a tensor as
-            # its columns named by the slot's fields (D-214).
+            # A delivery binds as the source it carries (spec/08 §10.4), and a tensor or
+            # tuple rows as named by the slot's fields (D-214, D-232).
             case read(slot, Delivery.source(source)) do
               {:ok, source} ->
                 {Map.put(bound, name, source), errors ++ missing_fields(slot, source, name)}
@@ -176,18 +176,19 @@ defmodule Visualize.Chart.Template do
   def bind(%Chart{}, _pool), do: {:ok, %{}}
 
   @doc false
-  # A bound source as a design reads it (spec/14 §7.3, D-214): a tensor's rows are tuples,
-  # which have no names, so its columns take the slot's declared fields in order; a slot
-  # that declares none refuses it. Any other source is as given.
+  # A bound source as a design reads it (spec/14 §7.3, D-214, D-232): a tensor's rows and
+  # tuple rows have no names, so their columns take the slot's declared fields in order; a
+  # slot that declares none refuses them. Any other source is as given. Application reads
+  # each slot through it, and a tick's sources are read through it by
+  # `Visualize.Chart.Compiled.Sources.read/2`.
   @spec read(term(), term()) :: {:ok, term()} | {:error, Validator.reason()}
-  def read(slot, %{__struct__: Nx.Tensor} = tensor) do
-    case slot do
-      %{fields: [_ | _] = fields} -> Table.named(tensor, fields)
-      _none -> {:error, {:type, :named_rows}}
+  def read(slot, source) do
+    case {Table.unnamed?(source), slot} do
+      {false, _slot} -> {:ok, source}
+      {true, %{fields: [_ | _] = fields}} -> Table.named(source, fields)
+      {true, _none} -> {:error, {:type, :named_rows}}
     end
   end
-
-  def read(_slot, source), do: {:ok, source}
 
   @doc false
   # A slot's pool entry — under its own name, else its default — with the name it was

@@ -294,11 +294,12 @@ defmodule Visualize.Chart.Validator.Words do
 
   def words({:missing_field, field}), do: "has no field #{inspect(field)}"
 
-  # A tensor bound to a slot (spec/14 §7.3, D-214).
+  # A tensor or tuple rows bound to a slot (spec/14 §7.3, D-214, D-232).
   def words({:width, declared, given}) do
-    "is a tensor #{given} column#{if given == 1, do: "", else: "s"} wide, and the slot " <>
-      "declares #{declared} field#{if declared == 1, do: "", else: "s"}: its columns are " <>
-      "the declared fields in order, one each"
+    "is #{given} column#{if given == 1, do: "", else: "s"} wide — a tensor's columns or a " <>
+      "tuple row's elements — and the slot declares #{declared} " <>
+      "field#{if declared == 1, do: "", else: "s"}: they are the declared fields in order, " <>
+      "one each"
   end
 
   def words({:rank, rank}),
@@ -385,8 +386,8 @@ defmodule Visualize.Chart.Validator.Words do
   defp type_words(:field_ref), do: "{:field, name}"
 
   defp type_words(:named_rows) do
-    "rows with named fields: a tensor's rows are tuples, so the slot declares fields " <>
-      "(fields: [...]) to name its columns in order"
+    "rows with named fields: a tensor's rows and tuple rows have no names, so the slot " <>
+      "declares fields (fields: [...]) to name their columns in order"
   end
 
   defp type_words(:generator),

@@ -13,7 +13,8 @@ defmodule Visualize.Board.Draw do
 
   alias Visualize.Board.{Rows, State, View}
   alias Visualize.Chart
-  alias Visualize.Chart.{Compiled, Frame, Summary}
+  alias Visualize.Chart.{Compiled, Frame, Names, Summary}
+  alias Visualize.Chart.Compiled.Sources
   alias Visualize.Data.{Delivery, Schema}
   alias Visualize.Data.Schema.Cache
   alias Visualize.Hooks.{Crosshair, Keyboard}
@@ -26,6 +27,26 @@ defmodule Visualize.Board.Draw do
     map_size(slots) > 0 and
       Enum.all?(slots, fn {_slot, slot} -> match?(%Delivery{}, slot.delivery) end) and
       Enum.any?(slots, fn {_slot, slot} -> slot.delivery.rows != [] end)
+  end
+
+  @doc false
+  # Each slot's delivery as the chart reads it (spec/15 §8.3, D-232), through the function a
+  # compiled chart's tick reads its sources with: a tensor and tuple rows named by the
+  # slot's declared fields, so the placement and the selection read named rows. `{:ok,
+  # slots}`, or `{:error, faults}` at `[:sources, slot]` for a delivery its slot cannot read.
+  def read(%Chart{sources: declared}, slots) do
+    deliveries = Map.new(slots, fn {slot, %{delivery: delivery}} -> {slot, delivery} end)
+
+    case Sources.read(declared, deliveries) do
+      {read, []} ->
+        {:ok,
+         Map.new(slots, fn {slot, held} ->
+           {slot, %{held | delivery: Map.fetch!(read, Names.name(slot))}}
+         end)}
+
+      {_read, faults} ->
+        {:error, faults}
+    end
   end
 
   @doc false
@@ -201,14 +222,16 @@ defmodule Visualize.Board.Draw do
 
   @doc false
   # A cell's state from what it holds (spec/15 §8.4): invalid when its component could not
-  # be applied because a field has a type its scale cannot take (D-153), down when it could
-  # not be applied otherwise, loading before any data, else `Visualize.Board.State.of/3`.
+  # be applied because a field has a type its scale cannot take (D-153), or when a delivery
+  # is one its slot cannot read (D-232); down when it could not be applied otherwise,
+  # loading before any data, else `Visualize.Board.State.of/3`.
   def state({:apply, errors} = fault, _slots, _now, _stale_after) do
     if Enum.any?(errors, &match?({_path, {:type_mismatch, _, _, _, _}}, &1)),
       do: {:invalid, errors},
       else: {:down, fault}
   end
 
+  def state({:data, errors}, _slots, _now, _stale_after), do: {:invalid, errors}
   def state(_fault, nil, _now, _stale_after), do: :loading
   def state(nil, slots, now, stale_after), do: State.of(slots, now, stale_after)
 
@@ -219,17 +242,27 @@ defmodule Visualize.Board.Draw do
   def once(cell) do
     blank = %{svg: nil, attrs: {%{}, %{}}, frames: 0}
 
-    {drawn, fault} =
+    # The slots as the chart reads them (D-232), which the state reads too.
+    {drawn, fault, slots} =
       if cell.slots == nil or not drawable?(cell.slots),
-        do: {blank, nil},
+        do: {blank, nil, cell.slots},
         else: first_frame(cell, blank)
 
-    view(cell, state(fault, cell.slots, cell.now, cell.stale_after), drawn)
+    view(cell, state(fault, slots, cell.now, cell.stale_after), drawn)
   end
 
   defp first_frame(cell, blank) do
-    sources = sources(cell.slots)
+    case read(cell.chart, cell.slots) do
+      {:ok, slots} ->
+        {drawn, fault} = first_frame(cell, sources(slots), blank)
+        {drawn, fault, slots}
 
+      {:error, faults} ->
+        {blank, {:data, faults}, cell.slots}
+    end
+  end
+
+  defp first_frame(cell, sources, blank) do
     case compile(cell, sources, []) do
       {:ok, %{compiled: compiled, applied: applied, summary: summary}} ->
         {svg, _stepped} = step(compiled, sources, 0, Map.put(cell, :summary, summary))

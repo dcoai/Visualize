@@ -24,7 +24,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       * `id` - the component's id, its hook element's DOM id, and the `id` of the events it
         sends (required)
-      * `chart` - the `%Visualize.Chart.Applied{}` drawn (required)
+      * `chart` - the `%Visualize.Chart.Applied{}` drawn, or what `Visualize.Chart.apply/2`
+        returns: `{:ok, applied}` is drawn as `applied`, and `{:error, errors}` is a fault
+        drawn over the drawing held (required; see *Bad data* below)
       * `backend` - `:svg` (default) or `:canvas`: on a canvas the drawing carries its hit
         index, `Visualize.Hooks.Tooltip.items/1`, so a click resolves as on the SVG
       * `canvas_format` - `:binary` (default) for `CanvasBinaryChart`, or `:json` for
@@ -33,6 +35,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
       * `render` - options for `Visualize.Chart.render/2` — `title:`, `description:`,
         `responsive:` … — the SVG always a root (default `[]`)
       * `tooltip_class` - the hook's `data-tooltip-class` (default `"vis-tooltip"`)
+
+    ## Bad data
+
+    A page that ticks a chart applies it to each tick's data and hands the component the
+    answer, `chart={Visualize.Chart.apply(design, sources: rows)}` (spec/10 §19.3, D-232).
+    `{:error, errors}` — tuple rows or a tensor of the wrong width bound to a slot, or any
+    other fault of application — draws nothing new: the drawing held stays, with its token,
+    so a click on it still resolves, and `{:invalid, errors}` is drawn over it as a board
+    cell draws it, `Visualize.Board.State.banner/4` in a `<div class="vis-chart-fault"
+    role="alert">`; with no drawing held, the whole panel, `Visualize.Board.State.render/4`.
+    The next chart that applies is drawn and clears it.
 
     ## What a move sends
 
@@ -49,6 +62,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     use Phoenix.LiveComponent
 
+    alias Visualize.Board.State
     alias Visualize.Chart
     alias Visualize.Chart.{Applied, Summary}
     alias Visualize.Event
@@ -78,23 +92,53 @@ if Code.ensure_loaded?(Phoenix.Component) do
          points: [],
          points_cache: %{},
          motion: false,
-         heap: nil
+         heap: nil,
+         fault: nil
        )}
     end
 
     @impl true
-    def update(%{id: id, chart: %Applied{} = chart} = assigns, socket) do
+    def update(%{id: id, chart: chart} = assigns, socket) do
       render_opts = Map.get(assigns, :render, [])
 
       backend =
         backend!(Map.get(assigns, :backend, :svg), Map.get(assigns, :canvas_format, :binary))
 
       socket =
-        socket
-        |> assign(id: id, tooltip_class: Map.get(assigns, :tooltip_class, "vis-tooltip"))
-        |> draw({chart, render_opts, backend})
+        assign(socket, id: id, tooltip_class: Map.get(assigns, :tooltip_class, "vis-tooltip"))
+
+      socket =
+        case applied(chart) do
+          {:ok, applied} -> socket |> draw({applied, render_opts, backend}) |> fault(nil)
+          {:error, errors} -> fault(socket, errors)
+        end
 
       {:ok, socket}
+    end
+
+    # The chart assign as `Visualize.Chart.apply/2` answers (D-232).
+    defp applied(%Applied{} = applied), do: {:ok, applied}
+    defp applied({:ok, %Applied{}} = ok), do: ok
+    defp applied({:error, [_ | _]} = error), do: error
+
+    # Application's faults drawn as a board cell draws `{:invalid, errors}` (spec/10 §19.3,
+    # spec/15 §8.4, D-232): a banner over the drawing held, which stays, or the whole panel
+    # where none is held yet; `nil` once a chart is drawn again.
+    defp fault(socket, nil), do: assign(socket, fault: nil)
+
+    defp fault(%{assigns: %{drawing: {%Applied{frame: frame}, _opts, _backend}}} = socket, errors) do
+      theme = frame.theme || Visualize.Theme.default()
+      id = socket.assigns.id <> "-fault"
+      assign(socket, fault: State.banner({:invalid, errors}, theme, frame.size.width, id: id))
+    end
+
+    defp fault(socket, errors) do
+      panel =
+        State.render({:invalid, errors}, Visualize.Theme.default(), {600, 400},
+          id: socket.assigns.id <> "-fault"
+        )
+
+      assign(socket, fault: panel)
     end
 
     defp backend!(:svg, _format), do: :svg
@@ -290,7 +334,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp only_text(_element), do: nil
 
     @impl true
-    def handle_event("visualize_event", params, socket) do
+    def handle_event("visualize_event", params, %{assigns: %{drawing: {_, _, _}}} = socket) do
       %{id: id, drawing: {chart, _render_opts, _backend}, drawn: drawn} = socket.assigns
 
       with {:ok, click} <- Event.decode(params),
@@ -326,6 +370,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def render(%{canvas: nil} = assigns) do
       ~H"""
       <div id={"#{@id}-keys"} phx-hook="KeyboardHook" data-keyboard-drawn={@drawn} {@keyboard}>
+        <div :if={@fault} class="vis-chart-fault" role="alert">{Phoenix.HTML.raw(@fault)}</div>
         <.points points={@points} />
         <div
           id={@id}
@@ -347,6 +392,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     def render(assigns) do
       ~H"""
       <div id={"#{@id}-keys"} phx-hook="KeyboardHook" data-keyboard-drawn={@drawn} {@keyboard}>
+      <div :if={@fault} class="vis-chart-fault" role="alert">{Phoenix.HTML.raw(@fault)}</div>
       <.points points={@points} />
       <div
         id={@id}

@@ -54,7 +54,8 @@ defmodule Visualize.Chart.TensorSourceTest do
                {:error, [{[:sources, "pts"], {:width, 2, 3}}]}
 
       assert Validator.format({[:sources, "pts"], {:width, 2, 3}}) =~
-               "is a tensor 3 columns wide, and the slot declares 2 fields"
+               "is 3 columns wide — a tensor's columns or a tuple row's elements — and the " <>
+                 "slot declares 2 fields"
     end
 
     test "a tensor of another rank is a fault at the slot" do
@@ -128,12 +129,22 @@ defmodule Visualize.Chart.TensorSourceTest do
                Chart.Compiled.svg(compiled, %{pts: lists()})
     end
 
-    test "raises naming the slot for a tensor it cannot read" do
+    test "svg/2, which returns no chart, raises naming the slot for a tensor it cannot read" do
       {:ok, %{"main" => compiled}} = Chart.compile(design(), sources: %{pts: lists()})
 
       assert_raise ArgumentError, ~r/sources\.pts.*3 columns wide/, fn ->
         Chart.Compiled.svg(compiled, %{pts: Nx.tensor([[1, 2, 3]])})
       end
+    end
+
+    test "a tick fed a tensor it cannot read carries the fault, and raises nothing (D-232)" do
+      {:ok, %{"main" => compiled}} = Chart.compile(design(), sources: %{pts: lists()})
+
+      {_payload, faulted} = Chart.Compiled.tick(compiled, %{pts: Nx.tensor([[1, 2, 3]])}, at: 0)
+      assert Chart.Compiled.faults(faulted) == [{[:sources, "pts"], {:width, 2, 3}}]
+
+      {_group, faulted} = Chart.Compiled.step(compiled, %{pts: Nx.tensor([[[1, 2]]])}, at: 0)
+      assert Chart.Compiled.faults(faulted) == [{[:sources, "pts"], {:rank, 3}}]
     end
   end
 end
