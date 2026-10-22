@@ -1454,6 +1454,27 @@ source(:primary, [:t, :latency, :state],
 
 The keys are the slot's own fields: a field `requires` names that `fields` does not list is `{:undeclared, :field, field}` at `[:sources, name, :requires, field]`, as for `types`. The values are lists of the **fact keys**, `Visualize.Chart.Fact.keys/0` — the attributes of `Visualize.Data.Schema.attributes/0` and the two derived facts `:names` and `:colors` (below, D-225) — checked as an enumeration. `:identity` among them requires the feed to declare the field part of its identity (spec/08 §10.1, D-167), since a schema keeps `identity` only when it is `true`: `requires: %{car: [:identity]}` is how a design that follows entities says it needs to know which rows are about the same one. It is a map of lists, not a list of pairs, because the JSON form (§11) has no tuples. A slot with no `requires` and no fact read of it states no contract, and binds as it always has.
 
+**Each fact key has a shape** (#868, #928): what its value is, whatever schema gives it — a **scalar**, written as one word, a **list**, or a **map**. The shape belongs to the key, not to the value one schema happens to give, and `Visualize.Chart.Fact.shape/1` states it for every key of `keys/0`; a key without a stated shape is not a fact key.
+
+| Key | Shape | Its value (spec/08 §10.1) |
+|---|---|---|
+| `type` | scalar | one of the five field types |
+| `unit` | scalar | a UCUM code |
+| `quantity` | scalar | a quantity's name |
+| `label` | scalar | a string |
+| `order` | list | the states in order |
+| `status` | map | each state's status role |
+| `polarity` | scalar | one of the three polarities |
+| `target` | scalar | a number |
+| `continuity` | scalar | a positive number |
+| `window` | scalar | a boolean |
+| `metric_kind` | scalar | one of the three metric kinds |
+| `bounds` | list | `[min, max]`, either `nil` |
+| `identity` | scalar | a boolean |
+| `values` | list | the bare declared values |
+| `names` | map | each named value's name (D-225) |
+| `colors` | map | each colored value's color (D-225) |
+
 **A fact: `Visualize.Chart.fact/3`.** `fact(source, field, key)` is `%Visualize.Chart.Fact{source: source, field: field, key: key}`: the attribute `key` of `field` in the schema bound to slot `source`. It is a term allowed wherever a value can appear, as a variable is (§7.1), and in a text as the hole `#{fact(:source, :field, :key)}`. So an axis title, a tick unit and an ordinal domain read the feed:
 
 ```elixir
@@ -1494,7 +1515,7 @@ delivery = Delivery.new(rows, schema: Schema.version(schema))
 ["ok", "warn", "fail"] = Visualize.Chart.Frame.scale(applied.frame, :color).domain
 ```
 
-The validator checks a fact against the design before application, so a design that reads what it does not declare does not validate. The slot MUST be declared (`{:undeclared, :source, source}`), and the field MUST be one of that slot's `fields` (`{:undeclared_field, source, field}`). The key MUST be a fact key, `Visualize.Chart.Fact.keys/0` (`{:enum, keys}`). In a text, the key MUST be one whose value is written as words: `order`, `status`, `names` and `colors`, which are a list and three maps, are `{:invalid_for, :text}` there. **Reading a fact is a requirement**: the contract of a slot is its `requires` together with every attribute a fact of it reads. `Visualize.Chart.contract/1` returns that contract, `%{slot => %{field => [key, …]}}` with each list in the order of `Visualize.Chart.Fact.keys/0`, for a picker to test a feed's schema before offering it (§7.2).
+The validator checks a fact against the design before application, so a design that reads what it does not declare does not validate. The slot MUST be declared (`{:undeclared, :source, source}`), and the field MUST be one of that slot's `fields` (`{:undeclared_field, source, field}`). The key MUST be a fact key, `Visualize.Chart.Fact.keys/0` (`{:enum, keys}`). In a text, the key MUST be one whose value is written as words, a **scalar** key: a fact in a text is a word when its key's shape is scalar (`Visualize.Chart.Fact.word?/1`), and a list or a map key — `order`, `bounds` and `values`, `status`, `names` and `colors` — is `{:invalid_for, :text}` there. The rule is the key's shape, not a list of keys, so a key added later is a word or not by the shape it states. **Reading a fact is a requirement**: the contract of a slot is its `requires` together with every attribute a fact of it reads. `Visualize.Chart.contract/1` returns that contract, `%{slot => %{field => [key, …]}}` with each list in the order of `Visualize.Chart.Fact.keys/0`, for a picker to test a feed's schema before offering it (§7.2).
 
 **The derived facts: `:names` and `:colors`** (#759, #863, D-224, D-225). A field's declared values may carry a display name and a color (spec/08 §10.1's value entries), which no attribute gives alone: `values` is the list as declared, and a fact of it is the bare values (below). Two fact keys read them, derived from `values` and never written in a schema: `fact(slot, field, :names)` is `Visualize.Data.Schema.value_names/2` of the field, a map from each declared value with a name to its name, and `fact(slot, field, :colors)` is `Visualize.Data.Schema.value_colors/2`, a map from each declared value with a color to its color as the schema holds it, a literal string or a typed color. `:colors` is a `:color_map` as it stands, so `range: fact(:status, :state, :colors)` pins each value that declares a color to it (§4.3); a scale that leaves its range `:auto` over `domain: fact(slot, field, :values)` takes the declared colors without one, the palette for the rest (§4.3's declared colors). `:names` is the map a host reads to label a value; the legend and the tooltip read the names themselves, through the frame's schemas (§4.5, §5.7), and need no fact. `fact(slot, field, :values)` stays the bare values. **A derived fact is given when it is not empty**: a field gives `:names` when at least one of its declared values has a name, and `:colors` when at least one has a color, so a fact or a `requires` entry of either over a field whose values carry none — or that declares no `values`, or that the schema does not describe — is `{:missing_attribute, slot, field, :names}` or `{:missing_attribute, slot, field, :colors}`, as a missing attribute is. One function answers what a fact key gives for every reader of a contract, `Visualize.Chart.Fact.fetch/3` — `{:ok, value}` or `:error` for a schema, a field and a key — so application, `Visualize.Board`'s binding check (spec/15 §4.1) and a picker cannot disagree about what a schema gives.
 
@@ -2122,6 +2143,8 @@ Its application is `Visualize.Chart.apply(design, sources: %{primary: idle, depl
 | `Visualize.Chart.var/1` | `%Visualize.Chart.Var{name: name}` for an atom (§7.1). |
 | `Visualize.Chart.fact/3` | `fact(source, field, key)`: `%Visualize.Chart.Fact{}`, the attribute `key` of `field` in the schema bound to slot `source`, resolved at application (§7.4). |
 | `Visualize.Chart.Fact.keys/0` | The fact keys, in order: the attributes of `Visualize.Data.Schema.attributes/0`, then the derived `:names` and `:colors` (§7.4, D-225). |
+| `Visualize.Chart.Fact.shape/1` | `shape(key)`: the shape of a fact key's value, `:scalar`, `:list` or `:map`, stated for every key of `keys/0` (§7.4). |
+| `Visualize.Chart.Fact.word?/1` | `word?(key)`: whether a fact of the key is written as a word, its shape `:scalar` — what a text hole accepts (§7.4). |
 | `Visualize.Chart.Fact.fetch/3` | `fetch(schema, field, key)`: what the fact key gives the field — `{:ok, value}`, the bare values for `:values` and the non-empty maps of `value_names/2` and `value_colors/2` for `:names` and `:colors` — or `:error` (§7.4, D-225). |
 | `Visualize.Chart.contract/1` | `contract(design)`: each slot's requirements of its feed's schema — its `requires` with every attribute a fact of it reads — as `%{slot => %{field => [key, …]}}`, keys in the order of `Visualize.Chart.Fact.keys/0`; a slot with none is absent (§7.4). |
 | `Visualize.Chart.check_types/2` | `check_types(design, types)`: `:ok`, or every field a mark reads through a scale whose type does not satisfy the scale kind's need, `{:type_mismatch, slot, field, expected, given}` by path; `types` maps a slot to a `%Visualize.Data.Schema{}` or to a map from field to type; total over any map (§7.4). |
